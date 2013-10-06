@@ -38,6 +38,7 @@ extern enum BSDType bsd_type;
 
 #include "syscall_defs.h"
 #include "syscall.h"
+#include "target_os_vmparam.h"
 #include "target_signal.h"
 #include "exec/gdbstub.h"
 
@@ -99,6 +100,7 @@ typedef struct TaskState {
 } __attribute__((aligned(16))) TaskState;
 
 void init_task_state(TaskState *ts);
+void stop_all_tasks(void);
 extern const char *qemu_uname_release;
 #if defined(CONFIG_USE_GUEST_BASE)
 extern unsigned long mmap_min_addr;
@@ -222,7 +224,13 @@ void mmap_fork_end(int child);
 #endif
 
 /* main.c */
-extern unsigned long x86_stack_size;
+extern unsigned long target_maxtsiz;
+extern unsigned long target_dfldsiz;
+extern unsigned long target_maxdsiz;
+extern unsigned long target_dflssiz;
+extern unsigned long target_maxssiz;
+extern unsigned long target_sgrowsiz;
+extern char qemu_proc_pathname[];
 
 /* user access */
 
