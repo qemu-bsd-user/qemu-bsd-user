@@ -200,6 +200,7 @@ trace-events-subdirs += accel/kvm
 trace-events-subdirs += accel/tcg
 trace-events-subdirs += audio
 trace-events-subdirs += block
+trace-events-subdirs += bsd-user
 trace-events-subdirs += chardev
 trace-events-subdirs += crypto
 trace-events-subdirs += hw/9pfs
