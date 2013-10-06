@@ -40,7 +40,7 @@ extern enum BSDType bsd_type;
 #include "syscall_defs.h"
 #include "syscall.h"
 #include "target_os_vmparam.h"
-#include "target_os_signal.h"
+#include "target_signal.h"
 #include "exec/gdbstub.h"
 
 #define THREAD __thread
@@ -250,59 +250,6 @@ extern unsigned long target_dflssiz;
 extern unsigned long target_maxssiz;
 extern unsigned long target_sgrowsiz;
 extern char qemu_proc_pathname[];
-void start_exclusive(void);
-void end_exclusive(void);
-void cpu_exec_start(CPUState *cpu);
-void cpu_exec_end(CPUState *cpu);
-
-/* syscall.c */
-abi_long get_errno(abi_long ret);
-int is_error(abi_long ret);
-int host_to_target_errno(int err);
-
-/* os-proc.c */
-abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
-        abi_ulong guest_envp, int do_fexec);
-
-/* os-sys.c */
-abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
-        abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp, abi_ulong newlen);
-abi_long do_freebsd_sysarch(void *cpu_env, abi_long arg1, abi_long arg2);
-
-/* os-thread.c */
-extern pthread_mutex_t *new_freebsd_thread_lock_ptr;
-void *new_freebsd_thread_start(void *arg);
-abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long tid,
-        struct timespec *timeout);
-abi_long freebsd_unlock_umtx(abi_ulong target_addr, abi_long id);
-abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong id,
-        struct timespec *ts);
-abi_long freebsd_umtx_wake(abi_ulong target_addr, uint32_t n_wake);
-abi_long freebsd_umtx_mutex_wake(abi_ulong target_addr, abi_long val);
-abi_long freebsd_umtx_wait_uint(abi_ulong obj, uint32_t val,
-                struct timespec *timeout);
-abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t val,
-                struct timespec *timeout);
-abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val);
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
-abi_long freebsd_umtx_nwake_private(abi_ulong obj, uint32_t val);
-abi_long freebsd_umtx_mutex_wake2(abi_ulong obj, uint32_t val);
-abi_long freebsd_umtx_sem_wait(abi_ulong obj, struct timespec *timeout);
-abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val);
-#endif
-abi_long freebsd_lock_umutex(abi_ulong target_addr, uint32_t id,
-        struct timespec *ts, int mode);
-abi_long freebsd_unlock_umutex(abi_ulong target_addr, uint32_t id);
-abi_long freebsd_cv_wait(abi_ulong target_ucond_addr,
-                abi_ulong target_umtx_addr, struct timespec *ts, int wflags);
-abi_long freebsd_cv_signal(abi_ulong target_ucond_addr);
-abi_long freebsd_cv_broadcast(abi_ulong target_ucond_addr);
-abi_long freebsd_rw_rdlock(abi_ulong target_addr, long fflag,
-        struct timespec *ts);
-abi_long freebsd_rw_wrlock(abi_ulong target_addr, long fflag,
-        struct timespec *ts);
-abi_long freebsd_rw_unlock(abi_ulong target_addr);
-
 
 /* user access */
 
