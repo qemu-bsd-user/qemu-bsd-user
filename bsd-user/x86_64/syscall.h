@@ -1,3 +1,23 @@
+/*
+ *  x86_64 system call definitions
+ *
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+#ifndef _X86_64_SYSCALL_H_
+#define _X86_64_SYSCALL_H_
+
 #define __USER_CS	(0x33)
 #define __USER_DS	(0x2B)
 
@@ -108,9 +128,13 @@ struct target_msqid64_ds {
 #define TARGET_FREEBSD_AMD64_SET_GSBASE	131
 
 
-#define UNAME_MACHINE "x86_64"
+#define UNAME_MACHINE           "x86_64"
+#define TARGET_HW_MACHINE       "amd64"
+#define TARGET_HW_MACHINE_ARCH  "amd64"
 
 #define TARGET_ARCH_SET_GS 0x1001
 #define TARGET_ARCH_SET_FS 0x1002
 #define TARGET_ARCH_GET_FS 0x1003
 #define TARGET_ARCH_GET_GS 0x1004
+
+#endif /* ! _X86_64_SYSCALL_H_ */
