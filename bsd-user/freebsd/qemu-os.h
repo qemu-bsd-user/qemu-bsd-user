@@ -50,30 +50,4 @@ abi_ulong copy_from_user_fdset_ptr(fd_set *fds, fd_set **fds_ptr,
 abi_long copy_to_user_fdset(abi_ulong target_fds_addr, const fd_set *fds,
         int n);
 
-/* os-socket.c */
-abi_long t2h_freebsd_cmsg(struct msghdr *msgh,
-                struct target_msghdr *target_msgh);
-abi_long h2t_freebsd_cmsg(struct target_msghdr *target_msgh,
-                struct msghdr *msgh);
-
-/* os-stat.c */
-abi_long h2t_freebsd_stat(abi_ulong target_addr, struct stat *host_st);
-abi_long h2t_freebsd_nstat(abi_ulong target_addr, struct stat *host_st);
-abi_long t2h_freebsd_fhandle(fhandle_t *host_fh, abi_ulong target_addr);
-abi_long h2t_freebsd_fhandle(abi_ulong target_addr, fhandle_t *host_fh);
-abi_long h2t_freebsd_statfs(abi_ulong target_addr, struct statfs *host_statfs);
-abi_long target_to_host_fcntl_cmd(int cmd);
-
-/* os-thread.c */
-abi_long t2h_freebsd_rtprio(struct rtprio *host_rtp, abi_ulong target_addr);
-abi_long h2t_freebsd_rtprio(abi_ulong target_addr, struct rtprio *host_rtp);
-abi_long do_freebsd_thr_new(CPUArchState *env, abi_ulong target_param_addr,
-        int32_t param_size);
-
-/* os-extattr.c */
-struct acl;
-abi_long t2h_freebsd_acl(struct acl *host_acl, abi_ulong target_addr);
-abi_long h2t_freebsd_acl(abi_ulong target_addr, struct acl *host_acl);
-abi_long t2h_freebsd_acl_type(acl_type_t *host_type, abi_long target_type);
-
 #endif /* !_QEMU_OS_H_ */
