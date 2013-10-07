@@ -83,7 +83,7 @@ out:
 }
 
 static int
-is_target_shell_script(int fd, char *interp, size_t size, char **interp_args)
+is_target_shell_script(int fd, char *interp, size_t size)
 {
     char buf[2], *p, *b;
     ssize_t n;
@@ -120,21 +120,7 @@ is_target_shell_script(int fd, char *interp, size_t size, char **interp_args)
             return 0;
         }
         if ((p = memchr(b, '\n', size)) != NULL) {
-            int hasargs = 0;
             *p = 0;
-
-            *interp_args = NULL;
-            p = interp;
-            while (*p) {
-                if ((*p == ' ') || (*p == '\t')) {
-                    hasargs = 1;
-                    *p = 0;
-                } else if (hasargs) {
-                    *interp_args = p;
-                    break;
-                }
-                ++p;
-            }
             return 1;
         }
         b += n;
@@ -150,7 +136,7 @@ is_target_shell_script(int fd, char *interp, size_t size, char **interp_args)
 abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         abi_ulong guest_envp, int do_fexec)
 {
-    char **argp, **envp, **qargp, **qarg1, **qarg0, **qargend;
+    char **argp, **envp, **qargp, **qarg1, **qarg0;
     int argc, envc;
     abi_ulong gp;
     abi_ulong addr;
@@ -180,7 +166,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         envc++;
     }
 
-    qarg0 = argp =  alloca((argc + 5) * sizeof(void *));
+    qarg0 = argp =  alloca((argc + 4) * sizeof(void *));
     /* save the first agrument for the emulator */
     *argp++ = (char *)getprogname();
     qargp = argp;
@@ -202,8 +188,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         }
         total_size += strlen(*q) + 1;
     }
-    *q++ = NULL;
-    qargend = q;
+    *q = NULL;
 
     for (gp = guest_envp, q = envp; gp; gp += sizeof(abi_ulong), q++) {
         if (get_user_ual(addr, gp)) {
@@ -232,7 +217,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
     }
 
     if (do_fexec) {
-        char execpath[PATH_MAX], *scriptargs;
+        char execpath[PATH_MAX];
 
         if (((int)path_or_fd > 0 &&
             is_target_elf_binary((int)path_or_fd)) == 1) {
@@ -253,7 +238,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
                 goto execve_end;
             }
         } else if (is_target_shell_script((int)path_or_fd, execpath,
-                    sizeof(execpath), &scriptargs) != 0) {
+                    sizeof(execpath)) != 0) {
             char scriptpath[PATH_MAX];
 
             /* execve() as a target script using emulator. */
@@ -261,10 +246,6 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
                         sizeof(scriptpath)) != NULL) {
                 *qargp = execpath;
                 *qarg1 = scriptpath;
-                if (scriptargs) {
-                    memmove(qarg1 + 1, qarg1, (qargend-qarg1) * sizeof(*qarg1));
-                    *qarg1 = scriptargs;
-                }
                 ret = get_errno(execve(qemu_proc_pathname, qarg0, envp));
             } else {
                 ret = -TARGET_EBADF;
@@ -275,7 +256,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         }
     } else {
         int fd;
-        char execpath[PATH_MAX], *scriptargs;
+        char execpath[PATH_MAX];
 
         p = lock_user_string(path_or_fd);
         if (p == NULL) {
@@ -294,15 +275,11 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
             *qarg1 = (char *)p;
             ret = get_errno(execve(qemu_proc_pathname, qargp, envp));
         } else if (is_target_shell_script(fd, execpath,
-                    sizeof(execpath), &scriptargs) != 0) {
+                    sizeof(execpath)) != 0) {
             close(fd);
             /* execve() as a target script using emulator. */
             *qargp = execpath;
             *qarg1 = (char *)p;
-            if (scriptargs) {
-                memmove(qarg1 + 1, qarg1, (qargend-qarg1) * sizeof(*qarg1));
-                *qarg1 = scriptargs;
-            }
             ret = get_errno(execve(qemu_proc_pathname, qarg0, envp));
         } else {
             close(fd);
