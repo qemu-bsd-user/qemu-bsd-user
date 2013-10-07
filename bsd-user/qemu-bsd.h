@@ -50,4 +50,12 @@ abi_long host_to_target_rusage(abi_ulong target_addr,
         const struct rusage *rusage);
 int host_to_target_waitstatus(int status);
 
+/* bsd-socket.c */
+abi_long target_to_host_sockaddr(struct sockaddr *addr, abi_ulong target_addr,
+        socklen_t len);
+abi_long host_to_target_sockaddr(abi_ulong target_addr, struct sockaddr *addr,
+        socklen_t len);
+abi_long target_to_host_ip_mreq(struct ip_mreqn *mreqn, abi_ulong target_addr,
+        socklen_t len);
+
 #endif /* !_QEMU_BSD_H_ */
