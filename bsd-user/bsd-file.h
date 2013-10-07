@@ -996,15 +996,9 @@ static abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
     }
     if (res == -1) {
         ret = get_errno(res);
-        set_second_rval(cpu_env, 0xFFFFFFFF);
     } else {
-#ifdef TARGET_WORDS_BIGENDIAN
-        ret = ((res >> 32) & 0xFFFFFFFF);
-        set_second_rval(cpu_env, res & 0xFFFFFFFF);
-#else
-        ret = res & 0xFFFFFFFF;                                                
+        ret = res & 0xFFFFFFFF;
         set_second_rval(cpu_env, (res >> 32) & 0xFFFFFFFF);
-#endif
     }
 #else
     ret = get_errno(lseek(arg1, arg2, arg3));
