@@ -550,30 +550,6 @@ static void load_symbols(struct elfhdr *hdr, int fd)
     syminfos = s;
 }
 
-/* Check the elf header and see if this a target elf binary. */
-int is_target_elf_binary(int fd)
-{
-    uint8_t buf[128];
-    struct elfhdr elf_ex;
-
-    if (lseek(fd, 0L, SEEK_SET) < 0) {
-        return 0;
-    }
-    if (read(fd, buf, sizeof(buf)) < 0) {
-        return 0;
-    }
-
-    elf_ex = *((struct elfhdr *)buf);
-    bswap_ehdr(&elf_ex);
-
-    if ((elf_ex.e_type != ET_EXEC && elf_ex.e_type != ET_DYN) ||
-        (!elf_check_arch(elf_ex.e_machine))) {
-        return 0;
-    } else {
-        return 1;
-    }
-}
-
 int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
                     struct image_info *info)
 {

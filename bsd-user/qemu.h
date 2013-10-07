@@ -251,6 +251,15 @@ extern unsigned long target_maxssiz;
 extern unsigned long target_sgrowsiz;
 extern char qemu_proc_pathname[];
 
+/* syscall.c */
+abi_long get_errno(abi_long ret);
+int is_error(abi_long ret);
+
+/* os-sys.c */
+abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
+        abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp, abi_ulong newlen);
+abi_long do_freebsd_sysarch(void *cpu_env, abi_long arg1, abi_long arg2);
+
 /* user access */
 
 #define VERIFY_READ 0
