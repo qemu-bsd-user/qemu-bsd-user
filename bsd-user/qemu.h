@@ -40,7 +40,7 @@ extern enum BSDType bsd_type;
 #include "syscall_defs.h"
 #include "syscall.h"
 #include "target_os_vmparam.h"
-#include "target_signal.h"
+#include "target_os_signal.h"
 #include "exec/gdbstub.h"
 
 #define THREAD __thread
