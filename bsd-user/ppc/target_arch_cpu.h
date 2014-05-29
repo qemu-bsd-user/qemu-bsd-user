@@ -34,9 +34,9 @@ static inline void target_cpu_set_tls(CPUPPCState *env, target_ulong newtls)
 #if defined(TARGET_PPC64)
     /* The kernel checks TIF_32BIT here; we don't support loading 32-bit
        binaries on PPC64 yet. */
-    env->gpr[13] = newtls;
+    env->gpr[13] = newtls + 0x7010;
 #else
-    env->gpr[2] = newtls;
+    env->gpr[2] = newtls + 0x7008;
 #endif
 }
 
