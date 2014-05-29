@@ -47,20 +47,28 @@
 
 enum
 {
-	PPC_FEATURE_32		= 0x80000000,	/* Always true */
 	PPC_FEATURE_64		= 0x40000000,	/* Defined on a 64-bit CPU */
 	PPC_FEATURE_HAS_ALTIVEC	= 0x10000000,
 	PPC_FEATURE_HAS_FPU	= 0x08000000,
-	PPC_FEATURE_HAS_MMU	= 0x04000000,
-	PPC_FEATURE_UNIFIED_CACHE = 0x01000000
 };
 
-#define TARET_ELF_HWCAP	(PPC_FEATURE_32 | PPC_FEATURE_HAS_ALTIVEC | \
-	PPC_FEATURE_HAS_FPU | PPC_HAS_FEATURE_MMU | PPC_FEATURE_UNIFIED_CACHE)
-#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-#define ELF_HWCAP (TARGET_ELF_HWCAP | PPC_FEATURE_64)
-#else
-#define ELF_HWCAP TARGET_ELF_HWCAP
-#endif
+#define ELF_HWCAP target_get_elf_hwcap()
+
+static inline uint32_t target_get_elf_hwcap(void)
+{
+    PowerPCCPU *cpu = POWERPC_CPU(thread_cpu);
+    uint32_t features = 0;
+
+    /* We don't have to be terribly complete here; the high points are
+       Altivec/FP/SPE support.  Anything else is just a bonus.  */
+#define GET_FEATURE(flag, feature)                                      \
+    do { if (cpu->env.insns_flags & flag) { features |= feature; } } while (0)
+    GET_FEATURE(PPC_64B, PPC_FEATURE_64);
+    GET_FEATURE(PPC_FLOAT, PPC_FEATURE_HAS_FPU);
+    GET_FEATURE(PPC_ALTIVEC, PPC_FEATURE_HAS_ALTIVEC);
+#undef GET_FEATURE
+
+    return features;
+}
 
 #endif /* _TARGET_ARCH_ELF_H_ */
