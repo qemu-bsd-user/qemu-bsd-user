@@ -68,7 +68,7 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     regs->gpr[7] = 0;
     /* XXX: it seems that r0 is zeroed after ! */
     regs->nip = infop->entry;
-    regs->gpr[1] = stack;
+    regs->gpr[1] = (stack - 2 * sizeof(abi_long)) & ~0x0f;
     if (bsd_type == target_freebsd) {
         regs->lr = infop->entry;
     }
