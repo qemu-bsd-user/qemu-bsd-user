@@ -36,7 +36,7 @@
 #define TARGET_SZREG        4
 #define TARGET_CALLFRAME_SIZ    (TARGET_SZREG * 6)
 #define TARGET_SZREG64        8
-#define TARGET_CALLFRAME_SIZ64    (TARGET_SZREG * 10)
+#define TARGET_CALLFRAME_SIZ64    (TARGET_SZREG64 * 10)
 
 /* powerpc/powerpc/exec_machdep.c */
 #define TARGET_MC_GET_CLEAR_RET 0x0001
@@ -116,8 +116,8 @@ set_sigtramp_args(CPUPPCState *regs, int sig, struct target_sigframe *frame,
      *  r3 = signal number
      *  r4 = siginfo pointer
      *  r5 = ucontext pointer
-     *  PC = signal handler pointer
-     *  lr = sigtramp at base of user stack
+     *  PC = sigtramp at base of user stack
+     *  lr = signal handler pointer
      */
     regs->gpr[1] = frame_addr;
     regs->gpr[3] = sig;
@@ -125,8 +125,8 @@ set_sigtramp_args(CPUPPCState *regs, int sig, struct target_sigframe *frame,
         offsetof(struct target_sigframe, sf_si);
     regs->gpr[5] = frame_addr +
         offsetof(struct target_sigframe, sf_uc);
-    regs->nip = ka->_sa_handler;
-    regs->lr = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
+    regs->lr = ka->_sa_handler;
+    regs->nip = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
 
     return 0;
 }
@@ -146,7 +146,9 @@ static inline abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
         mcp->mc_onstack = 0;
     }
 
-    for (i = 1; i < 32; i++) {
+	mcp->mc_flags = 0;
+
+    for (i = 1; i < 42; i++) {
         mcp->mc_frame[i] = tswapal(regs->gpr[i]);
     }
 
@@ -168,13 +170,6 @@ static inline abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
         mcp->mc_frame[4] = 0;    /* r4 = 0 */
     }
 
-	mcp->mc_frame[32] = tswapal(regs->lr);
-	mcp->mc_frame[33] = tswapal(regs->crf[0]);
-	mcp->mc_frame[34] = tswapal(regs->xer);
-	mcp->mc_frame[35] = tswapal(regs->ctr);
-	mcp->mc_frame[36] = tswapal(regs->nip);
-	mcp->mc_frame[37] = tswapal(regs->msr);
-
 	mcp->mc_len = sizeof(*mcp);
     /* Don't do any of the status and cause registers. */
 
@@ -185,12 +180,22 @@ static inline abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
 static inline abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
         int srflag)
 {
-	/* XXX:TODO:set_mcontext() TLS handling. */
+    abi_long tls;
     int i, err = 0;
 
-    for (i = 1; i < 32; i++) {
+#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
+	tls = regs->gpr[13];
+#else
+	tls = regs->gpr[2];
+#endif
+    for (i = 1; i < 42; i++) {
         regs->gpr[i] = tswapal(mcp->mc_frame[i]);
     }
+#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
+	regs->gpr[13] = tls;
+#else
+	regs->gpr[2] = tls;
+#endif
 
     if (mcp->mc_flags & TARGET_MC_FP_VALID) {
         /* restore fpu context if we have used it before */
