@@ -1,6 +1,7 @@
 /*
  *  powerpc VM parameters definitions
  *
+ *  Copyright (c) 2014 Justin Hibbits
  *  Copyright (c) 2013 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -21,7 +22,7 @@
 
 #include "cpu.h"
 
-/* compare to sys/arm/include/vmparam.h */
+/* compare to sys/powerpc/include/vmparam.h */
 #define TARGET_MAXTSIZ      (64UL*1024*1024)   /* max text size */
 #define TARGET_DFLDSIZ      (128UL*1024*1024)   /* initial data size limit */
 #define TARGET_MAXDSIZ      (1UL*1024*1024*1024)    /* max data size */
@@ -37,7 +38,7 @@
 #else
 #define TARGET_VM_MAXUSER_ADDRESS   0xfffff000UL
 #endif
-#define TARGET_USRSTACK             (TARGET_VM_MAXUSER_ADDRESS - 4096)
+#define TARGET_USRSTACK             (TARGET_VM_MAXUSER_ADDRESS - TARGET_PAGE_SIZE * 10)
 
 static inline abi_ulong get_sp_from_cpustate(CPUPPCState *state)
 {
