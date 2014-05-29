@@ -46,7 +46,7 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
     /* r3 = arg */
     regs->gpr[3] = arg;
     /* srr0 = start function entry */
-    regs->spr[SPR_SRR0] = entry;
+    regs->nip = entry;
 
     /* TODO:ppc64 target_thread_set_upcall */
 }
@@ -54,9 +54,21 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
 static inline void target_thread_init(struct target_pt_regs *regs,
         struct image_info *infop)
 {
-    memset(regs, 0, sizeof(*regs));
+	abi_long stack = infop->start_stack;
+
+#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
+    regs->gpr[2] = ldq_raw(infop->entry + 8);
+    infop->entry = ldq_raw(infop->entry);
+#endif
+    /* FIXME - what to for failure of get_user()? */
+    get_user_ual(regs->gpr[3], stack); /* argc */
+    regs->gpr[4] = stack + sizeof(abi_long);
+    regs->gpr[5] = regs->gpr[4] + ((1 + regs->gpr[3]) * sizeof(abi_long));
+    regs->gpr[6] = 0;
+    regs->gpr[7] = 0;
+    /* XXX: it seems that r0 is zeroed after ! */
     regs->nip = infop->entry;
-    regs->gpr[1] = infop->start_stack;
+    regs->gpr[1] = stack;
     if (bsd_type == target_freebsd) {
         regs->lr = infop->entry;
     }
