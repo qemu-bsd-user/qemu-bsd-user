@@ -25,23 +25,24 @@
 
 struct target_pt_regs {
 	abi_ulong gpr[32];
-	abi_ulong nip;
-	abi_ulong msr;
-	abi_ulong orig_gpr3;	/* Used for restarting system calls */
-	abi_ulong ctr;
 	abi_ulong lr;
+	abi_ulong cr;
 	abi_ulong xer;
-	abi_ulong ccr;
-#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-    abi_ulong softe;
-#else
-	abi_ulong mq;		/* 601 only (not used at present) */
-#endif
-					/* Used on APUS to hold IPL value. */
-	abi_ulong trap;		/* Reason for being here */
-	abi_ulong dar;		/* Fault registers */
-	abi_ulong dsisr;
-	abi_ulong result; 		/* Result of a system call */
+	abi_ulong ctr;
+	abi_ulong nip;
+	abi_ulong srr1;
+	abi_ulong exc;
+	union {
+		struct {
+			abi_ulong dar;		/* Fault registers */
+			abi_ulong dsisr;
+		} aim;
+		struct {
+			abi_ulong dear;
+			abi_ulong esr;
+			abi_ulong dbcr0;
+		} booke;
+	} cpu;
 };
 
 
