@@ -256,6 +256,10 @@ static int64_t nfs_client_open(NFSClient *client, const char *filename,
         error_setg(errp, "Invalid URL specified");
         goto fail;
     }
+    if (!uri->server) {
+        error_setg(errp, "Invalid URL specified");
+        goto fail;
+    }
     strp = strrchr(uri->path, '/');
     if (strp == NULL) {
         error_setg(errp, "Invalid URL specified");
@@ -343,7 +347,7 @@ static int nfs_file_open(BlockDriverState *bs, QDict *options, int flags,
 
     opts = qemu_opts_create(&runtime_opts, NULL, 0, &error_abort);
     qemu_opts_absorb_qdict(opts, options, &local_err);
-    if (error_is_set(&local_err)) {
+    if (local_err) {
         error_propagate(errp, local_err);
         return -EINVAL;
     }

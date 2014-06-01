@@ -227,6 +227,8 @@ int cpu_exec(CPUArchState *env)
     TranslationBlock *tb;
     uint8_t *tc_ptr;
     uintptr_t next_tb;
+    /* This must be volatile so it is not trashed by longjmp() */
+    volatile bool have_tb_lock = false;
 
     if (cpu->halted) {
         if (!cpu_has_work(cpu)) {
@@ -334,19 +336,25 @@ int cpu_exec(CPUArchState *env)
                     }
 #endif
 #if defined(TARGET_I386)
+                    if (interrupt_request & CPU_INTERRUPT_INIT) {
+                        cpu_svm_check_intercept_param(env, SVM_EXIT_INIT, 0);
+                        do_cpu_init(x86_cpu);
+                        cpu->exception_index = EXCP_HALTED;
+                        cpu_loop_exit(cpu);
+                    }
+#else
+                    if (interrupt_request & CPU_INTERRUPT_RESET) {
+                        cpu_reset(cpu);
+                    }
+#endif
+#if defined(TARGET_I386)
 #if !defined(CONFIG_USER_ONLY)
                     if (interrupt_request & CPU_INTERRUPT_POLL) {
                         cpu->interrupt_request &= ~CPU_INTERRUPT_POLL;
                         apic_poll_irq(x86_cpu->apic_state);
                     }
 #endif
-                    if (interrupt_request & CPU_INTERRUPT_INIT) {
-                            cpu_svm_check_intercept_param(env, SVM_EXIT_INIT,
-                                                          0);
-                            do_cpu_init(x86_cpu);
-                            cpu->exception_index = EXCP_HALTED;
-                            cpu_loop_exit(cpu);
-                    } else if (interrupt_request & CPU_INTERRUPT_SIPI) {
+                    if (interrupt_request & CPU_INTERRUPT_SIPI) {
                             do_cpu_sipi(x86_cpu);
                     } else if (env->hflags2 & HF2_GIF_MASK) {
                         if ((interrupt_request & CPU_INTERRUPT_SMI) &&
@@ -403,9 +411,6 @@ int cpu_exec(CPUArchState *env)
                         }
                     }
 #elif defined(TARGET_PPC)
-                    if ((interrupt_request & CPU_INTERRUPT_RESET)) {
-                        cpu_reset(cpu);
-                    }
                     if (interrupt_request & CPU_INTERRUPT_HARD) {
                         ppc_hw_interrupt(env);
                         if (env->pending_interrupts == 0) {
@@ -600,6 +605,7 @@ int cpu_exec(CPUArchState *env)
                     cpu_loop_exit(cpu);
                 }
                 spin_lock(&tcg_ctx.tb_ctx.tb_lock);
+                have_tb_lock = true;
                 tb = tb_find_fast(env);
                 /* Note: we do it here to avoid a gcc bug on Mac OS X when
                    doing it in tb_find_slow */
@@ -621,6 +627,7 @@ int cpu_exec(CPUArchState *env)
                     tb_add_jump((TranslationBlock *)(next_tb & ~TB_EXIT_MASK),
                                 next_tb & TB_EXIT_MASK, tb);
                 }
+                have_tb_lock = false;
                 spin_unlock(&tcg_ctx.tb_ctx.tb_lock);
 
                 /* cpu_interrupt might be called while translating the
@@ -692,6 +699,10 @@ int cpu_exec(CPUArchState *env)
 #ifdef TARGET_I386
             x86_cpu = X86_CPU(cpu);
 #endif
+            if (have_tb_lock) {
+                spin_unlock(&tcg_ctx.tb_ctx.tb_lock);
+                have_tb_lock = false;
+            }
         }
     } /* for(;;) */
 

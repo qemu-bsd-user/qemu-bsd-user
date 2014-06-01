@@ -1242,8 +1242,7 @@ static int target_setup_sigframe(struct target_rt_sigframe *sf,
     __put_user(env->pc, &sf->uc.tuc_mcontext.pc);
     __put_user(pstate_read(env), &sf->uc.tuc_mcontext.pstate);
 
-    __put_user(/*current->thread.fault_address*/ 0,
-            &sf->uc.tuc_mcontext.fault_address);
+    __put_user(env->exception.vaddress, &sf->uc.tuc_mcontext.fault_address);
 
     for (i = 0; i < TARGET_NSIG_WORDS; i++) {
         __put_user(set->sig[i], &sf->uc.tuc_sigmask.sig[i]);
@@ -4042,8 +4041,6 @@ static void setup_rt_frame(int sig, struct target_sigaction *ka,
     unsigned long return_ip;
     struct target_rt_sigframe *frame;
     abi_ulong info_addr, uc_addr;
-
-    frame_addr = get_sigframe(ka, env, sizeof *frame);
 
     frame_addr = get_sigframe(ka, env, sizeof(*frame));
     if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0)) {

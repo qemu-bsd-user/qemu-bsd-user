@@ -35,7 +35,7 @@ check-unit-y += tests/test-visitor-serialization$(EXESUF)
 check-unit-y += tests/test-iov$(EXESUF)
 gcov-files-test-iov-y = util/iov.c
 check-unit-y += tests/test-aio$(EXESUF)
-check-unit-y += tests/test-rfifolock$(EXESUF)
+check-unit-$(CONFIG_POSIX) += tests/test-rfifolock$(EXESUF)
 check-unit-y += tests/test-throttle$(EXESUF)
 gcov-files-test-aio-$(CONFIG_WIN32) = aio-win32.c
 gcov-files-test-aio-$(CONFIG_POSIX) = aio-posix.c
@@ -59,7 +59,9 @@ check-unit-y += tests/test-bitops$(EXESUF)
 check-unit-y += tests/test-qdev-global-props$(EXESUF)
 check-unit-y += tests/check-qom-interface$(EXESUF)
 gcov-files-check-qom-interface-y = qom/object.c
-check-unit-y += tests/test-vmstate$(EXESUF)
+check-unit-$(CONFIG_POSIX) += tests/test-vmstate$(EXESUF)
+check-unit-y += tests/test-qemu-opts$(EXESUF)
+gcov-files-test-qemu-opts-y = qom/test-qemu-opts.c
 
 check-block-$(CONFIG_POSIX) += tests/qemu-iotests-quick.sh
 
@@ -84,6 +86,11 @@ check-qtest-virtio-y += tests/virtio-rng-test$(EXESUF)
 gcov-files-virtio-y += hw/virtio/virtio-rng.c
 check-qtest-virtio-y += tests/virtio-scsi-test$(EXESUF)
 gcov-files-virtio-y += i386-softmmu/hw/scsi/virtio-scsi.c
+ifeq ($(CONFIG_VIRTIO)$(CONFIG_VIRTFS)$(CONFIG_PCI),yyy)
+check-qtest-virtio-y += tests/virtio-9p-test$(EXESUF)
+gcov-files-virtio-y += hw/9pfs/virtio-9p.c
+gcov-files-virtio-y += i386-softmmu/hw/9pfs/virtio-9p-device.c
+endif
 check-qtest-virtio-y += tests/virtio-serial-test$(EXESUF)
 gcov-files-virtio-y += i386-softmmu/hw/char/virtio-serial-bus.c
 check-qtest-virtio-y += $(check-qtest-virtioserial-y)
@@ -100,12 +107,24 @@ check-qtest-pci-y += tests/eepro100-test$(EXESUF)
 gcov-files-pci-y += hw/net/eepro100.c
 check-qtest-pci-y += tests/ne2000-test$(EXESUF)
 gcov-files-pci-y += hw/net/ne2000.c
+check-qtest-pci-y += tests/nvme-test$(EXESUF)
+gcov-files-pci-y += hw/block/nvme.c
+check-qtest-pci-y += tests/ac97-test$(EXESUF)
+gcov-files-pci-y += hw/audio/ac97.c
+check-qtest-pci-y += tests/es1370-test$(EXESUF)
+gcov-files-pci-y += hw/audio/es1370.c
 check-qtest-pci-y += $(check-qtest-virtio-y)
 gcov-files-pci-y += $(gcov-files-virtio-y) hw/virtio/virtio-pci.c
 check-qtest-pci-y += tests/tpci200-test$(EXESUF)
 gcov-files-pci-y += hw/ipack/tpci200.c
 check-qtest-pci-y += $(check-qtest-ipack-y)
 gcov-files-pci-y += $(gcov-files-ipack-y)
+check-qtest-pci-y += tests/display-vga-test$(EXESUF)
+gcov-files-pci-y += hw/display/vga.c
+gcov-files-pci-y += hw/display/cirrus_vga.c
+gcov-files-pci-y += hw/display/vga-pci.c
+check-qtest-pci-y += tests/intel-hda-test$(EXESUF)
+gcov-files-pci-y += hw/audio/intel-hda.c hw/audio/hda-codec.c
 
 check-qtest-i386-y = tests/endianness-test$(EXESUF)
 check-qtest-i386-y += tests/fdc-test$(EXESUF)
@@ -126,6 +145,15 @@ check-qtest-i386-y += tests/vmxnet3-test$(EXESUF)
 gcov-files-i386-y += hw/net/vmxnet3.c
 gcov-files-i386-y += hw/net/vmxnet_rx_pkt.c
 gcov-files-i386-y += hw/net/vmxnet_tx_pkt.c
+check-qtest-i386-y += tests/pvpanic-test$(EXESUF)
+gcov-files-i386-y += i386-softmmu/hw/misc/pvpanic.c
+check-qtest-i386-y += tests/i82801b11-test$(EXESUF)
+gcov-files-i386-y += hw/pci-bridge/i82801b11.c
+check-qtest-i386-y += tests/ioh3420-test$(EXESUF)
+gcov-files-i386-y += hw/pci-bridge/ioh3420.c
+check-qtest-i386-y += tests/usb-hcd-ehci-test$(EXESUF)
+gcov-files-i386-y += hw/usb/hcd-ehci.c
+gcov-files-i386-y += hw/usb/hcd-uhci.c
 check-qtest-x86_64-y = $(check-qtest-i386-y)
 gcov-files-i386-y += i386-softmmu/hw/timer/mc146818rtc.c
 gcov-files-x86_64-y = $(subst i386-softmmu/,x86_64-softmmu/,$(gcov-files-i386-y))
@@ -164,7 +192,11 @@ check-qapi-schema-y := $(addprefix tests/qapi-schema/, \
         duplicate-key.json union-invalid-base.json flat-union-no-base.json \
         flat-union-invalid-discriminator.json \
         flat-union-invalid-branch-key.json flat-union-reverse-define.json \
-        flat-union-string-discriminator.json)
+        flat-union-string-discriminator.json \
+        include-simple.json include-relpath.json include-format-err.json \
+        include-non-file.json include-no-file.json include-before-err.json \
+        include-nested-err.json include-self-cycle.json include-cycle.json \
+        include-repetition.json)
 
 GENERATED_HEADERS += tests/test-qapi-types.h tests/test-qapi-visit.h tests/test-qmp-commands.h
 
@@ -216,13 +248,19 @@ tests/test-vmstate$(EXESUF): tests/test-vmstate.o \
 
 tests/test-qapi-types.c tests/test-qapi-types.h :\
 $(SRC_PATH)/tests/qapi-schema/qapi-schema-test.json $(SRC_PATH)/scripts/qapi-types.py
-	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-types.py $(gen-out-type) -o tests -p "test-" < $<, "  GEN   $@")
+	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-types.py \
+		$(gen-out-type) -o tests -p "test-" -i $<, \
+		"  GEN   $@")
 tests/test-qapi-visit.c tests/test-qapi-visit.h :\
 $(SRC_PATH)/tests/qapi-schema/qapi-schema-test.json $(SRC_PATH)/scripts/qapi-visit.py
-	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-visit.py $(gen-out-type) -o tests -p "test-" < $<, "  GEN   $@")
+	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-visit.py \
+		$(gen-out-type) -o tests -p "test-" -i $<, \
+		"  GEN   $@")
 tests/test-qmp-commands.h tests/test-qmp-marshal.c :\
 $(SRC_PATH)/tests/qapi-schema/qapi-schema-test.json $(SRC_PATH)/scripts/qapi-commands.py
-	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-commands.py $(gen-out-type) -o tests -p "test-" < $<, "  GEN   $@")
+	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-commands.py \
+		$(gen-out-type) -o tests -p "test-" -i $<, \
+		"  GEN   $@")
 
 tests/test-string-output-visitor$(EXESUF): tests/test-string-output-visitor.o $(test-qapi-obj-y) libqemuutil.a libqemustub.a
 tests/test-string-input-visitor$(EXESUF): tests/test-string-input-visitor.o $(test-qapi-obj-y) libqemuutil.a libqemustub.a
@@ -265,20 +303,33 @@ tests/virtio-blk-test$(EXESUF): tests/virtio-blk-test.o
 tests/virtio-net-test$(EXESUF): tests/virtio-net-test.o
 tests/virtio-rng-test$(EXESUF): tests/virtio-rng-test.o
 tests/virtio-scsi-test$(EXESUF): tests/virtio-scsi-test.o
+tests/virtio-9p-test$(EXESUF): tests/virtio-9p-test.o
 tests/virtio-serial-test$(EXESUF): tests/virtio-serial-test.o
 tests/virtio-console-test$(EXESUF): tests/virtio-console-test.o
 tests/tpci200-test$(EXESUF): tests/tpci200-test.o
+tests/display-vga-test$(EXESUF): tests/display-vga-test.o
 tests/ipoctal232-test$(EXESUF): tests/ipoctal232-test.o
 tests/qom-test$(EXESUF): tests/qom-test.o
 tests/blockdev-test$(EXESUF): tests/blockdev-test.o $(libqos-pc-obj-y)
 tests/qdev-monitor-test$(EXESUF): tests/qdev-monitor-test.o $(libqos-pc-obj-y)
+tests/nvme-test$(EXESUF): tests/nvme-test.o
+tests/pvpanic-test$(EXESUF): tests/pvpanic-test.o
+tests/i82801b11-test$(EXESUF): tests/i82801b11-test.o
+tests/ac97-test$(EXESUF): tests/ac97-test.o
+tests/es1370-test$(EXESUF): tests/es1370-test.o
+tests/intel-hda-test$(EXESUF): tests/intel-hda-test.o
+tests/ioh3420-test$(EXESUF): tests/ioh3420-test.o
+tests/usb-hcd-ehci-test$(EXESUF): tests/usb-hcd-ehci-test.o
 tests/qemu-iotests/socket_scm_helper$(EXESUF): tests/qemu-iotests/socket_scm_helper.o
+tests/test-qemu-opts$(EXESUF): tests/test-qemu-opts.o libqemuutil.a libqemustub.a
 
 # QTest rules
 
 TARGETS=$(patsubst %-softmmu,%, $(filter %-softmmu,$(TARGET_DIRS)))
+ifeq ($(CONFIG_POSIX),y)
 QTEST_TARGETS=$(foreach TARGET,$(TARGETS), $(if $(check-qtest-$(TARGET)-y), $(TARGET),))
-check-qtest-$(CONFIG_POSIX)=$(foreach TARGET,$(TARGETS), $(check-qtest-$(TARGET)-y))
+check-qtest-y=$(foreach TARGET,$(TARGETS), $(check-qtest-$(TARGET)-y))
+endif
 
 qtest-obj-y = tests/libqtest.o libqemuutil.a libqemustub.a
 $(check-qtest-y): $(qtest-obj-y)
@@ -362,9 +413,14 @@ check-tests/test-qapi.py: tests/test-qapi.py
 
 .PHONY: $(patsubst %, check-%, $(check-qapi-schema-y))
 $(patsubst %, check-%, $(check-qapi-schema-y)): check-%.json: $(SRC_PATH)/%.json
-	$(call quiet-command, PYTHONPATH=$(SRC_PATH)/scripts $(PYTHON) $(SRC_PATH)/tests/qapi-schema/test-qapi.py <$^ >$*.test.out 2>$*.test.err; echo $$? >$*.test.exit, "  TEST  $*.out")
+	$(call quiet-command, PYTHONPATH=$(SRC_PATH)/scripts \
+		$(PYTHON) $(SRC_PATH)/tests/qapi-schema/test-qapi.py \
+		$^ >$*.test.out 2>$*.test.err; \
+		echo $$? >$*.test.exit, \
+		"  TEST  $*.out")
 	@diff -q $(SRC_PATH)/$*.out $*.test.out
-	@diff -q $(SRC_PATH)/$*.err $*.test.err
+	@# Sanitize error messages (make them independent of build directory)
+	@perl -p -e 's|\Q$(SRC_PATH)\E/||g' $*.test.err | diff -q $(SRC_PATH)/$*.err -
 	@diff -q $(SRC_PATH)/$*.exit $*.test.exit
 
 # Consolidated targets
@@ -377,7 +433,8 @@ check-block: $(patsubst %,check-%, $(check-block-y))
 check: check-qapi-schema check-unit check-qtest
 check-clean:
 	$(MAKE) -C tests/tcg clean
-	rm -rf $(check-unit-y) $(check-qtest-i386-y) $(check-qtest-x86_64-y) $(check-qtest-sparc64-y) $(check-qtest-sparc-y) tests/*.o $(QEMU_IOTESTS_HELPERS-y)
+	rm -rf $(check-unit-y) tests/*.o $(QEMU_IOTESTS_HELPERS-y)
+	rm -rf $(sort $(foreach target,$(SYSEMU_TARGET_LIST), $(check-qtest-$(target)-y)))
 
 clean: check-clean
 

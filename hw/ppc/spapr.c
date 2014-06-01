@@ -1140,14 +1140,14 @@ static SaveVMHandlers savevm_htab_handlers = {
 };
 
 /* pSeries LPAR / sPAPR hardware init */
-static void ppc_spapr_init(QEMUMachineInitArgs *args)
+static void ppc_spapr_init(MachineState *machine)
 {
-    ram_addr_t ram_size = args->ram_size;
-    const char *cpu_model = args->cpu_model;
-    const char *kernel_filename = args->kernel_filename;
-    const char *kernel_cmdline = args->kernel_cmdline;
-    const char *initrd_filename = args->initrd_filename;
-    const char *boot_device = args->boot_order;
+    ram_addr_t ram_size = machine->ram_size;
+    const char *cpu_model = machine->cpu_model;
+    const char *kernel_filename = machine->kernel_filename;
+    const char *kernel_cmdline = machine->kernel_cmdline;
+    const char *initrd_filename = machine->initrd_filename;
+    const char *boot_device = machine->boot_order;
     PowerPCCPU *cpu;
     CPUPPCState *env;
     PCIHostState *phb;
@@ -1419,19 +1419,6 @@ static int spapr_kvm_type(const char *vm_type)
     exit(1);
 }
 
-static QEMUMachine spapr_machine = {
-    .name = "pseries",
-    .desc = "pSeries Logical Partition (PAPR compliant)",
-    .is_default = 1,
-    .init = ppc_spapr_init,
-    .reset = ppc_spapr_reset,
-    .block_default_type = IF_SCSI,
-    .max_cpus = MAX_CPUS,
-    .no_parallel = 1,
-    .default_boot_order = NULL,
-    .kvm_type = spapr_kvm_type,
-};
-
 /*
  * Implementation of an interface to adjust firmware patch
  * for the bootindex property handling.
@@ -1494,7 +1481,17 @@ static void spapr_machine_class_init(ObjectClass *oc, void *data)
     MachineClass *mc = MACHINE_CLASS(oc);
     FWPathProviderClass *fwc = FW_PATH_PROVIDER_CLASS(oc);
 
-    mc->qemu_machine = data;
+    mc->name = "pseries";
+    mc->desc = "pSeries Logical Partition (PAPR compliant)";
+    mc->is_default = 1;
+    mc->init = ppc_spapr_init;
+    mc->reset = ppc_spapr_reset;
+    mc->block_default_type = IF_SCSI;
+    mc->max_cpus = MAX_CPUS;
+    mc->no_parallel = 1;
+    mc->default_boot_order = NULL;
+    mc->kvm_type = spapr_kvm_type;
+
     fwc->get_dev_path = spapr_get_fw_dev_path;
 }
 
@@ -1502,7 +1499,6 @@ static const TypeInfo spapr_machine_info = {
     .name          = TYPE_SPAPR_MACHINE,
     .parent        = TYPE_MACHINE,
     .class_init    = spapr_machine_class_init,
-    .class_data    = &spapr_machine,
     .interfaces = (InterfaceInfo[]) {
         { TYPE_FW_PATH_PROVIDER },
         { }

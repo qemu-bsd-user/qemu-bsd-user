@@ -13,21 +13,27 @@
 #ifndef TCG_TARGET_AARCH64
 #define TCG_TARGET_AARCH64 1
 
-#undef TCG_TARGET_WORDS_BIGENDIAN
+#define TCG_TARGET_INSN_UNIT_SIZE  4
 #undef TCG_TARGET_STACK_GROWSUP
 
 typedef enum {
-    TCG_REG_X0, TCG_REG_X1, TCG_REG_X2, TCG_REG_X3, TCG_REG_X4,
-    TCG_REG_X5, TCG_REG_X6, TCG_REG_X7, TCG_REG_X8, TCG_REG_X9,
-    TCG_REG_X10, TCG_REG_X11, TCG_REG_X12, TCG_REG_X13, TCG_REG_X14,
-    TCG_REG_X15, TCG_REG_X16, TCG_REG_X17, TCG_REG_X18, TCG_REG_X19,
-    TCG_REG_X20, TCG_REG_X21, TCG_REG_X22, TCG_REG_X23, TCG_REG_X24,
-    TCG_REG_X25, TCG_REG_X26, TCG_REG_X27, TCG_REG_X28,
-    TCG_REG_FP,  /* frame pointer */
-    TCG_REG_LR, /* link register */
-    TCG_REG_SP,  /* stack pointer or zero register */
-    TCG_REG_XZR = TCG_REG_SP /* same register number */
-    /* program counter is not directly accessible! */
+    TCG_REG_X0, TCG_REG_X1, TCG_REG_X2, TCG_REG_X3,
+    TCG_REG_X4, TCG_REG_X5, TCG_REG_X6, TCG_REG_X7,
+    TCG_REG_X8, TCG_REG_X9, TCG_REG_X10, TCG_REG_X11,
+    TCG_REG_X12, TCG_REG_X13, TCG_REG_X14, TCG_REG_X15,
+    TCG_REG_X16, TCG_REG_X17, TCG_REG_X18, TCG_REG_X19,
+    TCG_REG_X20, TCG_REG_X21, TCG_REG_X22, TCG_REG_X23,
+    TCG_REG_X24, TCG_REG_X25, TCG_REG_X26, TCG_REG_X27,
+    TCG_REG_X28, TCG_REG_X29, TCG_REG_X30,
+
+    /* X31 is either the stack pointer or zero, depending on context.  */
+    TCG_REG_SP = 31,
+    TCG_REG_XZR = 31,
+
+    /* Aliases.  */
+    TCG_REG_FP = TCG_REG_X29,
+    TCG_REG_LR = TCG_REG_X30,
+    TCG_AREG0  = TCG_REG_X19,
 } TCGReg;
 
 #define TCG_TARGET_NB_REGS 32
@@ -63,6 +69,7 @@ typedef enum {
 #define TCG_TARGET_HAS_muls2_i32        0
 #define TCG_TARGET_HAS_muluh_i32        0
 #define TCG_TARGET_HAS_mulsh_i32        0
+#define TCG_TARGET_HAS_trunc_shr_i32    0
 
 #define TCG_TARGET_HAS_div_i64          1
 #define TCG_TARGET_HAS_rem_i64          1
@@ -92,11 +99,7 @@ typedef enum {
 #define TCG_TARGET_HAS_muluh_i64        1
 #define TCG_TARGET_HAS_mulsh_i64        1
 
-enum {
-    TCG_AREG0 = TCG_REG_X19,
-};
-
-#define TCG_TARGET_HAS_new_ldst         0
+#define TCG_TARGET_HAS_new_ldst         1
 
 static inline void flush_icache_range(uintptr_t start, uintptr_t stop)
 {

@@ -80,7 +80,7 @@ static int parse_volume_options(GlusterConf *gconf, char *path)
  * 'server' specifies the server where the volume file specification for
  * the given volume resides. This can be either hostname, ipv4 address
  * or ipv6 address. ipv6 address needs to be within square brackets [ ].
- * If transport type is 'unix', then 'server' field should not be specifed.
+ * If transport type is 'unix', then 'server' field should not be specified.
  * The 'socket' field needs to be populated with the path to unix domain
  * socket.
  *
@@ -207,6 +207,11 @@ static struct glfs *qemu_gluster_init(GlusterConf *gconf, const char *filename,
                          "volume=%s image=%s transport=%s", gconf->server,
                          gconf->port, gconf->volname, gconf->image,
                          gconf->transport);
+
+        /* glfs_init sometimes doesn't set errno although docs suggest that */
+        if (errno == 0)
+            errno = EINVAL;
+
         goto out;
     }
     return glfs;
@@ -482,7 +487,7 @@ static int qemu_gluster_create(const char *filename,
 
     glfs = qemu_gluster_init(gconf, filename, errp);
     if (!glfs) {
-        ret = -EINVAL;
+        ret = -errno;
         goto out;
     }
 
