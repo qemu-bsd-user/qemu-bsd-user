@@ -30,8 +30,6 @@ static inline void target_cpu_init(CPUX86State *env,
 {
     uint64_t *gdt_table;
 
-    cpu_x86_set_cpl(env, 3);
-
     env->cr[0] = CR0_PG_MASK | CR0_WP_MASK | CR0_PE_MASK;
     env->hflags |= HF_PE_MASK;
     if (env->features[FEAT_1_EDX] & CPUID_SSE) {
