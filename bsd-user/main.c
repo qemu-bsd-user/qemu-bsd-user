@@ -337,7 +337,7 @@ int main(int argc, char **argv)
     module_call_init(MODULE_INIT_QOM);
 
     if ((envlist = envlist_create()) == NULL) {
-        error_report("Unable to allocate envlist");
+        (void) fprintf(stderr, "Unable to allocate envlist\n");
         exit(1);
     }
 
@@ -379,7 +379,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(r, "ignore-environment")) {
             envlist_free(envlist);
             if ((envlist = envlist_create()) == NULL) {
-                error_report("Unable to allocate envlist");
+                (void) fprintf(stderr, "Unable to allocate envlist\n");
                 exit(1);
             }
         } else if (!strcmp(r, "U")) {
@@ -406,7 +406,7 @@ int main(int argc, char **argv)
             qemu_host_page_size = atoi(argv[optind++]);
             if (qemu_host_page_size == 0 ||
                 (qemu_host_page_size & (qemu_host_page_size - 1)) != 0) {
-                error_report("page size must be a power of two");
+                fprintf(stderr, "page size must be a power of two\n");
                 exit(1);
             }
         } else if (!strcmp(r, "g")) {
@@ -488,7 +488,7 @@ int main(int argc, char **argv)
        qemu_host_page_size */
     env = cpu_init(cpu_model);
     if (!env) {
-        error_report("Unable to find CPU definition");
+        fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
     cpu = ENV_GET_CPU(env);
