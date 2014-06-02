@@ -227,6 +227,7 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
         default:
             {
                 static int oid_hw_availpages;
+                static int oid_hw_pagesizes;
 
                 if (!oid_hw_availpages) {
                     int real_oid[CTL_MAXNAME+2];
@@ -234,6 +235,13 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 
                     if (sysctlnametomib("hw.availpages", real_oid, &len) >= 0)
                         oid_hw_availpages = real_oid[1];
+                }
+                if (!oid_hw_pagesizes) {
+                    int real_oid[CTL_MAXNAME+2];
+                    size_t len = sizeof(real_oid) / sizeof(int);
+
+                    if (sysctlnametomib("hw.pagesizes", real_oid, &len) >= 0)
+                        oid_hw_pagesizes = real_oid[1];
                 }
 
                 if (oid_hw_availpages && snamep[1] == oid_hw_availpages) {
@@ -250,6 +258,17 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
                         holdlen = sizeof(abi_ulong);
                         ret = 0;
                     }
+                    goto out;
+                }
+
+                if (oid_hw_pagesizes && snamep[1] == oid_hw_pagesizes) {
+                    // XXX some targets do superpages now too... */
+                    if (oldlen) {
+                        (*(abi_ulong *)holdp) = tswapal((abi_ulong)getpagesize());
+                        ((abi_ulong *)holdp)[1] = 0;
+                    }
+                    holdlen = sizeof(abi_ulong) * 2;
+                    ret = 0;
                     goto out;
                 }
                 break;
