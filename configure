@@ -2,26 +2,28 @@
 #
 # qemu configure script (c) 2003 Fabrice Bellard
 #
-# set temporary file name
-if test ! -z "$TMPDIR" ; then
-    TMPDIR1="${TMPDIR}"
-elif test ! -z "$TEMPDIR" ; then
-    TMPDIR1="${TEMPDIR}"
-else
-    TMPDIR1="/tmp"
+
+# Temporary directory used for files created while
+# configure runs. Since it is in the build directory
+# we can safely blow away any previous version of it
+# (and we need not jump through hoops to try to delete
+# it when configure exits.)
+TMPDIR1="config-temp"
+rm -rf "${TMPDIR1}"
+mkdir -p "${TMPDIR1}"
+if [ $? -ne 0 ]; then
+    echo "ERROR: failed to create temporary directory"
+    exit 1
 fi
 
-TMPC="${TMPDIR1}/qemu-conf-${RANDOM}-$$-${RANDOM}.c"
-TMPB="qemu-conf-${RANDOM}-$$-${RANDOM}"
+TMPB="qemu-conf"
+TMPC="${TMPDIR1}/${TMPB}.c"
 TMPO="${TMPDIR1}/${TMPB}.o"
 TMPCXX="${TMPDIR1}/${TMPB}.cxx"
 TMPL="${TMPDIR1}/${TMPB}.lo"
 TMPA="${TMPDIR1}/lib${TMPB}.la"
-TMPE="${TMPDIR1}/qemu-conf-${RANDOM}-$$-${RANDOM}.exe"
+TMPE="${TMPDIR1}/${TMPB}.exe"
 
-# NB: do not call "exit" in the trap handler; this is buggy with some shells;
-# see <1285349658-3122-1-git-send-email-loic.minier@linaro.org>
-trap "rm -f $TMPC $TMPO $TMPCXX $TMPE" EXIT INT QUIT TERM
 rm -f config.log
 
 # Print a helpful header at the top of config.log
@@ -198,6 +200,7 @@ audio_win_int=""
 cc_i386=i386-pc-linux-gnu-gcc
 libs_qga=""
 debug_info="yes"
+stack_protector=""
 
 # Don't accept a target_list environment variable.
 unset target_list
@@ -261,7 +264,7 @@ DSOSUF=".so"
 LDFLAGS_SHARED="-shared"
 modules="no"
 prefix="/usr/local"
-mandir="\${prefix}/share/man"
+mandir="\${prefix}/man"
 datadir="\${prefix}/share"
 qemu_docdir="\${prefix}/share/doc/qemu"
 bindir="\${prefix}/bin"
@@ -284,7 +287,6 @@ softmmu="yes"
 linux_user="no"
 bsd_user="no"
 guest_base="yes"
-uname_release=""
 aix="no"
 blobs="yes"
 pkgversion=""
@@ -317,11 +319,15 @@ glusterfs_discard="no"
 glusterfs_zerofill="no"
 virtio_blk_data_plane=""
 gtk=""
-gtkabi="2.0"
+gtkabi=""
+vte=""
 tpm="no"
 libssh2=""
 vhdx=""
 quorum="no"
+pcap="no"
+pcap_create="no"
+bpf="no"
 
 # parse CC options first
 for opt do
@@ -401,6 +407,14 @@ fi
 
 # make source path absolute
 source_path=`cd "$source_path"; pwd`
+
+# running configure in the source tree?
+# we know that's the case if configure is there.
+if test -f "./configure"; then
+    pwd_is_source_path="y"
+else
+    pwd_is_source_path="n"
+fi
 
 check_define() {
 cat > $TMPC <<EOF
@@ -863,6 +877,10 @@ for opt do
   ;;
   --enable-vnc-ws) vnc_ws="yes"
   ;;
+  --enable-pcap) pcap="yes"
+  ;;
+  --disable-pcap) pcap="no"
+  ;;
   --disable-slirp) slirp="no"
   ;;
   --disable-uuid) uuid="no"
@@ -951,11 +969,13 @@ for opt do
   ;;
   --disable-pie) pie="no"
   ;;
-  --enable-uname-release=*) uname_release="$optarg"
-  ;;
   --enable-werror) werror="yes"
   ;;
   --disable-werror) werror="no"
+  ;;
+  --enable-stack-protector) stack_protector="yes"
+  ;;
+  --disable-stack-protector) stack_protector="no"
   ;;
   --disable-curses) curses="no"
   ;;
@@ -1071,6 +1091,10 @@ for opt do
   ;;
   --with-gtkabi=*) gtkabi="$optarg"
   ;;
+  --disable-vte) vte="no"
+  ;;
+  --enable-vte) vte="yes"
+  ;;
   --enable-tpm) tpm="yes"
   ;;
   --disable-libssh2) libssh2="no"
@@ -1085,7 +1109,10 @@ for opt do
   ;;
   --enable-quorum) quorum="yes"
   ;;
-  *) echo "ERROR: unknown option $opt"; show_help="yes"
+  *)
+      echo "ERROR: unknown option $opt"
+      echo "Try '$0 --help' for more information"
+      exit 1
   ;;
   esac
 done
@@ -1127,11 +1154,11 @@ case "$cpu" in
            CPU_CFLAGS="-m64 -mcpu=ultrasparc"
            ;;
     s390)
-           CPU_CFLAGS="-m31 -march=z990"
+           CPU_CFLAGS="-m31"
            LDFLAGS="-m31 $LDFLAGS"
            ;;
     s390x)
-           CPU_CFLAGS="-m64 -march=z990"
+           CPU_CFLAGS="-m64"
            LDFLAGS="-m64 $LDFLAGS"
            ;;
     i386)
@@ -1215,18 +1242,20 @@ Advanced options (experts only):
   --enable-modules         enable modules support
   --enable-debug-tcg       enable TCG debugging
   --disable-debug-tcg      disable TCG debugging (default)
-  --enable-debug-info       enable debugging information (default)
-  --disable-debug-info      disable debugging information
+  --enable-debug-info      enable debugging information (default)
+  --disable-debug-info     disable debugging information
   --enable-debug           enable common debug build options
   --enable-sparse          enable sparse checker
   --disable-sparse         disable sparse checker (default)
   --disable-strip          disable stripping binaries
   --disable-werror         disable compilation abort on warning
+  --disable-stack-protector disable compiler-provided stack protection
   --disable-sdl            disable SDL
   --enable-sdl             enable SDL
   --with-sdlabi            select preferred SDL ABI 1.2 or 2.0
   --disable-gtk            disable gtk UI
   --enable-gtk             enable gtk UI
+  --with-gtkabi            select preferred GTK ABI 2.0 or 3.0
   --disable-virtfs         disable VirtFS
   --enable-virtfs          enable VirtFS
   --disable-vnc            disable VNC
@@ -1288,7 +1317,6 @@ Advanced options (experts only):
   --fmod-lib               path to FMOD library
   --fmod-inc               path to FMOD includes
   --oss-lib                path to OSS library
-  --enable-uname-release=R Return R for uname -r in usermode emulation
   --cpu=CPU                Build for host CPU [$cpu]
   --disable-uuid           disable uuid support
   --enable-uuid            enable uuid support
@@ -1350,7 +1378,7 @@ Advanced options (experts only):
 
 NOTE: The object files are built at the place where configure is launched
 EOF
-exit 1
+exit 0
 fi
 
 # Now we have handled --enable-tcg-interpreter and know we're not just
@@ -1442,9 +1470,18 @@ for flag in $gcc_flags; do
     fi
 done
 
-if compile_prog "-Werror -fstack-protector-all" "" ; then
-    QEMU_CFLAGS="$QEMU_CFLAGS -fstack-protector-all"
-    LIBTOOLFLAGS="$LIBTOOLFLAGS -Wc,-fstack-protector-all"
+if test "$stack_protector" != "no" ; then
+  gcc_flags="-fstack-protector-strong -fstack-protector-all"
+  for flag in $gcc_flags; do
+    # We need to check both a compile and a link, since some compiler
+    # setups fail only on a .c->.o compile and some only at link time
+    if do_cc $QEMU_CFLAGS -Werror $flag -c -o $TMPO $TMPC &&
+       compile_prog "-Werror $flag" ""; then
+      QEMU_CFLAGS="$QEMU_CFLAGS $flag"
+      LIBTOOLFLAGS="$LIBTOOLFLAGS -Wc,$flag"
+      break
+    fi
+  done
 fi
 
 # Workaround for http://gcc.gnu.org/PR55489.  Happens with -fPIE/-fPIC and
@@ -1950,34 +1987,61 @@ fi
 ##########################################
 # GTK probe
 
+if test "$gtkabi" = ""; then
+    # The GTK ABI was not specified explicitly, so try whether 2.0 is available.
+    # Use 3.0 as a fallback if that is available.
+    if $pkg_config --exists "gtk+-2.0 >= 2.18.0"; then
+        gtkabi=2.0
+    elif $pkg_config --exists "gtk+-3.0 >= 3.0.0"; then
+        gtkabi=3.0
+    else
+        gtkabi=2.0
+    fi
+fi
+
 if test "$gtk" != "no"; then
     gtkpackage="gtk+-$gtkabi"
     if test "$gtkabi" = "3.0" ; then
       gtkversion="3.0.0"
+    else
+      gtkversion="2.18.0"
+    fi
+    if $pkg_config --exists "$gtkpackage >= $gtkversion"; then
+        gtk_cflags=`$pkg_config --cflags $gtkpackage`
+        gtk_libs=`$pkg_config --libs $gtkpackage`
+        libs_softmmu="$gtk_libs -lintl $libs_softmmu"
+        gtk="yes"
+    elif test "$gtk" = "yes"; then
+        feature_not_found "gtk" "Install gtk2 or gtk3 devel"
+    else
+        gtk="no"
+    fi
+fi
+
+##########################################
+# VTE probe
+
+if test "$vte" != "no"; then
+    if test "$gtkabi" = "3.0"; then
       vtepackage="vte-2.90"
       vteversion="0.32.0"
     else
-      gtkversion="2.18.0"
       vtepackage="vte"
       vteversion="0.24.0"
     fi
-    if ! $pkg_config --exists "$gtkpackage >= $gtkversion"; then
-        if test "$gtk" = "yes" ; then
-            feature_not_found "gtk" "Install gtk2 or gtk3 (requires --with-gtkabi=3.0 option to configure) devel"
+    if $pkg_config --exists "$vtepackage >= $vteversion"; then
+        vte_cflags=`$pkg_config --cflags $vtepackage`
+        vte_libs=`$pkg_config --libs $vtepackage`
+        libs_softmmu="$vte_libs $libs_softmmu"
+        vte="yes"
+    elif test "$vte" = "yes"; then
+        if test "$gtkabi" = "3.0"; then
+            feature_not_found "vte" "Install libvte-2.90 devel"
+        else
+            feature_not_found "vte" "Install libvte devel"
         fi
-        gtk="no"
-    elif ! $pkg_config --exists "$vtepackage >= $vteversion"; then
-        if test "$gtk" = "yes" ; then
-            error_exit "libvte not found (required for gtk support)"
-        fi
-        gtk="no"
     else
-	gtk_cflags=`$pkg_config --cflags $gtkpackage`
-	gtk_libs=`$pkg_config --libs $gtkpackage`
-	vte_cflags=`$pkg_config --cflags $vtepackage`
-	vte_libs=`$pkg_config --libs $vtepackage`
-	libs_softmmu="$gtk_libs $vte_libs $libs_softmmu"
-	gtk="yes"
+        vte="no"
     fi
 fi
 
@@ -2097,6 +2161,51 @@ EOF
     rdma="no"
   fi
 fi
+
+##########################################
+# pcap probe
+
+if test "$pcap" = "yes" -a "$pcap" != "no"; then
+  cat > $TMPC << EOF
+#include <pcap.h>
+int main(void) { return (pcap_lib_version() == (char *)0 ? 1 : 0); }
+EOF
+  if test "$mingw32" = "no" ; then
+    libpcap=-lpcap
+  else
+    libpcap=-lwpcap
+  fi
+  if compile_prog "" "$libpcap" ; then
+    :
+  else
+    echo
+    echo "Error: Could not find pcap"
+    echo "Make sure to have the pcap libs and headers installed."
+    echo
+    exit 1
+  fi
+  cat > $TMPC << EOF
+#include <pcap.h>
+int main(void)
+{
+  char errbuf[PCAP_ERRBUF_SIZE];
+  return (pcap_create("foo", errbuf) == (pcap_t *)0 ? 1 : 0);
+}
+EOF
+  if compile_prog "" "$libpcap" ; then
+    pcap_create="yes"
+  fi
+  cat > $TMPC << EOF
+#define PCAP_DONT_INCLUDE_PCAP_BPF_H
+#include <pcap.h>
+#include <net/bpf.h>
+int main(void) { return (BPF_MAJOR_VERSION); }
+EOF
+  if compile_prog ; then
+    bpf="yes"
+  fi
+  libs_softmmu="$libpcap $libs_softmmu"
+fi # test "$pcap"
 
 ##########################################
 # VNC TLS/WS detection
@@ -2601,7 +2710,7 @@ done
 if test "$modules" = yes; then
     shacmd_probe="sha1sum sha1 shasum"
     for c in $shacmd_probe; do
-        if which $c &>/dev/null; then
+        if which $c >/dev/null 2>&1; then
             shacmd="$c"
             break
         fi
@@ -2702,6 +2811,24 @@ fi
 if test "$mingw32" != yes -a "$pthread" = no; then
   error_exit "pthread check failed" \
       "Make sure to have the pthread libs and headers installed."
+fi
+
+# check for pthread_setname_np
+pthread_setname_np=no
+cat > $TMPC << EOF
+#include <pthread.h>
+
+static void *f(void *p) { return NULL; }
+int main(void)
+{
+    pthread_t thread;
+    pthread_create(&thread, 0, f, 0);
+    pthread_setname_np(thread, "QEMU");
+    return 0;
+}
+EOF
+if compile_prog "" "$pthread_lib" ; then
+  pthread_setname_np=yes
 fi
 
 ##########################################
@@ -2899,7 +3026,7 @@ EOF
     fdt=yes
     dtc_internal="yes"
     mkdir -p dtc
-    if [ "$source_path" != `pwd` ] ; then
+    if [ "$pwd_is_source_path" != "y" ] ; then
        symlink "$source_path/dtc/Makefile" "dtc/Makefile"
        symlink "$source_path/dtc/scripts" "dtc/scripts"
     fi
@@ -3271,15 +3398,18 @@ if compile_prog "" "" ; then
 fi
 
 # Check if tools are available to build documentation.
+#if test "$docs" != "no" ; then
+#  if has makeinfo && has pod2man; then
+#    docs=yes
+#  else
+#    if test "$docs" = "yes" ; then
+#      feature_not_found "docs" "Install texinfo and Perl/perl-podlators"
+#    fi
+#    docs=no
+#  fi
+#fi
 if test "$docs" != "no" ; then
-  if has makeinfo && has pod2man; then
-    docs=yes
-  else
-    if test "$docs" = "yes" ; then
-      feature_not_found "docs" "Install texinfo and Perl/perl-podlators"
-    fi
-    docs=no
-  fi
+  docs=yes
 fi
 
 # Search for bswap_32 function
@@ -3421,10 +3551,10 @@ if test "$smartcard_nss" != "no"; then
 #include <pk11pub.h>
 int main(void) { PK11_FreeSlot(0); return 0; }
 EOF
-    smartcard_includes="-I\$(SRC_PATH)/libcacard"
-    libcacard_libs="$($pkg_config --libs nss 2>/dev/null) $glib_libs"
-    libcacard_cflags="$($pkg_config --cflags nss 2>/dev/null) $glib_cflags"
-    test_cflags="$libcacard_cflags"
+    # FIXME: do not include $glib_* in here
+    nss_libs="$($pkg_config --libs nss 2>/dev/null) $glib_libs"
+    nss_cflags="$($pkg_config --cflags nss 2>/dev/null) $glib_cflags"
+    test_cflags="$nss_cflags"
     # The header files in nss < 3.13.3 have a bug which causes them to
     # emit a warning. If we're going to compile QEMU with -Werror, then
     # test that the headers don't have this bug. Otherwise we would pass
@@ -3434,11 +3564,8 @@ EOF
     fi
     if test -n "$libtool" &&
        $pkg_config --atleast-version=3.12.8 nss && \
-      compile_prog "$test_cflags" "$libcacard_libs"; then
+      compile_prog "$test_cflags" "$nss_libs"; then
         smartcard_nss="yes"
-        QEMU_CFLAGS="$QEMU_CFLAGS $libcacard_cflags"
-        QEMU_INCLUDES="$QEMU_INCLUDES $smartcard_includes"
-        libs_softmmu="$libcacard_libs $libs_softmmu"
     else
         if test "$smartcard_nss" = "yes"; then
             feature_not_found "nss"
@@ -3449,6 +3576,17 @@ fi
 
 # check for libusb
 if test "$libusb" != "no" ; then
+    cat > $TMPC << EOF
+#include <libusb.h>
+
+int main(void) { return libusb_get_port_path(NULL, NULL, NULL, 0); }
+EOF
+    if compile_prog "-Werror" "-lusb -pthread" ; then
+        libusb="yes"
+        libusb_cflags=""
+        libusb_libs=-lusb
+        libs_softmmu="$libs_softmmu $libusb_libs"
+    else
     if $pkg_config --atleast-version=1.0.13 libusb-1.0; then
         libusb="yes"
         libusb_cflags=$($pkg_config --cflags libusb-1.0)
@@ -3460,6 +3598,7 @@ if test "$libusb" != "no" ; then
             feature_not_found "libusb" "Install libusb devel"
         fi
         libusb="no"
+    fi
     fi
 fi
 
@@ -3983,11 +4122,14 @@ fi
 if test "$pie" = "no" ; then
   textseg_addr=
   case "$cpu" in
-    arm | hppa | i386 | m68k | ppc | ppc64 | s390* | sparc | sparc64 | x86_64 | x32)
+    arm | i386 | ppc* | s390* | sparc* | x86_64 | x32)
+      # ??? Rationale for choosing this address
       textseg_addr=0x60000000
       ;;
     mips)
-      textseg_addr=0x400000
+      # A 256M aligned address, high in the address space, with enough
+      # room for the code_gen_buffer above it before the stack.
+      textseg_addr=0x60000000
       ;;
   esac
   if [ -n "$textseg_addr" ]; then
@@ -4054,13 +4196,13 @@ echo "sparse enabled    $sparse"
 echo "strip binaries    $strip_opt"
 echo "profiler          $profiler"
 echo "static build      $static"
-echo "-Werror enabled   $werror"
 if test "$darwin" = "yes" ; then
     echo "Cocoa support     $cocoa"
 fi
 echo "pixman            $pixman"
 echo "SDL support       $sdl"
 echo "GTK support       $gtk"
+echo "VTE support       $vte"
 echo "curses support    $curses"
 echo "curl support      $curl"
 echo "mingw32 support   $mingw32"
@@ -4068,6 +4210,7 @@ echo "Audio drivers     $audio_drv_list"
 echo "Block whitelist (rw) $block_drv_rw_whitelist"
 echo "Block whitelist (ro) $block_drv_ro_whitelist"
 echo "VirtFS support    $virtfs"
+echo "pcap support      $pcap"
 echo "VNC support       $vnc"
 if test "$vnc" = "yes" ; then
     echo "VNC TLS support   $vnc_tls"
@@ -4083,8 +4226,6 @@ echo "xen support       $xen"
 echo "brlapi support    $brlapi"
 echo "bluez  support    $bluez"
 echo "Documentation     $docs"
-[ ! -z "$uname_release" ] && \
-echo "uname -r          $uname_release"
 echo "GUEST_BASE        $guest_base"
 echo "PIE               $pie"
 echo "vde support       $vde"
@@ -4106,7 +4247,9 @@ echo "libcap-ng support $cap_ng"
 echo "vhost-net support $vhost_net"
 echo "vhost-scsi support $vhost_scsi"
 echo "Trace backend     $trace_backend"
+if test "$trace_backend" = "simple"; then
 echo "Trace output file $trace_file-<pid>"
+fi
 if test "$spice" = "yes"; then
 echo "spice support     $spice ($spice_protocol_version/$spice_server_version)"
 else
@@ -4232,6 +4375,15 @@ fi
 if test "$profiler" = "yes" ; then
   echo "CONFIG_PROFILER=y" >> $config_host_mak
 fi
+if test "$pcap" = "yes" ; then
+  echo "CONFIG_PCAP=y" >> $config_host_mak
+  if test "$pcap_create" = "yes" ; then
+    echo "CONFIG_PCAP_CREATE=y" >> $config_host_mak
+  fi
+  if test "$bpf" = "yes" ; then
+    echo "CONFIG_BPF=y" >> $config_host_mak
+  fi
+fi
 if test "$slirp" = "yes" ; then
   echo "CONFIG_SLIRP=y" >> $config_host_mak
   echo "CONFIG_SMBD_COMMAND=\"$smbd\"" >> $config_host_mak
@@ -4305,6 +4457,7 @@ if test "$modules" = "yes"; then
 fi
 if test "$sdl" = "yes" ; then
   echo "CONFIG_SDL=y" >> $config_host_mak
+  echo "CONFIG_SDLABI=$sdlabi" >> $config_host_mak
   echo "SDL_CFLAGS=$sdl_cflags" >> $config_host_mak
 fi
 if test "$cocoa" = "yes" ; then
@@ -4388,7 +4541,11 @@ fi
 echo "GLIB_CFLAGS=$glib_cflags" >> $config_host_mak
 if test "$gtk" = "yes" ; then
   echo "CONFIG_GTK=y" >> $config_host_mak
+  echo "CONFIG_GTKABI=$gtkabi" >> $config_host_mak
   echo "GTK_CFLAGS=$gtk_cflags" >> $config_host_mak
+fi
+if test "$vte" = "yes" ; then
+  echo "CONFIG_VTE=y" >> $config_host_mak
   echo "VTE_CFLAGS=$vte_cflags" >> $config_host_mak
 fi
 if test "$xen" = "yes" ; then
@@ -4447,8 +4604,8 @@ fi
 
 if test "$smartcard_nss" = "yes" ; then
   echo "CONFIG_SMARTCARD_NSS=y" >> $config_host_mak
-  echo "libcacard_libs=$libcacard_libs" >> $config_host_mak
-  echo "libcacard_cflags=$libcacard_cflags" >> $config_host_mak
+  echo "NSS_LIBS=$nss_libs" >> $config_host_mak
+  echo "NSS_CFLAGS=$nss_cflags" >> $config_host_mak
 fi
 
 if test "$libusb" = "yes" ; then
@@ -4493,8 +4650,6 @@ fi
 if [ "$bsd" = "yes" ] ; then
   echo "CONFIG_BSD=y" >> $config_host_mak
 fi
-
-echo "CONFIG_UNAME_RELEASE=\"$uname_release\"" >> $config_host_mak
 
 if test "$zero_malloc" = "yes" ; then
   echo "CONFIG_ZERO_MALLOC=y" >> $config_host_mak
@@ -4634,6 +4789,16 @@ fi
 
 if test "$rdma" = "yes" ; then
   echo "CONFIG_RDMA=y" >> $config_host_mak
+fi
+
+# Hold two types of flag:
+#   CONFIG_THREAD_SETNAME_BYTHREAD  - we've got a way of setting the name on
+#                                     a thread we have a handle to
+#   CONFIG_PTHREAD_SETNAME_NP       - A way of doing it on a particular
+#                                     platform
+if test "$pthread_setname_np" = "yes" ; then
+  echo "CONFIG_THREAD_SETNAME_BYTHREAD=y" >> $config_host_mak
+  echo "CONFIG_PTHREAD_SETNAME_NP=y" >> $config_host_mak
 fi
 
 if test "$tcg_interpreter" = "yes"; then
@@ -5127,7 +5292,7 @@ do
 done
 mkdir -p $DIRS
 for f in $FILES ; do
-    if [ -e "$source_path/$f" ] && [ "$source_path" != `pwd` ]; then
+    if [ -e "$source_path/$f" ] && [ "$pwd_is_source_path" != "y" ]; then
         symlink "$source_path/$f" "$f"
     fi
 done
@@ -5163,3 +5328,4 @@ printf " '%s'" "$0" "$@" >>config.status
 echo >>config.status
 chmod +x config.status
 
+rm -r "$TMPDIR1"

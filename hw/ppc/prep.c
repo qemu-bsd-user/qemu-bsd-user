@@ -361,21 +361,22 @@ static const MemoryRegionPortio prep_portio_list[] = {
     PORTIO_END_OF_LIST(),
 };
 
+static PortioList prep_port_list;
+
 /* PowerPC PREP hardware initialisation */
-static void ppc_prep_init(QEMUMachineInitArgs *args)
+static void ppc_prep_init(MachineState *machine)
 {
-    ram_addr_t ram_size = args->ram_size;
-    const char *cpu_model = args->cpu_model;
-    const char *kernel_filename = args->kernel_filename;
-    const char *kernel_cmdline = args->kernel_cmdline;
-    const char *initrd_filename = args->initrd_filename;
-    const char *boot_device = args->boot_order;
+    ram_addr_t ram_size = machine->ram_size;
+    const char *cpu_model = machine->cpu_model;
+    const char *kernel_filename = machine->kernel_filename;
+    const char *kernel_cmdline = machine->kernel_cmdline;
+    const char *initrd_filename = machine->initrd_filename;
+    const char *boot_device = machine->boot_order;
     MemoryRegion *sysmem = get_system_memory();
     PowerPCCPU *cpu = NULL;
     CPUPPCState *env = NULL;
     nvram_t nvram;
     M48t59State *m48t59;
-    PortioList *port_list = g_new(PortioList, 1);
 #if 0
     MemoryRegion *xcsr = g_new(MemoryRegion, 1);
 #endif
@@ -542,8 +543,8 @@ static void ppc_prep_init(QEMUMachineInitArgs *args)
     cpu = POWERPC_CPU(first_cpu);
     sysctrl->reset_irq = cpu->env.irq_inputs[PPC6xx_INPUT_HRESET];
 
-    portio_list_init(port_list, NULL, prep_portio_list, sysctrl, "prep");
-    portio_list_add(port_list, isa_address_space_io(isa), 0x0);
+    portio_list_init(&prep_port_list, NULL, prep_portio_list, sysctrl, "prep");
+    portio_list_add(&prep_port_list, isa_address_space_io(isa), 0x0);
 
     /* PowerPC control and status register group */
 #if 0

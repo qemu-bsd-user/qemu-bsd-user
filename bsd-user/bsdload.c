@@ -24,6 +24,7 @@
 #include <stdlib.h>
 
 #include "qemu.h"
+#include "qemu/error-report.h"
 
 #define TARGET_NGROUPS 32
 
@@ -257,7 +258,7 @@ int loader_exec(const char * filename, char ** argv, char ** envp,
                 && bprm->buf[3] == 'F') {
             retval = load_elf_binary(bprm, regs, infop);
         } else {
-            fprintf(stderr, "Unknown binary format\n");
+            error_report("Unknown binary format");
             return -1;
         }
     }

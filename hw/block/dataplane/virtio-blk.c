@@ -23,7 +23,7 @@
 #include "virtio-blk.h"
 #include "block/aio.h"
 #include "hw/virtio/virtio-bus.h"
-#include "monitor/monitor.h" /* for object_add() */
+#include "qom/object_interfaces.h"
 
 enum {
     SEG_MAX = 126,                  /* maximum number of I/O segments */
@@ -59,7 +59,7 @@ struct VirtIOBlockDataPlane {
      * use it).
      */
     IOThread *iothread;
-    bool internal_iothread;
+    IOThread internal_iothread_obj;
     AioContext *ctx;
     EventNotifier io_notifier;      /* Linux AIO completion */
     EventNotifier host_notifier;    /* doorbell */
@@ -70,6 +70,9 @@ struct VirtIOBlockDataPlane {
                                              queue */
 
     unsigned int num_reqs;
+
+    /* Operation blocker on BDS */
+    Error *blocker;
 };
 
 /* Raise an interrupt to signal guest, if necessary */
@@ -350,6 +353,7 @@ void virtio_blk_data_plane_create(VirtIODevice *vdev, VirtIOBlkConf *blk,
 {
     VirtIOBlockDataPlane *s;
     int fd;
+    Error *local_err = NULL;
 
     *dataplane = NULL;
 
@@ -372,9 +376,10 @@ void virtio_blk_data_plane_create(VirtIODevice *vdev, VirtIOBlkConf *blk,
     /* If dataplane is (re-)enabled while the guest is running there could be
      * block jobs that can conflict.
      */
-    if (bdrv_in_use(blk->conf.bs)) {
-        error_setg(errp,
-                   "cannot start dataplane thread while device is in use");
+    if (bdrv_op_is_blocked(blk->conf.bs, BLOCK_OP_TYPE_DATAPLANE, &local_err)) {
+        error_report("cannot start dataplane thread: %s",
+                      error_get_pretty(local_err));
+        error_free(local_err);
         return;
     }
 
@@ -391,27 +396,23 @@ void virtio_blk_data_plane_create(VirtIODevice *vdev, VirtIOBlkConf *blk,
     s->blk = blk;
 
     if (blk->iothread) {
-        s->internal_iothread = false;
         s->iothread = blk->iothread;
+        object_ref(OBJECT(s->iothread));
     } else {
-        /* Create per-device IOThread if none specified */
-        Error *local_err = NULL;
-
-        s->internal_iothread = true;
-        object_add(TYPE_IOTHREAD, vdev->name, NULL, NULL, &local_err);
-        if (error_is_set(&local_err)) {
-            error_propagate(errp, local_err);
-            g_free(s);
-            return;
-        }
-        s->iothread = iothread_find(vdev->name);
-        assert(s->iothread);
+        /* Create per-device IOThread if none specified.  This is for
+         * x-data-plane option compatibility.  If x-data-plane is removed we
+         * can drop this.
+         */
+        object_initialize(&s->internal_iothread_obj,
+                          sizeof(s->internal_iothread_obj),
+                          TYPE_IOTHREAD);
+        user_creatable_complete(OBJECT(&s->internal_iothread_obj), &error_abort);
+        s->iothread = &s->internal_iothread_obj;
     }
-    object_ref(OBJECT(s->iothread));
     s->ctx = iothread_get_aio_context(s->iothread);
 
-    /* Prevent block operations that conflict with data plane thread */
-    bdrv_set_in_use(blk->conf.bs, 1);
+    error_setg(&s->blocker, "block device is in use by data plane");
+    bdrv_op_block_all(blk->conf.bs, s->blocker);
 
     *dataplane = s;
 }
@@ -424,11 +425,9 @@ void virtio_blk_data_plane_destroy(VirtIOBlockDataPlane *s)
     }
 
     virtio_blk_data_plane_stop(s);
-    bdrv_set_in_use(s->blk->conf.bs, 0);
+    bdrv_op_unblock_all(s->blk->conf.bs, s->blocker);
+    error_free(s->blocker);
     object_unref(OBJECT(s->iothread));
-    if (s->internal_iothread) {
-        object_unparent(OBJECT(s->iothread));
-    }
     g_free(s);
 }
 

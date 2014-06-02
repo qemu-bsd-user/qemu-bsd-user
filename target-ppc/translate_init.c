@@ -6699,6 +6699,8 @@ POWERPC_FAMILY(970)(ObjectClass *oc, void *data)
     pcc->flags = POWERPC_FLAG_VRE | POWERPC_FLAG_SE |
                  POWERPC_FLAG_BE | POWERPC_FLAG_PMM |
                  POWERPC_FLAG_BUS_CLK;
+    pcc->l1_dcache_size = 0x8000;
+    pcc->l1_icache_size = 0x10000;
 }
 
 static int check_pow_970FX (CPUPPCState *env)
@@ -6791,6 +6793,8 @@ POWERPC_FAMILY(970FX)(ObjectClass *oc, void *data)
     pcc->flags = POWERPC_FLAG_VRE | POWERPC_FLAG_SE |
                  POWERPC_FLAG_BE | POWERPC_FLAG_PMM |
                  POWERPC_FLAG_BUS_CLK;
+    pcc->l1_dcache_size = 0x8000;
+    pcc->l1_icache_size = 0x10000;
 }
 
 static int check_pow_970MP (CPUPPCState *env)
@@ -6877,6 +6881,8 @@ POWERPC_FAMILY(970MP)(ObjectClass *oc, void *data)
     pcc->flags = POWERPC_FLAG_VRE | POWERPC_FLAG_SE |
                  POWERPC_FLAG_BE | POWERPC_FLAG_PMM |
                  POWERPC_FLAG_BUS_CLK;
+    pcc->l1_dcache_size = 0x8000;
+    pcc->l1_icache_size = 0x10000;
 }
 
 static void init_proc_power5plus(CPUPPCState *env)
@@ -6967,6 +6973,8 @@ POWERPC_FAMILY(POWER5P)(ObjectClass *oc, void *data)
     pcc->flags = POWERPC_FLAG_VRE | POWERPC_FLAG_SE |
                  POWERPC_FLAG_BE | POWERPC_FLAG_PMM |
                  POWERPC_FLAG_BUS_CLK;
+    pcc->l1_dcache_size = 0x8000;
+    pcc->l1_icache_size = 0x10000;
 }
 
 static void init_proc_POWER7 (CPUPPCState *env)
@@ -7075,7 +7083,7 @@ POWERPC_FAMILY(POWER7)(ObjectClass *oc, void *data)
                         PPC2_PERM_ISA206 | PPC2_DIVE_ISA206 |
                         PPC2_ATOMIC_ISA206 | PPC2_FP_CVT_ISA206 |
                         PPC2_FP_TST_ISA206;
-    pcc->msr_mask = 0x800000000284FF37ULL;
+    pcc->msr_mask = 0x800000000280FF37ULL;
     pcc->mmu_model = POWERPC_MMU_2_06;
 #if defined(CONFIG_SOFTMMU)
     pcc->handle_mmu_fault = ppc_hash64_handle_mmu_fault;
@@ -7118,7 +7126,7 @@ POWERPC_FAMILY(POWER7P)(ObjectClass *oc, void *data)
                         PPC2_PERM_ISA206 | PPC2_DIVE_ISA206 |
                         PPC2_ATOMIC_ISA206 | PPC2_FP_CVT_ISA206 |
                         PPC2_FP_TST_ISA206;
-    pcc->msr_mask = 0x800000000204FF37ULL;
+    pcc->msr_mask = 0x800000000280FF37ULL;
     pcc->mmu_model = POWERPC_MMU_2_06;
 #if defined(CONFIG_SOFTMMU)
     pcc->handle_mmu_fault = ppc_hash64_handle_mmu_fault;
@@ -7157,7 +7165,7 @@ POWERPC_FAMILY(POWER8)(ObjectClass *oc, void *data)
     pcc->pvr_mask = CPU_POWERPC_POWER8_MASK;
     pcc->init_proc = init_proc_POWER8;
     pcc->check_pow = check_pow_nocheck;
-    pcc->insns_flags = PPC_INSNS_BASE | PPC_STRING | PPC_MFTB |
+    pcc->insns_flags = PPC_INSNS_BASE | PPC_ISEL | PPC_STRING | PPC_MFTB |
                        PPC_FLOAT | PPC_FLOAT_FSEL | PPC_FLOAT_FRES |
                        PPC_FLOAT_FSQRT | PPC_FLOAT_FRSQRTE |
                        PPC_FLOAT_FRSQRTES |
@@ -7175,7 +7183,7 @@ POWERPC_FAMILY(POWER8)(ObjectClass *oc, void *data)
                         PPC2_FP_TST_ISA206 | PPC2_BCTAR_ISA207 |
                         PPC2_LSQ_ISA207 | PPC2_ALTIVEC_207 |
                         PPC2_ISA205 | PPC2_ISA207S;
-    pcc->msr_mask = 0x800000000284FF36ULL;
+    pcc->msr_mask = 0x800000000280FF37ULL;
     pcc->mmu_model = POWERPC_MMU_2_06;
 #if defined(CONFIG_SOFTMMU)
     pcc->handle_mmu_fault = ppc_hash64_handle_mmu_fault;

@@ -101,7 +101,6 @@ static void scsi_dma_restart_bh(void *opaque)
                 scsi_req_continue(req);
                 break;
             case SCSI_XFER_NONE:
-                assert(!req->sg);
                 scsi_req_dequeue(req);
                 scsi_req_enqueue(req);
                 break;
@@ -939,6 +938,7 @@ static int scsi_req_length(SCSICommand *cmd, SCSIDevice *dev, uint8_t *buf)
         if (cmd->xfer == 0) {
             cmd->xfer = 256;
         }
+        /* fall through */
     case WRITE_10:
     case WRITE_VERIFY_10:
     case WRITE_12:
@@ -953,6 +953,7 @@ static int scsi_req_length(SCSICommand *cmd, SCSIDevice *dev, uint8_t *buf)
         if (cmd->xfer == 0) {
             cmd->xfer = 256;
         }
+        /* fall through */
     case READ_10:
     case RECOVER_BUFFERED_DATA:
     case READ_12:
@@ -1180,7 +1181,7 @@ static uint64_t scsi_cmd_lba(SCSICommand *cmd)
     return lba;
 }
 
-int scsi_req_parse(SCSICommand *cmd, SCSIDevice *dev, uint8_t *buf)
+static int scsi_req_parse(SCSICommand *cmd, SCSIDevice *dev, uint8_t *buf)
 {
     int rc;
 

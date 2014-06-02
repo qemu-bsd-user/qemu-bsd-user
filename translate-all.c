@@ -143,7 +143,7 @@ void cpu_gen_init(void)
 int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr)
 {
     TCGContext *s = &tcg_ctx;
-    uint8_t *gen_code_buf;
+    tcg_insn_unit *gen_code_buf;
     int gen_code_size;
 #ifdef CONFIG_PROFILER
     int64_t ti;
@@ -186,8 +186,8 @@ int cpu_gen_code(CPUArchState *env, TranslationBlock *tb, int *gen_code_size_ptr
 
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_OUT_ASM)) {
-        qemu_log("OUT: [size=%d]\n", *gen_code_size_ptr);
-        log_disas(tb->tc_ptr, *gen_code_size_ptr);
+        qemu_log("OUT: [size=%d]\n", gen_code_size);
+        log_disas(tb->tc_ptr, gen_code_size);
         qemu_log("\n");
         qemu_log_flush();
     }
@@ -235,7 +235,8 @@ static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
     s->tb_jmp_offset = NULL;
     s->tb_next = tb->tb_next;
 #endif
-    j = tcg_gen_code_search_pc(s, (uint8_t *)tc_ptr, searched_pc - tc_ptr);
+    j = tcg_gen_code_search_pc(s, (tcg_insn_unit *)tc_ptr,
+                               searched_pc - tc_ptr);
     if (j < 0)
         return -1;
     /* now find start of instruction before */
@@ -474,6 +475,10 @@ static inline PageDesc *page_find(tb_page_addr_t index)
 #elif defined(__s390x__)
   /* We have a +- 4GB range on the branches; leave some slop.  */
 # define MAX_CODE_GEN_BUFFER_SIZE  (3ul * 1024 * 1024 * 1024)
+#elif defined(__mips__)
+  /* We have a 256MB branch region, but leave room to make sure the
+     main executable is also within that region.  */
+# define MAX_CODE_GEN_BUFFER_SIZE  (128ul * 1024 * 1024)
 #else
 # define MAX_CODE_GEN_BUFFER_SIZE  ((size_t)-1)
 #endif
@@ -508,14 +513,47 @@ static inline size_t size_code_gen_buffer(size_t tb_size)
     return tb_size;
 }
 
+#ifdef __mips__
+/* In order to use J and JAL within the code_gen_buffer, we require
+   that the buffer not cross a 256MB boundary.  */
+static inline bool cross_256mb(void *addr, size_t size)
+{
+    return ((uintptr_t)addr ^ ((uintptr_t)addr + size)) & 0xf0000000;
+}
+
+/* We weren't able to allocate a buffer without crossing that boundary,
+   so make do with the larger portion of the buffer that doesn't cross.
+   Returns the new base of the buffer, and adjusts code_gen_buffer_size.  */
+static inline void *split_cross_256mb(void *buf1, size_t size1)
+{
+    void *buf2 = (void *)(((uintptr_t)buf1 + size1) & 0xf0000000);
+    size_t size2 = buf1 + size1 - buf2;
+
+    size1 = buf2 - buf1;
+    if (size1 < size2) {
+        size1 = size2;
+        buf1 = buf2;
+    }
+
+    tcg_ctx.code_gen_buffer_size = size1;
+    return buf1;
+}
+#endif
+
 #ifdef USE_STATIC_CODE_GEN_BUFFER
 static uint8_t static_code_gen_buffer[DEFAULT_CODE_GEN_BUFFER_SIZE]
     __attribute__((aligned(CODE_GEN_ALIGN)));
 
 static inline void *alloc_code_gen_buffer(void)
 {
-    map_exec(static_code_gen_buffer, tcg_ctx.code_gen_buffer_size);
-    return static_code_gen_buffer;
+    void *buf = static_code_gen_buffer;
+#ifdef __mips__
+    if (cross_256mb(buf, tcg_ctx.code_gen_buffer_size)) {
+        buf = split_cross_256mb(buf, tcg_ctx.code_gen_buffer_size);
+    }
+#endif
+    map_exec(buf, tcg_ctx.code_gen_buffer_size);
+    return buf;
 }
 #elif defined(USE_MMAP)
 static inline void *alloc_code_gen_buffer(void)
@@ -544,20 +582,76 @@ static inline void *alloc_code_gen_buffer(void)
     start = 0x40000000ul;
 # elif defined(__s390x__)
     start = 0x90000000ul;
+# elif defined(__mips__)
+    /* ??? We ought to more explicitly manage layout for softmmu too.  */
+#  ifdef CONFIG_USER_ONLY
+    start = 0x68000000ul;
+#  elif _MIPS_SIM == _ABI64
+    start = 0x128000000ul;
+#  else
+    start = 0x08000000ul;
+#  endif
 # endif
 
     buf = mmap((void *)start, tcg_ctx.code_gen_buffer_size,
                PROT_WRITE | PROT_READ | PROT_EXEC, flags, -1, 0);
-    return buf == MAP_FAILED ? NULL : buf;
+    if (buf == MAP_FAILED) {
+        return NULL;
+    }
+
+#ifdef __mips__
+    if (cross_256mb(buf, tcg_ctx.code_gen_buffer_size)) {
+        /* Try again, with the original still mapped, to avoid re-aquiring
+           that 256mb crossing.  This time don't specify an address.  */
+        size_t size2, size1 = tcg_ctx.code_gen_buffer_size;
+        void *buf2 = mmap(NULL, size1, PROT_WRITE | PROT_READ | PROT_EXEC,
+                          flags, -1, 0);
+        if (buf2 != MAP_FAILED) {
+            if (!cross_256mb(buf2, size1)) {
+                /* Success!  Use the new buffer.  */
+                munmap(buf, size1);
+                return buf2;
+            }
+            /* Failure.  Work with what we had.  */
+            munmap(buf2, size1);
+        }
+
+        /* Split the original buffer.  Free the smaller half.  */
+        buf2 = split_cross_256mb(buf, size1);
+        size2 = tcg_ctx.code_gen_buffer_size;
+        munmap(buf + (buf == buf2 ? size2 : 0), size1 - size2);
+        return buf2;
+    }
+#endif
+
+    return buf;
 }
 #else
 static inline void *alloc_code_gen_buffer(void)
 {
     void *buf = g_malloc(tcg_ctx.code_gen_buffer_size);
 
-    if (buf) {
-        map_exec(buf, tcg_ctx.code_gen_buffer_size);
+    if (buf == NULL) {
+        return NULL;
     }
+
+#ifdef __mips__
+    if (cross_256mb(buf, tcg_ctx.code_gen_buffer_size)) {
+        void *buf2 = g_malloc(tcg_ctx.code_gen_buffer_size);
+        if (buf2 != NULL && !cross_256mb(buf2, size1)) {
+            /* Success!  Use the new buffer.  */
+            free(buf);
+            buf = buf2;
+        } else {
+            /* Failure.  Work with what we had.  Since this is malloc
+               and not mmap, we can't free the other half.  */
+            free(buf2);
+            buf = split_cross_256mb(buf, tcg_ctx.code_gen_buffer_size);
+        }
+    }
+#endif
+
+    map_exec(buf, tcg_ctx.code_gen_buffer_size);
     return buf;
 }
 #endif /* USE_STATIC_CODE_GEN_BUFFER, USE_MMAP */
@@ -944,7 +1038,6 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
 {
     CPUArchState *env = cpu->env_ptr;
     TranslationBlock *tb;
-    uint8_t *tc_ptr;
     tb_page_addr_t phys_pc, phys_page2;
     target_ulong virt_page2;
     int code_gen_size;
@@ -959,8 +1052,7 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         /* Don't forget to invalidate previous TB info.  */
         tcg_ctx.tb_ctx.tb_invalidated_flag = 1;
     }
-    tc_ptr = tcg_ctx.code_gen_ptr;
-    tb->tc_ptr = tc_ptr;
+    tb->tc_ptr = tcg_ctx.code_gen_ptr;
     tb->cs_base = cs_base;
     tb->flags = flags;
     tb->cflags = cflags;
@@ -1777,7 +1869,6 @@ int page_check_range(target_ulong start, target_ulong len, int flags)
                     return -1;
                 }
             }
-            return 0;
         }
     }
     return 0;

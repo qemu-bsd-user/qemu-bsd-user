@@ -19,6 +19,7 @@
 
 #include "cpu.h"
 #include "sysemu/kvm.h"
+#include "kvm_i386.h"
 #ifndef CONFIG_USER_ONLY
 #include "sysemu/sysemu.h"
 #include "monitor/monitor.h"
@@ -941,6 +942,14 @@ hwaddr x86_cpu_get_phys_page_debug(CPUState *cs, vaddr addr)
             pdpe = ldq_phys(cs->as, pdpe_addr);
             if (!(pdpe & PG_PRESENT_MASK))
                 return -1;
+
+            if (pdpe & PG_PSE_MASK) {
+                page_size = 1024 * 1024 * 1024;
+                pte = pdpe & ~( (page_size - 1) & ~0xfff);
+                pte &= ~(PG_NX_MASK | PG_HI_USER_MASK);
+                goto out;
+            }
+
         } else
 #endif
         {
@@ -993,6 +1002,9 @@ hwaddr x86_cpu_get_phys_page_debug(CPUState *cs, vaddr addr)
         pte = pte & env->a20_mask;
     }
 
+#ifdef TARGET_X86_64
+out:
+#endif
     page_offset = (addr & TARGET_PAGE_MASK) & (page_size - 1);
     paddr = (pte & TARGET_PAGE_MASK) + page_offset;
     return paddr;
@@ -1318,12 +1330,21 @@ void do_cpu_init(X86CPU *cpu)
 {
     CPUState *cs = CPU(cpu);
     CPUX86State *env = &cpu->env;
+    CPUX86State *save = g_new(CPUX86State, 1);
     int sipi = cs->interrupt_request & CPU_INTERRUPT_SIPI;
-    uint64_t pat = env->pat;
+
+    *save = *env;
 
     cpu_reset(cs);
     cs->interrupt_request = sipi;
-    env->pat = pat;
+    memcpy(&env->start_init_save, &save->start_init_save,
+           offsetof(CPUX86State, end_init_save) -
+           offsetof(CPUX86State, start_init_save));
+    g_free(save);
+
+    if (kvm_enabled()) {
+        kvm_arch_do_init_vcpu(cpu);
+    }
     apic_init_reset(cpu->apic_state);
 }
 

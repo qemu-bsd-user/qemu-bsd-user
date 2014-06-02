@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "qemu.h"
+#include "qemu/error-report.h"
 #include "disas/disas.h"
 #include "target_os_elf.h"
 #include "target_os_stack.h"
@@ -128,7 +129,7 @@ static abi_ulong copy_elf_strings(int argc,char ** argv, void **page,
     while (argc-- > 0) {
         tmp = argv[argc];
         if (!tmp) {
-            fprintf(stderr, "VFS: argc is wrong");
+            error_report("VFS: argc is wrong");
             exit(-1);
         }
         tmp1 = tmp;

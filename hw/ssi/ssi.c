@@ -60,7 +60,7 @@ static int ssi_slave_init(DeviceState *dev)
 
     if (ssc->transfer_raw == ssi_transfer_raw_default &&
             ssc->cs_polarity != SSI_CS_NONE) {
-        qdev_init_gpio_in(dev, ssi_cs_default, 1);
+        qdev_init_gpio_in_named(dev, ssi_cs_default, SSI_GPIO_CS, 1);
     }
 
     return ssc->init(s);
@@ -126,8 +126,7 @@ const VMStateDescription vmstate_ssi_slave = {
     .name = "SSISlave",
     .version_id = 1,
     .minimum_version_id = 1,
-    .minimum_version_id_old = 1,
-    .fields      = (VMStateField[]) {
+    .fields = (VMStateField[]) {
         VMSTATE_BOOL(cs, SSISlave),
         VMSTATE_END_OF_LIST()
     }
@@ -156,7 +155,7 @@ static int ssi_auto_connect_slave(Object *child, void *opaque)
         return 0;
     }
 
-    cs_line = qdev_get_gpio_in(DEVICE(dev), 0);
+    cs_line = qdev_get_gpio_in_named(DEVICE(dev), SSI_GPIO_CS, 0);
     qdev_set_parent_bus(DEVICE(dev), BUS(arg->bus));
     **arg->cs_linep = cs_line;
     (*arg->cs_linep)++;

@@ -34,6 +34,7 @@
 #include "tcg.h"
 #include "qemu/timer.h"
 #include "qemu/envlist.h"
+#include "qemu/error-report.h"
 
 #include "host_os.h"
 #include "target_arch_cpu.h"
@@ -58,8 +59,8 @@ unsigned long reserved_va;
 #endif
 #endif /* CONFIG_USE_GUEST_BASE */
 
-static const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
-const char *qemu_uname_release = CONFIG_UNAME_RELEASE;
+const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
+const char *qemu_uname_release;
 extern char **environ;
 enum BSDType bsd_type;
 
@@ -336,7 +337,7 @@ int main(int argc, char **argv)
     module_call_init(MODULE_INIT_QOM);
 
     if ((envlist = envlist_create()) == NULL) {
-        (void) fprintf(stderr, "Unable to allocate envlist\n");
+        error_report("Unable to allocate envlist");
         exit(1);
     }
 
@@ -378,7 +379,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(r, "ignore-environment")) {
             envlist_free(envlist);
             if ((envlist = envlist_create()) == NULL) {
-                (void) fprintf(stderr, "Unable to allocate envlist\n");
+                error_report("Unable to allocate envlist");
                 exit(1);
             }
         } else if (!strcmp(r, "U")) {
@@ -405,7 +406,7 @@ int main(int argc, char **argv)
             qemu_host_page_size = atoi(argv[optind++]);
             if (qemu_host_page_size == 0 ||
                 (qemu_host_page_size & (qemu_host_page_size - 1)) != 0) {
-                fprintf(stderr, "page size must be a power of two\n");
+                error_report("page size must be a power of two");
                 exit(1);
             }
         } else if (!strcmp(r, "g")) {
@@ -487,7 +488,7 @@ int main(int argc, char **argv)
        qemu_host_page_size */
     env = cpu_init(cpu_model);
     if (!env) {
-        fprintf(stderr, "Unable to find CPU definition\n");
+        error_report("Unable to find CPU definition");
         exit(1);
     }
     cpu = ENV_GET_CPU(env);

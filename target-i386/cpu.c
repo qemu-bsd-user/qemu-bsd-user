@@ -24,6 +24,7 @@
 #include "cpu.h"
 #include "sysemu/kvm.h"
 #include "sysemu/cpus.h"
+#include "kvm_i386.h"
 #include "topology.h"
 
 #include "qemu/option.h"
@@ -316,7 +317,7 @@ typedef struct X86RegisterInfo32 {
 
 #define REGISTER(reg) \
     [R_##reg] = { .name = #reg, .qapi_enum = X86_CPU_REGISTER32_##reg }
-X86RegisterInfo32 x86_reg_info_32[CPU_NB_REGS32] = {
+static const X86RegisterInfo32 x86_reg_info_32[CPU_NB_REGS32] = {
     REGISTER(EAX),
     REGISTER(ECX),
     REGISTER(EDX),
@@ -1300,10 +1301,12 @@ static void x86_cpuid_version_set_family(Object *obj, Visitor *v, void *opaque,
     CPUX86State *env = &cpu->env;
     const int64_t min = 0;
     const int64_t max = 0xff + 0xf;
+    Error *local_err = NULL;
     int64_t value;
 
-    visit_type_int(v, &value, name, errp);
-    if (error_is_set(errp)) {
+    visit_type_int(v, &value, name, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
         return;
     }
     if (value < min || value > max) {
@@ -1339,10 +1342,12 @@ static void x86_cpuid_version_set_model(Object *obj, Visitor *v, void *opaque,
     CPUX86State *env = &cpu->env;
     const int64_t min = 0;
     const int64_t max = 0xff;
+    Error *local_err = NULL;
     int64_t value;
 
-    visit_type_int(v, &value, name, errp);
-    if (error_is_set(errp)) {
+    visit_type_int(v, &value, name, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
         return;
     }
     if (value < min || value > max) {
@@ -1375,10 +1380,12 @@ static void x86_cpuid_version_set_stepping(Object *obj, Visitor *v,
     CPUX86State *env = &cpu->env;
     const int64_t min = 0;
     const int64_t max = 0xf;
+    Error *local_err = NULL;
     int64_t value;
 
-    visit_type_int(v, &value, name, errp);
-    if (error_is_set(errp)) {
+    visit_type_int(v, &value, name, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
         return;
     }
     if (value < min || value > max) {
@@ -1511,10 +1518,12 @@ static void x86_cpuid_set_tsc_freq(Object *obj, Visitor *v, void *opaque,
     X86CPU *cpu = X86_CPU(obj);
     const int64_t min = 0;
     const int64_t max = INT64_MAX;
+    Error *local_err = NULL;
     int64_t value;
 
-    visit_type_int(v, &value, name, errp);
-    if (error_is_set(errp)) {
+    visit_type_int(v, &value, name, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
         return;
     }
     if (value < min || value > max) {
@@ -2409,8 +2418,7 @@ static void x86_cpu_reset(CPUState *s)
 
     xcc->parent_reset(s);
 
-
-    memset(env, 0, offsetof(CPUX86State, pat));
+    memset(env, 0, offsetof(CPUX86State, cpuid_level));
 
     tlb_flush(s, 1);
 
@@ -2476,8 +2484,7 @@ static void x86_cpu_reset(CPUState *s)
     cpu_breakpoint_remove_all(s, BP_CPU);
     cpu_watchpoint_remove_all(s, BP_CPU);
 
-    env->tsc_adjust = 0;
-    env->tsc = 0;
+    env->xcr0 = 1;
 
 #if !defined(CONFIG_USER_ONLY)
     /* We hard-wire the BSP to the first CPU. */
@@ -2486,6 +2493,10 @@ static void x86_cpu_reset(CPUState *s)
     }
 
     s->halted = !cpu_is_bsp(cpu);
+
+    if (kvm_enabled()) {
+        kvm_arch_reset_vcpu(cpu);
+    }
 #endif
 }
 
