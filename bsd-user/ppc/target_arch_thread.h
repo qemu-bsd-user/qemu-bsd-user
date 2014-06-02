@@ -19,12 +19,6 @@
 #ifndef _TARGET_ARCH_THREAD_H_
 #define _TARGET_ARCH_THREAD_H_
 
-#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-#define STACK_ALIGN 8
-#else
-#define STACK_ALIGN 4
-#endif
-
 /* Compare to powerpc/powerpc/exec_machdep.c cpu_set_upcall_kse() */
 static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
     abi_ulong arg, abi_ulong stack_base, abi_ulong stack_size)
@@ -46,7 +40,13 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
     /* r3 = arg */
     regs->gpr[3] = arg;
     /* srr0 = start function entry */
+#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
+    get_user_ual(regs->nip, entry);
+    get_user_ual(regs->gpr[2], entry + sizeof(abi_ulong));
+    get_user_ual(regs->gpr[11], entry + 2 * sizeof(abi_ulong));
+#else
     regs->nip = entry;
+#endif
 
     /* TODO:ppc64 target_thread_set_upcall */
 }
@@ -55,20 +55,25 @@ static inline void target_thread_init(struct target_pt_regs *regs,
         struct image_info *infop)
 {
 	abi_long stack = infop->start_stack;
+	abi_long argc;
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-    regs->gpr[2] = ldq_raw(infop->entry + 8);
     infop->entry = ldq_raw(infop->entry);
+    regs->gpr[2] = ldq_raw(infop->entry + 8) + infop->load_bias;
+    regs->gpr[11] = ldq_raw(infop->entry + 16) + infop->load_bias;
+    regs->gpr[1] = -roundup(-stack + 48, 16);
+#else
+    regs->gpr[1] = -roundup(-stack + 8, 16);
 #endif
+    regs->nip = infop->entry;
     /* FIXME - what to for failure of get_user()? */
-    get_user_ual(regs->gpr[3], stack); /* argc */
+    get_user_ual(argc, stack); /* argc */
+    regs->gpr[3] = argc;
     regs->gpr[4] = stack + sizeof(abi_long);
-    regs->gpr[5] = regs->gpr[4] + ((1 + regs->gpr[3]) * sizeof(abi_long));
+    regs->gpr[5] = regs->gpr[4] + ((1 + argc) * sizeof(abi_long));
     regs->gpr[6] = 0;
     regs->gpr[7] = 0;
-    /* XXX: it seems that r0 is zeroed after ! */
-    regs->nip = infop->entry;
-    regs->gpr[1] = (stack - 2 * sizeof(abi_long)) & ~0x0f;
+    regs->gpr[8] = TARGET_PS_STRINGS;
     if (bsd_type == target_freebsd) {
         regs->lr = infop->entry;
     }

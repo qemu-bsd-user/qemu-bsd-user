@@ -45,6 +45,9 @@ static inline void target_cpu_init(CPUPPCState *env,
 {
     int i;
 
+#ifdef TARGET_PPC64
+	env->msr |= (target_ulong)1 << MSR_SF;
+#endif
     for (i = 0; i < 32; i++) {
         env->gpr[i] = regs->gpr[i];
     }
@@ -314,12 +317,16 @@ static inline void target_cpu_loop(CPUPPCState *env)
             queue_signal(env, info.si_signo, &info);
             break;
         case POWERPC_EXCP_FPU:      /* Floating-point unavailable exception  */
+            env->msr |= (1 << MSR_FP);
+            env->nip -= 4;
+#if 0
             fprintf(stderr, "No floating point allowed\n");
             info.si_signo = TARGET_SIGILL;
             info.si_errno = 0;
             info.si_code = TARGET_ILL_COPROC;
             info.si_addr = env->nip - 4;
             queue_signal(env, info.si_signo, &info);
+#endif
             break;
         case POWERPC_EXCP_SYSCALL:  /* System call exception                 */
             cpu_abort(cs, "Syscall exception while in user mode. "
@@ -418,12 +425,16 @@ static inline void target_cpu_loop(CPUPPCState *env)
                       "while in user mode. Aborting\n");
             break;
         case POWERPC_EXCP_VPU:      /* Vector unavailable exception          */
+            env->msr |= (1 << MSR_VR);
+            env->nip -= 4;
+#if 0
             fprintf(stderr, "No Altivec instructions allowed\n");
             info.si_signo = TARGET_SIGILL;
             info.si_errno = 0;
             info.si_code = TARGET_ILL_COPROC;
             info.si_addr = env->nip - 4;
             queue_signal(env, info.si_signo, &info);
+#endif
             break;
         case POWERPC_EXCP_PIT:      /* Programmable interval timer IRQ       */
             cpu_abort(cs, "Programmable interval timer interrupt "
