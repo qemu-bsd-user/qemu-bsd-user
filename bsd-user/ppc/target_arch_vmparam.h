@@ -40,7 +40,7 @@
 #else
 #define TARGET_VM_MAXUSER_ADDRESS   0xfffff000UL
 #endif
-#define TARGET_USRSTACK             (TARGET_VM_MAXUSER_ADDRESS - TARGET_PAGE_SIZE * 10)
+#define TARGET_USRSTACK             (TARGET_VM_MAXUSER_ADDRESS - TARGET_PAGE_SIZE * 0x10)
 
 static inline abi_ulong get_sp_from_cpustate(CPUPPCState *state)
 {
