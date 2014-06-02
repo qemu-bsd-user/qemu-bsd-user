@@ -899,6 +899,7 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
     pthread_attr_t attr;
     TaskState *ts;
     CPUArchState *new_env;
+    CPUState *new_cpu;
     struct target_freebsd_thr_param *target_param;
     abi_ulong target_rtp_addr;
     struct target_freebsd_rtprio *target_rtp;
@@ -949,7 +950,8 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
 
     /* init regs that differ from the parent thread. */
     target_cpu_clone_regs(new_env, info.param.stack_base);
-    ENV_GET_CPU(new_env)->opaque = ts;
+    new_cpu = ENV_GET_CPU(new_env);
+    new_cpu->opaque = ts;
     ts->bprm = parent_ts->bprm;
     ts->info = parent_ts->info;
 
