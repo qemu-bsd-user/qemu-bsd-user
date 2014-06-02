@@ -350,9 +350,11 @@ static void channel_run (int ncont, int ichan)
     }
 #endif
 
-    n = r->transfer_handler (r->opaque, ichan + (ncont << 2),
-                             r->now[COUNT], (r->base[COUNT] + 1) << ncont);
-    r->now[COUNT] = n;
+    if (r->transfer_handler) {
+        n = r->transfer_handler (r->opaque, ichan + (ncont << 2),
+                                 r->now[COUNT], (r->base[COUNT] + 1) << ncont);
+        r->now[COUNT] = n;
+    }
     ldebug ("dma_pos %d size %d\n", n, (r->base[COUNT] + 1) << ncont);
 }
 
