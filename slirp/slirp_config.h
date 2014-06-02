@@ -41,7 +41,7 @@
 //#undef HOST_WORDS_BIGENDIAN
 
 /* Define if you have readv */
-#undef HAVE_READV
+#define HAVE_READV
 
 /* Define if iovec needs to be declared */
 #undef DECLARE_IOVEC
@@ -50,7 +50,7 @@
 #endif
 
 /* Define if you have a POSIX.1 sys/wait.h */
-#undef HAVE_SYS_WAIT_H
+#define HAVE_SYS_WAIT_H
 
 /* Define if you have sys/select.h */
 #undef HAVE_SYS_SELECT_H
@@ -65,7 +65,7 @@
 #endif
 
 /* Define if you have sys/signal.h */
-#undef HAVE_SYS_SIGNAL_H
+#define HAVE_SYS_SIGNAL_H
 
 /* Define if you have sys/stropts.h */
 #undef HAVE_SYS_STROPTS_H
@@ -84,3 +84,15 @@
 #ifdef _WIN32
 #define NO_UNIX_SOCKETS
 #endif
+
+/* Define if you have revoke() */
+#undef HAVE_REVOKE
+
+/* Define if you have the sysv method of opening pty's (/dev/ptmx, etc.) */
+#undef HAVE_GRANTPT
+
+/* Define if you have fchmod */
+#define HAVE_FCHMOD
+
+/* Define if you have <sys/type32.h> */
+#undef HAVE_SYS_TYPES32_H
