@@ -3232,6 +3232,10 @@
     '*br':     'str',
     '*helper': 'str' } }
 
+{ 'type': 'NetdevPcapOptions',
+  'data': {
+    '*ifname':     'str' } }
+
 ##
 # @NetdevHubPortOptions
 #
@@ -3279,6 +3283,7 @@
     'nic':      'NetLegacyNicOptions',
     'user':     'NetdevUserOptions',
     'tap':      'NetdevTapOptions',
+    'pcap':     'NetdevPcapOptions',
     'socket':   'NetdevSocketOptions',
     'vde':      'NetdevVdeOptions',
     'dump':     'NetdevDumpOptions',
