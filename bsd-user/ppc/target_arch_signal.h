@@ -33,14 +33,17 @@
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)
 
 /* compare to sys/powerpc/include/frame.h */
+#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
+#define TARGET_SZREG        8
+#define TARGET_CALLFRAME_SIZ    (TARGET_SZREG * 10)
+#else
 #define TARGET_SZREG        4
 #define TARGET_CALLFRAME_SIZ    (TARGET_SZREG * 6)
-#define TARGET_SZREG64        8
-#define TARGET_CALLFRAME_SIZ64    (TARGET_SZREG64 * 10)
+#endif
 
 /* powerpc/powerpc/exec_machdep.c */
-#define TARGET_MC_GET_CLEAR_RET 0x0001
-#define TARGET_MC_SET_ONSTACK   0x0004
+#define TARGET_MC_GET_CLEAR_RET 	0x0001
+#define TARGET_MC_SET_ONSTACK	 	0x0004
 #define TARGET_MC_FP_VALID		0x0001
 #define TARGET_MC_AV_VALID		0x0002
 

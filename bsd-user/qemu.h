@@ -50,6 +50,7 @@ extern enum BSDType bsd_type;
  * task_struct fields in the kernel
  */
 struct image_info {
+    abi_ulong load_bias;
     abi_ulong load_addr;
     abi_ulong start_code;
     abi_ulong end_code;
