@@ -45,6 +45,9 @@ static inline void target_cpu_init(CPUPPCState *env,
 {
     int i;
 
+#ifdef TARGET_PPC64
+	env->msr |= (target_ulong)1 << MSR_SF;
+#endif
     for (i = 0; i < 32; i++) {
         env->gpr[i] = regs->gpr[i];
     }

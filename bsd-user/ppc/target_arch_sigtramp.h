@@ -15,7 +15,7 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
     /*  4 */ 0xE8420008,   /* ld r2,8(r2) */
     /*  5 */ 0x7C0803A6,   /* mtlr r0 */
     /*  6 */ 0x4E800021,   /* blrl */
-    /*  7 */ 0x38610030,   /* addi r3,r1,16 */
+    /*  7 */ 0x38610030 + sigf_uc,   /* addi r3,r1,46 */
     /*  8 */ 0x380001A1,   /* li r0,417 */
     /*  9 */ 0x44000002,   /* sc */
     /* 10 */ 0x38000001,   /* li r0,1 */
@@ -26,7 +26,7 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
     uint32_t sigtramp_code[TARGET_SZSIGCODE/TARGET_INSN_SIZE] = {
     /* 1 */ 0x3821FFF0,   /* addi r1,r1,-16 */
     /* 2 */ 0x4E800021,   /* blrl */
-    /* 3 */ 0x38610010,   /* addi r3,r1,16 */
+    /* 3 */ 0x38610010 + sigf_uc,   /* addi r3,r1,16 */
     /* 4 */ 0x380001A1,   /* li r0,417 */
     /* 5 */ 0x44000002,   /* sc */
     /* 6 */ 0x38000001,   /* li r0,1 */
@@ -34,7 +34,7 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
     };
 #endif
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < TARGET_SZSIGCODE/TARGET_INSN_SIZE; i++) {
         tswap32s(&sigtramp_code[i]);
     }
 

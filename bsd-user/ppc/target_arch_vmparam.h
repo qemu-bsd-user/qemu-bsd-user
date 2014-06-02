@@ -30,11 +30,13 @@
 #define TARGET_MAXSSIZ      (64UL*1024*1024)    /* max stack size */
 #define TARGET_SGROWSIZ     (128UL*1024)        /* amount to grow stack */
 
+#ifndef TARGET_PPC64
 #define TARGET_RESERVED_VA  0xfffff000
+#endif
 
                 /* KERNBASE - 512 MB */
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-#define TARGET_VM_MAXUSER_ADDRESS	0xfffffffffffff000ULL
+#define TARGET_VM_MAXUSER_ADDRESS	0x00007fffff000000ULL
 #else
 #define TARGET_VM_MAXUSER_ADDRESS   0xfffff000UL
 #endif
