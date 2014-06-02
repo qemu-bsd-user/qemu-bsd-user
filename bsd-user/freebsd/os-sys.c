@@ -220,24 +220,36 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
             ret = 0;
             goto out;
 
-        case 851: /* hw.availpages */
-            {
-                long lvalue;
-                size_t len = sizeof(lvalue);
-
-                if (sysctlbyname("hw.availpages", &lvalue, &len, NULL, 0)
-                        == -1) {
-                    ret = -1;
-                } else {
-                    (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
-                    holdlen = sizeof(abi_ulong);
-                    ret = 0;
-                }
-            }
-            goto out;
-
         default:
-            break;
+            {
+                static int oid_hw_availpages;
+
+                if (!oid_hw_availpages) {
+                    int real_oid[CTL_MAXNAME+2];
+                    size_t len = sizeof(real_oid) / sizeof(int);
+
+                    if (sysctlnametomib("hw.availpages", real_oid, &len) >= 0)
+                        oid_hw_availpages = real_oid[1];
+                }
+
+                if (oid_hw_availpages && snamep[1] == oid_hw_availpages) {
+                    long lvalue;
+                    size_t len = sizeof(lvalue);
+
+                    if (sysctlbyname("hw.availpages", &lvalue, &len, NULL, 0)
+                            == -1) {
+                        ret = -1;
+                    } else {
+                        if (oldlen) {
+                            (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
+                        }
+                        holdlen = sizeof(abi_ulong);
+                        ret = 0;
+                    }
+                    goto out;
+                }
+                break;
+            }
         }
     default:
         break;
