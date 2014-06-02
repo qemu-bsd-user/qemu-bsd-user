@@ -812,7 +812,7 @@ receive_filter(E1000State *s, const uint8_t *buf, int size)
     if (rctl & E1000_RCTL_UPE)			// promiscuous
         return 1;
 
-    if ((buf[0] & 1) && (rctl & E1000_RCTL_MPE))	// promiscuous mcast
+    if (buf[0] & 1)				// promiscuous mcast
         return 1;
 
     if ((rctl & E1000_RCTL_BAM) && !memcmp(buf, bcast, sizeof bcast))
