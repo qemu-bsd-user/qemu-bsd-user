@@ -34,6 +34,7 @@
 #include "tcg.h"
 #include "qemu/timer.h"
 #include "qemu/envlist.h"
+#include "qemu/error-report.h"
 
 #include "host_os.h"
 #include "target_arch_cpu.h"
