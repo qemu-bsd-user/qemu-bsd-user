@@ -166,7 +166,9 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
         switch (snamep[1]) {
         case KERN_USRSTACK:
 #if TARGET_USRSTACK != 0
-            (*(abi_ulong *)holdp) = tswapal(TARGET_USRSTACK);
+            if (oldlen) {
+                (*(abi_ulong *)holdp) = tswapal(TARGET_USRSTACK);
+            }
             holdlen = sizeof(abi_ulong);
             ret = 0;
 #else
@@ -176,7 +178,9 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 
         case KERN_PS_STRINGS:
 #if defined(TARGET_PS_STRINGS)
-            (*(abi_ulong *)holdp) = tswapal(TARGET_PS_STRINGS);
+            if (oldlen) {
+                (*(abi_ulong *)holdp) = tswapal(TARGET_PS_STRINGS);
+            }
             holdlen = sizeof(abi_ulong);
             ret = 0;
 #else
