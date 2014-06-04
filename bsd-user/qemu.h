@@ -524,7 +524,7 @@ static inline int regpairs_aligned(void *cpu_env)
 {
     return 1;
 }
-#elif (defined(TARGET_PPC) || defined(TARGET_PPC64)) && TARGET_ABI_BITS == 32
+#elif defined(TARGET_PPC) && TARGET_ABI_BITS == 32
 static inline int regpairs_aligned(void *cpu_env)
 {
     return 1;

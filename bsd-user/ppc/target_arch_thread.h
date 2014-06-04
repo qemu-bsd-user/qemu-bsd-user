@@ -58,10 +58,10 @@ static inline void target_thread_init(struct target_pt_regs *regs,
 	abi_long argc;
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-    infop->entry = ldq_raw(infop->entry);
+    regs->gpr[1] = -roundup(-stack + 48, 16);
     regs->gpr[2] = ldq_raw(infop->entry + 8) + infop->load_bias;
     regs->gpr[11] = ldq_raw(infop->entry + 16) + infop->load_bias;
-    regs->gpr[1] = -roundup(-stack + 48, 16);
+    infop->entry = ldq_raw(infop->entry);
 #else
     regs->gpr[1] = -roundup(-stack + 8, 16);
 #endif
