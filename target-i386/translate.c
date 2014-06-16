@@ -27,6 +27,7 @@
 #include "cpu.h"
 #include "disas/disas.h"
 #include "tcg-op.h"
+#include "exec/cpu_ldst.h"
 
 #include "exec/helper-proto.h"
 #include "exec/helper-gen.h"
@@ -1503,14 +1504,6 @@ static void gen_shift_rm_im(DisasContext *s, TCGMemOp ot, int op1, int op2,
         tcg_gen_mov_tl(cpu_cc_dst, cpu_T[0]);
         set_cc_op(s, (is_right ? CC_OP_SARB : CC_OP_SHLB) + ot);
     }
-}
-
-static inline void tcg_gen_lshift(TCGv ret, TCGv arg1, target_long arg2)
-{
-    if (arg2 >= 0)
-        tcg_gen_shli_tl(ret, arg1, arg2);
-    else
-        tcg_gen_shri_tl(ret, arg1, -arg2);
 }
 
 static void gen_rot_rm_T1(DisasContext *s, TCGMemOp ot, int op1, int is_right)

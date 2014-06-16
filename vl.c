@@ -1074,7 +1074,7 @@ static int drive_init_func(QemuOpts *opts, void *opaque)
 {
     BlockInterfaceType *block_default_type = opaque;
 
-    return drive_init(opts, *block_default_type) == NULL;
+    return drive_new(opts, *block_default_type) == NULL;
 }
 
 static int drive_enable_snapshot(QemuOpts *opts, void *opaque)
@@ -1098,7 +1098,7 @@ static void default_drive(int enable, int snapshot, BlockInterfaceType type,
     if (snapshot) {
         drive_enable_snapshot(opts, NULL);
     }
-    if (!drive_init(opts, type)) {
+    if (!drive_new(opts, type)) {
         exit(1);
     }
 }
@@ -4039,7 +4039,7 @@ int main(int argc, char **argv, char **envp)
     }
 
     if (!is_daemonized()) {
-        if (!trace_backend_init(trace_events, trace_file)) {
+        if (!trace_init_backends(trace_events, trace_file)) {
             exit(1);
         }
     }
@@ -4541,6 +4541,8 @@ int main(int argc, char **argv, char **envp)
         }
     }
 
+    qdev_prop_check_global();
+
     if (incoming) {
         Error *local_err = NULL;
         qemu_start_incoming_migration(incoming, &local_err);
@@ -4557,7 +4559,7 @@ int main(int argc, char **argv, char **envp)
     os_setup_post();
 
     if (is_daemonized()) {
-        if (!trace_backend_init(trace_events, trace_file)) {
+        if (!trace_init_backends(trace_events, trace_file)) {
             exit(1);
         }
     }

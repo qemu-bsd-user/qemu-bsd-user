@@ -635,6 +635,9 @@ enum arm_features {
     ARM_FEATURE_CBAR_RO, /* has cp15 CBAR and it is read-only */
     ARM_FEATURE_EL2, /* has EL2 Virtualization support */
     ARM_FEATURE_EL3, /* has EL3 Secure monitor support */
+    ARM_FEATURE_V8_SHA1, /* implements SHA1 part of v8 Crypto Extensions */
+    ARM_FEATURE_V8_SHA256, /* implements SHA256 part of v8 Crypto Extensions */
+    ARM_FEATURE_V8_PMULL, /* implements PMULL part of v8 Crypto Extensions */
 };
 
 static inline int arm_feature(CPUARMState *env, int feature)
@@ -1197,28 +1200,6 @@ static inline void cpu_pc_from_tb(CPUARMState *env, TranslationBlock *tb)
     } else {
         env->regs[15] = tb->pc;
     }
-}
-
-/* Load an instruction and return it in the standard little-endian order */
-static inline uint32_t arm_ldl_code(CPUARMState *env, target_ulong addr,
-                                    bool do_swap)
-{
-    uint32_t insn = cpu_ldl_code(env, addr);
-    if (do_swap) {
-        return bswap32(insn);
-    }
-    return insn;
-}
-
-/* Ditto, for a halfword (Thumb) instruction */
-static inline uint16_t arm_lduw_code(CPUARMState *env, target_ulong addr,
-                                     bool do_swap)
-{
-    uint16_t insn = cpu_lduw_code(env, addr);
-    if (do_swap) {
-        return bswap16(insn);
-    }
-    return insn;
 }
 
 #endif

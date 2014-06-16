@@ -23,6 +23,7 @@
 #include "tcg-op.h"
 #include "exec/helper-proto.h"
 #include "microblaze-decode.h"
+#include "exec/cpu_ldst.h"
 #include "exec/helper-gen.h"
 
 #define SIM_COMPAT 0
@@ -97,19 +98,6 @@ static const char *special_regnames[] =
     "sr8", "sr9", "sr10", "sr11", "sr12", "sr13", "sr14", "sr15",
     "sr16", "sr17", "sr18"
 };
-
-/* Sign extend at translation time.  */
-static inline int sign_extend(unsigned int val, unsigned int width)
-{
-        int sval;
-
-        /* LSL.  */
-        val <<= 31 - width;
-        sval = val;
-        /* ASR.  */
-        sval >>= 31 - width;
-        return sval;
-}
 
 static inline void t_sync_flags(DisasContext *dc)
 {

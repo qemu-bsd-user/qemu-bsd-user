@@ -552,8 +552,7 @@ struct X86CPUDefinition {
           CPUID_PSE36 | CPUID_CLFLUSH | CPUID_ACPI | CPUID_MMX | \
           CPUID_FXSR | CPUID_SSE | CPUID_SSE2 | CPUID_SS)
           /* partly implemented:
-          CPUID_MTRR, CPUID_MCA, CPUID_CLFLUSH (needed for Win64)
-          CPUID_PSE36 (needed for Solaris) */
+          CPUID_MTRR, CPUID_MCA, CPUID_CLFLUSH (needed for Win64) */
           /* missing:
           CPUID_VME, CPUID_DTS, CPUID_SS, CPUID_HT, CPUID_TM, CPUID_PBE */
 #define TCG_EXT_FEATURES (CPUID_EXT_SSE3 | CPUID_EXT_PCLMULQDQ | \
@@ -569,9 +568,7 @@ struct X86CPUDefinition {
           CPUID_EXT_RDRAND */
 #define TCG_EXT2_FEATURES ((TCG_FEATURES & CPUID_EXT2_AMD_ALIASES) | \
           CPUID_EXT2_NX | CPUID_EXT2_MMXEXT | CPUID_EXT2_RDTSCP | \
-          CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT)
-          /* missing:
-          CPUID_EXT2_PDPE1GB */
+          CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT | CPUID_EXT2_PDPE1GB)
 #define TCG_EXT3_FEATURES (CPUID_EXT3_LAHF_LM | CPUID_EXT3_SVM | \
           CPUID_EXT3_CR8LEG | CPUID_EXT3_ABM | CPUID_EXT3_SSE4A)
 #define TCG_SVM_FEATURES 0
@@ -1691,8 +1688,8 @@ static void x86_cpu_parse_featurestr(CPUState *cs, char *features,
 
                 numvalue = strtoul(val, &err, 0);
                 if (!*val || *err) {
-                    error_setg(&local_err, "bad numerical value %s", val);
-                    goto out;
+                    error_setg(errp, "bad numerical value %s", val);
+                    return;
                 }
                 if (numvalue < 0x80000000) {
                     error_report("xlevel value shall always be >= 0x80000000"
@@ -1709,8 +1706,8 @@ static void x86_cpu_parse_featurestr(CPUState *cs, char *features,
                 tsc_freq = strtosz_suffix_unit(val, &err,
                                                STRTOSZ_DEFSUFFIX_B, 1000);
                 if (tsc_freq < 0 || *err) {
-                    error_setg(&local_err, "bad numerical value %s", val);
-                    goto out;
+                    error_setg(errp, "bad numerical value %s", val);
+                    return;
                 }
                 snprintf(num, sizeof(num), "%" PRId64, tsc_freq);
                 object_property_parse(OBJECT(cpu), num, "tsc-frequency",
@@ -1721,8 +1718,8 @@ static void x86_cpu_parse_featurestr(CPUState *cs, char *features,
                 char num[32];
                 numvalue = strtoul(val, &err, 0);
                 if (!*val || *err) {
-                    error_setg(&local_err, "bad numerical value %s", val);
-                    goto out;
+                    error_setg(errp, "bad numerical value %s", val);
+                    return;
                 }
                 if (numvalue < min) {
                     error_report("hv-spinlocks value shall always be >= 0x%x"
@@ -1741,7 +1738,7 @@ static void x86_cpu_parse_featurestr(CPUState *cs, char *features,
         }
         if (local_err) {
             error_propagate(errp, local_err);
-            goto out;
+            return;
         }
         featurestr = strtok(NULL, ",");
     }
@@ -1761,9 +1758,6 @@ static void x86_cpu_parse_featurestr(CPUState *cs, char *features,
     env->features[FEAT_KVM] &= ~minus_features[FEAT_KVM];
     env->features[FEAT_SVM] &= ~minus_features[FEAT_SVM];
     env->features[FEAT_7_0_EBX] &= ~minus_features[FEAT_7_0_EBX];
-
-out:
-    return;
 }
 
 /* generate a composite string into buf of all cpuid names in featureset
@@ -2792,6 +2786,7 @@ static Property x86_cpu_properties[] = {
     DEFINE_PROP_BOOL("hv-time", X86CPU, hyperv_time, false),
     DEFINE_PROP_BOOL("check", X86CPU, check_cpuid, false),
     DEFINE_PROP_BOOL("enforce", X86CPU, enforce_cpuid, false),
+    DEFINE_PROP_BOOL("kvm", X86CPU, expose_kvm, true),
     DEFINE_PROP_END_OF_LIST()
 };
 

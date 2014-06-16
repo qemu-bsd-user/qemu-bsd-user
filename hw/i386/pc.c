@@ -503,8 +503,7 @@ static const VMStateDescription vmstate_port92_isa = {
     .name = "port92",
     .version_id = 1,
     .minimum_version_id = 1,
-    .minimum_version_id_old = 1,
-    .fields      = (VMStateField []) {
+    .fields = (VMStateField[]) {
         VMSTATE_UINT8(outport, Port92State),
         VMSTATE_END_OF_LIST()
     }
@@ -921,9 +920,6 @@ static void load_linux(FWCfgState *fw_cfg,
 static const int ne2000_io[NE2000_NB_MAX] = { 0x300, 0x320, 0x340, 0x360,
                                               0x280, 0x380 };
 static const int ne2000_irq[NE2000_NB_MAX] = { 9, 10, 11, 3, 4, 5 };
-
-static const int parallel_io[MAX_PARALLEL_PORTS] = { 0x378, 0x278, 0x3bc };
-static const int parallel_irq[MAX_PARALLEL_PORTS] = { 7, 7, 7 };
 
 void pc_init_ne2k_isa(ISABus *bus, NICInfo *nd)
 {

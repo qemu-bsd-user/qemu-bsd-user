@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "cpu.h"
+#include "exec/cpu_ldst.h"
 
 #undef DEBUG_REMAP
 #ifdef DEBUG_REMAP

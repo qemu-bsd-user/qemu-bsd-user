@@ -20,10 +20,7 @@
 #include "cpu.h"
 #include "exec/cpu-all.h"
 #include "exec/helper-proto.h"
-
-#if !defined(CONFIG_USER_ONLY)
-#include "exec/softmmu_exec.h"
-#endif /* !defined(CONFIG_USER_ONLY) */
+#include "exec/cpu_ldst.h"
 
 /* Secure Virtual Machine helpers */
 
@@ -260,7 +257,6 @@ void helper_vmrun(CPUX86State *env, int aflag, int next_eip_addend)
                                   env->vm_vmcb + offsetof(struct vmcb,
                                                           save.rflags)),
                     ~(CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C | DF_MASK));
-    CC_OP = CC_OP_EFLAGS;
 
     svm_load_seg_cache(env, env->vm_vmcb + offsetof(struct vmcb, save.es),
                        R_ES);
@@ -702,7 +698,6 @@ void helper_vmexit(CPUX86State *env, uint32_t exit_code, uint64_t exit_info_1)
                                                            save.rflags)),
                     ~(CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C | DF_MASK |
                       VM_MASK));
-    CC_OP = CC_OP_EFLAGS;
 
     svm_load_seg_cache(env, env->vm_hsave + offsetof(struct vmcb, save.es),
                        R_ES);
