@@ -10,7 +10,7 @@ struct aes_key_st {
 };
 typedef struct aes_key_st AES_KEY;
 
-/* FreeBSD has it's own AES_set_decrypt_key in -lcrypto, avoid conflicts. */
+/* FreeBSD has its own AES_set_decrypt_key in -lcrypto, avoid conflicts */
 #ifdef __FreeBSD__
 #define AES_set_encrypt_key QEMU_AES_set_encrypt_key
 #define AES_set_decrypt_key QEMU_AES_set_decrypt_key
