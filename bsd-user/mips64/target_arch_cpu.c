@@ -18,10 +18,10 @@
 
 void target_cpu_set_tls(CPUMIPSState *env, target_ulong newtls)
 {
-    env->tls_value = newtls;
+    env->active_tc.CP0_UserLocal = newtls;
 }
 
 target_ulong target_cpu_get_tls(CPUMIPSState *env)
 {
-    return (env->tls_value);
+    return (env->active_tc.CP0_UserLocal);
 }

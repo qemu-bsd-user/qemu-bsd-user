@@ -160,7 +160,7 @@ static inline abi_long get_mcontext(CPUMIPSState *regs, target_mcontext_t *mcp,
     mcp->mc_pc = tswapal(regs->active_tc.PC);
     mcp->mullo = tswapal(regs->active_tc.LO[0]);
     mcp->mulhi = tswapal(regs->active_tc.HI[0]);
-    mcp->mc_tls = tswapal(regs->tls_value);
+    mcp->mc_tls = tswapal(regs->active_tc.CP0_UserLocal);
 
     /* Don't do any of the status and cause registers. */
 
@@ -189,7 +189,7 @@ static inline abi_long set_mcontext(CPUMIPSState *regs, target_mcontext_t *mcp,
     regs->CP0_EPC = tswapal(mcp->mc_pc);
     regs->active_tc.LO[0] = tswapal(mcp->mullo);
     regs->active_tc.HI[0] = tswapal(mcp->mulhi);
-    regs->tls_value = tswapal(mcp->mc_tls);
+    regs->active_tc.CP0_UserLocal = tswapal(mcp->mc_tls);
 
     if (srflag) {
         /* doing sigreturn() */
