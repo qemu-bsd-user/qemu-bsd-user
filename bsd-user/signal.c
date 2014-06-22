@@ -391,6 +391,7 @@ int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
             if (sig != TARGET_SIGCHLD &&
                 sig != TARGET_SIGURG &&
                 sig != TARGET_SIGWINCH &&
+                sig != TARGET_SIGINFO &&
                 sig != TARGET_SIGCONT) {
                 force_sig(sig);
             } else {
@@ -531,6 +532,7 @@ static int fatal_signal(int sig)
     case TARGET_SIGCHLD:
     case TARGET_SIGURG:
     case TARGET_SIGWINCH:
+    case TARGET_SIGINFO:
         /* Ignored by default. */
         return 0;
     case TARGET_SIGCONT:
@@ -884,6 +886,7 @@ handle_signal:
                 TARGET_SIGTTOU == sig) {
             kill(getpid(), SIGSTOP);
         } else if (TARGET_SIGCHLD != sig && TARGET_SIGURG != sig &&
+            TARGET_SIGINFO != sig &&
             TARGET_SIGWINCH != sig && TARGET_SIGCONT != sig) {
             force_sig(sig);
         }
