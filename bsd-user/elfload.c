@@ -166,8 +166,8 @@ static abi_ulong copy_elf_strings(int argc,char ** argv, void **page,
     return p;
 }
 
-static abi_ulong setup_arg_pages(abi_ulong p, struct bsd_binprm *bprm,
-                                 struct image_info *info)
+static void setup_arg_pages(struct bsd_binprm *bprm, struct image_info *info,
+                            abi_ulong *stackp, abi_ulong *stringp)
 {
     abi_ulong stack_base, size;
     abi_long addr;
@@ -189,12 +189,10 @@ static abi_ulong setup_arg_pages(abi_ulong p, struct bsd_binprm *bprm,
     target_stksiz = size;
     target_stkbas = addr;
 
-    if (setup_initial_stack(bprm, &p) != 0) {
+    if (setup_initial_stack(bprm, stackp, stringp) != 0) {
         perror("stk setup");
         exit(-1);
     }
-
-    return p;
 }
 
 static void set_brk(abi_ulong start, abi_ulong end)
@@ -819,7 +817,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     /* Do this so that we can load the interpreter, if need be.  We will
        change some of these later */
     info->rss = 0;
-    bprm->p = setup_arg_pages(bprm->p, bprm, info);
+    setup_arg_pages(bprm, info, &bprm->p, &bprm->stringp);
     info->start_stack = bprm->p;
 
     /* Now we do a little grungy work by mmaping the ELF image into
@@ -945,6 +943,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     bprm->p = target_create_elf_tables(bprm->p,
                     bprm->argc,
                     bprm->envc,
+                    bprm->stringp,
                     &elf_ex,
                     load_addr, load_bias,
                     interp_load_addr,
