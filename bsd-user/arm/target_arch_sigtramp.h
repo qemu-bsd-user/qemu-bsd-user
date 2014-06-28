@@ -15,16 +15,17 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
      */
     uint32_t sigtramp_code[] = {
     /* 1 */ 0xE1A0000D,         /* mov r0, sp */
-    /* 2 */ 0xE59F700C,         /* ldr r7, [pc, #12] */
-    /* 3 */ 0xEF000000 + sys_sigreturn, /* swi (SYS_sigreturn) */
-    /* 4 */ 0xE59F7008,         /* ldr r7, [pc, #8] */
-    /* 5 */ 0xEF000000 + sys_exit,      /* swi (SYS_exit)*/
-    /* 6 */ 0xEAFFFFFA,         /* b . -16 */
-    /* 7 */ sys_sigreturn,
-    /* 8 */ sys_exit
+    /* 2 */ 0xE2800000 + sigf_uc,   /*  add r0, r0, #SIGF_UC */
+    /* 3 */ 0xE59F700C,         /* ldr r7, [pc, #12] */
+    /* 4 */ 0xEF000000 + sys_sigreturn, /* swi (SYS_sigreturn) */
+    /* 5 */ 0xE59F7008,         /* ldr r7, [pc, #8] */
+    /* 6 */ 0xEF000000 + sys_exit,      /* swi (SYS_exit)*/
+    /* 7 */ 0xEAFFFFFA,         /* b . -16 */
+    /* 8 */ sys_sigreturn,
+    /* 9 */ sys_exit
     };
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < 9; i++) {
         tswap32s(&sigtramp_code[i]);
     }
 

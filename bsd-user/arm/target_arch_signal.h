@@ -47,7 +47,7 @@
 #define TARGET_INSN_SIZE    4       /* arm instruction size */
 
 /* Size of the signal trampolin code. See _sigtramp(). */
-#define TARGET_SZSIGCODE    ((abi_ulong)(8 * TARGET_INSN_SIZE))
+#define TARGET_SZSIGCODE    ((abi_ulong)(9 * TARGET_INSN_SIZE))
 
 /* compare to arm/include/_limits.h */
 #define TARGET_MINSIGSTKSZ  (1024 * 4)                  /* min sig stack size */
@@ -248,7 +248,7 @@ static inline abi_long get_ucontext_sigreturn(CPUARMState *regs,
         return -TARGET_EINVAL;
     }
 
-    *target_uc = target_sf + offsetof(struct target_sigframe, sf_uc);
+    *target_uc = target_sf;
 
     return 0;
 }
