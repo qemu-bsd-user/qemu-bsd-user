@@ -228,7 +228,7 @@ int loader_exec(const char * filename, char ** argv, char ** envp,
             bprm->fullpath = g_strdup(fullpath);
         } else {
             retval = open(execname, O_RDONLY);
-            bprm->fullpath = NULL;
+            bprm->fullpath = g_strdup(execname);
         }
         if (execname) {
             g_free((void *)execname);
