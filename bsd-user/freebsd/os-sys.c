@@ -1,7 +1,7 @@
 /*
  *  FreeBSD sysctl() and sysarch() system call emulation
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/param.h>
+#include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <string.h>
 
@@ -26,6 +27,59 @@
 
 #include "target_arch_sysarch.h"
 #include "target_os_vmparam.h"
+
+/*
+ * XXX The following should maybe go some place else.  Also, see the note
+ * about using "thunk" for sysctl's that pass data using structures.
+ */
+/* From sys/mount.h: */
+#define TARGET_MFSNAMELEN	16	/* length of type name including null */
+struct target_xvfsconf {
+	abi_ulong vfc_vfsops;		/* filesystem op vector - not used */
+	char vfc_name[TARGET_MFSNAMELEN];	/* filesystem type name */
+	int  vfc_typenum;		/* historic fs type number */
+	int  vfc_refcount;		/* number mounted of this type */
+	int  vfc_flags;			/* permanent flags */
+	abi_ulong vfc_next;		/* next int list - not used */
+};
+
+/* vfc_flag definitions */
+#define TARGET_VFCF_STATIC     0x00010000  /* statically compiled into kernel */
+#define TARGET_VFCF_NETWORK    0x00020000  /* may get data over the network */
+#define TARGET_VFCF_READONLY   0x00040000  /* writes are not implemented */
+#define TARGET_VFCF_SYNTHETIC  0x00080000  /* doesn't represent real files */
+#define TARGET_VFCF_LOOPBACK   0x00100000  /* aliases some other mounted FS */
+#define TARGET_VFCF_UNICODE    0x00200000  /* stores file names as Unicode */
+#define TARGET_VFCF_JAIL       0x00400000  /* can be mounted within a jail */
+#define TARGET_VFCF_DELEGADMIN 0x00800000  /* supports delegated admin */
+#define TARGET_VFCF_SBDRY      0x01000000  /* defer stop requests */
+
+static int
+host_to_target_vfc_flags(int flags)
+{
+    int ret = 0;
+
+    if (flags & VFCF_STATIC)
+	ret |= TARGET_VFCF_STATIC;
+    if (flags & VFCF_NETWORK)
+	ret |= TARGET_VFCF_NETWORK;
+    if (flags & VFCF_READONLY)
+	ret |= TARGET_VFCF_READONLY;
+    if (flags & VFCF_SYNTHETIC)
+	ret |= TARGET_VFCF_SYNTHETIC;
+    if (flags & VFCF_LOOPBACK)
+	ret |= TARGET_VFCF_LOOPBACK;
+    if (flags & VFCF_UNICODE)
+	ret |= TARGET_VFCF_UNICODE;
+    if (flags & VFCF_JAIL)
+	ret |= TARGET_VFCF_JAIL;
+    if (flags & VFCF_DELEGADMIN)
+	ret |= TARGET_VFCF_DELEGADMIN;
+    if (flags & VFCF_SBDRY)
+	ret |= TARGET_VFCF_SBDRY;
+
+    return ret;
+}
 
 /*
  * XXX this uses the undocumented oidfmt interface to find the kind of
@@ -161,6 +215,7 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
     oidfmt(snamep, namelen, NULL, &kind);
 
     /* Handle some arch/emulator dependent sysctl()'s here. */
+    /* XXX sysctl()'s that pass structs should use thunk like ioctl(). */
     switch (snamep[0]) {
     case CTL_KERN:
         switch (snamep[1]) {
@@ -211,6 +266,59 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
             break;
         }
         break;
+
+    case CTL_VFS:
+	{
+	    static int oid_vfs_conflist;
+
+	    if (!oid_vfs_conflist) {
+	        int real_oid[CTL_MAXNAME+2];
+		size_t len = sizeof(real_oid) / sizeof(int);
+
+		if (sysctlnametomib("vfs.conflist", real_oid, &len) >= 0)
+		    oid_vfs_conflist = real_oid[1];
+	    }
+
+	    if (oid_vfs_conflist && snamep[1] == oid_vfs_conflist) {
+		struct xvfsconf *xvfsp, *hxp;
+		int cnt, i;
+
+		if (sysctlbyname("vfs.conflist", NULL, &holdlen, NULL, 0) < 0) {
+		    ret = -1;
+		    goto out;
+		}
+		if (!holdp) {
+		    ret = 0;
+		    goto out;
+		}
+		xvfsp = (struct xvfsconf *)g_malloc(holdlen);
+		if (xvfsp == NULL) {
+		    ret = -TARGET_ENOMEM;
+		    goto out;
+		}
+		if (sysctlbyname("vfs.conflist", xvfsp, &holdlen, NULL, 0) < 0){
+		    g_free(xvfsp);
+		    ret = -1;
+		    goto out;
+		}
+		cnt = holdlen / sizeof(struct xvfsconf);
+		hxp = (struct xvfsconf *)holdp;
+		for (i = 0; i < cnt; i++) {
+		    hxp[i].vfc_vfsops = 0;
+		    strlcpy(hxp[i].vfc_name, xvfsp[i].vfc_name,
+			TARGET_MFSNAMELEN);
+		    hxp[i].vfc_typenum = tswap32(xvfsp[i].vfc_typenum);
+		    hxp[i].vfc_refcount = tswap32(xvfsp[i].vfc_refcount);
+		    hxp[i].vfc_flags = tswap32(
+			host_to_target_vfc_flags(xvfsp[i].vfc_flags));
+		    hxp[i].vfc_next = 0;
+	        }
+		g_free(xvfsp);
+		ret = 0;
+		goto out;
+	    }
+	}
+	break;
 
     case CTL_HW:
         switch (snamep[1]) {
