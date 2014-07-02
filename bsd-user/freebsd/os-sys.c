@@ -37,9 +37,9 @@
 struct target_xvfsconf {
 	abi_ulong vfc_vfsops;		/* filesystem op vector - not used */
 	char vfc_name[TARGET_MFSNAMELEN];	/* filesystem type name */
-	int  vfc_typenum;		/* historic fs type number */
-	int  vfc_refcount;		/* number mounted of this type */
-	int  vfc_flags;			/* permanent flags */
+	int32_t  vfc_typenum;		/* historic fs type number */
+	int32_t  vfc_refcount;		/* number mounted of this type */
+	int32_t  vfc_flags;		/* permanent flags */
 	abi_ulong vfc_next;		/* next int list - not used */
 };
 
@@ -215,7 +215,6 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
     oidfmt(snamep, namelen, NULL, &kind);
 
     /* Handle some arch/emulator dependent sysctl()'s here. */
-    /* XXX sysctl()'s that pass structs should use thunk like ioctl(). */
     switch (snamep[0]) {
     case CTL_KERN:
         switch (snamep[1]) {
@@ -280,7 +279,8 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 	    }
 
 	    if (oid_vfs_conflist && snamep[1] == oid_vfs_conflist) {
-		struct xvfsconf *xvfsp, *hxp;
+		struct xvfsconf *xvfsp;
+		struct target_xvfsconf *txp;
 		int cnt, i;
 
 		if (sysctlbyname("vfs.conflist", NULL, &holdlen, NULL, 0) < 0) {
@@ -302,16 +302,17 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 		    goto out;
 		}
 		cnt = holdlen / sizeof(struct xvfsconf);
-		hxp = (struct xvfsconf *)holdp;
+		holdlen = cnt * sizeof(struct target_xvfsconf);
+		txp = (struct target_xvfsconf *)holdp;
 		for (i = 0; i < cnt; i++) {
-		    hxp[i].vfc_vfsops = 0;
-		    strlcpy(hxp[i].vfc_name, xvfsp[i].vfc_name,
+		    txp[i].vfc_vfsops = 0;
+		    strlcpy(txp[i].vfc_name, xvfsp[i].vfc_name,
 			TARGET_MFSNAMELEN);
-		    hxp[i].vfc_typenum = tswap32(xvfsp[i].vfc_typenum);
-		    hxp[i].vfc_refcount = tswap32(xvfsp[i].vfc_refcount);
-		    hxp[i].vfc_flags = tswap32(
+		    txp[i].vfc_typenum = tswap32(xvfsp[i].vfc_typenum);
+		    txp[i].vfc_refcount = tswap32(xvfsp[i].vfc_refcount);
+		    txp[i].vfc_flags = tswap32(
 			host_to_target_vfc_flags(xvfsp[i].vfc_flags));
-		    hxp[i].vfc_next = 0;
+		    txp[i].vfc_next = 0;
 	        }
 		g_free(xvfsp);
 		ret = 0;
