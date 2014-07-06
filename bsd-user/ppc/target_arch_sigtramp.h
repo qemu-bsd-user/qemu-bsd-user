@@ -2,7 +2,7 @@
 #ifndef _TARGET_ARCH_SIGTRAMP_H_
 #define _TARGET_ARCH_SIGTRAMP_H_
 
-/* Compare to mips/mips/locore.S sigcode() */
+/* Compare to powerpc/powerpc/locore.S sigcode() */
 static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
         unsigned sys_sigreturn)
 {
