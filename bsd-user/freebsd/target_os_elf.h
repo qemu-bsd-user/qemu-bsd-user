@@ -85,6 +85,7 @@ struct exec
 #define DLINFO_ITEMS 12
 
 static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
+                                   abi_ulong stringp,
                                    struct elfhdr * exec,
                                    abi_ulong load_addr,
                                    abi_ulong load_bias,
@@ -140,7 +141,7 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
 #endif
 #undef NEW_AUX_ENT
 
-        sp = loader_build_argptr(envc, argc, sp, p, !ibcs);
+        sp = loader_build_argptr(envc, argc, sp, stringp, !ibcs);
         return sp;
 }
 
