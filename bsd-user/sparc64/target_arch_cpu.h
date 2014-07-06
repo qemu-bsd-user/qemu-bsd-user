@@ -77,6 +77,7 @@ static inline void target_cpu_loop(CPUSPARCState *env)
                                          env->regwptr[2], env->regwptr[3],
                                          env->regwptr[4], env->regwptr[5]);
             }
+            cpu_put_ccr(env, cpu_get_ccr(env));
             if ((unsigned int)ret >= (unsigned int)(-515)) {
                 ret = -ret;
 #if !defined(TARGET_ABI32)
