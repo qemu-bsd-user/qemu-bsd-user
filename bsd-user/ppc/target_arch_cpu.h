@@ -506,7 +506,7 @@ static inline void target_cpu_loop(CPUPPCState *env)
             env->crf[0] &= ~0x1;
             ret = do_freebsd_syscall(env, env->gpr[0], env->gpr[3], env->gpr[4],
                              env->gpr[5], env->gpr[6], env->gpr[7],
-                             env->gpr[8], 0, 0);
+                             env->gpr[8], env->gpr[9], env->gpr[10]);
             if (ret == (target_ulong)(-TARGET_QEMU_ESIGRETURN)) {
                 /* Returning from a successful sigreturn syscall.
                    Avoid corrupting register state.  */
