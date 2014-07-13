@@ -9,6 +9,8 @@
 #include "qapi-types.h"
 #include "qemu/notify.h"
 #include "qemu/main-loop.h"
+#include "qemu/bitmap.h"
+#include "qom/object.h"
 
 /* vl.c */
 
@@ -60,6 +62,7 @@ void qemu_system_powerdown_request(void);
 void qemu_register_powerdown_notifier(Notifier *notifier);
 void qemu_system_debug_request(void);
 void qemu_system_vmstop_request(RunState reason);
+void qemu_system_vmstop_request_prepare(void);
 int qemu_shutdown_requested_get(void);
 int qemu_reset_requested_get(void);
 void qemu_system_killed(int signal, pid_t pid);
@@ -131,8 +134,10 @@ extern uint8_t *boot_splash_filedata;
 extern size_t boot_splash_filedata_size;
 extern uint8_t qemu_extra_params_fw[2];
 extern QEMUClockType rtc_clock;
+extern const char *mem_path;
+extern int mem_prealloc;
 
-#define MAX_NODES 64
+#define MAX_NODES 128
 
 /* The following shall be true for all CPUs:
  *   cpu->cpu_index < max_cpus <= MAX_CPUMASK_BITS
@@ -141,9 +146,22 @@ extern QEMUClockType rtc_clock;
  */
 #define MAX_CPUMASK_BITS 255
 
-extern int nb_numa_nodes;
-extern uint64_t node_mem[MAX_NODES];
-extern unsigned long *node_cpumask[MAX_NODES];
+extern int nb_numa_nodes;   /* Number of NUMA nodes */
+extern int max_numa_nodeid; /* Highest specified NUMA node ID, plus one.
+                             * For all nodes, nodeid < max_numa_nodeid
+                             */
+
+typedef struct node_info {
+    uint64_t node_mem;
+    DECLARE_BITMAP(node_cpu, MAX_CPUMASK_BITS);
+    struct HostMemoryBackend *node_memdev;
+    bool present;
+} NodeInfo;
+extern NodeInfo numa_info[MAX_NODES];
+void set_numa_nodes(void);
+void set_numa_modes(void);
+extern QemuOptsList qemu_numa_opts;
+int numa_init_func(QemuOpts *opts, void *opaque);
 
 #define MAX_OPTION_ROMS 16
 typedef struct QEMUOptionRom {
@@ -188,8 +206,6 @@ extern CharDriverState *parallel_hds[MAX_PARALLEL_PORTS];
 void do_usb_add(Monitor *mon, const QDict *qdict);
 void do_usb_del(Monitor *mon, const QDict *qdict);
 void usb_info(Monitor *mon, const QDict *qdict);
-
-void rtc_change_mon_event(struct tm *tm);
 
 void add_boot_device_path(int32_t bootindex, DeviceState *dev,
                           const char *suffix);

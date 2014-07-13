@@ -330,13 +330,14 @@ virtio_blk_data_plane=""
 gtk=""
 gtkabi=""
 vte=""
-tpm="no"
+tpm="yes"
 libssh2=""
 vhdx=""
 quorum="no"
 pcap="no"
 pcap_create="no"
 bpf="no"
+numa=""
 
 # parse CC options first
 for opt do
@@ -1111,6 +1112,8 @@ for opt do
   ;;
   --enable-vte) vte="yes"
   ;;
+  --disable-tpm) tpm="no"
+  ;;
   --enable-tpm) tpm="yes"
   ;;
   --disable-libssh2) libssh2="no"
@@ -1124,6 +1127,10 @@ for opt do
   --disable-quorum) quorum="no"
   ;;
   --enable-quorum) quorum="yes"
+  ;;
+  --disable-numa) numa="no"
+  ;;
+  --enable-numa) numa="yes"
   ;;
   *)
       echo "ERROR: unknown option $opt"
@@ -1384,6 +1391,7 @@ Advanced options (experts only):
   --disable-glusterfs      disable GlusterFS backend
   --enable-gcov            enable test coverage analysis with gcov
   --gcov=GCOV              use specified gcov [$gcov_tool]
+  --disable-tpm            disable TPM support
   --enable-tpm             enable TPM support
   --disable-libssh2        disable ssh block device support
   --enable-libssh2         enable ssh block device support
@@ -1391,6 +1399,8 @@ Advanced options (experts only):
   --enable-vhdx            enable support for the Microsoft VHDX image format
   --disable-quorum         disable quorum block filter support
   --enable-quorum          enable quorum block filter support
+  --disable-numa           disable libnuma support
+  --enable-numa            enable libnuma support
 
 NOTE: The object files are built at the place where configure is launched
 EOF
@@ -1486,8 +1496,9 @@ for flag in $gcc_flags; do
     fi
 done
 
-if test "$stack_protector" != "no" ; then
+if test "$stack_protector" != "no"; then
   gcc_flags="-fstack-protector-strong -fstack-protector-all"
+  sp_on=0
   for flag in $gcc_flags; do
     # We need to check both a compile and a link, since some compiler
     # setups fail only on a .c->.o compile and some only at link time
@@ -1495,9 +1506,15 @@ if test "$stack_protector" != "no" ; then
        compile_prog "-Werror $flag" ""; then
       QEMU_CFLAGS="$QEMU_CFLAGS $flag"
       LIBTOOLFLAGS="$LIBTOOLFLAGS -Wc,$flag"
+      sp_on=1
       break
     fi
   done
+  if test "$stack_protector" = yes; then
+    if test $sp_on = 0; then
+      error_exit "Stack protector not supported"
+    fi
+  fi
 fi
 
 # Workaround for http://gcc.gnu.org/PR55489.  Happens with -fPIE/-fPIC and
@@ -1706,6 +1723,19 @@ if compile_object ; then
     fi
 else
     echo big/little test failed
+fi
+
+##########################################
+# L2TPV3 probe
+
+cat > $TMPC <<EOF
+#include <sys/socket.h>
+int main(void) { return sizeof(struct mmsghdr); }
+EOF
+if compile_prog "" "" ; then
+  l2tpv3=yes
+else
+  l2tpv3=no
 fi
 
 ##########################################
@@ -3220,6 +3250,26 @@ if compile_prog "" "" ; then
 fi
 
 ##########################################
+# libnuma probe
+
+if test "$numa" != "no" ; then
+  cat > $TMPC << EOF
+#include <numa.h>
+int main(void) { return numa_available(); }
+EOF
+
+  if compile_prog "" "-lnuma" ; then
+    numa=yes
+    libs_softmmu="-lnuma $libs_softmmu"
+  else
+    if test "$numa" = "yes" ; then
+      feature_not_found "numa" "install numactl devel"
+    fi
+    numa=no
+  fi
+fi
+
+##########################################
 # signalfd probe
 signalfd="no"
 cat > $TMPC << EOF
@@ -3478,7 +3528,7 @@ fi
 # Do we need libm
 cat > $TMPC << EOF
 #include <math.h>
-int main(void) { return isnan(sin(0.0)); }
+int main(int argc, char **argv) { return isnan(sin((double)argc)); }
 EOF
 if compile_prog "" "" ; then
   :
@@ -4279,6 +4329,7 @@ echo "vhdx              $vhdx"
 echo "Quorum            $quorum"
 echo "lzo support       $lzo"
 echo "snappy support    $snappy"
+echo "NUMA host support $numa"
 
 if test "$sdl_too_old" = "yes"; then
 echo "-> Your SDL version is too old - please upgrade to have SDL support"
@@ -4388,6 +4439,9 @@ if test "$vde" = "yes" ; then
 fi
 if test "$netmap" = "yes" ; then
   echo "CONFIG_NETMAP=y" >> $config_host_mak
+fi
+if test "$l2tpv3" = "yes" ; then
+  echo "CONFIG_L2TPV3=y" >> $config_host_mak
 fi
 if test "$cap_ng" = "yes" ; then
   echo "CONFIG_LIBCAP=y" >> $config_host_mak
@@ -4561,6 +4615,9 @@ if test "$virtfs" = "yes" ; then
 fi
 if test "$vhost_scsi" = "yes" ; then
   echo "CONFIG_VHOST_SCSI=y" >> $config_host_mak
+fi
+if test "$vhost_net" = "yes" ; then
+  echo "CONFIG_VHOST_NET_USED=y" >> $config_host_mak
 fi
 if test "$blobs" = "yes" ; then
   echo "INSTALL_BLOBS=yes" >> $config_host_mak
@@ -4793,6 +4850,8 @@ elif test "$ARCH" = "s390x" ; then
   QEMU_INCLUDES="-I\$(SRC_PATH)/tcg/s390 $QEMU_INCLUDES"
 elif test "$ARCH" = "x86_64" -o "$ARCH" = "x32" ; then
   QEMU_INCLUDES="-I\$(SRC_PATH)/tcg/i386 $QEMU_INCLUDES"
+elif test "$ARCH" = "ppc64" ; then
+  QEMU_INCLUDES="-I\$(SRC_PATH)/tcg/ppc $QEMU_INCLUDES"
 else
   QEMU_INCLUDES="-I\$(SRC_PATH)/tcg/\$(ARCH) $QEMU_INCLUDES"
 fi
@@ -4873,6 +4932,9 @@ if test "$linux" = "yes" ; then
     ;;
   aarch64)
     linux_arch=arm64
+    ;;
+  mips64)
+    linux_arch=mips
     ;;
   *)
     # For most CPUs the kernel architecture name and QEMU CPU name match.
@@ -5072,7 +5134,7 @@ case "$target_name" in
   *)
 esac
 case "$target_name" in
-  aarch64|arm|i386|x86_64|ppcemb|ppc|ppc64|s390x)
+  aarch64|arm|i386|x86_64|ppcemb|ppc|ppc64|s390x|mipsel|mips)
     # Make sure the target and host cpus are compatible
     if test "$kvm" = "yes" -a "$target_softmmu" = "yes" -a \
       \( "$target_name" = "$cpu" -o \
@@ -5080,6 +5142,7 @@ case "$target_name" in
       \( "$target_name" = "ppc64"  -a "$cpu" = "ppc" \) -o \
       \( "$target_name" = "ppc"    -a "$cpu" = "ppc64" \) -o \
       \( "$target_name" = "ppcemb" -a "$cpu" = "ppc64" \) -o \
+      \( "$target_name" = "mipsel" -a "$cpu" = "mips" \) -o \
       \( "$target_name" = "x86_64" -a "$cpu" = "i386"   \) -o \
       \( "$target_name" = "i386"   -a "$cpu" = "x86_64" \) \) ; then
       echo "CONFIG_KVM=y" >> $config_target_mak
@@ -5251,6 +5314,10 @@ if [ "$dtc_internal" = "yes" ]; then
   echo "config-host.h: subdir-dtc" >> $config_host_mak
 fi
 
+if test "$numa" = "yes"; then
+  echo "CONFIG_NUMA=y" >> $config_host_mak
+fi
+
 # build tree in object directory in case the source is not in the current directory
 DIRS="tests tests/tcg tests/tcg/cris tests/tcg/lm32 tests/libqos tests/qapi-schema tests/tcg/xtensa tests/qemu-iotests"
 DIRS="$DIRS fsdev"
@@ -5304,6 +5371,18 @@ done
 
 if test "$docs" = "yes" ; then
   mkdir -p QMP
+fi
+
+# set up qemu-iotests in this build directory
+iotests_common_env="tests/qemu-iotests/common.env"
+iotests_check="tests/qemu-iotests/check"
+
+echo "# Automatically generated by configure - do not modify" > "$iotests_common_env"
+echo >> "$iotests_common_env"
+echo "export PYTHON='$python'" >> "$iotests_common_env"
+
+if [ ! -e "$iotests_check" ]; then
+    symlink "$source_path/$iotests_check" "$iotests_check"
 fi
 
 # Save the configure command line for later reuse.

@@ -180,7 +180,6 @@ PropertyInfo qdev_prop_chr = {
 static int parse_netdev(DeviceState *dev, const char *str, void **ptr)
 {
     NICPeers *peers_ptr = (NICPeers *)ptr;
-    NICConf *conf = container_of(peers_ptr, NICConf, peers);
     NetClientState **ncs = peers_ptr->ncs;
     NetClientState *peers[MAX_QUEUE_NUM];
     int queues, i = 0;
@@ -219,7 +218,7 @@ static int parse_netdev(DeviceState *dev, const char *str, void **ptr)
         ncs[i]->queue_index = i;
     }
 
-    conf->queues = queues;
+    peers_ptr->queues = queues;
 
     return 0;
 
@@ -386,56 +385,6 @@ void qdev_set_nic_properties(DeviceState *dev, NICInfo *nd)
     nd->instantiated = 1;
 }
 
-/* --- iothread --- */
-
-static char *print_iothread(void *ptr)
-{
-    return iothread_get_id(ptr);
-}
-
-static int parse_iothread(DeviceState *dev, const char *str, void **ptr)
-{
-    IOThread *iothread;
-
-    iothread = iothread_find(str);
-    if (!iothread) {
-        return -ENOENT;
-    }
-    object_ref(OBJECT(iothread));
-    *ptr = iothread;
-    return 0;
-}
-
-static void get_iothread(Object *obj, struct Visitor *v, void *opaque,
-                         const char *name, Error **errp)
-{
-    get_pointer(obj, v, opaque, print_iothread, name, errp);
-}
-
-static void set_iothread(Object *obj, struct Visitor *v, void *opaque,
-                         const char *name, Error **errp)
-{
-    set_pointer(obj, v, opaque, parse_iothread, name, errp);
-}
-
-static void release_iothread(Object *obj, const char *name, void *opaque)
-{
-    DeviceState *dev = DEVICE(obj);
-    Property *prop = opaque;
-    IOThread **ptr = qdev_get_prop_ptr(dev, prop);
-
-    if (*ptr) {
-        object_unref(OBJECT(*ptr));
-    }
-}
-
-PropertyInfo qdev_prop_iothread = {
-    .name = "iothread",
-    .get = get_iothread,
-    .set = set_iothread,
-    .release = release_iothread,
-};
-
 static int qdev_add_one_global(QemuOpts *opts, void *opaque)
 {
     GlobalProperty *g;
@@ -445,7 +394,8 @@ static int qdev_add_one_global(QemuOpts *opts, void *opaque)
     g->driver   = qemu_opt_get(opts, "driver");
     g->property = qemu_opt_get(opts, "property");
     g->value    = qemu_opt_get(opts, "value");
-    oc = object_class_by_name(g->driver);
+    oc = object_class_dynamic_cast(object_class_by_name(g->driver),
+                                   TYPE_DEVICE);
     if (oc) {
         DeviceClass *dc = DEVICE_CLASS(oc);
 

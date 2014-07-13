@@ -23,7 +23,6 @@
  */
 #include "qemu-common.h"
 #include "monitor/monitor.h"
-#include "ui/console.h"
 #include "sysemu/sysemu.h"
 #include "qemu/timer.h"
 #include "sysemu/char.h"
@@ -84,12 +83,20 @@
 #include "ui/qemu-spice.h"
 
 #define READ_BUF_LEN 4096
+#define READ_RETRIES 10
 
 /***********************************************************/
 /* character device */
 
 static QTAILQ_HEAD(CharDriverStateHead, CharDriverState) chardevs =
     QTAILQ_HEAD_INITIALIZER(chardevs);
+
+CharDriverState *qemu_chr_alloc(void)
+{
+    CharDriverState *chr = g_malloc0(sizeof(CharDriverState));
+    qemu_mutex_init(&chr->chr_write_lock);
+    return chr;
+}
 
 void qemu_chr_be_event(CharDriverState *s, int event)
 {
@@ -115,17 +122,54 @@ void qemu_chr_be_generic_open(CharDriverState *s)
 
 int qemu_chr_fe_write(CharDriverState *s, const uint8_t *buf, int len)
 {
-    return s->chr_write(s, buf, len);
+    int ret;
+
+    qemu_mutex_lock(&s->chr_write_lock);
+    ret = s->chr_write(s, buf, len);
+    qemu_mutex_unlock(&s->chr_write_lock);
+    return ret;
 }
 
 int qemu_chr_fe_write_all(CharDriverState *s, const uint8_t *buf, int len)
 {
     int offset = 0;
-    int res;
+    int res = 0;
 
+    qemu_mutex_lock(&s->chr_write_lock);
     while (offset < len) {
         do {
             res = s->chr_write(s, buf + offset, len - offset);
+            if (res == -1 && errno == EAGAIN) {
+                g_usleep(100);
+            }
+        } while (res == -1 && errno == EAGAIN);
+
+        if (res <= 0) {
+            break;
+        }
+
+        offset += res;
+    }
+    qemu_mutex_unlock(&s->chr_write_lock);
+
+    if (res < 0) {
+        return res;
+    }
+    return offset;
+}
+
+int qemu_chr_fe_read_all(CharDriverState *s, uint8_t *buf, int len)
+{
+    int offset = 0, counter = 10;
+    int res;
+
+    if (!s->chr_sync_read) {
+        return 0;
+    }
+
+    while (offset < len) {
+        do {
+            res = s->chr_sync_read(s, buf + offset, len - offset);
             if (res == -1 && errno == EAGAIN) {
                 g_usleep(100);
             }
@@ -140,6 +184,10 @@ int qemu_chr_fe_write_all(CharDriverState *s, const uint8_t *buf, int len)
         }
 
         offset += res;
+
+        if (!counter--) {
+            break;
+        }
     }
 
     return offset;
@@ -168,7 +216,18 @@ void qemu_chr_be_write(CharDriverState *s, uint8_t *buf, int len)
 
 int qemu_chr_fe_get_msgfd(CharDriverState *s)
 {
-    return s->get_msgfd ? s->get_msgfd(s) : -1;
+    int fd;
+    return (qemu_chr_fe_get_msgfds(s, &fd, 1) == 1) ? fd : -1;
+}
+
+int qemu_chr_fe_get_msgfds(CharDriverState *s, int *fds, int len)
+{
+    return s->get_msgfds ? s->get_msgfds(s, fds, len) : -1;
+}
+
+int qemu_chr_fe_set_msgfds(CharDriverState *s, int *fds, int num)
+{
+    return s->set_msgfds ? s->set_msgfds(s, fds, num) : -1;
 }
 
 int qemu_chr_add_client(CharDriverState *s, int fd)
@@ -236,7 +295,7 @@ static CharDriverState *qemu_chr_open_null(void)
 {
     CharDriverState *chr;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     chr->chr_write = null_chr_write;
     chr->explicit_be_open = true;
     return chr;
@@ -263,17 +322,20 @@ typedef struct {
     int prod[MAX_MUX];
     int cons[MAX_MUX];
     int timestamps;
+
+    /* Protected by the CharDriverState chr_write_lock.  */
     int linestart;
     int64_t timestamps_start;
 } MuxDriver;
 
 
+/* Called with chr_write_lock held.  */
 static int mux_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     MuxDriver *d = chr->opaque;
     int ret;
     if (!d->timestamps) {
-        ret = d->drv->chr_write(d->drv, buf, len);
+        ret = qemu_chr_fe_write(d->drv, buf, len);
     } else {
         int i;
 
@@ -295,10 +357,10 @@ static int mux_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
                          (secs / 60) % 60,
                          secs % 60,
                          (int)(ti % 1000));
-                d->drv->chr_write(d->drv, (uint8_t *)buf1, strlen(buf1));
+                qemu_chr_fe_write(d->drv, (uint8_t *)buf1, strlen(buf1));
                 d->linestart = 0;
             }
-            ret += d->drv->chr_write(d->drv, buf+i, 1);
+            ret += qemu_chr_fe_write(d->drv, buf+i, 1);
             if (buf[i] == '\n') {
                 d->linestart = 1;
             }
@@ -333,13 +395,13 @@ static void mux_print_help(CharDriverState *chr)
                  "\n\rEscape-Char set to Ascii: 0x%02x\n\r\n\r",
                  term_escape_char);
     }
-    chr->chr_write(chr, (uint8_t *)cbuf, strlen(cbuf));
+    qemu_chr_fe_write(chr, (uint8_t *)cbuf, strlen(cbuf));
     for (i = 0; mux_help[i] != NULL; i++) {
         for (j=0; mux_help[i][j] != '\0'; j++) {
             if (mux_help[i][j] == '%')
-                chr->chr_write(chr, (uint8_t *)ebuf, strlen(ebuf));
+                qemu_chr_fe_write(chr, (uint8_t *)ebuf, strlen(ebuf));
             else
-                chr->chr_write(chr, (uint8_t *)&mux_help[i][j], 1);
+                qemu_chr_fe_write(chr, (uint8_t *)&mux_help[i][j], 1);
         }
     }
 }
@@ -364,7 +426,7 @@ static int mux_proc_byte(CharDriverState *chr, MuxDriver *d, int ch)
         case 'x':
             {
                  const char *term =  "QEMU: Terminated\n\r";
-                 chr->chr_write(chr,(uint8_t *)term,strlen(term));
+                 qemu_chr_fe_write(chr, (uint8_t *)term, strlen(term));
                  exit(0);
                  break;
             }
@@ -519,12 +581,18 @@ static Notifier muxes_realize_notify = {
     .notify = muxes_realize_done,
 };
 
+static GSource *mux_chr_add_watch(CharDriverState *s, GIOCondition cond)
+{
+    MuxDriver *d = s->opaque;
+    return d->drv->chr_add_watch(d->drv, cond);
+}
+
 static CharDriverState *qemu_chr_open_mux(CharDriverState *drv)
 {
     CharDriverState *chr;
     MuxDriver *d;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     d = g_malloc0(sizeof(MuxDriver));
 
     chr->opaque = d;
@@ -535,6 +603,9 @@ static CharDriverState *qemu_chr_open_mux(CharDriverState *drv)
     chr->chr_accept_input = mux_chr_accept_input;
     /* Frontend guest-open / -close notification is not support with muxes */
     chr->chr_set_fe_open = NULL;
+    if (drv->chr_add_watch) {
+        chr->chr_add_watch = mux_chr_add_watch;
+    }
     /* only default to opened state if we've realized the initial
      * set of muxes
      */
@@ -813,6 +884,7 @@ typedef struct FDCharDriver {
     QTAILQ_ENTRY(FDCharDriver) node;
 } FDCharDriver;
 
+/* Called with chr_write_lock held.  */
 static int fd_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     FDCharDriver *s = chr->opaque;
@@ -899,7 +971,7 @@ static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out)
     CharDriverState *chr;
     FDCharDriver *s;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     s = g_malloc0(sizeof(FDCharDriver));
     s->fd_in = io_channel_from_fd(fd_in);
     s->fd_out = io_channel_from_fd(fd_out);
@@ -1012,12 +1084,14 @@ static CharDriverState *qemu_chr_open_stdio(ChardevStdio *opts)
 
 typedef struct {
     GIOChannel *fd;
-    int connected;
     int read_bytes;
+
+    /* Protected by the CharDriverState chr_write_lock.  */
+    int connected;
     guint timer_tag;
 } PtyCharDriver;
 
-static void pty_chr_update_read_handler(CharDriverState *chr);
+static void pty_chr_update_read_handler_locked(CharDriverState *chr);
 static void pty_chr_state(CharDriverState *chr, int connected);
 
 static gboolean pty_chr_timer(gpointer opaque)
@@ -1025,14 +1099,17 @@ static gboolean pty_chr_timer(gpointer opaque)
     struct CharDriverState *chr = opaque;
     PtyCharDriver *s = chr->opaque;
 
+    qemu_mutex_lock(&chr->chr_write_lock);
     s->timer_tag = 0;
     if (!s->connected) {
         /* Next poll ... */
-        pty_chr_update_read_handler(chr);
+        pty_chr_update_read_handler_locked(chr);
     }
+    qemu_mutex_unlock(&chr->chr_write_lock);
     return FALSE;
 }
 
+/* Called with chr_write_lock held.  */
 static void pty_chr_rearm_timer(CharDriverState *chr, int ms)
 {
     PtyCharDriver *s = chr->opaque;
@@ -1049,13 +1126,38 @@ static void pty_chr_rearm_timer(CharDriverState *chr, int ms)
     }
 }
 
+/* Called with chr_write_lock held.  */
+static void pty_chr_update_read_handler_locked(CharDriverState *chr)
+{
+    PtyCharDriver *s = chr->opaque;
+    GPollFD pfd;
+
+    pfd.fd = g_io_channel_unix_get_fd(s->fd);
+    pfd.events = G_IO_OUT;
+    pfd.revents = 0;
+    g_poll(&pfd, 1, 0);
+    if (pfd.revents & G_IO_HUP) {
+        pty_chr_state(chr, 0);
+    } else {
+        pty_chr_state(chr, 1);
+    }
+}
+
+static void pty_chr_update_read_handler(CharDriverState *chr)
+{
+    qemu_mutex_lock(&chr->chr_write_lock);
+    pty_chr_update_read_handler_locked(chr);
+    qemu_mutex_unlock(&chr->chr_write_lock);
+}
+
+/* Called with chr_write_lock held.  */
 static int pty_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     PtyCharDriver *s = chr->opaque;
 
     if (!s->connected) {
         /* guest sends data, check for (re-)connect */
-        pty_chr_update_read_handler(chr);
+        pty_chr_update_read_handler_locked(chr);
         return 0;
     }
     return io_channel_send(s->fd, buf, len);
@@ -1101,22 +1203,7 @@ static gboolean pty_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
     return TRUE;
 }
 
-static void pty_chr_update_read_handler(CharDriverState *chr)
-{
-    PtyCharDriver *s = chr->opaque;
-    GPollFD pfd;
-
-    pfd.fd = g_io_channel_unix_get_fd(s->fd);
-    pfd.events = G_IO_OUT;
-    pfd.revents = 0;
-    g_poll(&pfd, 1, 0);
-    if (pfd.revents & G_IO_HUP) {
-        pty_chr_state(chr, 0);
-    } else {
-        pty_chr_state(chr, 1);
-    }
-}
-
+/* Called with chr_write_lock held.  */
 static void pty_chr_state(CharDriverState *chr, int connected)
 {
     PtyCharDriver *s = chr->opaque;
@@ -1176,7 +1263,7 @@ static CharDriverState *qemu_chr_open_pty(const char *id,
 
     close(slave_fd);
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
 
     chr->filename = g_strdup_printf("pty:%s", pty_name);
     ret->pty = g_strdup(pty_name);
@@ -1541,7 +1628,7 @@ static CharDriverState *qemu_chr_open_pp_fd(int fd)
     drv->fd = fd;
     drv->mode = IEEE1284_MODE_COMPAT;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     chr->chr_write = null_chr_write;
     chr->chr_ioctl = pp_ioctl;
     chr->chr_close = pp_close;
@@ -1596,7 +1683,7 @@ static CharDriverState *qemu_chr_open_pp_fd(int fd)
 {
     CharDriverState *chr;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     chr->opaque = (void *)(intptr_t)fd;
     chr->chr_write = null_chr_write;
     chr->chr_ioctl = pp_ioctl;
@@ -1610,9 +1697,12 @@ static CharDriverState *qemu_chr_open_pp_fd(int fd)
 typedef struct {
     int max_size;
     HANDLE hcom, hrecv, hsend;
-    OVERLAPPED orecv, osend;
+    OVERLAPPED orecv;
     BOOL fpipe;
     DWORD len;
+
+    /* Protected by the CharDriverState chr_write_lock.  */
+    OVERLAPPED osend;
 } WinCharState;
 
 typedef struct {
@@ -1722,6 +1812,7 @@ static int win_chr_init(CharDriverState *chr, const char *filename)
     return -1;
 }
 
+/* Called with chr_write_lock held.  */
 static int win_chr_write(CharDriverState *chr, const uint8_t *buf, int len1)
 {
     WinCharState *s = chr->opaque;
@@ -1820,7 +1911,7 @@ static CharDriverState *qemu_chr_open_win_path(const char *filename)
     CharDriverState *chr;
     WinCharState *s;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     s = g_malloc0(sizeof(WinCharState));
     chr->opaque = s;
     chr->chr_write = win_chr_write;
@@ -1919,7 +2010,7 @@ static CharDriverState *qemu_chr_open_pipe(ChardevHostdev *opts)
     CharDriverState *chr;
     WinCharState *s;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     s = g_malloc0(sizeof(WinCharState));
     chr->opaque = s;
     chr->chr_write = win_chr_write;
@@ -1938,7 +2029,7 @@ static CharDriverState *qemu_chr_open_win_file(HANDLE fd_out)
     CharDriverState *chr;
     WinCharState *s;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     s = g_malloc0(sizeof(WinCharState));
     s->hcom = fd_out;
     chr->opaque = s;
@@ -2094,7 +2185,7 @@ static CharDriverState *qemu_chr_open_stdio(ChardevStdio *opts)
     DWORD              dwMode;
     int                is_console = 0;
 
-    chr   = g_malloc0(sizeof(CharDriverState));
+    chr   = qemu_chr_alloc();
     stdio = g_malloc0(sizeof(WinStdioCharState));
 
     stdio->hStdIn = GetStdHandle(STD_INPUT_HANDLE);
@@ -2164,6 +2255,7 @@ typedef struct {
     int max_size;
 } NetCharDriver;
 
+/* Called with chr_write_lock held.  */
 static int udp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     NetCharDriver *s = chr->opaque;
@@ -2256,7 +2348,7 @@ static CharDriverState *qemu_chr_open_udp_fd(int fd)
     CharDriverState *chr = NULL;
     NetCharDriver *s = NULL;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     s = g_malloc0(sizeof(NetCharDriver));
 
     s->fd = fd;
@@ -2299,16 +2391,74 @@ typedef struct {
     int do_telnetopt;
     int do_nodelay;
     int is_unix;
-    int msgfd;
+    int *read_msgfds;
+    int read_msgfds_num;
+    int *write_msgfds;
+    int write_msgfds_num;
 } TCPCharDriver;
 
 static gboolean tcp_chr_accept(GIOChannel *chan, GIOCondition cond, void *opaque);
 
+#ifndef _WIN32
+static int unix_send_msgfds(CharDriverState *chr, const uint8_t *buf, int len)
+{
+    TCPCharDriver *s = chr->opaque;
+    struct msghdr msgh;
+    struct iovec iov;
+    int r;
+
+    size_t fd_size = s->write_msgfds_num * sizeof(int);
+    char control[CMSG_SPACE(fd_size)];
+    struct cmsghdr *cmsg;
+
+    memset(&msgh, 0, sizeof(msgh));
+    memset(control, 0, sizeof(control));
+
+    /* set the payload */
+    iov.iov_base = (uint8_t *) buf;
+    iov.iov_len = len;
+
+    msgh.msg_iov = &iov;
+    msgh.msg_iovlen = 1;
+
+    msgh.msg_control = control;
+    msgh.msg_controllen = sizeof(control);
+
+    cmsg = CMSG_FIRSTHDR(&msgh);
+
+    cmsg->cmsg_len = CMSG_LEN(fd_size);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    memcpy(CMSG_DATA(cmsg), s->write_msgfds, fd_size);
+
+    do {
+        r = sendmsg(s->fd, &msgh, 0);
+    } while (r < 0 && errno == EINTR);
+
+    /* free the written msgfds, no matter what */
+    if (s->write_msgfds_num) {
+        g_free(s->write_msgfds);
+        s->write_msgfds = 0;
+        s->write_msgfds_num = 0;
+    }
+
+    return r;
+}
+#endif
+
+/* Called with chr_write_lock held.  */
 static int tcp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     TCPCharDriver *s = chr->opaque;
     if (s->connected) {
-        return io_channel_send(s->chan, buf, len);
+#ifndef _WIN32
+        if (s->is_unix && s->write_msgfds_num) {
+            return unix_send_msgfds(chr, buf, len);
+        } else
+#endif
+        {
+            return io_channel_send(s->chan, buf, len);
+        }
     } else {
         /* XXX: indicate an error ? */
         return len;
@@ -2375,12 +2525,46 @@ static void tcp_chr_process_IAC_bytes(CharDriverState *chr,
     *size = j;
 }
 
-static int tcp_get_msgfd(CharDriverState *chr)
+static int tcp_get_msgfds(CharDriverState *chr, int *fds, int num)
 {
     TCPCharDriver *s = chr->opaque;
-    int fd = s->msgfd;
-    s->msgfd = -1;
-    return fd;
+    int to_copy = (s->read_msgfds_num < num) ? s->read_msgfds_num : num;
+
+    if (to_copy) {
+        int i;
+
+        memcpy(fds, s->read_msgfds, to_copy * sizeof(int));
+
+        /* Close unused fds */
+        for (i = to_copy; i < s->read_msgfds_num; i++) {
+            close(s->read_msgfds[i]);
+        }
+
+        g_free(s->read_msgfds);
+        s->read_msgfds = 0;
+        s->read_msgfds_num = 0;
+    }
+
+    return to_copy;
+}
+
+static int tcp_set_msgfds(CharDriverState *chr, int *fds, int num)
+{
+    TCPCharDriver *s = chr->opaque;
+
+    /* clear old pending fd array */
+    if (s->write_msgfds) {
+        g_free(s->write_msgfds);
+    }
+
+    if (num) {
+        s->write_msgfds = g_malloc(num * sizeof(int));
+        memcpy(s->write_msgfds, fds, num * sizeof(int));
+    }
+
+    s->write_msgfds_num = num;
+
+    return 0;
 }
 
 #ifndef _WIN32
@@ -2390,26 +2574,46 @@ static void unix_process_msgfd(CharDriverState *chr, struct msghdr *msg)
     struct cmsghdr *cmsg;
 
     for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
-        int fd;
+        int fd_size, i;
 
-        if (cmsg->cmsg_len != CMSG_LEN(sizeof(int)) ||
+        if (cmsg->cmsg_len < CMSG_LEN(sizeof(int)) ||
             cmsg->cmsg_level != SOL_SOCKET ||
-            cmsg->cmsg_type != SCM_RIGHTS)
+            cmsg->cmsg_type != SCM_RIGHTS) {
             continue;
+        }
 
-        fd = *((int *)CMSG_DATA(cmsg));
-        if (fd < 0)
+        fd_size = cmsg->cmsg_len - CMSG_LEN(0);
+
+        if (!fd_size) {
             continue;
+        }
 
-        /* O_NONBLOCK is preserved across SCM_RIGHTS so reset it */
-        qemu_set_block(fd);
+        /* close and clean read_msgfds */
+        for (i = 0; i < s->read_msgfds_num; i++) {
+            close(s->read_msgfds[i]);
+        }
 
-#ifndef MSG_CMSG_CLOEXEC
-        qemu_set_cloexec(fd);
-#endif
-        if (s->msgfd != -1)
-            close(s->msgfd);
-        s->msgfd = fd;
+        if (s->read_msgfds_num) {
+            g_free(s->read_msgfds);
+        }
+
+        s->read_msgfds_num = fd_size / sizeof(int);
+        s->read_msgfds = g_malloc(fd_size);
+        memcpy(s->read_msgfds, CMSG_DATA(cmsg), fd_size);
+
+        for (i = 0; i < s->read_msgfds_num; i++) {
+            int fd = s->read_msgfds[i];
+            if (fd < 0) {
+                continue;
+            }
+
+            /* O_NONBLOCK is preserved across SCM_RIGHTS so reset it */
+            qemu_set_block(fd);
+
+    #ifndef MSG_CMSG_CLOEXEC
+            qemu_set_cloexec(fd);
+    #endif
+        }
     }
 }
 
@@ -2457,12 +2661,35 @@ static GSource *tcp_chr_add_watch(CharDriverState *chr, GIOCondition cond)
     return g_io_create_watch(s->chan, cond);
 }
 
+static void tcp_chr_disconnect(CharDriverState *chr)
+{
+    TCPCharDriver *s = chr->opaque;
+
+    s->connected = 0;
+    if (s->listen_chan) {
+        s->listen_tag = g_io_add_watch(s->listen_chan, G_IO_IN,
+                                       tcp_chr_accept, chr);
+    }
+    remove_fd_in_watch(chr);
+    g_io_channel_unref(s->chan);
+    s->chan = NULL;
+    closesocket(s->fd);
+    s->fd = -1;
+    qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+}
+
 static gboolean tcp_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
 {
     CharDriverState *chr = opaque;
     TCPCharDriver *s = chr->opaque;
     uint8_t buf[READ_BUF_LEN];
     int len, size;
+
+    if (cond & G_IO_HUP) {
+        /* connection closed */
+        tcp_chr_disconnect(chr);
+        return TRUE;
+    }
 
     if (!s->connected || s->max_size <= 0) {
         return TRUE;
@@ -2473,16 +2700,7 @@ static gboolean tcp_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
     size = tcp_chr_recv(chr, (void *)buf, len);
     if (size == 0) {
         /* connection closed */
-        s->connected = 0;
-        if (s->listen_chan) {
-            s->listen_tag = g_io_add_watch(s->listen_chan, G_IO_IN, tcp_chr_accept, chr);
-        }
-        remove_fd_in_watch(chr);
-        g_io_channel_unref(s->chan);
-        s->chan = NULL;
-        closesocket(s->fd);
-        s->fd = -1;
-        qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
+        tcp_chr_disconnect(chr);
     } else if (size > 0) {
         if (s->do_telnetopt)
             tcp_chr_process_IAC_bytes(chr, s, buf, &size);
@@ -2491,6 +2709,24 @@ static gboolean tcp_chr_read(GIOChannel *chan, GIOCondition cond, void *opaque)
     }
 
     return TRUE;
+}
+
+static int tcp_chr_sync_read(CharDriverState *chr, const uint8_t *buf, int len)
+{
+    TCPCharDriver *s = chr->opaque;
+    int size;
+
+    if (!s->connected) {
+        return 0;
+    }
+
+    size = tcp_chr_recv(chr, (void *) buf, len);
+    if (size == 0) {
+        /* connection closed */
+        tcp_chr_disconnect(chr);
+    }
+
+    return size;
 }
 
 #ifndef _WIN32
@@ -2607,6 +2843,7 @@ static gboolean tcp_chr_accept(GIOChannel *channel, GIOCondition cond, void *opa
 static void tcp_chr_close(CharDriverState *chr)
 {
     TCPCharDriver *s = chr->opaque;
+    int i;
     if (s->fd >= 0) {
         remove_fd_in_watch(chr);
         if (s->chan) {
@@ -2623,6 +2860,15 @@ static void tcp_chr_close(CharDriverState *chr)
             g_io_channel_unref(s->listen_chan);
         }
         closesocket(s->listen_fd);
+    }
+    if (s->read_msgfds_num) {
+        for (i = 0; i < s->read_msgfds_num; i++) {
+            close(s->read_msgfds[i]);
+        }
+        g_free(s->read_msgfds);
+    }
+    if (s->write_msgfds_num) {
+        g_free(s->write_msgfds);
     }
     g_free(s);
     qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
@@ -2646,13 +2892,16 @@ static CharDriverState *qemu_chr_open_socket_fd(int fd, bool do_nodelay,
         return NULL;
     }
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     s = g_malloc0(sizeof(TCPCharDriver));
 
     s->connected = 0;
     s->fd = -1;
     s->listen_fd = -1;
-    s->msgfd = -1;
+    s->read_msgfds = 0;
+    s->read_msgfds_num = 0;
+    s->write_msgfds = 0;
+    s->write_msgfds_num = 0;
 
     chr->filename = g_malloc(256);
     switch (ss.ss_family) {
@@ -2681,8 +2930,10 @@ static CharDriverState *qemu_chr_open_socket_fd(int fd, bool do_nodelay,
 
     chr->opaque = s;
     chr->chr_write = tcp_chr_write;
+    chr->chr_sync_read = tcp_chr_sync_read;
     chr->chr_close = tcp_chr_close;
-    chr->get_msgfd = tcp_get_msgfd;
+    chr->get_msgfds = tcp_get_msgfds;
+    chr->set_msgfds = tcp_set_msgfds;
     chr->chr_add_client = tcp_chr_add_client;
     chr->chr_add_watch = tcp_chr_add_watch;
     chr->chr_update_read_handler = tcp_chr_update_read_handler;
@@ -2785,6 +3036,7 @@ static size_t ringbuf_count(const CharDriverState *chr)
     return d->prod - d->cons;
 }
 
+/* Called with chr_write_lock held.  */
 static int ringbuf_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     RingBufCharDriver *d = chr->opaque;
@@ -2809,9 +3061,11 @@ static int ringbuf_chr_read(CharDriverState *chr, uint8_t *buf, int len)
     RingBufCharDriver *d = chr->opaque;
     int i;
 
+    qemu_mutex_lock(&chr->chr_write_lock);
     for (i = 0; i < len && d->cons != d->prod; i++) {
         buf[i] = d->cbuf[d->cons++ & (d->size - 1)];
     }
+    qemu_mutex_unlock(&chr->chr_write_lock);
 
     return i;
 }
@@ -2831,7 +3085,7 @@ static CharDriverState *qemu_chr_open_ringbuf(ChardevRingbuf *opts,
     CharDriverState *chr;
     RingBufCharDriver *d;
 
-    chr = g_malloc0(sizeof(CharDriverState));
+    chr = qemu_chr_alloc();
     d = g_malloc(sizeof(*d));
 
     d->size = opts->has_size ? opts->size : 65536;
@@ -3448,6 +3702,7 @@ ChardevInfoList *qmp_query_chardev(Error **errp)
         info->value = g_malloc0(sizeof(*info->value));
         info->value->label = g_strdup(chr->label);
         info->value->filename = g_strdup(chr->filename);
+        info->value->frontend_open = chr->fe_open;
 
         info->next = chr_list;
         chr_list = info;

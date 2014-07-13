@@ -84,6 +84,7 @@ enum {
 };
 
 static hwaddr motherboard_legacy_map[] = {
+    [VE_NORFLASHALIAS] = 0,
     /* CS7: 0x10000000 .. 0x10020000 */
     [VE_SYSREGS] = 0x10000000,
     [VE_SP810] = 0x10001000,
@@ -114,7 +115,6 @@ static hwaddr motherboard_legacy_map[] = {
     [VE_VIDEORAM] = 0x4c000000,
     [VE_ETHERNET] = 0x4e000000,
     [VE_USB] = 0x4f000000,
-    [VE_NORFLASHALIAS] = -1, /* not present */
 };
 
 static hwaddr motherboard_aseries_map[] = {
@@ -533,7 +533,15 @@ static void vexpress_common_init(VEDBoardInfo *daughterboard,
      * If a bios file was provided, attempt to map it into memory
      */
     if (bios_name) {
-        const char *fn = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+        const char *fn;
+
+        if (drive_get(IF_PFLASH, 0, 0)) {
+            error_report("The contents of the first flash device may be "
+                         "specified with -bios or with -drive if=pflash... "
+                         "but you cannot use both options at once");
+            exit(1);
+        }
+        fn = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
         if (!fn || load_image_targphys(fn, map[VE_NORFLASH0],
                                        VEXPRESS_FLASH_SIZE) < 0) {
             error_report("Could not load ROM image '%s'", bios_name);

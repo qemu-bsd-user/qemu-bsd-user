@@ -44,6 +44,7 @@
 #include "hw/ide/ahci.h"
 #include "hw/usb.h"
 #include "hw/cpu/icc_bus.h"
+#include "qemu/error-report.h"
 
 /* ICH9 AHCI has 6 ports */
 #define MAX_SATA_PORTS     6
@@ -57,10 +58,12 @@ static bool smbios_legacy_mode;
  * pages in the host.
  */
 static bool gigabyte_align = true;
+static bool has_reserved_memory = true;
 
 /* PC hardware initialisation */
 static void pc_q35_init(MachineState *machine)
 {
+    PCMachineState *pc_machine = PC_MACHINE(machine);
     ram_addr_t below_4g_mem_size, above_4g_mem_size;
     Q35PCIHost *q35_host;
     PCIHostState *phb;
@@ -83,8 +86,46 @@ static void pc_q35_init(MachineState *machine)
     PCIDevice *ahci;
     DeviceState *icc_bridge;
     PcGuestInfo *guest_info;
+    ram_addr_t lowmem;
 
-    if (xen_enabled() && xen_hvm_init(&ram_memory) != 0) {
+    /* Check whether RAM fits below 4G (leaving 1/2 GByte for IO memory
+     * and 256 Mbytes for PCI Express Enhanced Configuration Access Mapping
+     * also known as MMCFG).
+     * If it doesn't, we need to split it in chunks below and above 4G.
+     * In any case, try to make sure that guest addresses aligned at
+     * 1G boundaries get mapped to host addresses aligned at 1G boundaries.
+     * For old machine types, use whatever split we used historically to avoid
+     * breaking migration.
+     */
+    if (machine->ram_size >= 0xb0000000) {
+        lowmem = gigabyte_align ? 0x80000000 : 0xb0000000;
+    } else {
+        lowmem = 0xb0000000;
+    }
+
+    /* Handle the machine opt max-ram-below-4g.  It is basicly doing
+     * min(qemu limit, user limit).
+     */
+    if (lowmem > pc_machine->max_ram_below_4g) {
+        lowmem = pc_machine->max_ram_below_4g;
+        if (machine->ram_size - lowmem > lowmem &&
+            lowmem & ((1ULL << 30) - 1)) {
+            error_report("Warning: Large machine and max_ram_below_4g(%"PRIu64
+                         ") not a multiple of 1G; possible bad performance.",
+                         pc_machine->max_ram_below_4g);
+        }
+    }
+
+    if (machine->ram_size >= lowmem) {
+        above_4g_mem_size = machine->ram_size - lowmem;
+        below_4g_mem_size = lowmem;
+    } else {
+        above_4g_mem_size = 0;
+        below_4g_mem_size = machine->ram_size;
+    }
+
+    if (xen_enabled() && xen_hvm_init(&below_4g_mem_size, &above_4g_mem_size,
+                                      &ram_memory) != 0) {
         fprintf(stderr, "xen hardware virtual machine initialisation failed\n");
         exit(1);
     }
@@ -97,24 +138,6 @@ static void pc_q35_init(MachineState *machine)
     pc_acpi_init("q35-acpi-dsdt.aml");
 
     kvmclock_create();
-
-    /* Check whether RAM fits below 4G (leaving 1/2 GByte for IO memory
-     * and 256 Mbytes for PCI Express Enhanced Configuration Access Mapping
-     * also known as MMCFG).
-     * If it doesn't, we need to split it in chunks below and above 4G.
-     * In any case, try to make sure that guest addresses aligned at
-     * 1G boundaries get mapped to host addresses aligned at 1G boundaries.
-     * For old machine types, use whatever split we used historically to avoid
-     * breaking migration.
-     */
-    if (machine->ram_size >= 0xb0000000) {
-        ram_addr_t lowmem = gigabyte_align ? 0x80000000 : 0xb0000000;
-        above_4g_mem_size = machine->ram_size - lowmem;
-        below_4g_mem_size = lowmem;
-    } else {
-        above_4g_mem_size = 0;
-        below_4g_mem_size = machine->ram_size;
-    }
 
     /* pci enabled */
     if (pci_enabled) {
@@ -130,6 +153,7 @@ static void pc_q35_init(MachineState *machine)
     guest_info->has_pci_info = has_pci_info;
     guest_info->isapc_ram_fw = false;
     guest_info->has_acpi_build = has_acpi_build;
+    guest_info->has_reserved_memory = has_reserved_memory;
 
     if (smbios_defaults) {
         MachineClass *mc = MACHINE_GET_CLASS(machine);
@@ -140,9 +164,7 @@ static void pc_q35_init(MachineState *machine)
 
     /* allocate ram and load rom/bios */
     if (!xen_enabled()) {
-        pc_memory_init(get_system_memory(),
-                       machine->kernel_filename, machine->kernel_cmdline,
-                       machine->initrd_filename,
+        pc_memory_init(machine, get_system_memory(),
                        below_4g_mem_size, above_4g_mem_size,
                        rom_memory, &ram_memory, guest_info);
     }
@@ -176,6 +198,15 @@ static void pc_q35_init(MachineState *machine)
     lpc = pci_create_simple_multifunction(host_bus, PCI_DEVFN(ICH9_LPC_DEV,
                                           ICH9_LPC_FUNC), true,
                                           TYPE_ICH9_LPC_DEVICE);
+
+    object_property_add_link(OBJECT(machine), PC_MACHINE_ACPI_DEVICE_PROP,
+                             TYPE_HOTPLUG_HANDLER,
+                             (Object **)&pc_machine->acpi_dev,
+                             object_property_allow_set_link,
+                             OBJ_PROP_LINK_UNREF_ON_RELEASE, &error_abort);
+    object_property_set_link(OBJECT(machine), OBJECT(lpc),
+                             PC_MACHINE_ACPI_DEVICE_PROP, &error_abort);
+
     ich9_lpc = ICH9_LPC_DEVICE(lpc);
     ich9_lpc->pic = gsi;
     ich9_lpc->ioapic = gsi_state->ioapic_irq;
@@ -245,6 +276,7 @@ static void pc_q35_init(MachineState *machine)
 static void pc_compat_2_0(MachineState *machine)
 {
     smbios_legacy_mode = true;
+    has_reserved_memory = false;
 }
 
 static void pc_compat_1_7(MachineState *machine)
@@ -329,7 +361,7 @@ static QEMUMachine pc_q35_machine_v2_0 = {
     .name = "pc-q35-2.0",
     .init = pc_q35_init_2_0,
     .compat_props = (GlobalProperty[]) {
-        PC_Q35_COMPAT_2_0,
+        PC_COMPAT_2_0,
         { /* end of list */ }
     },
 };
@@ -341,7 +373,7 @@ static QEMUMachine pc_q35_machine_v1_7 = {
     .name = "pc-q35-1.7",
     .init = pc_q35_init_1_7,
     .compat_props = (GlobalProperty[]) {
-        PC_Q35_COMPAT_1_7,
+        PC_COMPAT_1_7,
         { /* end of list */ }
     },
 };
@@ -353,7 +385,7 @@ static QEMUMachine pc_q35_machine_v1_6 = {
     .name = "pc-q35-1.6",
     .init = pc_q35_init_1_6,
     .compat_props = (GlobalProperty[]) {
-        PC_Q35_COMPAT_1_6,
+        PC_COMPAT_1_6,
         { /* end of list */ }
     },
 };
@@ -363,7 +395,7 @@ static QEMUMachine pc_q35_machine_v1_5 = {
     .name = "pc-q35-1.5",
     .init = pc_q35_init_1_5,
     .compat_props = (GlobalProperty[]) {
-        PC_Q35_COMPAT_1_5,
+        PC_COMPAT_1_5,
         { /* end of list */ }
     },
 };
@@ -384,12 +416,12 @@ static QEMUMachine pc_q35_machine_v1_4 = {
 
 static void pc_q35_machine_init(void)
 {
-    qemu_register_machine(&pc_q35_machine_v2_1);
-    qemu_register_machine(&pc_q35_machine_v2_0);
-    qemu_register_machine(&pc_q35_machine_v1_7);
-    qemu_register_machine(&pc_q35_machine_v1_6);
-    qemu_register_machine(&pc_q35_machine_v1_5);
-    qemu_register_machine(&pc_q35_machine_v1_4);
+    qemu_register_pc_machine(&pc_q35_machine_v2_1);
+    qemu_register_pc_machine(&pc_q35_machine_v2_0);
+    qemu_register_pc_machine(&pc_q35_machine_v1_7);
+    qemu_register_pc_machine(&pc_q35_machine_v1_6);
+    qemu_register_pc_machine(&pc_q35_machine_v1_5);
+    qemu_register_pc_machine(&pc_q35_machine_v1_4);
 }
 
 machine_init(pc_q35_machine_init);

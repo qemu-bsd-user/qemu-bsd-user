@@ -85,16 +85,16 @@
 
 #define HTAB_SIZE(spapr)        (1ULL << ((spapr)->htab_shift))
 
+typedef struct sPAPRMachineState sPAPRMachineState;
 
-typedef struct SPAPRMachine SPAPRMachine;
 #define TYPE_SPAPR_MACHINE      "spapr-machine"
 #define SPAPR_MACHINE(obj) \
-    OBJECT_CHECK(SPAPRMachine, (obj), TYPE_SPAPR_MACHINE)
+    OBJECT_CHECK(sPAPRMachineState, (obj), TYPE_SPAPR_MACHINE)
 
 /**
- * SPAPRMachine:
+ * sPAPRMachineState:
  */
-struct SPAPRMachine {
+struct sPAPRMachineState {
     /*< private >*/
     MachineState parent_obj;
 
@@ -102,75 +102,7 @@ struct SPAPRMachine {
     char *kvm_type;
 };
 
-
 sPAPREnvironment *spapr;
-
-int spapr_allocate_irq(int hint, bool lsi)
-{
-    int irq;
-
-    if (hint) {
-        irq = hint;
-        if (hint >= spapr->next_irq) {
-            spapr->next_irq = hint + 1;
-        }
-        /* FIXME: we should probably check for collisions somehow */
-    } else {
-        irq = spapr->next_irq++;
-    }
-
-    /* Configure irq type */
-    if (!xics_get_qirq(spapr->icp, irq)) {
-        return 0;
-    }
-
-    xics_set_irq_type(spapr->icp, irq, lsi);
-
-    return irq;
-}
-
-/*
- * Allocate block of consequtive IRQs, returns a number of the first.
- * If msi==true, aligns the first IRQ number to num.
- */
-int spapr_allocate_irq_block(int num, bool lsi, bool msi)
-{
-    int first = -1;
-    int i, hint = 0;
-
-    /*
-     * MSIMesage::data is used for storing VIRQ so
-     * it has to be aligned to num to support multiple
-     * MSI vectors. MSI-X is not affected by this.
-     * The hint is used for the first IRQ, the rest should
-     * be allocated continuously.
-     */
-    if (msi) {
-        assert((num == 1) || (num == 2) || (num == 4) ||
-               (num == 8) || (num == 16) || (num == 32));
-        hint = (spapr->next_irq + num - 1) & ~(num - 1);
-    }
-
-    for (i = 0; i < num; ++i) {
-        int irq;
-
-        irq = spapr_allocate_irq(hint, lsi);
-        if (!irq) {
-            return -1;
-        }
-
-        if (0 == i) {
-            first = irq;
-            hint = 0;
-        }
-
-        /* If the above doesn't create a consecutive block then that's
-         * an internal bug */
-        assert(irq == (first + i));
-    }
-
-    return first;
-}
 
 static XICSState *try_create_xics(const char *type, int nr_servers,
                                   int nr_irqs)
@@ -228,8 +160,7 @@ static int spapr_fixup_cpu_smt_dt(void *fdt, int offset, PowerPCCPU *cpu,
     int index = ppc_get_vcpu_dt_id(cpu);
 
     if (cpu->cpu_version) {
-        ret = fdt_setprop(fdt, offset, "cpu-version",
-                          &cpu->cpu_version, sizeof(cpu->cpu_version));
+        ret = fdt_setprop_cell(fdt, offset, "cpu-version", cpu->cpu_version);
         if (ret < 0) {
             return ret;
         }
@@ -441,6 +372,9 @@ static void *spapr_create_fdt_skel(hwaddr initrd_base,
     }
     if (boot_device) {
         _FDT((fdt_property_string(fdt, "qemu,boot-device", boot_device)));
+    }
+    if (boot_menu) {
+        _FDT((fdt_property_cell(fdt, "qemu,boot-menu", boot_menu)));
     }
     _FDT((fdt_property_cell(fdt, "qemu,graphic-width", graphic_width)));
     _FDT((fdt_property_cell(fdt, "qemu,graphic-height", graphic_height)));
@@ -673,8 +607,8 @@ static int spapr_populate_memory(sPAPREnvironment *spapr, void *fdt)
     int i, off;
 
     /* memory node(s) */
-    if (nb_numa_nodes > 1 && node_mem[0] < ram_size) {
-        node0_size = node_mem[0];
+    if (nb_numa_nodes > 1 && numa_info[0].node_mem < ram_size) {
+        node0_size = numa_info[0].node_mem;
     } else {
         node0_size = ram_size;
     }
@@ -712,7 +646,7 @@ static int spapr_populate_memory(sPAPREnvironment *spapr, void *fdt)
         if (mem_start >= ram_size) {
             node_size = 0;
         } else {
-            node_size = node_mem[i];
+            node_size = numa_info[i].node_mem;
             if (node_size > ram_size - mem_start) {
                 node_size = ram_size - mem_start;
             }
@@ -857,7 +791,8 @@ static void spapr_reset_htab(sPAPREnvironment *spapr)
 
     /* Update the RMA size if necessary */
     if (spapr->vrma_adjust) {
-        hwaddr node0_size = (nb_numa_nodes > 1) ? node_mem[0] : ram_size;
+        hwaddr node0_size = (nb_numa_nodes > 1) ?
+            numa_info[0].node_mem : ram_size;
         spapr->rma_size = kvmppc_rma_size(node0_size, spapr->htab_shift);
     }
 }
@@ -955,7 +890,7 @@ static const VMStateDescription vmstate_spapr = {
     .version_id = 2,
     .minimum_version_id = 1,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT32(next_irq, sPAPREnvironment),
+        VMSTATE_UNUSED(4), /* used to be @next_irq */
 
         /* RTC offset */
         VMSTATE_UINT64(rtc_offset, sPAPREnvironment),
@@ -1289,7 +1224,7 @@ static void ppc_spapr_init(MachineState *machine)
     MemoryRegion *sysmem = get_system_memory();
     MemoryRegion *ram = g_new(MemoryRegion, 1);
     hwaddr rma_alloc_size;
-    hwaddr node0_size = (nb_numa_nodes > 1) ? node_mem[0] : ram_size;
+    hwaddr node0_size = (nb_numa_nodes > 1) ? numa_info[0].node_mem : ram_size;
     uint32_t initrd_base = 0;
     long kernel_size = 0, initrd_size = 0;
     long load_limit, rtas_limit, fw_size;
@@ -1359,7 +1294,6 @@ static void ppc_spapr_init(MachineState *machine)
     /* Set up Interrupt Controller before we create the VCPUs */
     spapr->icp = xics_system_init(smp_cpus * kvmppc_smt_threads() / smp_threads,
                                   XICS_IRQS);
-    spapr->next_irq = XICS_IRQ_BASE;
 
     /* init CPUs */
     if (cpu_model == NULL) {
@@ -1618,14 +1552,14 @@ static char *spapr_get_fw_dev_path(FWPathProvider *p, BusState *bus,
 
 static char *spapr_get_kvm_type(Object *obj, Error **errp)
 {
-    SPAPRMachine *sm = SPAPR_MACHINE(obj);
+    sPAPRMachineState *sm = SPAPR_MACHINE(obj);
 
     return g_strdup(sm->kvm_type);
 }
 
 static void spapr_set_kvm_type(Object *obj, const char *value, Error **errp)
 {
-    SPAPRMachine *sm = SPAPR_MACHINE(obj);
+    sPAPRMachineState *sm = SPAPR_MACHINE(obj);
 
     g_free(sm->kvm_type);
     sm->kvm_type = g_strdup(value);
@@ -1659,7 +1593,7 @@ static void spapr_machine_class_init(ObjectClass *oc, void *data)
 static const TypeInfo spapr_machine_info = {
     .name          = TYPE_SPAPR_MACHINE,
     .parent        = TYPE_MACHINE,
-    .instance_size = sizeof(SPAPRMachine),
+    .instance_size = sizeof(sPAPRMachineState),
     .instance_init = spapr_machine_initfn,
     .class_init    = spapr_machine_class_init,
     .interfaces = (InterfaceInfo[]) {
@@ -1668,9 +1602,25 @@ static const TypeInfo spapr_machine_info = {
     },
 };
 
+static void spapr_machine_2_1_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+
+    mc->name = "pseries-2.1";
+    mc->desc = "pSeries Logical Partition (PAPR compliant) v2.1";
+    mc->is_default = 0;
+}
+
+static const TypeInfo spapr_machine_2_1_info = {
+    .name          = TYPE_SPAPR_MACHINE "2.1",
+    .parent        = TYPE_SPAPR_MACHINE,
+    .class_init    = spapr_machine_2_1_class_init,
+};
+
 static void spapr_machine_register_types(void)
 {
     type_register_static(&spapr_machine_info);
+    type_register_static(&spapr_machine_2_1_info);
 }
 
 type_init(spapr_machine_register_types)

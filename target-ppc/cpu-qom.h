@@ -56,7 +56,7 @@ typedef struct PowerPCCPUClass {
     void (*parent_reset)(CPUState *cpu);
 
     uint32_t pvr;
-    uint32_t pvr_mask;
+    bool (*pvr_match)(struct PowerPCCPUClass *pcc, uint32_t pvr);
     uint64_t pcr_mask;
     uint32_t svr;
     uint64_t insns_flags;
@@ -119,7 +119,9 @@ void ppc_cpu_dump_statistics(CPUState *cpu, FILE *f,
                              fprintf_function cpu_fprintf, int flags);
 hwaddr ppc_cpu_get_phys_page_debug(CPUState *cpu, vaddr addr);
 int ppc_cpu_gdb_read_register(CPUState *cpu, uint8_t *buf, int reg);
+int ppc_cpu_gdb_read_register_apple(CPUState *cpu, uint8_t *buf, int reg);
 int ppc_cpu_gdb_write_register(CPUState *cpu, uint8_t *buf, int reg);
+int ppc_cpu_gdb_write_register_apple(CPUState *cpu, uint8_t *buf, int reg);
 int ppc64_cpu_write_elf64_qemunote(WriteCoreDumpFunction f,
                                    CPUState *cpu, void *opaque);
 int ppc64_cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cs,

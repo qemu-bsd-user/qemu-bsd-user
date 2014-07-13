@@ -295,14 +295,7 @@ void page_size_init(void)
 {
     /* NOTE: we can always suppose that qemu_host_page_size >=
        TARGET_PAGE_SIZE */
-#ifdef _WIN32
-    SYSTEM_INFO system_info;
-
-    GetSystemInfo(&system_info);
-    qemu_real_host_page_size = system_info.dwPageSize;
-#else
     qemu_real_host_page_size = getpagesize();
-#endif
     if (qemu_host_page_size == 0) {
         qemu_host_page_size = qemu_real_host_page_size;
     }
@@ -601,7 +594,7 @@ static inline void *alloc_code_gen_buffer(void)
 
 #ifdef __mips__
     if (cross_256mb(buf, tcg_ctx.code_gen_buffer_size)) {
-        /* Try again, with the original still mapped, to avoid re-aquiring
+        /* Try again, with the original still mapped, to avoid re-acquiring
            that 256mb crossing.  This time don't specify an address.  */
         size_t size2, size1 = tcg_ctx.code_gen_buffer_size;
         void *buf2 = mmap(NULL, size1, PROT_WRITE | PROT_READ | PROT_EXEC,

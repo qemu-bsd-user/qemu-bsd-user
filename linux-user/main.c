@@ -28,7 +28,6 @@
 
 #include "qemu.h"
 #include "qemu-common.h"
-#include "qemu/cache-utils.h"
 #include "cpu.h"
 #include "tcg.h"
 #include "qemu/timer.h"
@@ -807,6 +806,9 @@ void cpu_loop(CPUARMState *env)
                             cpu_set_tls(env, env->regs[0]);
                             env->regs[0] = 0;
                             break;
+                        case ARM_NR_breakpoint:
+                            env->regs[15] -= env->thumb ? 2 : 4;
+                            goto excp_debug;
                         default:
                             gemu_log("qemu: Unsupported ARM syscall: 0x%x\n",
                                      n);
@@ -850,6 +852,7 @@ void cpu_loop(CPUARMState *env)
             }
             break;
         case EXCP_DEBUG:
+        excp_debug:
             {
                 int sig;
 
@@ -3829,9 +3832,6 @@ int main(int argc, char **argv, char **envp)
 
     module_call_init(MODULE_INIT_QOM);
 
-    qemu_init_auxval(envp);
-    qemu_cache_utils_init();
-
     if ((envlist = envlist_create()) == NULL) {
         (void) fprintf(stderr, "Unable to allocate envlist\n");
         exit(1);
@@ -3901,11 +3901,11 @@ int main(int argc, char **argv, char **envp)
 #elif defined TARGET_OPENRISC
         cpu_model = "or1200";
 #elif defined(TARGET_PPC)
-#ifdef TARGET_PPC64
-        cpu_model = "970fx";
-#else
+# ifdef TARGET_PPC64
+        cpu_model = "POWER7";
+# else
         cpu_model = "750";
-#endif
+# endif
 #else
         cpu_model = "any";
 #endif

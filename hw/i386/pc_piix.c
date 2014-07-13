@@ -48,6 +48,7 @@
 #include "exec/address-spaces.h"
 #include "hw/acpi/acpi.h"
 #include "cpu.h"
+#include "qemu/error-report.h"
 #ifdef CONFIG_XEN
 #  include <xen/hvm/hvm_info_table.h>
 #endif
@@ -67,12 +68,14 @@ static bool smbios_legacy_mode;
  * pages in the host.
  */
 static bool gigabyte_align = true;
+static bool has_reserved_memory = true;
 
 /* PC hardware initialisation */
 static void pc_init1(MachineState *machine,
                      int pci_enabled,
                      int kvmclock_enabled)
 {
+    PCMachineState *pc_machine = PC_MACHINE(machine);
     MemoryRegion *system_memory = get_system_memory();
     MemoryRegion *system_io = get_system_io();
     int i;
@@ -96,8 +99,44 @@ static void pc_init1(MachineState *machine,
     DeviceState *icc_bridge;
     FWCfgState *fw_cfg = NULL;
     PcGuestInfo *guest_info;
+    ram_addr_t lowmem;
 
-    if (xen_enabled() && xen_hvm_init(&ram_memory) != 0) {
+    /* Check whether RAM fits below 4G (leaving 1/2 GByte for IO memory).
+     * If it doesn't, we need to split it in chunks below and above 4G.
+     * In any case, try to make sure that guest addresses aligned at
+     * 1G boundaries get mapped to host addresses aligned at 1G boundaries.
+     * For old machine types, use whatever split we used historically to avoid
+     * breaking migration.
+     */
+    if (machine->ram_size >= 0xe0000000) {
+        lowmem = gigabyte_align ? 0xc0000000 : 0xe0000000;
+    } else {
+        lowmem = 0xe0000000;
+    }
+
+    /* Handle the machine opt max-ram-below-4g.  It is basicly doing
+     * min(qemu limit, user limit).
+     */
+    if (lowmem > pc_machine->max_ram_below_4g) {
+        lowmem = pc_machine->max_ram_below_4g;
+        if (machine->ram_size - lowmem > lowmem &&
+            lowmem & ((1ULL << 30) - 1)) {
+            error_report("Warning: Large machine and max_ram_below_4g(%"PRIu64
+                         ") not a multiple of 1G; possible bad performance.",
+                         pc_machine->max_ram_below_4g);
+        }
+    }
+
+    if (machine->ram_size >= lowmem) {
+        above_4g_mem_size = machine->ram_size - lowmem;
+        below_4g_mem_size = lowmem;
+    } else {
+        above_4g_mem_size = 0;
+        below_4g_mem_size = machine->ram_size;
+    }
+
+    if (xen_enabled() && xen_hvm_init(&below_4g_mem_size, &above_4g_mem_size,
+                                      &ram_memory) != 0) {
         fprintf(stderr, "xen hardware virtual machine initialisation failed\n");
         exit(1);
     }
@@ -110,22 +149,6 @@ static void pc_init1(MachineState *machine,
 
     if (kvm_enabled() && kvmclock_enabled) {
         kvmclock_create();
-    }
-
-    /* Check whether RAM fits below 4G (leaving 1/2 GByte for IO memory).
-     * If it doesn't, we need to split it in chunks below and above 4G.
-     * In any case, try to make sure that guest addresses aligned at
-     * 1G boundaries get mapped to host addresses aligned at 1G boundaries.
-     * For old machine types, use whatever split we used historically to avoid
-     * breaking migration.
-     */
-    if (machine->ram_size >= 0xe0000000) {
-        ram_addr_t lowmem = gigabyte_align ? 0xc0000000 : 0xe0000000;
-        above_4g_mem_size = machine->ram_size - lowmem;
-        below_4g_mem_size = lowmem;
-    } else {
-        above_4g_mem_size = 0;
-        below_4g_mem_size = machine->ram_size;
     }
 
     if (pci_enabled) {
@@ -143,6 +166,7 @@ static void pc_init1(MachineState *machine,
 
     guest_info->has_pci_info = has_pci_info;
     guest_info->isapc_ram_fw = !pci_enabled;
+    guest_info->has_reserved_memory = has_reserved_memory;
 
     if (smbios_defaults) {
         MachineClass *mc = MACHINE_GET_CLASS(machine);
@@ -153,11 +177,9 @@ static void pc_init1(MachineState *machine,
 
     /* allocate ram and load rom/bios */
     if (!xen_enabled()) {
-        fw_cfg = pc_memory_init(system_memory,
-                       machine->kernel_filename, machine->kernel_cmdline,
-                       machine->initrd_filename,
-                       below_4g_mem_size, above_4g_mem_size,
-                       rom_memory, &ram_memory, guest_info);
+        fw_cfg = pc_memory_init(machine, system_memory,
+                                below_4g_mem_size, above_4g_mem_size,
+                                rom_memory, &ram_memory, guest_info);
     }
 
     gsi_state = g_malloc0(sizeof(*gsi_state));
@@ -244,14 +266,23 @@ static void pc_init1(MachineState *machine,
     }
 
     if (pci_enabled && acpi_enabled) {
+        DeviceState *piix4_pm;
         I2CBus *smbus;
 
         smi_irq = qemu_allocate_irqs(pc_acpi_smi_interrupt, first_cpu, 1);
         /* TODO: Populate SPD eeprom data.  */
         smbus = piix4_pm_init(pci_bus, piix3_devfn + 3, 0xb100,
                               gsi[9], *smi_irq,
-                              kvm_enabled(), fw_cfg);
+                              kvm_enabled(), fw_cfg, &piix4_pm);
         smbus_eeprom_init(smbus, 8, NULL, 0);
+
+        object_property_add_link(OBJECT(machine), PC_MACHINE_ACPI_DEVICE_PROP,
+                                 TYPE_HOTPLUG_HANDLER,
+                                 (Object **)&pc_machine->acpi_dev,
+                                 object_property_allow_set_link,
+                                 OBJ_PROP_LINK_UNREF_ON_RELEASE, &error_abort);
+        object_property_set_link(OBJECT(machine), OBJECT(piix4_pm),
+                                 PC_MACHINE_ACPI_DEVICE_PROP, &error_abort);
     }
 
     if (pci_enabled) {
@@ -267,6 +298,7 @@ static void pc_init_pci(MachineState *machine)
 static void pc_compat_2_0(MachineState *machine)
 {
     smbios_legacy_mode = true;
+    has_reserved_memory = false;
 }
 
 static void pc_compat_1_7(MachineState *machine)
@@ -360,6 +392,11 @@ static void pc_init_pci_no_kvmclock(MachineState *machine)
     has_pci_info = false;
     has_acpi_build = false;
     smbios_defaults = false;
+    gigabyte_align = false;
+    smbios_legacy_mode = true;
+    has_reserved_memory = false;
+    option_rom_has_mr = true;
+    rom_file_has_mr = false;
     x86_cpu_compat_disable_kvm_features(FEAT_KVM, KVM_FEATURE_PV_EOI);
     enable_compat_apic_id_mode();
     pc_init1(machine, 1, 0);
@@ -370,6 +407,11 @@ static void pc_init_isa(MachineState *machine)
     has_pci_info = false;
     has_acpi_build = false;
     smbios_defaults = false;
+    gigabyte_align = false;
+    smbios_legacy_mode = true;
+    has_reserved_memory = false;
+    option_rom_has_mr = true;
+    rom_file_has_mr = false;
     if (!machine->cpu_model) {
         machine->cpu_model = "486";
     }
@@ -843,25 +885,25 @@ static QEMUMachine xenfv_machine = {
 
 static void pc_machine_init(void)
 {
-    qemu_register_machine(&pc_i440fx_machine_v2_1);
-    qemu_register_machine(&pc_i440fx_machine_v2_0);
-    qemu_register_machine(&pc_i440fx_machine_v1_7);
-    qemu_register_machine(&pc_i440fx_machine_v1_6);
-    qemu_register_machine(&pc_i440fx_machine_v1_5);
-    qemu_register_machine(&pc_i440fx_machine_v1_4);
-    qemu_register_machine(&pc_machine_v1_3);
-    qemu_register_machine(&pc_machine_v1_2);
-    qemu_register_machine(&pc_machine_v1_1);
-    qemu_register_machine(&pc_machine_v1_0);
-    qemu_register_machine(&pc_machine_v0_15);
-    qemu_register_machine(&pc_machine_v0_14);
-    qemu_register_machine(&pc_machine_v0_13);
-    qemu_register_machine(&pc_machine_v0_12);
-    qemu_register_machine(&pc_machine_v0_11);
-    qemu_register_machine(&pc_machine_v0_10);
-    qemu_register_machine(&isapc_machine);
+    qemu_register_pc_machine(&pc_i440fx_machine_v2_1);
+    qemu_register_pc_machine(&pc_i440fx_machine_v2_0);
+    qemu_register_pc_machine(&pc_i440fx_machine_v1_7);
+    qemu_register_pc_machine(&pc_i440fx_machine_v1_6);
+    qemu_register_pc_machine(&pc_i440fx_machine_v1_5);
+    qemu_register_pc_machine(&pc_i440fx_machine_v1_4);
+    qemu_register_pc_machine(&pc_machine_v1_3);
+    qemu_register_pc_machine(&pc_machine_v1_2);
+    qemu_register_pc_machine(&pc_machine_v1_1);
+    qemu_register_pc_machine(&pc_machine_v1_0);
+    qemu_register_pc_machine(&pc_machine_v0_15);
+    qemu_register_pc_machine(&pc_machine_v0_14);
+    qemu_register_pc_machine(&pc_machine_v0_13);
+    qemu_register_pc_machine(&pc_machine_v0_12);
+    qemu_register_pc_machine(&pc_machine_v0_11);
+    qemu_register_pc_machine(&pc_machine_v0_10);
+    qemu_register_pc_machine(&isapc_machine);
 #ifdef CONFIG_XEN
-    qemu_register_machine(&xenfv_machine);
+    qemu_register_pc_machine(&xenfv_machine);
 #endif
 }
 

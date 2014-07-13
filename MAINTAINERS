@@ -176,6 +176,11 @@ M: Peter Maydell <peter.maydell@linaro.org>
 S: Maintained
 F: target-arm/kvm.c
 
+MIPS
+M: James Hogan <james.hogan@imgtec.com>
+S: Maintained
+F: target-mips/kvm.c
+
 PPC
 M: Alexander Graf <agraf@suse.de>
 S: Maintained
@@ -558,6 +563,7 @@ Devices
 -------
 IDE
 M: Kevin Wolf <kwolf@redhat.com>
+M: Stefan Hajnoczi <stefanha@redhat.com>
 S: Odd Fixes
 F: include/hw/ide.h
 F: hw/ide/
@@ -848,7 +854,7 @@ S: Odd Fixes
 F: scripts/checkpatch.pl
 
 Seccomp
-M: Eduardo Otubo <otubo@linux.vnet.ibm.com>
+M: Eduardo Otubo <eduardo.otubo@profitbricks.com>
 S: Supported
 F: qemu-seccomp.c
 F: include/sysemu/seccomp.h

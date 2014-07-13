@@ -31,9 +31,15 @@
 #include "qemu/queue.h"
 #include "qemu/int128.h"
 #include "qemu/notify.h"
+#include "qapi/error.h"
+#include "qom/object.h"
 
 #define MAX_PHYS_ADDR_SPACE_BITS 62
 #define MAX_PHYS_ADDR            (((hwaddr)1 << MAX_PHYS_ADDR_SPACE_BITS) - 1)
+
+#define TYPE_MEMORY_REGION "qemu:memory-region"
+#define MEMORY_REGION(obj) \
+        OBJECT_CHECK(MemoryRegion, (obj), TYPE_MEMORY_REGION)
 
 typedef struct MemoryRegionOps MemoryRegionOps;
 typedef struct MemoryRegionMmio MemoryRegionMmio;
@@ -130,11 +136,11 @@ typedef struct CoalescedMemoryRange CoalescedMemoryRange;
 typedef struct MemoryRegionIoeventfd MemoryRegionIoeventfd;
 
 struct MemoryRegion {
+    Object parent_obj;
     /* All fields are private - violators will be prosecuted */
     const MemoryRegionOps *ops;
     const MemoryRegionIOMMUOps *iommu_ops;
     void *opaque;
-    struct Object *owner;
     MemoryRegion *container;
     Int128 size;
     hwaddr addr;
@@ -151,7 +157,7 @@ struct MemoryRegion {
     bool flush_coalesced_mmio;
     MemoryRegion *alias;
     hwaddr alias_offset;
-    int priority;
+    int32_t priority;
     bool may_overlap;
     QTAILQ_HEAD(subregions, MemoryRegion) subregions;
     QTAILQ_ENTRY(MemoryRegion) subregions_link;
@@ -310,6 +316,28 @@ void memory_region_init_ram(MemoryRegion *mr,
                             struct Object *owner,
                             const char *name,
                             uint64_t size);
+
+#ifdef __linux__
+/**
+ * memory_region_init_ram_from_file:  Initialize RAM memory region with a
+ *                                    mmap-ed backend.
+ *
+ * @mr: the #MemoryRegion to be initialized.
+ * @owner: the object that tracks the region's reference count
+ * @name: the name of the region.
+ * @size: size of the region.
+ * @share: %true if memory must be mmaped with the MAP_SHARED flag
+ * @path: the path in which to allocate the RAM.
+ * @errp: pointer to Error*, to store an error if it happens.
+ */
+void memory_region_init_ram_from_file(MemoryRegion *mr,
+                                      struct Object *owner,
+                                      const char *name,
+                                      uint64_t size,
+                                      bool share,
+                                      const char *path,
+                                      Error **errp);
+#endif
 
 /**
  * memory_region_init_ram_ptr:  Initialize RAM memory region from a
@@ -511,6 +539,16 @@ bool memory_region_is_logging(MemoryRegion *mr);
  * @mr: the memory region being queried
  */
 bool memory_region_is_rom(MemoryRegion *mr);
+
+/**
+ * memory_region_get_fd: Get a file descriptor backing a RAM memory region.
+ *
+ * Returns a file descriptor backing a file-based RAM memory region,
+ * or -1 if the region is not a file-based RAM memory region.
+ *
+ * @mr: the RAM or alias memory region being queried.
+ */
+int memory_region_get_fd(MemoryRegion *mr);
 
 /**
  * memory_region_get_ram_ptr: Get a pointer into a RAM memory region.
@@ -846,6 +884,14 @@ void memory_region_set_alias_offset(MemoryRegion *mr,
  * @addr: the area within @container to be searched
  */
 bool memory_region_present(MemoryRegion *container, hwaddr addr);
+
+/**
+ * memory_region_is_mapped: returns true if #MemoryRegion is mapped
+ * into any address space.
+ *
+ * @mr: a #MemoryRegion which should be checked if it's mapped
+ */
+bool memory_region_is_mapped(MemoryRegion *mr);
 
 /**
  * memory_region_find: translate an address/size relative to a

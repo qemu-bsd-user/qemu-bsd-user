@@ -32,8 +32,9 @@
 #include "qapi/qmp/qerror.h"
 #include "qapi/visitor.h"
 #include "qapi/qmp/qjson.h"
-#include "monitor/monitor.h"
 #include "hw/hotplug.h"
+#include "hw/boards.h"
+#include "qapi-event.h"
 
 int qdev_hotplug = 0;
 static bool qdev_hot_added = false;
@@ -567,32 +568,35 @@ static void bus_set_realized(Object *obj, bool value, Error **errp)
 {
     BusState *bus = BUS(obj);
     BusClass *bc = BUS_GET_CLASS(bus);
+    BusChild *kid;
     Error *local_err = NULL;
 
     if (value && !bus->realized) {
         if (bc->realize) {
             bc->realize(bus, &local_err);
-
-            if (local_err != NULL) {
-                goto error;
-            }
-
         }
-    } else if (!value && bus->realized) {
-        if (bc->unrealize) {
-            bc->unrealize(bus, &local_err);
 
+        /* TODO: recursive realization */
+    } else if (!value && bus->realized) {
+        QTAILQ_FOREACH(kid, &bus->children, sibling) {
+            DeviceState *dev = kid->child;
+            object_property_set_bool(OBJECT(dev), false, "realized",
+                                     &local_err);
             if (local_err != NULL) {
-                goto error;
+                break;
             }
+        }
+        if (bc->unrealize && local_err == NULL) {
+            bc->unrealize(bus, &local_err);
         }
     }
 
-    bus->realized = value;
-    return;
+    if (local_err != NULL) {
+        error_propagate(errp, local_err);
+        return;
+    }
 
-error:
-    error_propagate(errp, local_err);
+    bus->realized = value;
 }
 
 void qbus_create_inplace(void *bus, size_t size, const char *typename,
@@ -776,6 +780,27 @@ void qdev_property_add_static(DeviceState *dev, Property *prop,
     }
 }
 
+/* @qdev_alias_all_properties - Add alias properties to the source object for
+ * all qdev properties on the target DeviceState.
+ */
+void qdev_alias_all_properties(DeviceState *target, Object *source)
+{
+    ObjectClass *class;
+    Property *prop;
+
+    class = object_get_class(OBJECT(target));
+    do {
+        DeviceClass *dc = DEVICE_CLASS(class);
+
+        for (prop = dc->props; prop && prop->name; prop++) {
+            object_property_add_alias(source, prop->name,
+                                      OBJECT(target), prop->name,
+                                      &error_abort);
+        }
+        class = object_class_get_parent(class);
+    } while (class != object_class_by_name(TYPE_DEVICE));
+}
+
 static bool device_get_realized(Object *obj, Error **errp)
 {
     DeviceState *dev = DEVICE(obj);
@@ -813,6 +838,18 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
             local_err == NULL) {
             hotplug_handler_plug(dev->parent_bus->hotplug_handler,
                                  dev, &local_err);
+        } else if (local_err == NULL &&
+                   object_dynamic_cast(qdev_get_machine(), TYPE_MACHINE)) {
+            HotplugHandler *hotplug_ctrl;
+            MachineState *machine = MACHINE(qdev_get_machine());
+            MachineClass *mc = MACHINE_GET_CLASS(machine);
+
+            if (mc->get_hotplug_handler) {
+                hotplug_ctrl = mc->get_hotplug_handler(machine, dev);
+                if (hotplug_ctrl) {
+                    hotplug_handler_plug(hotplug_ctrl, dev, &local_err);
+                }
+            }
         }
 
         if (qdev_get_vmsd(dev) && local_err == NULL) {
@@ -832,6 +869,7 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
         if (dev->hotplugged && local_err == NULL) {
             device_reset(dev);
         }
+        dev->pending_deleted_event = false;
     } else if (!value && dev->realized) {
         QLIST_FOREACH(bus, &dev->child_bus, sibling) {
             object_property_set_bool(OBJECT(bus), false, "realized",
@@ -846,6 +884,7 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
         if (dc->unrealize && local_err == NULL) {
             dc->unrealize(dev, &local_err);
         }
+        dev->pending_deleted_event = true;
     }
 
     if (local_err != NULL) {
@@ -863,6 +902,20 @@ static bool device_get_hotpluggable(Object *obj, Error **errp)
 
     return dc->hotpluggable && (dev->parent_bus == NULL ||
                                 dev->parent_bus->allow_hotplug);
+}
+
+static bool device_get_hotplugged(Object *obj, Error **err)
+{
+    DeviceState *dev = DEVICE(obj);
+
+    return dev->hotplugged;
+}
+
+static void device_set_hotplugged(Object *obj, bool value, Error **err)
+{
+    DeviceState *dev = DEVICE(obj);
+
+    dev->hotplugged = value;
 }
 
 static void device_initfn(Object *obj)
@@ -883,6 +936,9 @@ static void device_initfn(Object *obj)
                              device_get_realized, device_set_realized, NULL);
     object_property_add_bool(obj, "hotpluggable",
                              device_get_hotpluggable, NULL, NULL);
+    object_property_add_bool(obj, "hotplugged",
+                             device_get_hotplugged, device_set_hotplugged,
+                             &error_abort);
 
     class = object_get_class(OBJECT(dev));
     do {
@@ -901,7 +957,13 @@ static void device_initfn(Object *obj)
 
 static void device_post_init(Object *obj)
 {
-    qdev_prop_set_globals(DEVICE(obj), &error_abort);
+    Error *err = NULL;
+    qdev_prop_set_globals(DEVICE(obj), &err);
+    if (err) {
+        qerror_report_err(err);
+        error_free(err);
+        exit(EXIT_FAILURE);
+    }
 }
 
 /* Unlink device from bus and free the structure.  */
@@ -916,7 +978,7 @@ static void device_finalize(Object *obj)
 
     QLIST_FOREACH_SAFE(ngl, &dev->gpios, node, next) {
         QLIST_REMOVE(ngl, node);
-        qemu_free_irqs(ngl->in);
+        qemu_free_irqs(ngl->in, ngl->num_in);
         g_free(ngl->name);
         g_free(ngl);
         /* ngl->out irqs are owned by the other end and should not be freed
@@ -939,8 +1001,6 @@ static void device_unparent(Object *obj)
 {
     DeviceState *dev = DEVICE(obj);
     BusState *bus;
-    QObject *event_data;
-    bool have_realized = dev->realized;
 
     if (dev->realized) {
         object_property_set_bool(obj, false, "realized", NULL);
@@ -956,17 +1016,10 @@ static void device_unparent(Object *obj)
     }
 
     /* Only send event if the device had been completely realized */
-    if (have_realized) {
+    if (dev->pending_deleted_event) {
         gchar *path = object_get_canonical_path(OBJECT(dev));
 
-        if (dev->id) {
-            event_data = qobject_from_jsonf("{ 'device': %s, 'path': %s }",
-                                            dev->id, path);
-        } else {
-            event_data = qobject_from_jsonf("{ 'path': %s }", path);
-        }
-        monitor_protocol_event(QEVENT_DEVICE_DELETED, event_data);
-        qobject_decref(event_data);
+        qapi_event_send_device_deleted(!!dev->id, dev->id, path, &error_abort);
         g_free(path);
     }
 }
