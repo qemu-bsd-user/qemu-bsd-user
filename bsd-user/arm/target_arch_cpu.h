@@ -68,7 +68,7 @@ static inline int do_strex(CPUARMState *env)
         abort();
     }
     if (segv) {
-        env->cp15.far_el1 = deposit64(env->cp15.far_el1, 0, 32,
+        env->cp15.far_el[1] = deposit64(env->cp15.far_el[1], 0, 32,
                                       addr);
         goto done;
     }
@@ -78,7 +78,7 @@ static inline int do_strex(CPUARMState *env)
     if (size == 3) {
         segv = get_user_u32(val, addr + 4);
         if (segv) {
-            env->cp15.far_el1 = deposit64(env->cp15.far_el1, 0, 32,
+            env->cp15.far_el[1] = deposit64(env->cp15.far_el[1], 0, 32,
                                           addr + 4);
             goto done;
         }
@@ -100,7 +100,7 @@ static inline int do_strex(CPUARMState *env)
         break;
     }
     if (segv) {
-        env->cp15.far_el1 = deposit64(env->cp15.far_el1, 0, 32,
+        env->cp15.far_el[1] = deposit64(env->cp15.far_el[1], 0, 32,
                                       addr);
         goto done;
     }
@@ -108,7 +108,7 @@ static inline int do_strex(CPUARMState *env)
         val = env->regs[(env->exclusive_info >> 12) & 0xf];
         segv = put_user_u32(val, addr + 4);
         if (segv) {
-            env->cp15.far_el1 = deposit64(env->cp15.far_el1, 0, 32,
+            env->cp15.far_el[1] = deposit64(env->cp15.far_el[1], 0, 32,
                                           addr + 4);
             goto done;
         }
@@ -320,11 +320,11 @@ static inline void target_cpu_loop(CPUARMState *env)
             break;
         case EXCP_PREFETCH_ABORT:
             /* See arm/arm/trap.c prefetch_abort_handler() */
-            addr = (uint32_t)(env->cp15.far_el1 >> 32);;
+            addr = (uint32_t)(env->cp15.far_el[1] >> 32);;
             goto do_segv;
         case EXCP_DATA_ABORT:
             /* See arm/arm/trap.c data_abort_handler() */
-            addr = (uint32_t)env->cp15.far_el1;
+            addr = (uint32_t)env->cp15.far_el[1];
         do_segv:
             {
                 info.si_signo = SIGSEGV;
@@ -351,7 +351,7 @@ static inline void target_cpu_loop(CPUARMState *env)
         /* XXX case EXCP_KERNEL_TRAP: */
         case EXCP_STREX:
             if (do_strex(env)) {
-                addr = (uint32_t)env->cp15.far_el1;
+                addr = (uint32_t)env->cp15.far_el[1];
                 goto do_segv;
             }
             break;
