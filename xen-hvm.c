@@ -165,7 +165,7 @@ static void xen_ram_init(ram_addr_t *below_4g_mem_size,
                                                    PC_MACHINE_MAX_RAM_BELOW_4G,
                                                    &error_abort);
 
-    /* Handle the machine opt max-ram-below-4g.  It is basicly doing
+    /* Handle the machine opt max-ram-below-4g.  It is basically doing
      * min(xen limit, user limit).
      */
     if (HVM_BELOW_4G_RAM_END <= user_lowmem) {
@@ -513,11 +513,14 @@ static void xen_sync_dirty_bitmap(XenIOState *state,
                                  start_addr >> TARGET_PAGE_BITS, npages,
                                  bitmap);
     if (rc < 0) {
-        if (rc != -ENODATA) {
+#ifndef ENODATA
+#define ENODATA  ENOENT
+#endif
+        if (errno == ENODATA) {
             memory_region_set_dirty(framebuffer, 0, size);
             DPRINTF("xen: track_dirty_vram failed (0x" TARGET_FMT_plx
                     ", 0x" TARGET_FMT_plx "): %s\n",
-                    start_addr, start_addr + size, strerror(-rc));
+                    start_addr, start_addr + size, strerror(errno));
         }
         return;
     }

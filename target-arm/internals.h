@@ -105,6 +105,24 @@ enum arm_fprounding {
 
 int arm_rmode_to_sf(int rmode);
 
+static inline void aarch64_save_sp(CPUARMState *env, int el)
+{
+    if (env->pstate & PSTATE_SP) {
+        env->sp_el[el] = env->xregs[31];
+    } else {
+        env->sp_el[0] = env->xregs[31];
+    }
+}
+
+static inline void aarch64_restore_sp(CPUARMState *env, int el)
+{
+    if (env->pstate & PSTATE_SP) {
+        env->xregs[31] = env->sp_el[el];
+    } else {
+        env->xregs[31] = env->sp_el[0];
+    }
+}
+
 static inline void update_spsel(CPUARMState *env, uint32_t imm)
 {
     unsigned int cur_el = arm_current_pl(env);
@@ -114,21 +132,14 @@ static inline void update_spsel(CPUARMState *env, uint32_t imm)
     if (!((imm ^ env->pstate) & PSTATE_SP)) {
         return;
     }
+    aarch64_save_sp(env, cur_el);
     env->pstate = deposit32(env->pstate, 0, 1, imm);
 
     /* We rely on illegal updates to SPsel from EL0 to get trapped
      * at translation time.
      */
     assert(cur_el >= 1 && cur_el <= 3);
-    if (env->pstate & PSTATE_SP) {
-        /* Switch from using SP_EL0 to using SP_ELx */
-        env->sp_el[0] = env->xregs[31];
-        env->xregs[31] = env->sp_el[cur_el];
-    } else {
-        /* Switch from SP_EL0 to SP_ELx */
-        env->sp_el[cur_el] = env->xregs[31];
-        env->xregs[31] = env->sp_el[0];
-    }
+    aarch64_restore_sp(env, cur_el);
 }
 
 /* Valid Syndrome Register EC field values */
@@ -277,6 +288,12 @@ static inline uint32_t syn_data_abort(int same_el, int ea, int cm, int s1ptw,
 {
     return (EC_DATAABORT << ARM_EL_EC_SHIFT) | (same_el << ARM_EL_EC_SHIFT)
         | (ea << 9) | (cm << 8) | (s1ptw << 7) | (wnr << 6) | fsc;
+}
+
+static inline uint32_t syn_swstep(int same_el, int isv, int ex)
+{
+    return (EC_SOFTWARESTEP << ARM_EL_EC_SHIFT) | (same_el << ARM_EL_EC_SHIFT)
+        | (isv << 24) | (ex << 6) | 0x22;
 }
 
 #endif

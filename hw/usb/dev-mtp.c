@@ -832,7 +832,7 @@ static void usb_mtp_command(MTPState *s, MTPControl *c)
             return;
         }
         data_in = usb_mtp_get_object(s, c, o);
-        if (NULL == data_in) {
+        if (data_in == NULL) {
             usb_mtp_queue_result(s, RES_GENERAL_ERROR,
                                  c->trans, 0, 0, 0);
             return;
@@ -851,7 +851,7 @@ static void usb_mtp_command(MTPState *s, MTPControl *c)
             return;
         }
         data_in = usb_mtp_get_partial_object(s, c, o);
-        if (NULL == data_in) {
+        if (data_in == NULL) {
             usb_mtp_queue_result(s, RES_GENERAL_ERROR,
                                  c->trans, 0, 0, 0);
             return;
@@ -1090,7 +1090,7 @@ static const VMStateDescription vmstate_usb_mtp = {
 };
 
 static Property mtp_properties[] = {
-    DEFINE_PROP_STRING("root", MTPState, root),
+    DEFINE_PROP_STRING("x-root", MTPState, root),
     DEFINE_PROP_STRING("desc", MTPState, desc),
     DEFINE_PROP_END_OF_LIST(),
 };

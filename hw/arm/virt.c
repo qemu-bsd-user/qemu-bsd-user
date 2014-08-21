@@ -98,17 +98,17 @@ typedef struct VirtBoardInfo {
  */
 static const MemMapEntry a15memmap[] = {
     /* Space up to 0x8000000 is reserved for a boot ROM */
-    [VIRT_FLASH] = { 0, 0x8000000 },
-    [VIRT_CPUPERIPHS] = { 0x8000000, 0x20000 },
+    [VIRT_FLASH] =      {          0, 0x08000000 },
+    [VIRT_CPUPERIPHS] = { 0x08000000, 0x00020000 },
     /* GIC distributor and CPU interfaces sit inside the CPU peripheral space */
-    [VIRT_GIC_DIST] = { 0x8000000, 0x10000 },
-    [VIRT_GIC_CPU] = { 0x8010000, 0x10000 },
-    [VIRT_UART] = { 0x9000000, 0x1000 },
-    [VIRT_RTC] = { 0x90010000, 0x1000 },
-    [VIRT_MMIO] = { 0xa000000, 0x200 },
+    [VIRT_GIC_DIST] =   { 0x08000000, 0x00010000 },
+    [VIRT_GIC_CPU] =    { 0x08010000, 0x00010000 },
+    [VIRT_UART] =       { 0x09000000, 0x00001000 },
+    [VIRT_RTC] =        { 0x09010000, 0x00001000 },
+    [VIRT_MMIO] =       { 0x0a000000, 0x00000200 },
     /* ...repeating for a total of NUM_VIRTIO_TRANSPORTS, each of that size */
     /* 0x10000000 .. 0x40000000 reserved for PCI */
-    [VIRT_MEM] = { 0x40000000, 30ULL * 1024 * 1024 * 1024 },
+    [VIRT_MEM] =        { 0x40000000, 30ULL * 1024 * 1024 * 1024 },
 };
 
 static const int a15irqmap[] = {
@@ -194,20 +194,41 @@ static void fdt_add_psci_node(const VirtBoardInfo *vbi)
 
     /* No PSCI for TCG yet */
     if (kvm_enabled()) {
+        uint32_t cpu_suspend_fn;
+        uint32_t cpu_off_fn;
+        uint32_t cpu_on_fn;
+        uint32_t migrate_fn;
+
         qemu_fdt_add_subnode(fdt, "/psci");
         if (armcpu->psci_version == 2) {
             const char comp[] = "arm,psci-0.2\0arm,psci";
             qemu_fdt_setprop(fdt, "/psci", "compatible", comp, sizeof(comp));
+
+            cpu_off_fn = QEMU_PSCI_0_2_FN_CPU_OFF;
+            if (arm_feature(&armcpu->env, ARM_FEATURE_AARCH64)) {
+                cpu_suspend_fn = QEMU_PSCI_0_2_FN64_CPU_SUSPEND;
+                cpu_on_fn = QEMU_PSCI_0_2_FN64_CPU_ON;
+                migrate_fn = QEMU_PSCI_0_2_FN64_MIGRATE;
+            } else {
+                cpu_suspend_fn = QEMU_PSCI_0_2_FN_CPU_SUSPEND;
+                cpu_on_fn = QEMU_PSCI_0_2_FN_CPU_ON;
+                migrate_fn = QEMU_PSCI_0_2_FN_MIGRATE;
+            }
         } else {
             qemu_fdt_setprop_string(fdt, "/psci", "compatible", "arm,psci");
+
+            cpu_suspend_fn = QEMU_PSCI_0_1_FN_CPU_SUSPEND;
+            cpu_off_fn = QEMU_PSCI_0_1_FN_CPU_OFF;
+            cpu_on_fn = QEMU_PSCI_0_1_FN_CPU_ON;
+            migrate_fn = QEMU_PSCI_0_1_FN_MIGRATE;
         }
 
         qemu_fdt_setprop_string(fdt, "/psci", "method", "hvc");
-        qemu_fdt_setprop_cell(fdt, "/psci", "cpu_suspend",
-                                  PSCI_FN_CPU_SUSPEND);
-        qemu_fdt_setprop_cell(fdt, "/psci", "cpu_off", PSCI_FN_CPU_OFF);
-        qemu_fdt_setprop_cell(fdt, "/psci", "cpu_on", PSCI_FN_CPU_ON);
-        qemu_fdt_setprop_cell(fdt, "/psci", "migrate", PSCI_FN_MIGRATE);
+
+        qemu_fdt_setprop_cell(fdt, "/psci", "cpu_suspend", cpu_suspend_fn);
+        qemu_fdt_setprop_cell(fdt, "/psci", "cpu_off", cpu_off_fn);
+        qemu_fdt_setprop_cell(fdt, "/psci", "cpu_on", cpu_on_fn);
+        qemu_fdt_setprop_cell(fdt, "/psci", "migrate", migrate_fn);
     }
 }
 

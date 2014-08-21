@@ -417,8 +417,12 @@ static void do_cpu_reset(void *opaque)
     if (info) {
         if (!info->is_linux) {
             /* Jump to the entry point.  */
-            env->regs[15] = info->entry & 0xfffffffe;
-            env->thumb = info->entry & 1;
+            if (env->aarch64) {
+                env->pc = info->entry;
+            } else {
+                env->regs[15] = info->entry & 0xfffffffe;
+                env->thumb = info->entry & 1;
+            }
         } else {
             if (CPU(cpu) == first_cpu) {
                 if (env->aarch64) {
@@ -509,6 +513,13 @@ void arm_load_kernel(ARMCPU *cpu, struct arm_boot_info *info)
     if (kernel_size < 0) {
         kernel_size = load_uimage(info->kernel_filename, &entry, NULL,
                                   &is_linux);
+    }
+    /* On aarch64, it's the bootloader's job to uncompress the kernel. */
+    if (arm_feature(&cpu->env, ARM_FEATURE_AARCH64) && kernel_size < 0) {
+        entry = info->loader_start + kernel_load_offset;
+        kernel_size = load_image_gzipped(info->kernel_filename, entry,
+                                         info->ram_size - kernel_load_offset);
+        is_linux = 1;
     }
     if (kernel_size < 0) {
         entry = info->loader_start + kernel_load_offset;

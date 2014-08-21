@@ -1044,7 +1044,7 @@ static void *file_ram_alloc(RAMBlock *block,
     }
 
     /* Make name safe to use with mkstemp by replacing '/' with '_'. */
-    sanitized_name = g_strdup(block->mr->name);
+    sanitized_name = g_strdup(memory_region_name(block->mr));
     for (c = sanitized_name; *c != '\0'; c++) {
         if (*c == '/')
             *c = '_';
@@ -1242,7 +1242,7 @@ static ram_addr_t ram_block_add(RAMBlock *new_block)
             new_block->host = phys_mem_alloc(new_block->length);
             if (!new_block->host) {
                 fprintf(stderr, "Cannot set up guest memory '%s': %s\n",
-                        new_block->mr->name, strerror(errno));
+                        memory_region_name(new_block->mr), strerror(errno));
                 exit(1);
             }
             memory_try_enable_merging(new_block->host, new_block->length);
@@ -1568,8 +1568,7 @@ static void notdirty_mem_write(void *opaque, hwaddr ram_addr,
     default:
         abort();
     }
-    cpu_physical_memory_set_dirty_flag(ram_addr, DIRTY_MEMORY_MIGRATION);
-    cpu_physical_memory_set_dirty_flag(ram_addr, DIRTY_MEMORY_VGA);
+    cpu_physical_memory_set_dirty_range_nocode(ram_addr, size);
     /* we remove the notdirty callback only if the code has been
        flushed */
     if (!cpu_physical_memory_is_clean(ram_addr)) {
@@ -1978,8 +1977,7 @@ static void invalidate_and_set_dirty(hwaddr addr,
         /* invalidate code */
         tb_invalidate_phys_page_range(addr, addr + length, 0);
         /* set dirty bit */
-        cpu_physical_memory_set_dirty_flag(addr, DIRTY_MEMORY_VGA);
-        cpu_physical_memory_set_dirty_flag(addr, DIRTY_MEMORY_MIGRATION);
+        cpu_physical_memory_set_dirty_range_nocode(addr, length);
     }
     xen_modified_memory(addr, length);
 }
@@ -2335,15 +2333,7 @@ void address_space_unmap(AddressSpace *as, void *buffer, hwaddr len,
         mr = qemu_ram_addr_from_host(buffer, &addr1);
         assert(mr != NULL);
         if (is_write) {
-            while (access_len) {
-                unsigned l;
-                l = TARGET_PAGE_SIZE;
-                if (l > access_len)
-                    l = access_len;
-                invalidate_and_set_dirty(addr1, l);
-                addr1 += l;
-                access_len -= l;
-            }
+            invalidate_and_set_dirty(addr1, access_len);
         }
         if (xen_enabled()) {
             xen_invalidate_map_cache_entry(buffer);
@@ -2581,9 +2571,7 @@ void stl_phys_notdirty(AddressSpace *as, hwaddr addr, uint32_t val)
                 /* invalidate code */
                 tb_invalidate_phys_page_range(addr1, addr1 + 4, 0);
                 /* set dirty bit */
-                cpu_physical_memory_set_dirty_flag(addr1,
-                                                   DIRTY_MEMORY_MIGRATION);
-                cpu_physical_memory_set_dirty_flag(addr1, DIRTY_MEMORY_VGA);
+                cpu_physical_memory_set_dirty_range_nocode(addr1, 4);
             }
         }
     }

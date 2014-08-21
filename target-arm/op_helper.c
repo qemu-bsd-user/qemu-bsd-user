@@ -258,7 +258,7 @@ void HELPER(exception_with_syndrome)(CPUARMState *env, uint32_t excp,
 
 uint32_t HELPER(cpsr_read)(CPUARMState *env)
 {
-    return cpsr_read(env) & ~CPSR_EXEC;
+    return cpsr_read(env) & ~(CPSR_EXEC | CPSR_RESERVED);
 }
 
 void HELPER(cpsr_write)(CPUARMState *env, uint32_t val, uint32_t mask)
@@ -369,6 +369,11 @@ void HELPER(msr_i_pstate)(CPUARMState *env, uint32_t op, uint32_t imm)
     }
 }
 
+void HELPER(clear_pstate_ss)(CPUARMState *env)
+{
+    env->pstate &= ~PSTATE_SS;
+}
+
 void HELPER(exception_return)(CPUARMState *env)
 {
     int cur_el = arm_current_pl(env);
@@ -376,13 +381,20 @@ void HELPER(exception_return)(CPUARMState *env)
     uint32_t spsr = env->banked_spsr[spsr_idx];
     int new_el, i;
 
-    if (env->pstate & PSTATE_SP) {
-        env->sp_el[cur_el] = env->xregs[31];
-    } else {
-        env->sp_el[0] = env->xregs[31];
-    }
+    aarch64_save_sp(env, cur_el);
 
     env->exclusive_addr = -1;
+
+    /* We must squash the PSTATE.SS bit to zero unless both of the
+     * following hold:
+     *  1. debug exceptions are currently disabled
+     *  2. singlestep will be active in the EL we return to
+     * We check 1 here and 2 after we've done the pstate/cpsr write() to
+     * transition to the EL we're going to.
+     */
+    if (arm_generate_debug_exceptions(env)) {
+        spsr &= ~PSTATE_SS;
+    }
 
     if (spsr & PSTATE_nRW) {
         /* TODO: We currently assume EL1/2/3 are running in AArch64.  */
@@ -390,6 +402,9 @@ void HELPER(exception_return)(CPUARMState *env)
         new_el = 0;
         env->uncached_cpsr = 0x10;
         cpsr_write(env, spsr, ~0);
+        if (!arm_singlestep_active(env)) {
+            env->uncached_cpsr &= ~PSTATE_SS;
+        }
         for (i = 0; i < 15; i++) {
             env->regs[i] = env->xregs[i];
         }
@@ -414,7 +429,10 @@ void HELPER(exception_return)(CPUARMState *env)
         }
         env->aarch64 = 1;
         pstate_write(env, spsr);
-        env->xregs[31] = env->sp_el[new_el];
+        if (!arm_singlestep_active(env)) {
+            env->pstate &= ~PSTATE_SS;
+        }
+        aarch64_restore_sp(env, new_el);
         env->pc = env->elr_el[cur_el];
     }
 
@@ -433,6 +451,9 @@ illegal_return:
     spsr &= PSTATE_NZCV | PSTATE_DAIF;
     spsr |= pstate_read(env) & ~(PSTATE_NZCV | PSTATE_DAIF);
     pstate_write(env, spsr);
+    if (!arm_singlestep_active(env)) {
+        env->pstate &= ~PSTATE_SS;
+    }
 }
 
 /* ??? Flag setting arithmetic is awkward because we need to do comparisons.
