@@ -343,6 +343,28 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
             ret = 0;
             goto out;
 
+#if TARGET_ABI_BITS != HOST_LONG_BITS
+	case HW_PHYSMEM:
+	    holdlen = sizeof(abi_ulong);
+	    ret = 0;
+
+	    if (oldlen) {
+		unsigned long lvalue;
+		size_t len = sizeof(lvalue);
+
+		if (sysctlbyname("hw.physmem", &lvalue, &len, NULL, 0)
+		    == -1) {
+			ret = -1;
+		} else {
+			abi_ulong maxmem = -0x100c000;
+			if (((unsigned long)maxmem) < lvalue)
+			    lvalue = maxmem;
+				(*(abi_ulong *)holdp) = lvalue;
+		}
+	    }
+	    goto out;
+#endif
+
         default:
             {
                 static int oid_hw_availpages;
