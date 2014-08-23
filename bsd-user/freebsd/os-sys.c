@@ -359,7 +359,7 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 			abi_ulong maxmem = -0x100c000;
 			if (((unsigned long)maxmem) < lvalue)
 			    lvalue = maxmem;
-				(*(abi_ulong *)holdp) = lvalue;
+			    (*(abi_ulong *)holdp) = lvalue;
 		}
 	    }
 	    goto out;
