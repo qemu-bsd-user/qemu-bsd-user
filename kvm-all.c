@@ -44,10 +44,6 @@
 #include <sys/eventfd.h>
 #endif
 
-#ifdef CONFIG_VALGRIND_H
-#include <valgrind/memcheck.h>
-#endif
-
 /* KVM uses PAGE_SIZE in its definition of COALESCED_MMIO_MAX */
 #define PAGE_SIZE TARGET_PAGE_SIZE
 
@@ -488,6 +484,19 @@ int kvm_check_extension(KVMState *s, unsigned int extension)
     ret = kvm_ioctl(s, KVM_CHECK_EXTENSION, extension);
     if (ret < 0) {
         ret = 0;
+    }
+
+    return ret;
+}
+
+int kvm_vm_check_extension(KVMState *s, unsigned int extension)
+{
+    int ret;
+
+    ret = kvm_vm_ioctl(s, KVM_CHECK_EXTENSION, extension);
+    if (ret < 0) {
+        /* VM wide version not implemented, use global one instead */
+        ret = kvm_check_extension(s, extension);
     }
 
     return ret;
@@ -1669,15 +1678,34 @@ void kvm_cpu_synchronize_state(CPUState *cpu)
     }
 }
 
+static void do_kvm_cpu_synchronize_post_reset(void *arg)
+{
+    CPUState *cpu = arg;
+
+    kvm_arch_put_registers(cpu, KVM_PUT_RESET_STATE);
+    cpu->kvm_vcpu_dirty = false;
+}
+
 void kvm_cpu_synchronize_post_reset(CPUState *cpu)
 {
-    kvm_arch_put_registers(cpu, KVM_PUT_RESET_STATE);
+    run_on_cpu(cpu, do_kvm_cpu_synchronize_post_reset, cpu);
+}
+
+static void do_kvm_cpu_synchronize_post_init(void *arg)
+{
+    CPUState *cpu = arg;
+
+    kvm_arch_put_registers(cpu, KVM_PUT_FULL_STATE);
     cpu->kvm_vcpu_dirty = false;
 }
 
 void kvm_cpu_synchronize_post_init(CPUState *cpu)
 {
-    kvm_arch_put_registers(cpu, KVM_PUT_FULL_STATE);
+    run_on_cpu(cpu, do_kvm_cpu_synchronize_post_init, cpu);
+}
+
+void kvm_cpu_clean_state(CPUState *cpu)
+{
     cpu->kvm_vcpu_dirty = false;
 }
 
@@ -1724,7 +1752,8 @@ int kvm_cpu_exec(CPUState *cpu)
             }
             fprintf(stderr, "error: kvm run failed %s\n",
                     strerror(-run_ret));
-            abort();
+            ret = -1;
+            break;
         }
 
         trace_kvm_run_exit(cpu->cpu_index, run->exit_reason);
@@ -1926,9 +1955,6 @@ int kvm_has_intx_set_mask(void)
 
 void kvm_setup_guest_memory(void *start, size_t size)
 {
-#ifdef CONFIG_VALGRIND_H
-    VALGRIND_MAKE_MEM_DEFINED(start, size);
-#endif
     if (!kvm_has_sync_mmu()) {
         int ret = qemu_madvise(start, size, QEMU_MADV_DONTFORK);
 

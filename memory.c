@@ -876,30 +876,6 @@ static char *memory_region_escape_name(const char *name)
     return escaped;
 }
 
-static void object_property_add_child_array(Object *owner,
-                                            const char *name,
-                                            Object *child)
-{
-    int i;
-    char *base_name = memory_region_escape_name(name);
-
-    for (i = 0; ; i++) {
-        char *full_name = g_strdup_printf("%s[%d]", base_name, i);
-        Error *local_err = NULL;
-
-        object_property_add_child(owner, full_name, child, &local_err);
-        g_free(full_name);
-        if (!local_err) {
-            break;
-        }
-
-        error_free(local_err);
-    }
-
-    g_free(base_name);
-}
-        
-
 void memory_region_init(MemoryRegion *mr,
                         Object *owner,
                         const char *name,
@@ -917,8 +893,12 @@ void memory_region_init(MemoryRegion *mr,
     mr->name = g_strdup(name);
 
     if (name) {
-        object_property_add_child_array(owner, name, OBJECT(mr));
+        char *escaped_name = memory_region_escape_name(name);
+        char *name_array = g_strdup_printf("%s[*]", escaped_name);
+        object_property_add_child(owner, name_array, OBJECT(mr), &error_abort);
         object_unref(OBJECT(mr));
+        g_free(name_array);
+        g_free(escaped_name);
     }
 }
 
@@ -1162,13 +1142,14 @@ void memory_region_init_io(MemoryRegion *mr,
 void memory_region_init_ram(MemoryRegion *mr,
                             Object *owner,
                             const char *name,
-                            uint64_t size)
+                            uint64_t size,
+                            Error **errp)
 {
     memory_region_init(mr, owner, name, size);
     mr->ram = true;
     mr->terminates = true;
     mr->destructor = memory_region_destructor_ram;
-    mr->ram_addr = qemu_ram_alloc(size, mr);
+    mr->ram_addr = qemu_ram_alloc(size, mr, errp);
 }
 
 #ifdef __linux__
@@ -1198,7 +1179,10 @@ void memory_region_init_ram_ptr(MemoryRegion *mr,
     mr->ram = true;
     mr->terminates = true;
     mr->destructor = memory_region_destructor_ram_from_ptr;
-    mr->ram_addr = qemu_ram_alloc_from_ptr(size, ptr, mr);
+
+    /* qemu_ram_alloc_from_ptr cannot fail with ptr != NULL.  */
+    assert(ptr != NULL);
+    mr->ram_addr = qemu_ram_alloc_from_ptr(size, ptr, mr, &error_abort);
 }
 
 void memory_region_init_alias(MemoryRegion *mr,
@@ -1220,7 +1204,8 @@ void memory_region_init_rom_device(MemoryRegion *mr,
                                    const MemoryRegionOps *ops,
                                    void *opaque,
                                    const char *name,
-                                   uint64_t size)
+                                   uint64_t size,
+                                   Error **errp)
 {
     memory_region_init(mr, owner, name, size);
     mr->ops = ops;
@@ -1228,7 +1213,7 @@ void memory_region_init_rom_device(MemoryRegion *mr,
     mr->terminates = true;
     mr->rom_device = true;
     mr->destructor = memory_region_destructor_rom_device;
-    mr->ram_addr = qemu_ram_alloc(size, mr);
+    mr->ram_addr = qemu_ram_alloc(size, mr, errp);
 }
 
 void memory_region_init_iommu(MemoryRegion *mr,
@@ -1309,6 +1294,10 @@ uint64_t memory_region_size(MemoryRegion *mr)
 
 const char *memory_region_name(const MemoryRegion *mr)
 {
+    if (!mr->name) {
+        ((MemoryRegion *)mr)->name =
+            object_get_canonical_path_component(OBJECT(mr));
+    }
     return mr->name;
 }
 
