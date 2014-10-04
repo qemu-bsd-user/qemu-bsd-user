@@ -161,6 +161,12 @@ S: Maintained
 F: target-xtensa/
 F: hw/xtensa/
 
+TriCore
+M: Bastian Koppelmann <kbastian@mail.uni-paderborn.de>
+S: Maintained
+F: target-tricore/
+F: hw/tricore/
+
 Guest CPU Cores (KVM):
 ----------------------
 
@@ -614,7 +620,7 @@ USB
 M: Gerd Hoffmann <kraxel@redhat.com>
 S: Maintained
 F: hw/usb/*
-F: tests/usb-hcd-ehci-test.c
+F: tests/usb-*-test.c
 
 VFIO
 M: Alex Williamson <alex.williamson@redhat.com>
@@ -677,6 +683,12 @@ M: Edgar E. Iglesias <edgar.iglesias@gmail.com>
 S: Maintained
 F: hw/*/xilinx_*
 F: include/hw/xilinx.h
+
+Vmware
+M: Dmitry Fleytman <dmitry@daynix.com>
+S: Maintained
+F: hw/net/vmxnet*
+F: hw/scsi/vmw_pvscsi*
 
 Subsystems
 ----------
@@ -968,7 +980,7 @@ S: Supported
 F: block/rbd.c
 
 Sheepdog
-M: MORITA Kazutaka <morita.kazutaka@lab.ntt.co.jp>
+M: Hitoshi Mitake <mitake.hitoshi@lab.ntt.co.jp>
 M: Liu Yuan <namei.unix@gmail.com>
 L: sheepdog@lists.wpkg.org
 S: Supported

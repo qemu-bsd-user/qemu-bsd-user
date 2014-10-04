@@ -18,6 +18,7 @@
 #include "hw/block/block.h"
 #include "sysemu/iothread.h"
 #include "block/block.h"
+#include "block/accounting.h"
 
 #define TYPE_VIRTIO_BLK "virtio-blk-device"
 #define VIRTIO_BLK(obj) \
@@ -131,10 +132,8 @@ typedef struct VirtIOBlock {
     VMChangeStateEntry *change;
     /* Function to push to vq and notify guest */
     void (*complete_request)(struct VirtIOBlockReq *req, unsigned char status);
-#ifdef CONFIG_VIRTIO_BLK_DATA_PLANE
     Notifier migration_state_notifier;
     struct VirtIOBlockDataPlane *dataplane;
-#endif
 } VirtIOBlock;
 
 typedef struct MultiReqBuffer {

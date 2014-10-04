@@ -93,6 +93,10 @@ static void scsi_command_complete(void *opaque, int ret)
     SCSIGenericReq *r = (SCSIGenericReq *)opaque;
 
     r->req.aiocb = NULL;
+    if (r->req.io_canceled) {
+        scsi_req_cancel_complete(&r->req);
+        goto done;
+    }
     if (r->io_header.driver_status & SG_ERR_DRIVER_SENSE) {
         r->req.sense_len = r->io_header.sb_len_wr;
     }
@@ -133,26 +137,8 @@ static void scsi_command_complete(void *opaque, int ret)
             r, r->req.tag, status);
 
     scsi_req_complete(&r->req, status);
-    if (!r->req.io_canceled) {
-        scsi_req_unref(&r->req);
-    }
-}
-
-/* Cancel a pending data transfer.  */
-static void scsi_cancel_io(SCSIRequest *req)
-{
-    SCSIGenericReq *r = DO_UPCAST(SCSIGenericReq, req, req);
-
-    DPRINTF("Cancel tag=0x%x\n", req->tag);
-    if (r->req.aiocb) {
-        bdrv_aio_cancel(r->req.aiocb);
-
-        /* This reference was left in by scsi_*_data.  We take ownership of
-         * it independent of whether bdrv_aio_cancel completes the request
-         * or not.  */
-        scsi_req_unref(&r->req);
-    }
-    r->req.aiocb = NULL;
+done:
+    scsi_req_unref(&r->req);
 }
 
 static int execute_command(BlockDriverState *bdrv,
@@ -186,8 +172,7 @@ static void scsi_read_complete(void * opaque, int ret)
     int len;
 
     r->req.aiocb = NULL;
-    if (ret) {
-        DPRINTF("IO error ret %d\n", ret);
+    if (ret || r->req.io_canceled) {
         scsi_command_complete(r, ret);
         return;
     }
@@ -211,9 +196,7 @@ static void scsi_read_complete(void * opaque, int ret)
         bdrv_set_guest_block_size(s->conf.bs, s->blocksize);
 
         scsi_req_data(&r->req, len);
-        if (!r->req.io_canceled) {
-            scsi_req_unref(&r->req);
-        }
+        scsi_req_unref(&r->req);
     }
 }
 
@@ -246,8 +229,7 @@ static void scsi_write_complete(void * opaque, int ret)
 
     DPRINTF("scsi_write_complete() ret = %d\n", ret);
     r->req.aiocb = NULL;
-    if (ret) {
-        DPRINTF("IO error\n");
+    if (ret || r->req.io_canceled) {
         scsi_command_complete(r, ret);
         return;
     }
@@ -302,9 +284,6 @@ static int32_t scsi_send_command(SCSIRequest *req, uint8_t *cmd)
     SCSIGenericReq *r = DO_UPCAST(SCSIGenericReq, req, req);
     SCSIDevice *s = r->req.dev;
     int ret;
-
-    DPRINTF("Command: lun=%d tag=0x%x len %zd data=0x%02x", lun, tag,
-            r->req.cmd.xfer, cmd[0]);
 
 #ifdef DEBUG_SCSI
     {
@@ -386,49 +365,49 @@ static void scsi_generic_reset(DeviceState *dev)
     scsi_device_purge_requests(s, SENSE_CODE(RESET));
 }
 
-static void scsi_destroy(SCSIDevice *s)
+static void scsi_unrealize(SCSIDevice *s, Error **errp)
 {
     scsi_device_purge_requests(s, SENSE_CODE(NO_SENSE));
     blockdev_mark_auto_del(s->conf.bs);
 }
 
-static int scsi_generic_initfn(SCSIDevice *s)
+static void scsi_generic_realize(SCSIDevice *s, Error **errp)
 {
     int rc;
     int sg_version;
     struct sg_scsi_id scsiid;
 
     if (!s->conf.bs) {
-        error_report("drive property not set");
-        return -1;
+        error_setg(errp, "drive property not set");
+        return;
     }
 
     if (bdrv_get_on_error(s->conf.bs, 0) != BLOCKDEV_ON_ERROR_ENOSPC) {
-        error_report("Device doesn't support drive option werror");
-        return -1;
+        error_setg(errp, "Device doesn't support drive option werror");
+        return;
     }
     if (bdrv_get_on_error(s->conf.bs, 1) != BLOCKDEV_ON_ERROR_REPORT) {
-        error_report("Device doesn't support drive option rerror");
-        return -1;
+        error_setg(errp, "Device doesn't support drive option rerror");
+        return;
     }
 
     /* check we are using a driver managing SG_IO (version 3 and after */
     rc = bdrv_ioctl(s->conf.bs, SG_GET_VERSION_NUM, &sg_version);
     if (rc < 0) {
-        error_report("cannot get SG_IO version number: %s.  "
-                     "Is this a SCSI device?",
-                     strerror(-rc));
-        return -1;
+        error_setg(errp, "cannot get SG_IO version number: %s.  "
+                         "Is this a SCSI device?",
+                         strerror(-rc));
+        return;
     }
     if (sg_version < 30000) {
-        error_report("scsi generic interface too old");
-        return -1;
+        error_setg(errp, "scsi generic interface too old");
+        return;
     }
 
     /* get LUN of the /dev/sg? */
     if (bdrv_ioctl(s->conf.bs, SG_GET_SCSI_ID, &scsiid)) {
-        error_report("SG_GET_SCSI_ID ioctl failed");
-        return -1;
+        error_setg(errp, "SG_GET_SCSI_ID ioctl failed");
+        return;
     }
 
     /* define device state */
@@ -460,7 +439,6 @@ static int scsi_generic_initfn(SCSIDevice *s)
     }
 
     DPRINTF("block size %d\n", s->blocksize);
-    return 0;
 }
 
 const SCSIReqOps scsi_generic_req_ops = {
@@ -469,7 +447,6 @@ const SCSIReqOps scsi_generic_req_ops = {
     .send_command = scsi_send_command,
     .read_data    = scsi_read_data,
     .write_data   = scsi_write_data,
-    .cancel_io    = scsi_cancel_io,
     .get_buf      = scsi_get_buf,
     .load_request = scsi_generic_load_request,
     .save_request = scsi_generic_save_request,
@@ -501,8 +478,8 @@ static void scsi_generic_class_initfn(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     SCSIDeviceClass *sc = SCSI_DEVICE_CLASS(klass);
 
-    sc->init         = scsi_generic_initfn;
-    sc->destroy      = scsi_destroy;
+    sc->realize      = scsi_generic_realize;
+    sc->unrealize    = scsi_unrealize;
     sc->alloc_req    = scsi_new_request;
     sc->parse_cdb    = scsi_generic_parse_cdb;
     dc->fw_name = "disk";

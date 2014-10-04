@@ -668,10 +668,10 @@ void object_class_foreach(void (*fn)(ObjectClass *klass, void *opaque),
 int object_child_foreach(Object *obj, int (*fn)(Object *child, void *opaque),
                          void *opaque)
 {
-    ObjectProperty *prop;
+    ObjectProperty *prop, *next;
     int ret = 0;
 
-    QTAILQ_FOREACH(prop, &obj->properties, node) {
+    QTAILQ_FOREACH_SAFE(prop, &obj->properties, node, next) {
         if (object_property_is_child(prop)) {
             ret = fn(prop->opaque, opaque);
             if (ret != 0) {
@@ -728,6 +728,27 @@ object_property_add(Object *obj, const char *name, const char *type,
                     void *opaque, Error **errp)
 {
     ObjectProperty *prop;
+    size_t name_len = strlen(name);
+
+    if (name_len >= 3 && !memcmp(name + name_len - 3, "[*]", 4)) {
+        int i;
+        ObjectProperty *ret;
+        char *name_no_array = g_strdup(name);
+
+        name_no_array[name_len - 3] = '\0';
+        for (i = 0; ; ++i) {
+            char *full_name = g_strdup_printf("%s[%d]", name_no_array, i);
+
+            ret = object_property_add(obj, full_name, type, get, set,
+                                      release, opaque, NULL);
+            g_free(full_name);
+            if (ret) {
+                break;
+            }
+        }
+        g_free(name_no_array);
+        return ret;
+    }
 
     QTAILQ_FOREACH(prop, &obj->properties, node) {
         if (strcmp(prop->name, name) == 0) {
@@ -938,14 +959,18 @@ int object_property_get_enum(Object *obj, const char *name,
 {
     StringOutputVisitor *sov;
     StringInputVisitor *siv;
+    char *str;
     int ret;
 
     sov = string_output_visitor_new(false);
     object_property_get(obj, string_output_get_visitor(sov), name, errp);
-    siv = string_input_visitor_new(string_output_get_string(sov));
+    str = string_output_get_string(sov);
+    siv = string_input_visitor_new(str);
     string_output_visitor_cleanup(sov);
     visit_type_enum(string_input_get_visitor(siv),
                     &ret, strings, NULL, name, errp);
+
+    g_free(str);
     string_input_visitor_cleanup(siv);
 
     return ret;
@@ -956,13 +981,17 @@ void object_property_get_uint16List(Object *obj, const char *name,
 {
     StringOutputVisitor *ov;
     StringInputVisitor *iv;
+    char *str;
 
     ov = string_output_visitor_new(false);
     object_property_get(obj, string_output_get_visitor(ov),
                         name, errp);
-    iv = string_input_visitor_new(string_output_get_string(ov));
+    str = string_output_get_string(ov);
+    iv = string_input_visitor_new(str);
     visit_type_uint16List(string_input_get_visitor(iv),
                           list, NULL, errp);
+
+    g_free(str);
     string_output_visitor_cleanup(ov);
     string_input_visitor_cleanup(iv);
 }

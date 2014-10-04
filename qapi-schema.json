@@ -11,6 +11,9 @@
 # QAPI event definitions
 { 'include': 'qapi/event.json' }
 
+# Tracing commands
+{ 'include': 'qapi/trace.json' }
+
 ##
 # LostTickPolicy:
 #
@@ -1186,13 +1189,13 @@
 ##
 # @inject-nmi:
 #
-# Injects an Non-Maskable Interrupt into all guest's VCPUs.
+# Injects a Non-Maskable Interrupt into the default CPU (x86/s390) or all CPUs (ppc64).
 #
 # Returns:  If successful, nothing
 #
 # Since:  0.14.0
 #
-# Notes: Only x86 Virtual Machines support this command.
+# Note: prior to 2.1, this command was only supported for x86 and s390 VMs
 ##
 { 'command': 'inject-nmi' }
 
@@ -3233,6 +3236,23 @@
               'btn'     : 'InputBtnEvent',
               'rel'     : 'InputMoveEvent',
               'abs'     : 'InputMoveEvent' } }
+
+##
+# @input-send-event
+#
+# Send input event(s) to guest.
+#
+# @console: Which console to send event(s) to.
+#
+# @events: List of InputEvent union.
+#
+# Returns: Nothing on success.
+#
+# Since: 2.2
+#
+##
+{ 'command': 'input-send-event',
+  'data': { 'console':'int', 'events': [ 'InputEvent' ] } }
 
 ##
 # @NumaOptions

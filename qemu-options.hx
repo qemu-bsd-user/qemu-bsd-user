@@ -35,7 +35,8 @@ DEF("machine", HAS_ARG, QEMU_OPTION_machine, \
     "                kernel_irqchip=on|off controls accelerated irqchip support\n"
     "                kvm_shadow_mem=size of KVM shadow MMU\n"
     "                dump-guest-core=on|off include guest memory in a core dump (default=on)\n"
-    "                mem-merge=on|off controls memory merge support (default: on)\n",
+    "                mem-merge=on|off controls memory merge support (default: on)\n"
+    "                iommu=on|off controls emulated Intel IOMMU (VT-d) support (default=off)\n",
     QEMU_ARCH_ALL)
 STEXI
 @item -machine [type=]@var{name}[,prop=@var{value}[,...]]
@@ -58,6 +59,8 @@ Include guest memory in a core dump. The default is on.
 Enables or disables memory merge support. This feature, when supported by
 the host, de-duplicates identical memory pages among VMs instances
 (enabled by default).
+@item iommu=on|off
+Enables or disables emulated Intel IOMMU (VT-d) support. The default is off.
 @end table
 ETEXI
 
@@ -225,7 +228,8 @@ DEF("m", HAS_ARG, QEMU_OPTION_m,
     "                size: initial amount of guest memory (default: "
     stringify(DEFAULT_RAM_SIZE) "MiB)\n"
     "                slots: number of hotplug slots (default: none)\n"
-    "                maxmem: maximum amount of guest memory (default: none)\n",
+    "                maxmem: maximum amount of guest memory (default: none)\n"
+    "NOTE: Some architectures might enforce a specific granularity\n",
     QEMU_ARCH_ALL)
 STEXI
 @item -m [size=]@var{megs}
@@ -2351,6 +2355,16 @@ multiple of 512 bytes. It defaults to 256k.
 @item sslverify
 Whether to verify the remote server's certificate when connecting over SSL. It
 can have the value 'on' or 'off'. It defaults to 'on'.
+
+@item cookie
+Send this cookie (it can also be a list of cookies separated by ';') with
+each outgoing request.  Only supported when using protocols such as HTTP
+which support cookies, otherwise ignored.
+
+@item timeout
+Set the timeout in seconds of the CURL connection. This timeout is the time
+that CURL waits for a response from the remote server to get the size of the
+image to be downloaded. If not set, the default timeout of 5 seconds is used.
 @end table
 
 Note that when passing options to qemu explicitly, @option{driver} is the value
@@ -2372,9 +2386,10 @@ qemu-system-x86_64 -drive file=/tmp/Fedora-x86_64-20-20131211.1-sda.qcow2,copy-o
 @end example
 
 Example: boot from an image stored on a VMware vSphere server with a self-signed
-certificate using a local overlay for writes and a readahead of 64k
+certificate using a local overlay for writes, a readahead of 64k and a timeout
+of 10 seconds.
 @example
-qemu-img create -f qcow2 -o backing_file='json:@{"file.driver":"https",, "file.url":"https://user:password@@vsphere.example.com/folder/test/test-flat.vmdk?dcPath=Datacenter&dsName=datastore1",, "file.sslverify":"off",, "file.readahead":"64k"@}' /tmp/test.qcow2
+qemu-img create -f qcow2 -o backing_file='json:@{"file.driver":"https",, "file.url":"https://user:password@@vsphere.example.com/folder/test/test-flat.vmdk?dcPath=Datacenter&dsName=datastore1",, "file.sslverify":"off",, "file.readahead":"64k",, "file.timeout":10@}' /tmp/test.qcow2
 
 qemu-system-x86_64 -drive file=/tmp/test.qcow2
 @end example

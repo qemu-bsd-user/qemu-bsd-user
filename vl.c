@@ -134,6 +134,7 @@ const char* keyboard_layout = NULL;
 ram_addr_t ram_size;
 const char *mem_path = NULL;
 int mem_prealloc = 0; /* force preallocation of physical target memory */
+bool enable_mlock = false;
 int nb_nics;
 NICInfo nd_table[MAX_NICS];
 int autostart;
@@ -388,6 +389,10 @@ static QemuOptsList qemu_machine_opts = {
             .name = PC_MACHINE_MAX_RAM_BELOW_4G,
             .type = QEMU_OPT_SIZE,
             .help = "maximum ram below the 4G boundary (32bit boundary)",
+        },{
+            .name = "iommu",
+            .type = QEMU_OPT_BOOL,
+            .help = "Set on/off to enable/disable Intel IOMMU (VT-d)",
         },
         { /* End of list */ }
     },
@@ -1417,12 +1422,8 @@ static void smp_parse(QemuOpts *opts)
 
 }
 
-static void configure_realtime(QemuOpts *opts)
+static void realtime_init(void)
 {
-    bool enable_mlock;
-
-    enable_mlock = qemu_opt_get_bool(opts, "mlock", true);
-
     if (enable_mlock) {
         if (os_mlock() < 0) {
             fprintf(stderr, "qemu: locking memory failed\n");
@@ -1717,11 +1718,11 @@ void qemu_del_vm_change_state_handler(VMChangeStateEntry *e)
 
 void vm_state_notify(int running, RunState state)
 {
-    VMChangeStateEntry *e;
+    VMChangeStateEntry *e, *next;
 
     trace_vm_state_notify(running, state);
 
-    for (e = vm_change_state_head.lh_first; e; e = e->entries.le_next) {
+    QLIST_FOREACH_SAFE(e, &vm_change_state_head, entries, next) {
         e->cb(e->opaque, running, state);
     }
 }
@@ -2837,15 +2838,15 @@ static void free_and_trace(gpointer mem)
     free(mem);
 }
 
-static int object_set_property(const char *name, const char *value, void *opaque)
+static int machine_set_property(const char *name, const char *value,
+                                void *opaque)
 {
     Object *obj = OBJECT(opaque);
     StringInputVisitor *siv;
     Error *local_err = NULL;
     char *c, *qom_name;
 
-    if (strcmp(name, "qom-type") == 0 || strcmp(name, "id") == 0 ||
-        strcmp(name, "type") == 0) {
+    if (strcmp(name, "type") == 0) {
         return 0;
     }
 
@@ -2964,6 +2965,7 @@ int main(int argc, char **argv, char **envp)
     ram_addr_t maxram_size = default_ram_size;
     uint64_t ram_slots = 0;
     FILE *vmstate_dump_file = NULL;
+    Error *main_loop_err = NULL;
 
     atexit(qemu_run_exit_notifiers);
     error_set_progname(argv[0]);
@@ -3354,34 +3356,34 @@ int main(int argc, char **argv, char **envp)
 
                     sz = qemu_opt_get_size(opts, "maxmem", 0);
                     if (sz < ram_size) {
-                        fprintf(stderr, "qemu: invalid -m option value: maxmem "
-                                "(%" PRIu64 ") <= initial memory ("
-                                RAM_ADDR_FMT ")\n", sz, ram_size);
+                        error_report("invalid -m option value: maxmem "
+                                "(0x%" PRIx64 ") <= initial memory (0x"
+                                RAM_ADDR_FMT ")", sz, ram_size);
                         exit(EXIT_FAILURE);
                     }
 
                     slots = qemu_opt_get_number(opts, "slots", 0);
                     if ((sz > ram_size) && !slots) {
-                        fprintf(stderr, "qemu: invalid -m option value: maxmem "
-                                "(%" PRIu64 ") more than initial memory ("
+                        error_report("invalid -m option value: maxmem "
+                                "(0x%" PRIx64 ") more than initial memory (0x"
                                 RAM_ADDR_FMT ") but no hotplug slots where "
-                                "specified\n", sz, ram_size);
+                                "specified", sz, ram_size);
                         exit(EXIT_FAILURE);
                     }
 
                     if ((sz <= ram_size) && slots) {
-                        fprintf(stderr, "qemu: invalid -m option value:  %"
+                        error_report("invalid -m option value:  %"
                                 PRIu64 " hotplug slots where specified but "
-                                "maxmem (%" PRIu64 ") <= initial memory ("
-                                RAM_ADDR_FMT ")\n", slots, sz, ram_size);
+                                "maxmem (0x%" PRIx64 ") <= initial memory (0x"
+                                RAM_ADDR_FMT ")", slots, sz, ram_size);
                         exit(EXIT_FAILURE);
                     }
                     maxram_size = sz;
                     ram_slots = slots;
                 } else if ((!maxmem_str && slots_str) ||
                            (maxmem_str && !slots_str)) {
-                    fprintf(stderr, "qemu: invalid -m option value: missing "
-                            "'%s' option\n", slots_str ? "maxmem" : "slots");
+                    error_report("invalid -m option value: missing "
+                            "'%s' option", slots_str ? "maxmem" : "slots");
                     exit(EXIT_FAILURE);
                 }
                 break;
@@ -3969,7 +3971,7 @@ int main(int argc, char **argv, char **envp)
                 if (!opts) {
                     exit(1);
                 }
-                configure_realtime(opts);
+                enable_mlock = qemu_opt_get_bool(opts, "mlock", true);
                 break;
             case QEMU_OPTION_msg:
                 opts = qemu_opts_parse(qemu_find_opts("msg"), optarg, 0);
@@ -3994,8 +3996,8 @@ int main(int argc, char **argv, char **envp)
 
     os_daemonize();
 
-    if (qemu_init_main_loop()) {
-        fprintf(stderr, "qemu_init_main_loop failed\n");
+    if (qemu_init_main_loop(&main_loop_err)) {
+        error_report("%s", error_get_pretty(main_loop_err));
         exit(1);
     }
 
@@ -4031,11 +4033,6 @@ int main(int argc, char **argv, char **envp)
 
     if (machine_class->hw_version) {
         qemu_set_version(machine_class->hw_version);
-    }
-
-    if (qemu_opts_foreach(qemu_find_opts("object"),
-                          object_create, NULL, 0) != 0) {
-        exit(1);
     }
 
     /* Init CPU def lists, based on config
@@ -4249,8 +4246,13 @@ int main(int argc, char **argv, char **envp)
         exit(0);
     }
 
+    if (qemu_opts_foreach(qemu_find_opts("object"),
+                          object_create, NULL, 0) != 0) {
+        exit(1);
+    }
+
     machine_opts = qemu_get_machine_opts();
-    if (qemu_opt_foreach(machine_opts, object_set_property, current_machine,
+    if (qemu_opt_foreach(machine_opts, machine_set_property, current_machine,
                          1) < 0) {
         object_unref(OBJECT(current_machine));
         exit(1);
@@ -4330,6 +4332,7 @@ int main(int argc, char **argv, char **envp)
     qemu_spice_init();
 #endif
 
+    cpu_ticks_init();
     if (icount_opts) {
         if (kvm_enabled() || xen_enabled()) {
             fprintf(stderr, "-icount is not allowed with kvm or xen\n");
@@ -4436,6 +4439,8 @@ int main(int argc, char **argv, char **envp)
 
     machine_class->init(current_machine);
 
+    realtime_init();
+
     audio_init();
 
     cpu_synchronize_all_post_init();
@@ -4537,7 +4542,7 @@ int main(int argc, char **argv, char **envp)
         }
     }
 
-    qdev_prop_check_global();
+    qdev_prop_check_globals();
     if (vmstate_dump_file) {
         /* dump and exit */
         dump_vmstate_json_to_file(vmstate_dump_file);
