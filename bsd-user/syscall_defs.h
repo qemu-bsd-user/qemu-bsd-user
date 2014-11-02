@@ -633,7 +633,9 @@ typedef struct {
 #define TARGET_UMTX_OP_SEM_WAKE             20
 #define TARGET_UMTX_OP_NWAKE_PRIVATE        21
 #define TARGET_UMTX_OP_MUTEX_WAKE2          22
-#define TARGET_UMTX_OP_MAX                  23
+#define TARGET_UMTX_OP_SEM2_WAIT            23
+#define TARGET_UMTX_OP_SEM2_WAKE            24
+#define TARGET_UMTX_OP_MAX                  25
 
 /* flags for UMTX_OP_CV_WAIT */
 #define TARGET_CVWAIT_CHECK_UNPARKING       0x01

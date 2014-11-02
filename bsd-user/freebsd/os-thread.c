@@ -225,6 +225,25 @@ abi_long freebsd_umtx_mutex_wake2(abi_ulong target_addr,
 }
 #endif /* UMTX_OP_MUTEX_WAKE2 */
 
+#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+abi_long freebsd_umtx_sem_wait(abi_ulong obj, struct timespec *timeout)
+{
+
+    /* XXX Assumes struct _usem is opauque to the user */
+    if (!access_ok(VERIFY_WRITE, obj, sizeof(struct target__usem))) {
+        return -TARGET_EFAULT;
+    }
+    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAIT, 0, NULL, timeout));
+}
+
+abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val)
+{
+
+    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAKE, val, NULL, NULL));
+}
+#endif
+
+#else
 abi_long freebsd_umtx_sem_wait(abi_ulong obj, struct timespec *timeout)
 {
 
