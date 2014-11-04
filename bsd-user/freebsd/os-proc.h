@@ -1,7 +1,7 @@
 /*
  *  process related system call shims and definitions
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,9 @@
 #ifndef __FREEBSD_PROC_H_
 #define __FREEBSD_PROC_H_
 
+#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+#include <sys/signal.h>
+#endif
 #include <sys/types.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/procdesc.h>
@@ -71,6 +74,56 @@ static inline abi_long do_freebsd_wait4(abi_long arg1, abi_ulong target_status,
     }
     return ret;
 }
+
+#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+/* wait6(2) */
+static inline abi_long do_freebsd_wait6(abi_long idtype, abi_long id,
+	abi_ulong target_status, abi_long options, abi_ulong target_wrusage,
+	abi_ulong target_infop)
+{
+    abi_long ret;
+    int status;
+    struct __wrusage wrusage, *wrusage_ptr = NULL;
+    siginfo_t info;
+    void *p;
+
+    if (target_wrusage) {
+        wrusage_ptr = &wrusage;
+    }
+    ret = get_errno(wait6(idtype, id, &status, options, wrusage_ptr, &info));
+    if (!is_error(ret)) {
+        status = host_to_target_waitstatus(status);
+        if (put_user_s32(status, target_status) != 0) {
+            return -TARGET_EFAULT;
+        }
+        if (target_wrusage != 0) {
+            host_to_target_wrusage(target_wrusage, &wrusage);
+        }
+	if (target_infop != 0) {
+            p = lock_user(VERIFY_WRITE, target_infop, sizeof(target_siginfo_t),
+			0);
+	    if (p == NULL) {
+		return -TARGET_EFAULT;
+	    }
+	    host_to_target_siginfo(p, &info);
+            unlock_user(p, target_infop, sizeof(target_siginfo_t));
+	}
+    }
+    return ret;
+}
+
+#else /* !  __FreeBSD_version > 1100000 */
+
+static inline abi_long do_freebsd_wait6( __unused abi_long idtype,
+	__unused abi_long id,  __unused abi_ulong target_status,
+	__unused abi_long options, __unused abi_ulong target_wrusage,
+	__unused abi_ulong target_infop)
+{
+
+    qemu_log("qemu: Unsupported syscall wait6()\n");
+    return -TARGET_ENOSYS;
+}
+#endif /* __FreeBSD_version > 1100000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 /* setloginclass(2) */

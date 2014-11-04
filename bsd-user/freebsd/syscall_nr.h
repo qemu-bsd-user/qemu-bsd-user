@@ -447,4 +447,5 @@
 #define TARGET_FREEBSD_NR_rctl_remove_rule  529
 #define TARGET_FREEBSD_NR_posix_fallocate   530
 #define TARGET_FREEBSD_NR_posix_fadvise 531
-#define TARGET_FREEBSD_NR_MAXSYSCALL    532
+#define TARGET_FREEBSD_NR_wait6 	532
+#define TARGET_FREEBSD_NR_MAXSYSCALL    533

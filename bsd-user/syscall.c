@@ -2,7 +2,7 @@
  *  BSD syscalls
  *
  *  Copyright (c) 2003 - 2008 Fabrice Bellard
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -187,6 +187,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     case TARGET_FREEBSD_NR_wait4: /* wait4(2) */
         ret = do_freebsd_wait4(arg1, arg2, arg3, arg4);
+        break;
+
+    case TARGET_FREEBSD_NR_wait6: /* wait6(2) */
+        ret = do_freebsd_wait6(arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_exit: /* exit(2) */
