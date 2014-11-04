@@ -367,6 +367,26 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_cap_getmode(arg1);
         break;
 
+    case TARGET_FREEBSD_NR_cap_rights_limit: /* cap_rights_limit(2) */
+        ret = do_freebsd_cap_rights_limit(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_cap_ioctls_limit: /* cap_ioctls_limit(2) */
+        ret = do_freebsd_cap_ioctls_limit(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_cap_ioctls_get: /* cap_ioctls_get(2) */
+        ret = do_freebsd_cap_ioctls_get(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_cap_fcntls_limit: /* cap_fcntls_limit(2) */
+        ret = do_freebsd_cap_fcntls_limit(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_cap_fcntls_get: /* cap_fcntls_get(2) */
+        ret = do_freebsd_cap_fcntls_get(arg1, arg2);
+        break;
+
     case TARGET_FREEBSD_NR_audit: /* audit(2) */
         ret = do_freebsd_audit(arg1, arg2);
         break;

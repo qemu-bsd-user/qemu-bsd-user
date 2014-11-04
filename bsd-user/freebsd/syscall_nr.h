@@ -448,4 +448,9 @@
 #define TARGET_FREEBSD_NR_posix_fallocate   530
 #define TARGET_FREEBSD_NR_posix_fadvise 531
 #define TARGET_FREEBSD_NR_wait6 	532
-#define TARGET_FREEBSD_NR_MAXSYSCALL    533
+#define TARGET_FREEBSD_NR_cap_rights_limit  533
+#define TARGET_FREEBSD_NR_cap_ioctls_limit  534
+#define TARGET_FREEBSD_NR_cap_ioctls_get    535
+#define TARGET_FREEBSD_NR_cap_fcntls_limit  536
+#define TARGET_FREEBSD_NR_cap_fcntls_get    537
+#define TARGET_FREEBSD_NR_MAXSYSCALL    538

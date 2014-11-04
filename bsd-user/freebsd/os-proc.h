@@ -419,6 +419,48 @@ static inline abi_long do_freebsd_cap_getmode(abi_ulong arg1)
     return -TARGET_ENOSYS;
 }
 
+/* cap_rights_limit(2) */
+static inline abi_long do_freebsd_cap_rights_limit(int arg1, abi_ulong arg2)
+{
+
+    qemu_log("qemu: Unsupported syscall cap_rights_limit()\n");
+    return -TARGET_ENOSYS;
+}
+
+/* cap_ioctls_limit(2) */
+static inline abi_long do_freebsd_cap_ioctls_limit(int arg1, abi_ulong arg2,
+	abi_ulong arg3)
+{
+
+    qemu_log("qemu: Unsupported syscall cap_ioctls_limit()\n");
+    return -TARGET_ENOSYS;
+}
+
+/* cap_ioctls_get(2) */
+static inline abi_long do_freebsd_cap_ioctls_get(int arg1, abi_ulong arg2,
+	abi_ulong arg3)
+{
+
+    qemu_log("qemu: Unsupported syscall cap_ioctls_limit()\n");
+    return -TARGET_ENOSYS;
+}
+
+/* cap_fcntls_limit(2) */
+static inline abi_long do_freebsd_cap_fcntls_limit(int arg1, abi_ulong arg2)
+{
+
+    qemu_log("qemu: Unsupported syscall cap_fcntls_limit()\n");
+    return -TARGET_ENOSYS;
+}
+
+/* cap_fcntls_get(2) */
+static inline abi_long do_freebsd_cap_fcntls_get(int arg1, abi_ulong arg2)
+{
+
+    qemu_log("qemu: Unsupported syscall cap_fcntls_get()\n");
+    return -TARGET_ENOSYS;
+}
+
 /* audit(2) */
 static inline abi_long do_freebsd_audit(abi_ulong arg1, abi_ulong arg2)
 {
