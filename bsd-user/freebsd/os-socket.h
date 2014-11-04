@@ -1,7 +1,7 @@
 /*
  *  FreeBSD socket related system call shims
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -557,4 +557,108 @@ static inline abi_long do_freebsd_sendfile(abi_long fd, abi_long s,
     return -TARGET_ENOSYS;
 }
 
+#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+/* bindat(2) */
+static inline abi_long do_bsd_bindat(int fd, int sockfd, abi_ulong target_addr,
+        socklen_t addrlen)
+{
+    abi_long ret;
+    void *addr;
+
+    if ((int)addrlen < 0) {
+        return -TARGET_EINVAL;
+    }
+
+    addr = alloca(addrlen + 1);
+    ret = target_to_host_sockaddr(addr, target_addr, addrlen);
+    if (is_error(ret)) {
+        return ret;
+    }
+
+    return get_errno(bindat(fd, sockfd, addr, addrlen));
+}
+
+/* connectat(2) */
+static inline abi_long do_bsd_connectat(int fd, int sockfd,
+	abi_ulong target_addr, socklen_t addrlen)
+{
+    abi_long ret;
+    void *addr;
+
+    if ((int)addrlen < 0) {
+        return -TARGET_EINVAL;
+    }
+    addr = alloca(addrlen);
+
+    ret = target_to_host_sockaddr(addr, target_addr, addrlen);
+
+    if (is_error(ret)) {
+        return ret;
+    }
+
+    return get_errno(connectat(fd, sockfd, addr, addrlen));
+}
+
+/* accept4(2) */
+static inline abi_long do_bsd_accept4(int fd, abi_ulong target_addr,
+        abi_ulong target_addrlen_addr, int flags)
+{
+    socklen_t addrlen;
+    void *addr;
+    abi_long ret;
+
+    if (target_addr == 0) {
+        return get_errno(accept(fd, NULL, NULL));
+    }
+    /* return EINVAL if addrlen pointer is invalid */
+    if (get_user_u32(addrlen, target_addrlen_addr)) {
+        return -TARGET_EINVAL;
+    }
+    if ((int)addrlen < 0) {
+        return -TARGET_EINVAL;
+    }
+    if (!access_ok(VERIFY_WRITE, target_addr, addrlen)) {
+        return -TARGET_EINVAL;
+    }
+    addr = alloca(addrlen);
+
+    ret = get_errno(accept4(fd, addr, &addrlen, flags));
+    if (!is_error(ret)) {
+        host_to_target_sockaddr(target_addr, addr, addrlen);
+        if (put_user_u32(addrlen, target_addrlen_addr)) {
+            ret = -TARGET_EFAULT;
+        }
+    }
+    return ret;
+}
+
+#else /* ! __FreeBSD_version > 1100000 */
+
+/* bindat(2) */
+static inline abi_long do_bsd_bindat(__unused int sockfd,
+	__unused abi_ulong target_addr, __unused socklen_t addrlen)
+{
+
+    qemu_log("qemu: Unsupported syscall bindat()\n");
+    return -TARGET_ENOSYS;
+}
+
+/* connectat(2) */
+static inline abi_long do_bsd_connectat(__unused int sockfd,
+	__unused abi_ulong target_addr, __unused socklen_t addrlen)
+{
+
+    qemu_log("qemu: Unsupported syscall connectat()\n");
+    return -TARGET_ENOSYS;
+}
+
+static inline abi_long do_bsd_accept4(__unused int fd,
+	__unused abi_ulong target_addr, __unused abi_ulong target_addrlen_addr,
+	__unused int flags)
+{
+
+    qemu_log("qemu: Unsupported syscall accept4()\n");
+    return -TARGET_ENOSYS;
+}
+#endif /* ! __FreeBSD_version > 1100000 */
 #endif /* !__FREEBSD_SOCKET_H_ */

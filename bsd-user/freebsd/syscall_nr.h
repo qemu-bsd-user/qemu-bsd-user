@@ -453,4 +453,8 @@
 #define TARGET_FREEBSD_NR_cap_ioctls_get    535
 #define TARGET_FREEBSD_NR_cap_fcntls_limit  536
 #define TARGET_FREEBSD_NR_cap_fcntls_get    537
-#define TARGET_FREEBSD_NR_MAXSYSCALL    538
+#define TARGET_FREEBSD_NR_bindat	538
+#define TARGET_FREEBSD_NR_connectat	539
+#define TARGET_FREEBSD_NR_chflagsat	540
+#define TARGET_FREEBSD_NR_accept4	541
+#define TARGET_FREEBSD_NR_MAXSYSCALL	542
