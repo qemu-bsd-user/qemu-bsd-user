@@ -557,7 +557,7 @@ static inline abi_long do_freebsd_sendfile(abi_long fd, abi_long s,
     return -TARGET_ENOSYS;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 /* bindat(2) */
 static inline abi_long do_bsd_bindat(int fd, int sockfd, abi_ulong target_addr,
         socklen_t addrlen)
@@ -632,7 +632,7 @@ static inline abi_long do_bsd_accept4(int fd, abi_ulong target_addr,
     return ret;
 }
 
-#else /* ! __FreeBSD_version > 1100000 */
+#else /* ! __FreeBSD_version >= 1000000 */
 
 /* bindat(2) */
 static inline abi_long do_bsd_bindat(__unused int sockfd,
@@ -660,5 +660,5 @@ static inline abi_long do_bsd_accept4(__unused int fd,
     qemu_log("qemu: Unsupported syscall accept4()\n");
     return -TARGET_ENOSYS;
 }
-#endif /* ! __FreeBSD_version > 1100000 */
+#endif /* ! __FreeBSD_version >= 1000000 */
 #endif /* !__FREEBSD_SOCKET_H_ */

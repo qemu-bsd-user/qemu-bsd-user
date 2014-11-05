@@ -20,7 +20,7 @@
 #ifndef __FREEBSD_PROC_H_
 #define __FREEBSD_PROC_H_
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 #include <sys/signal.h>
 #endif
 #include <sys/types.h>
@@ -75,7 +75,7 @@ static inline abi_long do_freebsd_wait4(abi_long arg1, abi_ulong target_status,
     return ret;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 /* wait6(2) */
 static inline abi_long do_freebsd_wait6(abi_long idtype, abi_long id,
 	abi_ulong target_status, abi_long options, abi_ulong target_wrusage,
@@ -112,7 +112,7 @@ static inline abi_long do_freebsd_wait6(abi_long idtype, abi_long id,
     return ret;
 }
 
-#else /* !  __FreeBSD_version > 1100000 */
+#else /* !  __FreeBSD_version >= 1000000 */
 
 static inline abi_long do_freebsd_wait6( __unused abi_long idtype,
 	__unused abi_long id,  __unused abi_ulong target_status,
@@ -123,7 +123,7 @@ static inline abi_long do_freebsd_wait6( __unused abi_long idtype,
     qemu_log("qemu: Unsupported syscall wait6()\n");
     return -TARGET_ENOSYS;
 }
-#endif /* __FreeBSD_version > 1100000 */
+#endif /* __FreeBSD_version >= 1000000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 /* setloginclass(2) */
