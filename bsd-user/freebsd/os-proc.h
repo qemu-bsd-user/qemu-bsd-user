@@ -21,6 +21,7 @@
 #define __FREEBSD_PROC_H_
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
+#include <sys/procctl.h>
 #include <sys/signal.h>
 #endif
 #include <sys/types.h>
@@ -517,6 +518,15 @@ static inline abi_long do_freebsd_auditctl(abi_ulong arg1)
 {
 
     qemu_log("qemu: Unsupported syscall auditctl()\n");
+    return -TARGET_ENOSYS;
+}
+
+/* procctl(2) */
+static inline abi_long do_freebsd_procctl(__unused int idtype, __unused int id,
+	__unused int cmd, __unused abi_ulong arg)
+{
+
+    qemu_log("qemu: Unsupported syscall procctl()\n");
     return -TARGET_ENOSYS;
 }
 
