@@ -44,6 +44,7 @@
 
 /* *BSD dependent syscall shims */
 #include "os-extattr.h"
+#include "os-file.h"
 #include "os-time.h"
 #include "os-misc.h"
 #include "os-proc.h"
@@ -646,6 +647,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_chflags(arg1, arg2);
         break;
 
+    case TARGET_FREEBSD_NR_chflagsat: /* chflagsat(2) */
+        ret = do_bsd_chflagsat(arg1, arg2, arg3, arg4);
+        break;
+
     case TARGET_FREEBSD_NR_lchflags: /* lchflags(2) */
         ret = do_bsd_lchflags(arg1, arg2);
         break;
@@ -700,6 +705,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     case TARGET_FREEBSD_NR_pipe: /* pipe(2) */
         ret = do_bsd_pipe(cpu_env, arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_pipe2: /* pipe2(2) */
+        ret = do_bsd_pipe2(cpu_env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_swapon: /* swapon(2) */

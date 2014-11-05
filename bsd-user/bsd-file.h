@@ -1013,7 +1013,7 @@ static abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
 }
 
 /* pipe(2) */
-static abi_long do_bsd_pipe(void *cpu_env, abi_long arg1)
+static abi_long do_bsd_pipe(void *cpu_env, abi_ulong pipedes)
 {
     abi_long ret;
     int host_pipe[2];
@@ -1022,8 +1022,12 @@ static abi_long do_bsd_pipe(void *cpu_env, abi_long arg1)
     if (host_ret != -1) {
         set_second_rval(cpu_env, host_pipe[1]);
         ret = host_pipe[0];
+	if (put_user_s32(host_pipe[0], pipedes) ||
+	    put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
+		return -TARGET_EFAULT;
+	}
     } else {
-        ret = get_errno(host_ret);
+	ret = get_errno(host_ret);
     }
     return ret;
 }
