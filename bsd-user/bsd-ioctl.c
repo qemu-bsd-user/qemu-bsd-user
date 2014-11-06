@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/param.h>
+#include <sys/ioccom.h>
 #include <sys/ioctl.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/_termios.h>
@@ -307,6 +308,29 @@ static IOCTLEntry ioctl_entries[] = {
     { 0, 0 },
 };
 
+static void log_unsupported_ioctl(unsigned long cmd)
+{
+	gemu_log("cmd=0x%08lx dir=", cmd);
+	switch (cmd & IOC_DIRMASK) {
+	case IOC_VOID:
+		gemu_log("VOID ");
+		break;
+	case IOC_OUT:
+		gemu_log("OUT ");
+		break;
+	case IOC_IN:
+		gemu_log("IN  ");
+		break;
+	case IOC_INOUT:
+		gemu_log("INOUT");
+		break;
+	default:
+		gemu_log("%01lx ???", (cmd & IOC_DIRMASK) >> 29);
+		break;
+	}
+	gemu_log(" '%c' %3d %lu\n", (char)IOCGROUP(cmd), (int)(cmd & 0xff), IOCPARM_LEN(cmd));
+}
+
 abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg)
 {
     const IOCTLEntry *ie;
@@ -319,7 +343,8 @@ abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg)
     ie = ioctl_entries;
     for (;;) {
         if (ie->target_cmd == 0) {
-            gemu_log("Unsupported ioctl: cmd=0x%04lx\n", (long)cmd);
+	    gemu_log("Qemu unsupported ioctl: ");
+	    log_unsupported_ioctl(cmd);
             return -TARGET_ENOSYS;
         }
         if (ie->target_cmd == cmd) {
@@ -398,8 +423,8 @@ abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg)
         break;
 
     default:
-        gemu_log("Unsupported ioctl type: cmd=0x%04lx type=%d\n",
-            (long)cmd, arg_type[0]);
+	gemu_log("Qemu unknown ioctl: type=%d ", arg_type[0]);
+	log_unsupported_ioctl(cmd);
         ret = -TARGET_ENOSYS;
         break;
     }
