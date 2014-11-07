@@ -82,6 +82,7 @@ out:
     return ret;
 }
 
+#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
 static int
 is_target_shell_script(int fd, char *interp, size_t size, char **interp_args)
 {
@@ -143,6 +144,7 @@ is_target_shell_script(int fd, char *interp, size_t size, char **interp_args)
 
     return 0;
 }
+#endif
 
 /*
  * execve/fexecve
@@ -257,6 +259,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
                 ret = -TARGET_EBADF;
                 goto execve_end;
             }
+#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
         } else if (is_target_shell_script((int)path_or_fd, execpath,
                     sizeof(execpath), &scriptargs) != 0) {
             char scriptpath[PATH_MAX];
@@ -282,6 +285,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
                 ret = -TARGET_EBADF;
                 goto execve_end;
             }
+#endif
         } else {
             ret = get_errno(fexecve((int)path_or_fd, argp, envp));
         }
@@ -310,6 +314,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
             *qarg1++ = (char *)interp_prefix;
 #endif
             ret = get_errno(execve(qemu_proc_pathname, qargp, envp));
+#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
         } else if (is_target_shell_script(fd, execpath,
                     sizeof(execpath), &scriptargs) != 0) {
             close(fd);
@@ -328,6 +333,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
                 *qarg1 = scriptargs;
             }
             ret = get_errno(execve(qemu_proc_pathname, qarg0, envp));
+#endif
         } else {
             close(fd);
             /* Execve() as a host native binary. */
