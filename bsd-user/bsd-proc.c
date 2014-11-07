@@ -17,6 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
@@ -147,7 +148,7 @@ abi_long host_to_target_rusage(abi_ulong target_addr,
     return 0;
 }
 
-:#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 abi_long host_to_target_wrusage(abi_ulong target_addr,
 	const struct __wrusage *wrusage)
 {
@@ -162,7 +163,7 @@ abi_long host_to_target_wrusage(abi_ulong target_addr,
 
     return 0;
 }
-#endif /* ! __FreeBSD_version >= 1000000 */
+#endif /* __FreeBSD_version >= 1000000 */
 
 /*
  * wait status conversion.

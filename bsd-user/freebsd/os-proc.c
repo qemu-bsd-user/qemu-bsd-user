@@ -234,7 +234,9 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
     }
 
     if (do_fexec) {
+#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
         char execpath[PATH_MAX], *scriptargs;
+#endif /* __FreeBSD_version < 1100000 */
 
         if (((int)path_or_fd > 0 &&
             is_target_elf_binary((int)path_or_fd)) == 1) {
@@ -291,7 +293,9 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         }
     } else {
         int fd;
+#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
         char execpath[PATH_MAX], *scriptargs;
+#endif
 
         p = lock_user_string(path_or_fd);
         if (p == NULL) {

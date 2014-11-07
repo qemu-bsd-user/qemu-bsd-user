@@ -20,6 +20,7 @@
 #ifndef __FREEBSD_PROC_H_
 #define __FREEBSD_PROC_H_
 
+#include <sys/param.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 #include <sys/procctl.h>
 #include <sys/signal.h>
