@@ -48,8 +48,10 @@ rlim_t target_to_host_rlim(abi_ulong target_rlim);
 abi_ulong host_to_target_rlim(rlim_t rlim);
 abi_long host_to_target_rusage(abi_ulong target_addr,
         const struct rusage *rusage);
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 abi_long host_to_target_wrusage(abi_ulong target_addr,
         const struct __wrusage *wrusage);
+#endif /*  __FreeBSD_version >= 1000000 */
 int host_to_target_waitstatus(int status);
 
 /* bsd-socket.c */
