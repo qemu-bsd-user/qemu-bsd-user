@@ -467,3 +467,19 @@
 #define	TARGET_FREEBSD_NR_aio_mlock	543
 #define	TARGET_FREEBSD_NR_procctl	544
 #define	TARGET_FREEBSD_NR_MAXSYSCALL	545
+/* Legacy system calls. */
+#ifndef	TARGET_FREEBSD_NR_killpg
+#define	TARGET_FREEBSD_NR_killpg	146
+#endif
+#ifndef	TARGET_FREEBSD_NR__umtx_lock
+#define	TARGET_FREEBSD_NR__umtx_lock	434
+#endif
+#ifndef	TARGET_FREEBSD_NR__umtx_unlock
+#define	TARGET_FREEBSD_NR__umtx_unlock	435
+#endif
+#ifndef	TARGET_FREEBSD_NR_cap_new
+#define	TARGET_FREEBSD_NR_cap_new	514
+#endif
+#ifndef	TARGET_FREEBSD_NR_cap_getrights
+#define	TARGET_FREEBSD_NR_cap_getrights	515
+#endif

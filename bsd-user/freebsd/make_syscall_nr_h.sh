@@ -24,3 +24,22 @@ echo " */" >> $sysnr
 echo "" >> $sysnr
 
 /usr/bin/sed -e 's:SYS_:TARGET_FREEBSD_NR_:' < $syshdr >> $sysnr 
+
+cat << _EOF >> $sysnr
+/* Legacy system calls. */
+#ifndef	TARGET_FREEBSD_NR_killpg
+#define	TARGET_FREEBSD_NR_killpg	146
+#endif
+#ifndef	TARGET_FREEBSD_NR__umtx_lock
+#define	TARGET_FREEBSD_NR__umtx_lock	434
+#endif
+#ifndef	TARGET_FREEBSD_NR__umtx_unlock
+#define	TARGET_FREEBSD_NR__umtx_unlock	435
+#endif
+#ifndef	TARGET_FREEBSD_NR_cap_new
+#define	TARGET_FREEBSD_NR_cap_new	514
+#endif
+#ifndef	TARGET_FREEBSD_NR_cap_getrights
+#define	TARGET_FREEBSD_NR_cap_getrights	515
+#endif
+_EOF
