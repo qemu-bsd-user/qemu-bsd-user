@@ -559,8 +559,8 @@ static inline abi_long do_freebsd_sendfile(abi_long fd, abi_long s,
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 /* bindat(2) */
-static inline abi_long do_bsd_bindat(int fd, int sockfd, abi_ulong target_addr,
-        socklen_t addrlen)
+static inline abi_long do_freebsd_bindat(int fd, int sockfd,
+	abi_ulong target_addr, socklen_t addrlen)
 {
     abi_long ret;
     void *addr;
@@ -579,7 +579,7 @@ static inline abi_long do_bsd_bindat(int fd, int sockfd, abi_ulong target_addr,
 }
 
 /* connectat(2) */
-static inline abi_long do_bsd_connectat(int fd, int sockfd,
+static inline abi_long do_freebsd_connectat(int fd, int sockfd,
 	abi_ulong target_addr, socklen_t addrlen)
 {
     abi_long ret;
@@ -600,7 +600,7 @@ static inline abi_long do_bsd_connectat(int fd, int sockfd,
 }
 
 /* accept4(2) */
-static inline abi_long do_bsd_accept4(int fd, abi_ulong target_addr,
+static inline abi_long do_freebsd_accept4(int fd, abi_ulong target_addr,
         abi_ulong target_addrlen_addr, int flags)
 {
     socklen_t addrlen;
@@ -635,7 +635,7 @@ static inline abi_long do_bsd_accept4(int fd, abi_ulong target_addr,
 #else /* ! __FreeBSD_version >= 1000000 */
 
 /* bindat(2) */
-static inline abi_long do_bsd_bindat(__unused int sockfd,
+static inline abi_long do_freebsd_bindat(__unused int fd, __unused int sockfd,
 	__unused abi_ulong target_addr, __unused socklen_t addrlen)
 {
 
@@ -644,15 +644,17 @@ static inline abi_long do_bsd_bindat(__unused int sockfd,
 }
 
 /* connectat(2) */
-static inline abi_long do_bsd_connectat(__unused int sockfd,
-	__unused abi_ulong target_addr, __unused socklen_t addrlen)
+static inline abi_long do_freebsd_connectat(__unused int fd,
+	__unused int sockfd, __unused abi_ulong target_addr,
+	__unused socklen_t addrlen)
 {
 
     qemu_log("qemu: Unsupported syscall connectat()\n");
     return -TARGET_ENOSYS;
 }
 
-static inline abi_long do_bsd_accept4(__unused int fd,
+/* accept4(2) */
+static inline abi_long do_freebsd_accept4(__unused int fd,
 	__unused abi_ulong target_addr, __unused abi_ulong target_addrlen_addr,
 	__unused int flags)
 {

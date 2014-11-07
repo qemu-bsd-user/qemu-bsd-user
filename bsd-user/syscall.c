@@ -1072,7 +1072,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_accept4: /* accept4(2) */
-        ret = do_bsd_accept4(arg1, arg2, arg3, arg4);
+        ret = do_freebsd_accept4(arg1, arg2, arg3, arg4);
         break;
 
     case TARGET_FREEBSD_NR_bind: /* bind(2) */
@@ -1080,7 +1080,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_bindat: /* bindat(2) */
-        ret = do_bsd_bindat(arg1, arg2, arg3, arg4);
+        ret = do_freebsd_bindat(arg1, arg2, arg3, arg4);
         break;
 
     case TARGET_FREEBSD_NR_connect: /* connect(2) */
@@ -1088,7 +1088,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_connectat: /* connectat(2) */
-        ret = do_bsd_connectat(arg1, arg2, arg3, arg4);
+        ret = do_freebsd_connectat(arg1, arg2, arg3, arg4);
         break;
 
     case TARGET_FREEBSD_NR_getpeername: /* getpeername(2) */
