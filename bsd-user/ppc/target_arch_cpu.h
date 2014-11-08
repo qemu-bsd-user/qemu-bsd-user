@@ -154,30 +154,25 @@ static inline void target_cpu_loop(CPUPPCState *env)
             fprintf(stderr, "Invalid data memory access: 0x" TARGET_FMT_lx "\n",
                       env->spr[SPR_DAR]);
             /* XXX: check this. Seems bugged */
-            switch (env->error_code & 0xFF000000) {
-            case 0x40000000:
+            if (env->error_code & 0x40000000) {
                 info.si_signo = TARGET_SIGSEGV;
                 info.si_errno = 0;
                 info.si_code = TARGET_SEGV_MAPERR;
-                break;
-            case 0x04000000:
+            } else if (env->error_code & 0x04000000) {
                 info.si_signo = TARGET_SIGILL;
                 info.si_errno = 0;
                 info.si_code = TARGET_ILL_ILLADR;
-                break;
-            case 0x08000000:
+            } else if (env->error_code & 0x08000000) {
                 info.si_signo = TARGET_SIGSEGV;
                 info.si_errno = 0;
                 info.si_code = TARGET_SEGV_ACCERR;
-                break;
-            default:
+            } else {
                 /* Let's send a regular segfault... */
                 fprintf(stderr, "Invalid segfault errno (%02x)\n",
                           env->error_code);
                 info.si_signo = TARGET_SIGSEGV;
                 info.si_errno = 0;
                 info.si_code = TARGET_SEGV_MAPERR;
-                break;
             }
             info.si_addr = env->nip;
             queue_signal(env, info.si_signo, &info);
@@ -189,7 +184,7 @@ static inline void target_cpu_loop(CPUPPCState *env)
             switch (env->error_code & 0xFF000000) {
             case 0x40000000:
                 info.si_signo = TARGET_SIGSEGV;
-            info.si_errno = 0;
+                info.si_errno = 0;
                 info.si_code = TARGET_SEGV_MAPERR;
                 break;
             case 0x10000000:
