@@ -291,6 +291,10 @@ abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val);
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 abi_long freebsd_umtx_nwake_private(abi_ulong obj, uint32_t val);
 abi_long freebsd_umtx_mutex_wake2(abi_ulong obj, uint32_t val);
+#if __FreeBSD_version > 1100000
+abi_long freebsd_umtx_sem2_wait(abi_ulong obj, struct timespec *timeout);
+abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val);
+#endif
 abi_long freebsd_umtx_sem_wait(abi_ulong obj, struct timespec *timeout);
 abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val);
 #endif
