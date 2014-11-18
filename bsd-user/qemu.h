@@ -277,7 +277,7 @@ abi_long do_freebsd_sysarch(void *cpu_env, abi_long arg1, abi_long arg2);
 extern pthread_mutex_t *new_freebsd_thread_lock_ptr;
 void *new_freebsd_thread_start(void *arg);
 abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long tid,
-        struct timespec *timeout);
+        size_t utsz, struct _umtx_time *ut);
 abi_long freebsd_unlock_umtx(abi_ulong target_addr, abi_long id);
 abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong id,
         size_t utsz, struct _umtx_time *ut);
@@ -306,9 +306,9 @@ abi_long freebsd_cv_wait(abi_ulong target_ucond_addr,
 abi_long freebsd_cv_signal(abi_ulong target_ucond_addr);
 abi_long freebsd_cv_broadcast(abi_ulong target_ucond_addr);
 abi_long freebsd_rw_rdlock(abi_ulong target_addr, long fflag,
-        struct timespec *ts);
+        size_t utsz, struct _umtx_time *ut);
 abi_long freebsd_rw_wrlock(abi_ulong target_addr, long fflag,
-        struct timespec *ts);
+        size_t utsz, struct _umtx_time *ut);
 abi_long freebsd_rw_unlock(abi_ulong target_addr);
 
 

@@ -358,7 +358,7 @@ abi_long h2t_freebsd_rtprio(abi_ulong target_addr, struct rtprio *host_rtp)
 }
 
 abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long id,
-        struct timespec *timeout)
+        size_t utsz, struct _umtx_time *ut)
 {
     abi_long ret;
     abi_long owner;
@@ -411,10 +411,10 @@ abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long id,
                 __func__, g2h(target_addr), UMTX_OP_WAIT, (long long)owner);
 #ifdef TARGET_ABI32
         ret = get_errno(_umtx_op(g2h(target_addr), UMTX_OP_WAIT_UINT, owner,
-            NULL, timeout));
+            (void *)utsz, ut));
 #else
         ret = get_errno(_umtx_op(g2h(target_addr), UMTX_OP_WAIT, owner,
-            NULL, timeout));
+            (void *)utsz, ut));
 #endif
         if (is_error(ret)) {
             return ret;
@@ -731,7 +731,7 @@ abi_long freebsd_cv_broadcast(abi_ulong target_ucond_addr)
 }
 
 abi_long freebsd_rw_rdlock(abi_ulong target_addr, long fflag,
-        struct timespec *ts)
+        size_t utsz, struct _umtx_time *ut)
 {
     struct target_urwlock *target_urwlock;
     uint32_t flags, wrflags;
@@ -790,7 +790,7 @@ abi_long freebsd_rw_rdlock(abi_ulong target_addr, long fflag,
                     UMTX_OP_WAIT_UINT, tswap32(state),
                     target_urwlock->rw_state);
             ret = get_errno(_umtx_op(&target_urwlock->rw_state,
-                        UMTX_OP_WAIT_UINT, tswap32(state), NULL, ts));
+                        UMTX_OP_WAIT_UINT, tswap32(state), (void *)utsz, ut));
             if (is_error(ret)) {
                 return ret;
             }
@@ -819,7 +819,7 @@ abi_long freebsd_rw_rdlock(abi_ulong target_addr, long fflag,
 }
 
 abi_long freebsd_rw_wrlock(abi_ulong target_addr, long fflag,
-        struct timespec *ts)
+        size_t utsz, struct _umtx_time *ut)
 {
     struct target_urwlock *target_urwlock;
     uint32_t blocked_readers, blocked_writers;
@@ -882,7 +882,7 @@ abi_long freebsd_rw_wrlock(abi_ulong target_addr, long fflag,
                     UMTX_OP_WAIT_UINT, tswap32(state),
                     target_urwlock->rw_state);
             ret = get_errno(_umtx_op(&target_urwlock->rw_state,
-                        UMTX_OP_WAIT_UINT, tswap32(state), NULL, ts));
+                        UMTX_OP_WAIT_UINT, tswap32(state), (void *)utsz, ut));
             if (is_error(ret)) {
                 return ret;
             }

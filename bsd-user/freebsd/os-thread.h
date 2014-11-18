@@ -243,7 +243,7 @@ static inline abi_long do_freebsd__umtx_lock(abi_ulong target_addr)
     if (is_error(ret)) {
         return ret;
     }
-    return freebsd_lock_umtx(target_addr, tid, NULL);
+    return freebsd_lock_umtx(target_addr, tid, 0, NULL);
 }
 
 /* undocumented _umtx_unlock() */
@@ -276,12 +276,15 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
             return ret;
         }
         if (target_time != 0) {
-            if (t2h_freebsd_timespec(&ts, target_time)) {
+	    ut._clockid = CLOCK_REALTIME;
+	    ut._flags = UMTX_ABSTIME;
+            if (t2h_freebsd_timespec(&ut._timeout, target_time +
+		offsetof(struct target__umtx_time, _timeout))) {
                 return -TARGET_EFAULT;
             }
-            ret = freebsd_lock_umtx(obj, tid, &ts);
+            ret = freebsd_lock_umtx(obj, tid, sizeof(ut), &ut);
         } else {
-            ret = freebsd_lock_umtx(obj, tid, NULL);
+            ret = freebsd_lock_umtx(obj, tid, 0, NULL);
         }
         break;
 
@@ -451,23 +454,29 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
 
     case TARGET_UMTX_OP_RW_RDLOCK:
         if (target_time != 0) {
-            if (t2h_freebsd_timespec(&ts, target_time)) {
+	    ut._clockid = CLOCK_REALTIME;
+	    ut._flags = UMTX_ABSTIME;
+            if (t2h_freebsd_timespec(&ut._timeout, target_time +
+		offsetof(struct target__umtx_time, _timeout))) {
                 return -TARGET_EFAULT;
             }
-            ret = freebsd_rw_rdlock(obj, val, &ts);
+            ret = freebsd_rw_rdlock(obj, val, sizeof(ut), &ut);
         } else {
-            ret = freebsd_rw_rdlock(obj, val, NULL);
+            ret = freebsd_rw_rdlock(obj, val, 0, NULL);
         }
         break;
 
     case TARGET_UMTX_OP_RW_WRLOCK:
         if (target_time != 0) {
-            if (t2h_freebsd_timespec(&ts, target_time)) {
+	    ut._clockid = CLOCK_REALTIME;
+	    ut._flags = UMTX_ABSTIME;
+            if (t2h_freebsd_timespec(&ut._timeout, target_time +
+		offsetof(struct target__umtx_time, _timeout))) {
                 return -TARGET_EFAULT;
             }
-            ret = freebsd_rw_wrlock(obj, val, &ts);
+            ret = freebsd_rw_wrlock(obj, val, sizeof(ut), &ut);
         } else {
-            ret = freebsd_rw_wrlock(obj, val, NULL);
+            ret = freebsd_rw_wrlock(obj, val, 0, NULL);
         }
         break;
 
