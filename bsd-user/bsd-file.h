@@ -228,6 +228,13 @@ static inline abi_long do_bsd_close(abi_long arg1)
     return get_errno(close(arg1));
 }
 
+/* fsync(2) */
+static inline abi_long do_bsd_fsync(abi_long arg1)
+{
+
+    return get_errno(fsync(arg1));
+}
+
 /* closefrom(2) */
 static inline abi_long do_bsd_closefrom(abi_long arg1)
 {

@@ -481,6 +481,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_close(arg1);
         break;
 
+    case TARGET_FREEBSD_NR_fsync: /* fsync(2) */
+        ret = do_bsd_fsync(arg1);
+        break;
+
     case TARGET_FREEBSD_NR_closefrom: /* closefrom(2) */
         ret = do_bsd_closefrom(arg1);
         break;
