@@ -83,6 +83,7 @@ pthread_mutex_t *new_freebsd_thread_lock_ptr = &new_thread_lock;
 static pthread_mutex_t umtx_wait_lck = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t umtx_wait_cv = PTHREAD_COND_INITIALIZER;
 static abi_ulong umtx_wait_addr;
+static pthread_mutex_t umtx_sem_lck = PTHREAD_MUTEX_INITIALIZER;
 
 static void rtp_to_schedparam(const struct rtprio *rtp, int *policy,
         struct sched_param *param)
@@ -235,36 +236,98 @@ abi_long freebsd_umtx_mutex_wake2(abi_ulong target_addr,
 abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	struct _umtx_time *ut)
 {
+    struct target__usem2 *t__usem2;
+    uint32_t count;
 
-    /* XXX Assumes struct _usem is opauque to the user */
-    if (!access_ok(VERIFY_WRITE, obj, sizeof(struct target__usem2))) {
+    pthread_mutex_lock(&umtx_sem_lck);
+    if (!lock_user_struct(VERIFY_WRITE, t__usem2, obj, 0)) {
         return -TARGET_EFAULT;
     }
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAIT, 0, (void *)utsz,
-	ut));
+    do {
+	__get_user(count, &t__usem2->_count);
+    } while (!tcmpset_32(&t__usem2->_count, count, count | USEM_HAS_WAITERS));
+    unlock_user_struct(t__usem2, obj, 1);
+    pthread_mutex_unlock(&umtx_sem_lck);
+
+    if (USEM_COUNT(count) != 0)
+	return (0);
+    return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAIT_UINT,
+	tswap32(count | USEM_HAS_WAITERS), (void *)utsz, ut));
 }
 
 abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val)
 {
+    struct target__usem2 *t__usem2;
+    uint32_t count;
 
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAKE, val, NULL, NULL));
+    pthread_mutex_lock(&umtx_sem_lck);
+    if (!lock_user_struct(VERIFY_WRITE, t__usem2, obj, 0)) {
+        return -TARGET_EFAULT;
+    }
+again:
+    __get_user(count, &t__usem2->_count);
+    if (USEM_COUNT(count) > 0) {
+	if (USEM_COUNT(count) == 1) {
+	    if (!tcmpset_32(&t__usem2->_count, count, 1)) {
+		/* count has changed, try again. */
+		goto again;
+	    }
+	}
+        __get_user(count, &t__usem2->_count);
+	unlock_user_struct(t__usem2, obj, 1);
+	pthread_mutex_unlock(&umtx_sem_lck);
+	return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE, tswap32(count),
+		NULL, NULL));
+    }
+    unlock_user_struct(t__usem2, obj, 1);
+    pthread_mutex_unlock(&umtx_sem_lck);
+    return (0);
 }
 #endif /* ! __FreeBSD_version > 1100000 */
 
 abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t utsz,
 	struct _umtx_time *ut)
 {
-    /* XXX Assumes struct _usem is opauque to the user */
-    if (!access_ok(VERIFY_WRITE, obj, sizeof(struct target__usem))) {
+    struct target__usem *t__usem;
+    uint32_t count;
+
+    pthread_mutex_lock(&umtx_sem_lck);
+    if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
         return -TARGET_EFAULT;
     }
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM_WAIT, 0, (void *)utsz, ut));
+    __put_user(1, &t__usem->_has_waiters);
+    __get_user(count, &t__usem->_count);
+    unlock_user_struct(t__usem, obj, 1);
+    pthread_mutex_unlock(&umtx_sem_lck);
+    if (count != 0) {
+	return (0);
+    }
+
+    return get_errno(_umtx_op(&t__usem->_count, UMTX_OP_WAIT_UINT, tswap32(count),
+		(void *)utsz, ut));
 }
 
 abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val)
 {
+    struct target__usem *t__usem;
+    uint32_t count;
 
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM_WAKE, val, NULL, NULL));
+    pthread_mutex_lock(&umtx_sem_lck);
+    if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
+        return -TARGET_EFAULT;
+    }
+    __get_user(count, &t__usem->_count);
+    if (count > 0) {
+	if (count == 1)
+		__put_user(0, &t__usem->_has_waiters);
+	unlock_user_struct(t__usem, obj, 1);
+	pthread_mutex_unlock(&umtx_sem_lck);
+	return get_errno(_umtx_op(&t__usem->_count, UMTX_OP_WAKE, tswap32(count),
+		NULL, NULL));
+    }
+    unlock_user_struct(t__usem, obj, 1);
+    pthread_mutex_unlock(&umtx_sem_lck);
+    return (0);
 }
 #endif /* ! __FreeBSD_version > 900000 */
 
