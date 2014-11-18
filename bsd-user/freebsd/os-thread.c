@@ -1,7 +1,7 @@
 /*
  *  FreeBSD thr emulation support code
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -70,6 +70,11 @@ struct target__usem {
     uint32_t    _has_waiters;
     uint32_t    _count;
     uint32_t    _flags;
+};
+
+struct target__usem2 {
+    uint32_t	_count;
+    uint32_t	_flags;
 };
 
 static pthread_mutex_t new_thread_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -170,22 +175,23 @@ static int tcmpset_32(uint32_t *addr, uint32_t a, uint32_t b)
 }
 
 abi_long freebsd_umtx_wait_uint(abi_ulong obj, uint32_t val,
-        struct timespec *timeout)
+        size_t utsz, struct _umtx_time *ut)
 {
 
-    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%x, NULL, %p)\n",
-            __func__, g2h(obj), UMTX_OP_WAIT_UINT, val, timeout);
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_WAIT_UINT, val, NULL, timeout));
+    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%x, %d, %p)\n",
+            __func__, g2h(obj), UMTX_OP_WAIT_UINT, val, (int)utsz, ut);
+    return get_errno(_umtx_op(g2h(obj), UMTX_OP_WAIT_UINT, val,
+		(void *)utsz, ut));
 }
 
 abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t val,
-        struct timespec *timeout)
+        size_t utsz, struct _umtx_time *ut)
 {
 
-    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%x, NULL, %p)\n",
-            __func__, g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE, val, timeout);
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE, val, NULL,
-                timeout));
+    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%x, %d, %p)\n",
+            __func__, g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE, val, (int)utsz, ut);
+    return get_errno(_umtx_op(g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE, val,
+		(void *)utsz, ut));
 }
 
 abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val)
@@ -226,14 +232,16 @@ abi_long freebsd_umtx_mutex_wake2(abi_ulong target_addr,
 #endif /* UMTX_OP_MUTEX_WAKE2 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
-abi_long freebsd_umtx_sem2_wait(abi_ulong obj, struct timespec *timeout)
+abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
+	struct _umtx_time *ut)
 {
 
     /* XXX Assumes struct _usem is opauque to the user */
-    if (!access_ok(VERIFY_WRITE, obj, sizeof(struct target__usem))) {
+    if (!access_ok(VERIFY_WRITE, obj, sizeof(struct target__usem2))) {
         return -TARGET_EFAULT;
     }
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAIT, 0, NULL, timeout));
+    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAIT, 0, (void *)utsz,
+	ut));
 }
 
 abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val)
@@ -243,14 +251,14 @@ abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val)
 }
 #endif /* ! __FreeBSD_version > 1100000 */
 
-abi_long freebsd_umtx_sem_wait(abi_ulong obj, struct timespec *timeout)
+abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t utsz,
+	struct _umtx_time *ut)
 {
-
     /* XXX Assumes struct _usem is opauque to the user */
     if (!access_ok(VERIFY_WRITE, obj, sizeof(struct target__usem))) {
         return -TARGET_EFAULT;
     }
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM_WAIT, 0, NULL, timeout));
+    return get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM_WAIT, 0, (void *)utsz, ut));
 }
 
 abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val)
@@ -385,7 +393,7 @@ abi_long freebsd_unlock_umtx(abi_ulong target_addr, abi_long id)
 }
 
 abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong id,
-        struct timespec *ts)
+        size_t utsz, struct _umtx_time *ut)
 {
 
     /* We want to check the user memory but not lock it.  We might sleep. */
@@ -393,12 +401,13 @@ abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong id,
         return -TARGET_EFAULT;
     }
 
-    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%llx, NULL, NULL)\n",
-            __func__, g2h(targ_addr), UMTX_OP_WAIT, (long long)id);
+    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%llx, %d, %p)\n",
+            __func__, g2h(targ_addr), UMTX_OP_WAIT, (long long)id, (int)utsz, ut);
 #ifdef TARGET_ABI32
-    return get_errno(_umtx_op(g2h(targ_addr), UMTX_OP_WAIT_UINT, id, NULL, ts));
+    return get_errno(_umtx_op(g2h(targ_addr), UMTX_OP_WAIT_UINT, id,
+		(void *)utsz, ut));
 #else
-    return get_errno(_umtx_op(g2h(targ_addr), UMTX_OP_WAIT, id, NULL, ts));
+    return get_errno(_umtx_op(g2h(targ_addr), UMTX_OP_WAIT, id, (void *)utsz, ut));
 #endif
 }
 

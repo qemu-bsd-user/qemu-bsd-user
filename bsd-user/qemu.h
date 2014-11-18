@@ -280,22 +280,22 @@ abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long tid,
         struct timespec *timeout);
 abi_long freebsd_unlock_umtx(abi_ulong target_addr, abi_long id);
 abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong id,
-        struct timespec *ts);
+        size_t utsz, struct _umtx_time *ut);
 abi_long freebsd_umtx_wake(abi_ulong target_addr, uint32_t n_wake);
 abi_long freebsd_umtx_mutex_wake(abi_ulong target_addr, abi_long val);
-abi_long freebsd_umtx_wait_uint(abi_ulong obj, uint32_t val,
-                struct timespec *timeout);
-abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t val,
-                struct timespec *timeout);
+abi_long freebsd_umtx_wait_uint(abi_ulong obj, uint32_t val, size_t utsz,
+                struct _umtx_time *ut);
+abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t val, size_t utsz,
+                struct _umtx_time *ut);
 abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val);
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 abi_long freebsd_umtx_nwake_private(abi_ulong obj, uint32_t val);
 abi_long freebsd_umtx_mutex_wake2(abi_ulong obj, uint32_t val);
 #if __FreeBSD_version > 1100000
-abi_long freebsd_umtx_sem2_wait(abi_ulong obj, struct timespec *timeout);
+abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz, struct _umtx_time *ut);
 abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val);
 #endif
-abi_long freebsd_umtx_sem_wait(abi_ulong obj, struct timespec *timeout);
+abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t utsz, struct _umtx_time *ut);
 abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val);
 #endif
 abi_long freebsd_lock_umutex(abi_ulong target_addr, uint32_t id,
