@@ -276,8 +276,8 @@ again:
         __get_user(count, &t__usem2->_count);
 	unlock_user_struct(t__usem2, obj, 1);
 	pthread_mutex_unlock(&umtx_sem_lck);
-	return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE, tswap32(count),
-		NULL, NULL));
+	return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE,
+		INT_MAX /* USEM_COUNT(count) */, NULL, NULL));
     }
     unlock_user_struct(t__usem2, obj, 1);
     pthread_mutex_unlock(&umtx_sem_lck);
@@ -322,8 +322,8 @@ abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val)
 		__put_user(0, &t__usem->_has_waiters);
 	unlock_user_struct(t__usem, obj, 1);
 	pthread_mutex_unlock(&umtx_sem_lck);
-	return get_errno(_umtx_op(&t__usem->_count, UMTX_OP_WAKE, tswap32(count),
-		NULL, NULL));
+	return get_errno(_umtx_op(&t__usem->_count, UMTX_OP_WAKE,
+		INT_MAX /* count */, NULL, NULL));
     }
     unlock_user_struct(t__usem, obj, 1);
     pthread_mutex_unlock(&umtx_sem_lck);
