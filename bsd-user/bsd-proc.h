@@ -1,7 +1,7 @@
 /*
  *  process related system call shims and definitions
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -266,6 +266,20 @@ static inline abi_long do_bsd_setegid(abi_long arg1)
 {
 
     return get_errno(setegid(arg1));
+}
+
+/* getpgid(2) */
+static inline abi_long do_bsd_getpgid(pid_t pid)
+{
+
+    return get_errno(getpgid(pid));
+}
+
+/* setpgid(2) */
+static inline abi_long do_bsd_setpgid(int pid, int pgrp)
+{
+
+    return get_errno(setpgid(pid, pgrp));
 }
 
 /* getpgrp(2) */

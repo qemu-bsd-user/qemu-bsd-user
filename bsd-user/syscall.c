@@ -274,6 +274,14 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_getpgrp();
         break;
 
+    case TARGET_FREEBSD_NR_getpgid: /* getpgid(2) */
+	ret = do_bsd_getpgid(arg1);
+	break;
+
+    case TARGET_FREEBSD_NR_setpgid: /* setpgid(2) */
+	ret = do_bsd_setpgid(arg1, arg2);
+	break;
+
     case TARGET_FREEBSD_NR_setreuid: /* setreuid(2) */
         ret = do_bsd_setreuid(arg1, arg2);
         break;
