@@ -85,13 +85,13 @@ static abi_long do_freebsd_thr_exit(CPUArchState *cpu_env, abi_ulong tid_addr)
 static abi_long do_freebsd_thr_kill(long id, int sig)
 {
 
-    return get_errno(thr_kill(id, sig));
+    return get_errno(thr_kill(id, target_to_host_signal(sig)));
 }
 
 static abi_long do_freebsd_thr_kill2(pid_t pid, long id, int sig)
 {
 
-    return get_errno(thr_kill2(pid, id, sig));
+    return get_errno(thr_kill2(pid, id, target_to_host_signal(sig)));
 }
 
 static abi_long do_freebsd_thr_suspend(abi_ulong target_ts)
