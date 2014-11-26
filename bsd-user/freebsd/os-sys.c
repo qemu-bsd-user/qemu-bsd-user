@@ -336,12 +336,16 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
     case CTL_HW:
         switch (snamep[1]) {
         case HW_MACHINE:
-            strlcpy(holdp, TARGET_HW_MACHINE, oldlen);
+	    holdlen = sizeof(TARGET_HW_MACHINE);
+	    if (holdp)
+		strlcpy(holdp, TARGET_HW_MACHINE, oldlen);
             ret = 0;
             goto out;
 
         case HW_MACHINE_ARCH:
-            strlcpy(holdp, TARGET_HW_MACHINE_ARCH, oldlen);
+	    holdlen = sizeof(TARGET_HW_MACHINE_ARCH);
+	    if (holdp)
+		strlcpy(holdp, TARGET_HW_MACHINE_ARCH, oldlen);
             ret = 0;
             goto out;
 
