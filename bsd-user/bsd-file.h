@@ -1009,7 +1009,7 @@ static abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
         ret = ((res >> 32) & 0xFFFFFFFF);
         set_second_rval(cpu_env, res & 0xFFFFFFFF);
 #else
-        ret = res & 0xFFFFFFFF;                                                
+        ret = res & 0xFFFFFFFF;
         set_second_rval(cpu_env, (res >> 32) & 0xFFFFFFFF);
 #endif
     }
@@ -1027,12 +1027,15 @@ static abi_long do_bsd_pipe(void *cpu_env, abi_ulong pipedes)
     int host_ret = pipe(host_pipe);
 
     if (host_ret != -1) {
+		/* XXX pipe(2), unlike pipe2(), returns the second FD in a register. */
         set_second_rval(cpu_env, host_pipe[1]);
         ret = host_pipe[0];
-	if (put_user_s32(host_pipe[0], pipedes) ||
-	    put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
-		return -TARGET_EFAULT;
-	}
+		/* XXX Not needed for pipe():
+		if (put_user_s32(host_pipe[0], pipedes) ||
+			put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
+			return -TARGET_EFAULT;
+		}
+		*/
     } else {
 	ret = get_errno(host_ret);
     }

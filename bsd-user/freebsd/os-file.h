@@ -108,25 +108,26 @@ static abi_long do_freebsd_aio_mlock(__unused abi_ulong iocb)
 /* pipe2(2) */
 static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
 {
-    abi_long ret;
     int host_pipe[2];
-    int host_ret = pipe2(host_pipe, flags);
+    int host_ret = pipe2(host_pipe, flags); /* XXXss - flags should be
+											   translated from target to host. */
 
     if (is_error(host_ret)) {
-	return get_errno(host_ret);
+		return get_errno(host_ret);
     }
-    if (host_ret != -1) {
-        set_second_rval(cpu_env, host_pipe[1]);
-        ret = host_pipe[0];
+	/*
+	 * XXX pipe2() returns it's second FD by copying it back to
+	 * userspace and not in a second register like pipe(2):
+	 * set_second_rval(cpu_env, host_pipe[1]);
+	 *
+	 * Copy the FD's back to userspace:
+	 */
 	if (put_user_s32(host_pipe[0], pipedes) ||
-	    put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
-	    	return -TARGET_EFAULT;
+		put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
+		return -TARGET_EFAULT;
 	}
-    } else {
-	ret = get_errno(host_ret);
-    }
-    return ret;
-} 
+    return 0;
+}
 
 /* chflagsat(2) */
 static inline abi_long do_bsd_chflagsat(int fd, abi_ulong path,
