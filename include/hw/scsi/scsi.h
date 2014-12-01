@@ -2,7 +2,7 @@
 #define QEMU_HW_SCSI_H
 
 #include "hw/qdev.h"
-#include "block/block.h"
+#include "qemu/typedefs.h"
 #include "hw/block/block.h"
 #include "sysemu/sysemu.h"
 #include "qemu/notify.h"
@@ -68,7 +68,7 @@ struct SCSIRequest {
     bool              io_canceled;
     bool              retry;
     bool              dma_started;
-    BlockDriverAIOCB  *aiocb;
+    BlockAIOCB        *aiocb;
     QEMUSGList        *sg;
     QTAILQ_ENTRY(SCSIRequest) next;
 };
@@ -84,7 +84,6 @@ struct SCSIRequest {
 typedef struct SCSIDeviceClass {
     DeviceClass parent_class;
     void (*realize)(SCSIDevice *dev, Error **errp);
-    void (*unrealize)(SCSIDevice *dev, Error **errp);
     int (*parse_cdb)(SCSIDevice *dev, SCSICommand *cmd, uint8_t *buf,
                      void *hba_private);
     SCSIRequest *(*alloc_req)(SCSIDevice *s, uint32_t tag, uint32_t lun,
@@ -146,8 +145,6 @@ struct SCSIBusInfo {
     void (*transfer_data)(SCSIRequest *req, uint32_t arg);
     void (*complete)(SCSIRequest *req, uint32_t arg, size_t resid);
     void (*cancel)(SCSIRequest *req);
-    void (*hotplug)(SCSIBus *bus, SCSIDevice *dev);
-    void (*hot_unplug)(SCSIBus *bus, SCSIDevice *dev);
     void (*change)(SCSIBus *bus, SCSIDevice *dev, SCSISense sense);
     QEMUSGList *(*get_sg_list)(SCSIRequest *req);
 
@@ -175,7 +172,7 @@ static inline SCSIBus *scsi_bus_from_device(SCSIDevice *d)
     return DO_UPCAST(SCSIBus, qbus, d->qdev.parent_bus);
 }
 
-SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockDriverState *bdrv,
+SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockBackend *blk,
                                       int unit, bool removable, int bootindex,
                                       const char *serial, Error **errp);
 void scsi_bus_legacy_handle_cmdline(SCSIBus *bus, Error **errp);
@@ -241,8 +238,9 @@ extern const struct SCSISense sense_code_SPACE_ALLOC_FAILED;
 
 #define SENSE_CODE(x) sense_code_ ## x
 
-uint32_t scsi_data_cdb_length(uint8_t *buf);
-uint32_t scsi_cdb_length(uint8_t *buf);
+uint32_t scsi_data_cdb_xfer(uint8_t *buf);
+uint32_t scsi_cdb_xfer(uint8_t *buf);
+int scsi_cdb_length(uint8_t *buf);
 int scsi_sense_valid(SCSISense sense);
 int scsi_build_sense(uint8_t *in_buf, int in_len,
                      uint8_t *buf, int len, bool fixed);
@@ -273,6 +271,7 @@ void scsi_req_retry(SCSIRequest *req);
 void scsi_device_purge_requests(SCSIDevice *sdev, SCSISense sense);
 void scsi_device_set_ua(SCSIDevice *sdev, SCSISense sense);
 void scsi_device_report_change(SCSIDevice *dev, SCSISense sense);
+void scsi_device_unit_attention_reported(SCSIDevice *dev);
 int scsi_device_get_sense(SCSIDevice *dev, uint8_t *buf, int len, bool fixed);
 SCSIDevice *scsi_device_find(SCSIBus *bus, int channel, int target, int lun);
 

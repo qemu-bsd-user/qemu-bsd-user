@@ -798,7 +798,7 @@ static void virtio_net_handle_ctrl(VirtIODevice *vdev, VirtQueue *vq)
     virtio_net_ctrl_ack status = VIRTIO_NET_ERR;
     VirtQueueElement elem;
     size_t s;
-    struct iovec *iov;
+    struct iovec *iov, *iov2;
     unsigned int iov_cnt;
 
     while (virtqueue_pop(vq, &elem)) {
@@ -808,8 +808,8 @@ static void virtio_net_handle_ctrl(VirtIODevice *vdev, VirtQueue *vq)
             exit(1);
         }
 
-        iov = elem.out_sg;
         iov_cnt = elem.out_num;
+        iov2 = iov = g_memdup(elem.out_sg, sizeof(struct iovec) * elem.out_num);
         s = iov_to_buf(iov, iov_cnt, 0, &ctrl, sizeof(ctrl));
         iov_discard_front(&iov, &iov_cnt, sizeof(ctrl));
         if (s != sizeof(ctrl)) {
@@ -833,6 +833,7 @@ static void virtio_net_handle_ctrl(VirtIODevice *vdev, VirtQueue *vq)
 
         virtqueue_push(vq, &elem, sizeof(status));
         virtio_notify(vdev, vq);
+        g_free(iov2);
     }
 }
 
@@ -1661,8 +1662,6 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
     n->qdev = dev;
     register_savevm(dev, "virtio-net", -1, VIRTIO_NET_VM_VERSION,
                     virtio_net_save, virtio_net_load, n);
-
-    add_boot_device_path(n->nic_conf.bootindex, dev, "/ethernet-phy@0");
 }
 
 static void virtio_net_device_unrealize(DeviceState *dev, Error **errp)
@@ -1714,6 +1713,9 @@ static void virtio_net_instance_init(Object *obj)
      * Can be overriden with virtio_net_set_config_size.
      */
     n->config_size = sizeof(struct virtio_net_config);
+    device_add_bootindex_property(obj, &n->nic_conf.bootindex,
+                                  "bootindex", "/ethernet-phy@0",
+                                  DEVICE(n), NULL);
 }
 
 static Property virtio_net_properties[] = {

@@ -35,11 +35,6 @@ int kvm_init_vcpu(CPUState *cpu)
     return -ENOSYS;
 }
 
-int kvm_init(MachineClass *mc)
-{
-    return -ENOSYS;
-}
-
 void kvm_flush_coalesced_mmio_buffer(void)
 {
 }
@@ -151,5 +146,10 @@ int kvm_irqchip_add_irqfd_notifier(KVMState *s, EventNotifier *n,
 int kvm_irqchip_remove_irqfd_notifier(KVMState *s, EventNotifier *n, int virq)
 {
     return -ENOSYS;
+}
+
+bool kvm_has_free_slot(MachineState *ms)
+{
+    return false;
 }
 #endif

@@ -657,7 +657,7 @@ static int vmdk_open_vmdk4(BlockDriverState *bs,
         snprintf(buf, sizeof(buf), "VMDK version %" PRId32,
                  le32_to_cpu(header.version));
         error_set(errp, QERR_UNKNOWN_BLOCK_FORMAT_FEATURE,
-                  bs->device_name, "vmdk", buf);
+                  bdrv_get_device_name(bs), "vmdk", buf);
         return -ENOTSUP;
     } else if (le32_to_cpu(header.version) == 3 && (flags & BDRV_O_RDWR)) {
         /* VMware KB 2064959 explains that version 3 added support for
@@ -939,7 +939,7 @@ static int vmdk_open(BlockDriverState *bs, QDict *options, int flags,
     /* Disable migration when VMDK images are used */
     error_set(&s->migration_blocker,
               QERR_BLOCK_FORMAT_FEATURE_NOT_SUPPORTED,
-              "vmdk", bs->device_name, "live migration");
+              "vmdk", bdrv_get_device_name(bs), "live migration");
     migrate_add_blocker(s->migration_blocker);
     g_free(buf);
     return 0;
@@ -1113,7 +1113,7 @@ static int get_cluster_offset(BlockDriverState *bs,
     uint32_t min_count, *l2_table;
     bool zeroed = false;
     int64_t ret;
-    int32_t cluster_sector;
+    int64_t cluster_sector;
 
     if (m_data) {
         m_data->valid = 0;
@@ -2137,22 +2137,28 @@ static ImageInfoSpecific *vmdk_get_specific_info(BlockDriverState *bs)
     return spec_info;
 }
 
+static bool vmdk_extents_type_eq(const VmdkExtent *a, const VmdkExtent *b)
+{
+    return a->flat == b->flat &&
+           a->compressed == b->compressed &&
+           (a->flat || a->cluster_sectors == b->cluster_sectors);
+}
+
 static int vmdk_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
 {
     int i;
     BDRVVmdkState *s = bs->opaque;
     assert(s->num_extents);
+
+    /* See if we have multiple extents but they have different cases */
+    for (i = 1; i < s->num_extents; i++) {
+        if (!vmdk_extents_type_eq(&s->extents[0], &s->extents[i])) {
+            return -ENOTSUP;
+        }
+    }
     bdi->needs_compressed_writes = s->extents[0].compressed;
     if (!s->extents[0].flat) {
         bdi->cluster_size = s->extents[0].cluster_sectors << BDRV_SECTOR_BITS;
-    }
-    /* See if we have multiple extents but they have different cases */
-    for (i = 1; i < s->num_extents; i++) {
-        if (bdi->needs_compressed_writes != s->extents[i].compressed ||
-            (bdi->cluster_size && bdi->cluster_size !=
-                s->extents[i].cluster_sectors << BDRV_SECTOR_BITS)) {
-            return -ENOTSUP;
-        }
     }
     return 0;
 }

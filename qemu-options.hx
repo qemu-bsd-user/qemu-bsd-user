@@ -33,6 +33,7 @@ DEF("machine", HAS_ARG, QEMU_OPTION_machine, \
     "                property accel=accel1[:accel2[:...]] selects accelerator\n"
     "                supported accelerators are kvm, xen, tcg (default: tcg)\n"
     "                kernel_irqchip=on|off controls accelerated irqchip support\n"
+    "                vmport=on|off|auto controls emulation of vmport (default: auto)\n"
     "                kvm_shadow_mem=size of KVM shadow MMU\n"
     "                dump-guest-core=on|off include guest memory in a core dump (default=on)\n"
     "                mem-merge=on|off controls memory merge support (default: on)\n"
@@ -51,6 +52,10 @@ than one accelerator specified, the next one is used if the previous one fails
 to initialize.
 @item kernel_irqchip=on|off
 Enables in-kernel irqchip support for the chosen accelerator when available.
+@item vmport=on|off|auto
+Enables emulation of VMWare IO port, for vmmouse etc. auto says to select the
+value based on accel. For accel=xen the default is off otherwise the default
+is on.
 @item kvm_shadow_mem=size
 Defines the size of the KVM shadow MMU.
 @item dump-guest-core=on|off
@@ -1930,9 +1935,9 @@ ETEXI
 
 DEF("chardev", HAS_ARG, QEMU_OPTION_chardev,
     "-chardev null,id=id[,mux=on|off]\n"
-    "-chardev socket,id=id[,host=host],port=port[,to=to][,ipv4][,ipv6][,nodelay]\n"
-    "         [,server][,nowait][,telnet][,mux=on|off] (tcp)\n"
-    "-chardev socket,id=id,path=path[,server][,nowait][,telnet],[mux=on|off] (unix)\n"
+    "-chardev socket,id=id[,host=host],port=port[,to=to][,ipv4][,ipv6][,nodelay][,reconnect=seconds]\n"
+    "         [,server][,nowait][,telnet][,reconnect=seconds][,mux=on|off] (tcp)\n"
+    "-chardev socket,id=id,path=path[,server][,nowait][,telnet][,reconnect=seconds][,mux=on|off] (unix)\n"
     "-chardev udp,id=id[,host=host],port=port[,localaddr=localaddr]\n"
     "         [,localport=localport][,ipv4][,ipv6][,mux=on|off]\n"
     "-chardev msmouse,id=id[,mux=on|off]\n"
@@ -2004,7 +2009,7 @@ Options to each backend are described below.
 A void device. This device will not emit any data, and will drop any data it
 receives. The null backend does not take any options.
 
-@item -chardev socket ,id=@var{id} [@var{TCP options} or @var{unix options}] [,server] [,nowait] [,telnet]
+@item -chardev socket ,id=@var{id} [@var{TCP options} or @var{unix options}] [,server] [,nowait] [,telnet] [,reconnect=@var{seconds}]
 
 Create a two-way stream socket, which can be either a TCP or a unix socket. A
 unix socket will be created if @option{path} is specified. Behaviour is
@@ -2017,6 +2022,10 @@ connect to a listening socket.
 
 @option{telnet} specifies that traffic on the socket should interpret telnet
 escape sequences.
+
+@option{reconnect} sets the timeout for reconnecting on non-server sockets when
+the remote end goes away.  qemu will delay this many seconds and then attempt
+to reconnect.  Zero disables reconnecting, and is the default.
 
 TCP and unix socket options are given below:
 
@@ -2687,14 +2696,16 @@ telnet on port 5555 to access the QEMU port.
 localhost 5555
 @end table
 
-@item tcp:[@var{host}]:@var{port}[,@var{server}][,nowait][,nodelay]
+@item tcp:[@var{host}]:@var{port}[,@var{server}][,nowait][,nodelay][,reconnect=@var{seconds}]
 The TCP Net Console has two modes of operation.  It can send the serial
 I/O to a location or wait for a connection from a location.  By default
 the TCP Net Console is sent to @var{host} at the @var{port}.  If you use
 the @var{server} option QEMU will wait for a client socket application
 to connect to the port before continuing, unless the @code{nowait}
 option was specified.  The @code{nodelay} option disables the Nagle buffering
-algorithm.  If @var{host} is omitted, 0.0.0.0 is assumed. Only
+algorithm.  The @code{reconnect} option only applies if @var{noserver} is
+set, if the connection goes down it will attempt to reconnect at the
+given interval.  If @var{host} is omitted, 0.0.0.0 is assumed. Only
 one TCP connection at a time is accepted. You can use @code{telnet} to
 connect to the corresponding character device.
 @table @code
@@ -2715,7 +2726,7 @@ MAGIC_SYSRQ sequence if you use a telnet that supports sending the break
 sequence.  Typically in unix telnet you do it with Control-] and then
 type "send break" followed by pressing the enter key.
 
-@item unix:@var{path}[,server][,nowait]
+@item unix:@var{path}[,server][,nowait][,reconnect=@var{seconds}]
 A unix domain socket is used instead of a tcp socket.  The option works the
 same as if you had specified @code{-serial tcp} except the unix domain socket
 @var{path} is used for connections.
@@ -2983,16 +2994,8 @@ Load the contents of @var{file} as an option ROM.
 This option is useful to load things like EtherBoot.
 ETEXI
 
-DEF("clock", HAS_ARG, QEMU_OPTION_clock, \
-    "-clock          force the use of the given methods for timer alarm.\n" \
-    "                To see what timers are available use '-clock help'\n",
-    QEMU_ARCH_ALL)
-STEXI
-@item -clock @var{method}
-@findex -clock
-Force the use of the given methods for timer alarm. To see what timers
-are available use @code{-clock help}.
-ETEXI
+HXCOMM Silently ignored for compatibility
+DEF("clock", HAS_ARG, QEMU_OPTION_clock, "", QEMU_ARCH_ALL)
 
 HXCOMM Options deprecated by -rtc
 DEF("localtime", 0, QEMU_OPTION_localtime, "", QEMU_ARCH_ALL)

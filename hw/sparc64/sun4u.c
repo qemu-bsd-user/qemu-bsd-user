@@ -38,7 +38,7 @@
 #include "hw/ide.h"
 #include "hw/loader.h"
 #include "elf.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "exec/address-spaces.h"
 
 //#define DEBUG_IRQ
@@ -864,7 +864,7 @@ static void sun4uv_init(MemoryRegion *address_space_mem,
     for(i = 0; i < nb_nics; i++)
         pci_nic_init_nofail(&nd_table[i], pci_bus, "ne2k_pci", NULL);
 
-    ide_drive_get(hd, MAX_IDE_BUS);
+    ide_drive_get(hd, ARRAY_SIZE(hd));
 
     pci_cmd646_ide_init(pci_bus, hd, 1);
 

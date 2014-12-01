@@ -190,6 +190,9 @@ int64_t strtosz_suffix_unit(const char *nptr, char **end,
 /* used to print char* safely */
 #define STR_OR_NULL(str) ((str) ? (str) : "null")
 
+/* id.c */
+bool id_wellformed(const char *id);
+
 /* path.c */
 void init_paths(const char *prefix);
 const char *path(const char *pathname);
@@ -354,7 +357,6 @@ char *qemu_find_file(int type, const char *name);
 void os_setup_early_signal_handling(void);
 char *os_find_datadir(void);
 void os_parse_cmd_args(int index, const char *optarg);
-void os_pidfile_error(void);
 
 /* Convert a byte between binary and BCD.  */
 static inline uint8_t to_bcd(uint8_t val)

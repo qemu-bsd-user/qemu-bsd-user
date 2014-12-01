@@ -41,7 +41,7 @@ typedef struct BDRVBlkdebugState {
 } BDRVBlkdebugState;
 
 typedef struct BlkdebugAIOCB {
-    BlockDriverAIOCB common;
+    BlockAIOCB common;
     QEMUBH *bh;
     int ret;
 } BlkdebugAIOCB;
@@ -195,6 +195,8 @@ static const char *event_names[BLKDBG_EVENT_MAX] = {
     [BLKDBG_PWRITEV]                        = "pwritev",
     [BLKDBG_PWRITEV_ZERO]                   = "pwritev_zero",
     [BLKDBG_PWRITEV_DONE]                   = "pwritev_done",
+
+    [BLKDBG_EMPTY_IMAGE_PREPARE]            = "empty_image_prepare",
 };
 
 static int get_event_by_name(const char *name, BlkDebugEvent *event)
@@ -463,8 +465,8 @@ static void error_callback_bh(void *opaque)
     qemu_aio_unref(acb);
 }
 
-static BlockDriverAIOCB *inject_error(BlockDriverState *bs,
-    BlockDriverCompletionFunc *cb, void *opaque, BlkdebugRule *rule)
+static BlockAIOCB *inject_error(BlockDriverState *bs,
+    BlockCompletionFunc *cb, void *opaque, BlkdebugRule *rule)
 {
     BDRVBlkdebugState *s = bs->opaque;
     int error = rule->options.inject.error;
@@ -489,9 +491,9 @@ static BlockDriverAIOCB *inject_error(BlockDriverState *bs,
     return &acb->common;
 }
 
-static BlockDriverAIOCB *blkdebug_aio_readv(BlockDriverState *bs,
+static BlockAIOCB *blkdebug_aio_readv(BlockDriverState *bs,
     int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-    BlockDriverCompletionFunc *cb, void *opaque)
+    BlockCompletionFunc *cb, void *opaque)
 {
     BDRVBlkdebugState *s = bs->opaque;
     BlkdebugRule *rule = NULL;
@@ -511,9 +513,9 @@ static BlockDriverAIOCB *blkdebug_aio_readv(BlockDriverState *bs,
     return bdrv_aio_readv(bs->file, sector_num, qiov, nb_sectors, cb, opaque);
 }
 
-static BlockDriverAIOCB *blkdebug_aio_writev(BlockDriverState *bs,
+static BlockAIOCB *blkdebug_aio_writev(BlockDriverState *bs,
     int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-    BlockDriverCompletionFunc *cb, void *opaque)
+    BlockCompletionFunc *cb, void *opaque)
 {
     BDRVBlkdebugState *s = bs->opaque;
     BlkdebugRule *rule = NULL;
@@ -533,8 +535,8 @@ static BlockDriverAIOCB *blkdebug_aio_writev(BlockDriverState *bs,
     return bdrv_aio_writev(bs->file, sector_num, qiov, nb_sectors, cb, opaque);
 }
 
-static BlockDriverAIOCB *blkdebug_aio_flush(BlockDriverState *bs,
-    BlockDriverCompletionFunc *cb, void *opaque)
+static BlockAIOCB *blkdebug_aio_flush(BlockDriverState *bs,
+    BlockCompletionFunc *cb, void *opaque)
 {
     BDRVBlkdebugState *s = bs->opaque;
     BlkdebugRule *rule = NULL;

@@ -59,8 +59,6 @@
 /* The cluster reads as all zeros */
 #define QCOW_OFLAG_ZERO (1ULL << 0)
 
-#define REFCOUNT_SHIFT 1 /* refcount size is 2 bytes */
-
 #define MIN_CLUSTER_BITS 9
 #define MAX_CLUSTER_BITS 21
 
@@ -223,6 +221,8 @@ typedef struct BDRVQcowState {
     int l2_size;
     int l1_size;
     int l1_vm_state_index;
+    int refcount_block_bits;
+    int refcount_block_size;
     int csize_shift;
     int csize_mask;
     uint64_t cluster_offset_mask;
@@ -487,6 +487,8 @@ void qcow2_signal_corruption(BlockDriverState *bs, bool fatal, int64_t offset,
 int qcow2_refcount_init(BlockDriverState *bs);
 void qcow2_refcount_close(BlockDriverState *bs);
 
+int qcow2_get_refcount(BlockDriverState *bs, int64_t cluster_index);
+
 int qcow2_update_cluster_refcount(BlockDriverState *bs, int64_t cluster_index,
                                   int addend, enum qcow2_discard_type type);
 
@@ -534,10 +536,11 @@ uint64_t qcow2_alloc_compressed_cluster_offset(BlockDriverState *bs,
 
 int qcow2_alloc_cluster_link_l2(BlockDriverState *bs, QCowL2Meta *m);
 int qcow2_discard_clusters(BlockDriverState *bs, uint64_t offset,
-    int nb_sectors, enum qcow2_discard_type type);
+    int nb_sectors, enum qcow2_discard_type type, bool full_discard);
 int qcow2_zero_clusters(BlockDriverState *bs, uint64_t offset, int nb_sectors);
 
-int qcow2_expand_zero_clusters(BlockDriverState *bs);
+int qcow2_expand_zero_clusters(BlockDriverState *bs,
+                               BlockDriverAmendStatusCB *status_cb);
 
 /* qcow2-snapshot.c functions */
 int qcow2_snapshot_create(BlockDriverState *bs, QEMUSnapshotInfo *sn_info);

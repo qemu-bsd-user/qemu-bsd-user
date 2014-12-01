@@ -80,7 +80,7 @@ typedef struct IscsiTask {
 } IscsiTask;
 
 typedef struct IscsiAIOCB {
-    BlockDriverAIOCB common;
+    BlockAIOCB common;
     QEMUIOVector *qiov;
     QEMUBH *bh;
     IscsiLun *iscsilun;
@@ -227,7 +227,7 @@ iscsi_abort_task_cb(struct iscsi_context *iscsi, int status, void *command_data,
 }
 
 static void
-iscsi_aio_cancel(BlockDriverAIOCB *blockacb)
+iscsi_aio_cancel(BlockAIOCB *blockacb)
 {
     IscsiAIOCB *acb = (IscsiAIOCB *)blockacb;
     IscsiLun *iscsilun = acb->iscsilun;
@@ -359,6 +359,12 @@ static int coroutine_fn iscsi_co_writev(BlockDriverState *bs,
     uint32_t num_sectors;
 
     if (!is_request_lun_aligned(sector_num, nb_sectors, iscsilun)) {
+        return -EINVAL;
+    }
+
+    if (bs->bl.max_transfer_length && nb_sectors > bs->bl.max_transfer_length) {
+        error_report("iSCSI Error: Write of %d sectors exceeds max_xfer_len "
+                     "of %d sectors", nb_sectors, bs->bl.max_transfer_length);
         return -EINVAL;
     }
 
@@ -529,6 +535,12 @@ static int coroutine_fn iscsi_co_readv(BlockDriverState *bs,
         return -EINVAL;
     }
 
+    if (bs->bl.max_transfer_length && nb_sectors > bs->bl.max_transfer_length) {
+        error_report("iSCSI Error: Read of %d sectors exceeds max_xfer_len "
+                     "of %d sectors", nb_sectors, bs->bl.max_transfer_length);
+        return -EINVAL;
+    }
+
     if (iscsilun->lbprz && nb_sectors >= ISCSI_CHECKALLOC_THRES &&
         !iscsi_allocationmap_is_allocated(iscsilun, sector_num, nb_sectors)) {
         int64_t ret;
@@ -663,9 +675,9 @@ iscsi_aio_ioctl_cb(struct iscsi_context *iscsi, int status,
     iscsi_schedule_bh(acb);
 }
 
-static BlockDriverAIOCB *iscsi_aio_ioctl(BlockDriverState *bs,
+static BlockAIOCB *iscsi_aio_ioctl(BlockDriverState *bs,
         unsigned long int req, void *buf,
-        BlockDriverCompletionFunc *cb, void *opaque)
+        BlockCompletionFunc *cb, void *opaque)
 {
     IscsiLun *iscsilun = bs->opaque;
     struct iscsi_context *iscsi = iscsilun->iscsi;
@@ -1219,6 +1231,40 @@ static void iscsi_attach_aio_context(BlockDriverState *bs,
               qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + NOP_INTERVAL);
 }
 
+static bool iscsi_is_write_protected(IscsiLun *iscsilun)
+{
+    struct scsi_task *task;
+    struct scsi_mode_sense *ms = NULL;
+    bool wrprotected = false;
+
+    task = iscsi_modesense6_sync(iscsilun->iscsi, iscsilun->lun,
+                                 1, SCSI_MODESENSE_PC_CURRENT,
+                                 0x3F, 0, 255);
+    if (task == NULL) {
+        error_report("iSCSI: Failed to send MODE_SENSE(6) command: %s",
+                     iscsi_get_error(iscsilun->iscsi));
+        goto out;
+    }
+
+    if (task->status != SCSI_STATUS_GOOD) {
+        error_report("iSCSI: Failed MODE_SENSE(6), LUN assumed writable");
+        goto out;
+    }
+    ms = scsi_datain_unmarshall(task);
+    if (!ms) {
+        error_report("iSCSI: Failed to unmarshall MODE_SENSE(6) data: %s",
+                     iscsi_get_error(iscsilun->iscsi));
+        goto out;
+    }
+    wrprotected = ms->device_specific_parameter & 0x80;
+
+out:
+    if (task) {
+        scsi_free_scsi_task(task);
+    }
+    return wrprotected;
+}
+
 /*
  * We support iscsi url's on the form
  * iscsi://[<username>%<password>@]<host>[:<port>]/<targetname>/<lun>
@@ -1339,6 +1385,14 @@ static int iscsi_open(BlockDriverState *bs, QDict *options, int flags,
     scsi_free_scsi_task(task);
     task = NULL;
 
+    /* Check the write protect flag of the LUN if we want to write */
+    if (iscsilun->type == TYPE_DISK && (flags & BDRV_O_RDWR) &&
+        iscsi_is_write_protected(iscsilun)) {
+        error_setg(errp, "Cannot open a write protected LUN as read-write");
+        ret = -EACCES;
+        goto out;
+    }
+
     iscsi_readcapacity_sync(iscsilun, &local_err);
     if (local_err != NULL) {
         error_propagate(errp, local_err);
@@ -1447,31 +1501,44 @@ static void iscsi_close(BlockDriverState *bs)
     memset(iscsilun, 0, sizeof(IscsiLun));
 }
 
+static int sector_limits_lun2qemu(int64_t sector, IscsiLun *iscsilun)
+{
+    return MIN(sector_lun2qemu(sector, iscsilun), INT_MAX / 2 + 1);
+}
+
 static void iscsi_refresh_limits(BlockDriverState *bs, Error **errp)
 {
-    IscsiLun *iscsilun = bs->opaque;
-
     /* We don't actually refresh here, but just return data queried in
      * iscsi_open(): iscsi targets don't change their limits. */
+
+    IscsiLun *iscsilun = bs->opaque;
+    uint32_t max_xfer_len = iscsilun->use_16_for_rw ? 0xffffffff : 0xffff;
+
+    if (iscsilun->bl.max_xfer_len) {
+        max_xfer_len = MIN(max_xfer_len, iscsilun->bl.max_xfer_len);
+    }
+
+    bs->bl.max_transfer_length = sector_limits_lun2qemu(max_xfer_len, iscsilun);
+
     if (iscsilun->lbp.lbpu) {
         if (iscsilun->bl.max_unmap < 0xffffffff) {
-            bs->bl.max_discard = sector_lun2qemu(iscsilun->bl.max_unmap,
-                                                 iscsilun);
+            bs->bl.max_discard =
+                sector_limits_lun2qemu(iscsilun->bl.max_unmap, iscsilun);
         }
-        bs->bl.discard_alignment = sector_lun2qemu(iscsilun->bl.opt_unmap_gran,
-                                                   iscsilun);
+        bs->bl.discard_alignment =
+            sector_limits_lun2qemu(iscsilun->bl.opt_unmap_gran, iscsilun);
     }
 
     if (iscsilun->bl.max_ws_len < 0xffffffff) {
-        bs->bl.max_write_zeroes = sector_lun2qemu(iscsilun->bl.max_ws_len,
-                                                  iscsilun);
+        bs->bl.max_write_zeroes =
+            sector_limits_lun2qemu(iscsilun->bl.max_ws_len, iscsilun);
     }
     if (iscsilun->lbp.lbpws) {
-        bs->bl.write_zeroes_alignment = sector_lun2qemu(iscsilun->bl.opt_unmap_gran,
-                                                        iscsilun);
+        bs->bl.write_zeroes_alignment =
+            sector_limits_lun2qemu(iscsilun->bl.opt_unmap_gran, iscsilun);
     }
-    bs->bl.opt_transfer_length = sector_lun2qemu(iscsilun->bl.opt_xfer_len,
-                                                 iscsilun);
+    bs->bl.opt_transfer_length =
+        sector_limits_lun2qemu(iscsilun->bl.opt_xfer_len, iscsilun);
 }
 
 /* Since iscsi_open() ignores bdrv_flags, there is nothing to do here in
@@ -1519,7 +1586,7 @@ static int iscsi_create(const char *filename, QemuOpts *opts, Error **errp)
     IscsiLun *iscsilun = NULL;
     QDict *bs_options;
 
-    bs = bdrv_new("", &error_abort);
+    bs = bdrv_new();
 
     /* Read out options */
     total_size = DIV_ROUND_UP(qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0),

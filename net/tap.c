@@ -599,7 +599,6 @@ static int net_init_tap_one(const NetdevTapOptions *tap, NetClientState *peer,
 
     s = net_tap_fd_init(peer, model, name, fd, vnet_hdr);
     if (!s) {
-        close(fd);
         return -1;
     }
 
@@ -798,6 +797,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
         if (net_init_tap_one(tap, peer, "bridge", name, ifname,
                              script, downscript, vhostfdname,
                              vnet_hdr, fd)) {
+            close(fd);
             return -1;
         }
     } else {
@@ -825,6 +825,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
             if (queues > 1 && i == 0 && !tap->has_ifname) {
                 if (tap_fd_get_ifname(fd, ifname)) {
                     error_report("Fail to get ifname");
+                    close(fd);
                     return -1;
                 }
             }
@@ -833,6 +834,7 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
                                  i >= 1 ? "no" : script,
                                  i >= 1 ? "no" : downscript,
                                  vhostfdname, vnet_hdr, fd)) {
+                close(fd);
                 return -1;
             }
         }

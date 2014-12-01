@@ -1615,11 +1615,13 @@
 #
 # @name: the name of the property
 # @type: the typename of the property
+# @description: #optional if specified, the description of the property.
+#               (since 2.2)
 #
 # Since: 1.2
 ##
 { 'type': 'DevicePropertyInfo',
-  'data': { 'name': 'str', 'type': 'str' } }
+  'data': { 'name': 'str', 'type': 'str', '*description': 'str' } }
 
 ##
 # @device-list-properties:
@@ -2656,14 +2658,19 @@
 # @nodelay: #optional set TCP_NODELAY socket option (default: false)
 # @telnet: #optional enable telnet protocol on server
 #          sockets (default: false)
+# @reconnect: #optional For a client socket, if a socket is disconnected,
+#          then attempt a reconnect after the given number of seconds.
+#          Setting this to zero disables this function. (default: 0)
+#          (Since: 2.2)
 #
 # Since: 1.4
 ##
-{ 'type': 'ChardevSocket', 'data': { 'addr'     : 'SocketAddress',
-                                     '*server'  : 'bool',
-                                     '*wait'    : 'bool',
-                                     '*nodelay' : 'bool',
-                                     '*telnet'  : 'bool' } }
+{ 'type': 'ChardevSocket', 'data': { 'addr'       : 'SocketAddress',
+                                     '*server'    : 'bool',
+                                     '*wait'      : 'bool',
+                                     '*nodelay'   : 'bool',
+                                     '*telnet'    : 'bool',
+                                     '*reconnect' : 'int' } }
 
 ##
 # @ChardevUdp:
@@ -3229,6 +3236,11 @@
 #
 # Input event union.
 #
+# @key: Input event of Keyboard
+# @btn: Input event of pointer buttons
+# @rel: Input event of relative pointer motion
+# @abs: Input event of absolute pointer motion
+#
 # Since: 2.0
 ##
 { 'union' : 'InputEvent',
@@ -3238,11 +3250,11 @@
               'abs'     : 'InputMoveEvent' } }
 
 ##
-# @input-send-event
+# @x-input-send-event
 #
 # Send input event(s) to guest.
 #
-# @console: Which console to send event(s) to.
+# @console: #optional console to send event(s) to.
 #
 # @events: List of InputEvent union.
 #
@@ -3250,9 +3262,11 @@
 #
 # Since: 2.2
 #
+# Note: this command is experimental, and not a stable API.
+#
 ##
-{ 'command': 'input-send-event',
-  'data': { 'console':'int', 'events': [ 'InputEvent' ] } }
+{ 'command': 'x-input-send-event',
+  'data': { '*console':'int', 'events': [ 'InputEvent' ] } }
 
 ##
 # @NumaOptions

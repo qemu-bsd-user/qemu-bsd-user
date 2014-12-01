@@ -549,8 +549,8 @@ void shpc_device_hotplug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
     shpc_interrupt_update(pci_hotplug_dev);
 }
 
-void shpc_device_hot_unplug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
-                               Error **errp)
+void shpc_device_hot_unplug_request_cb(HotplugHandler *hotplug_dev,
+                                       DeviceState *dev, Error **errp)
 {
     Error *local_err = NULL;
     PCIDevice *pci_hotplug_dev = PCI_DEVICE(hotplug_dev);
@@ -559,8 +559,9 @@ void shpc_device_hot_unplug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
     uint8_t led;
     int slot;
 
-    shpc_device_hotplug_common(PCI_DEVICE(dev), &slot, shpc, errp);
+    shpc_device_hotplug_common(PCI_DEVICE(dev), &slot, shpc, &local_err);
     if (local_err) {
+        error_propagate(errp, local_err);
         return;
     }
 
@@ -662,6 +663,7 @@ void shpc_cleanup(PCIDevice *d, MemoryRegion *bar)
     SHPCDevice *shpc = d->shpc;
     d->cap_present &= ~QEMU_PCI_CAP_SHPC;
     memory_region_del_subregion(bar, &shpc->mmio);
+    object_unparent(OBJECT(&shpc->mmio));
     /* TODO: cleanup config space changes? */
     g_free(shpc->config);
     g_free(shpc->cmask);

@@ -130,6 +130,7 @@ extern int no_shutdown;
 extern int semihosting_enabled;
 extern int old_param;
 extern int boot_menu;
+extern bool boot_strict;
 extern uint8_t *boot_splash_filedata;
 extern size_t boot_splash_filedata_size;
 extern uint8_t qemu_extra_params_fw[2];
@@ -160,6 +161,7 @@ typedef struct node_info {
 extern NodeInfo numa_info[MAX_NODES];
 void set_numa_nodes(void);
 void set_numa_modes(void);
+void query_numa_node_mem(uint64_t node_mem[]);
 extern QemuOptsList qemu_numa_opts;
 int numa_init_func(QemuOpts *opts, void *opaque);
 
@@ -182,9 +184,6 @@ void do_pci_device_hot_remove(Monitor *mon, const QDict *qdict);
 
 /* generic hotplug */
 void drive_hot_add(Monitor *mon, const QDict *qdict);
-
-/* CPU hotplug */
-void qemu_register_cpu_added_notifier(Notifier *notifier);
 
 /* pcie aer error injection */
 void pcie_aer_inject_error_print(Monitor *mon, const QObject *data);
@@ -212,6 +211,11 @@ void add_boot_device_path(int32_t bootindex, DeviceState *dev,
 char *get_boot_devices_list(size_t *size, bool ignore_suffixes);
 
 DeviceState *get_boot_device(uint32_t position);
+void check_boot_index(int32_t bootindex, Error **errp);
+void del_boot_device_path(DeviceState *dev, const char *suffix);
+void device_add_bootindex_property(Object *obj, int32_t *bootindex,
+                                   const char *name, const char *suffix,
+                                   DeviceState *dev, Error **errp);
 
 QemuOpts *qemu_get_machine_opts(void);
 

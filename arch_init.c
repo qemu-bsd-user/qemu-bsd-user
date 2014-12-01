@@ -486,15 +486,23 @@ static void migration_bitmap_sync_range(ram_addr_t start, ram_addr_t length)
 
 
 /* Needs iothread lock! */
+/* Fix me: there are too many global variables used in migration process. */
+static int64_t start_time;
+static int64_t bytes_xfer_prev;
+static int64_t num_dirty_pages_period;
+
+static void migration_bitmap_sync_init(void)
+{
+    start_time = 0;
+    bytes_xfer_prev = 0;
+    num_dirty_pages_period = 0;
+}
 
 static void migration_bitmap_sync(void)
 {
     RAMBlock *block;
     uint64_t num_dirty_pages_init = migration_dirty_pages;
     MigrationState *s = migrate_get_current();
-    static int64_t start_time;
-    static int64_t bytes_xfer_prev;
-    static int64_t num_dirty_pages_period;
     int64_t end_time;
     int64_t bytes_xfer_now;
     static uint64_t xbzrle_cache_miss_prev;
@@ -774,6 +782,7 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
     mig_throttle_on = false;
     dirty_rate_high_cnt = 0;
     bitmap_sync_count = 0;
+    migration_bitmap_sync_init();
 
     if (migrate_use_xbzrle()) {
         XBZRLE_cache_lock();
@@ -1006,7 +1015,7 @@ static inline void *host_from_stream_offset(QEMUFile *f,
     uint8_t len;
 
     if (flags & RAM_SAVE_FLAG_CONTINUE) {
-        if (!block) {
+        if (!block || block->length <= offset) {
             error_report("Ack, bad migration stream!");
             return NULL;
         }
@@ -1019,8 +1028,9 @@ static inline void *host_from_stream_offset(QEMUFile *f,
     id[len] = 0;
 
     QTAILQ_FOREACH(block, &ram_list.blocks, next) {
-        if (!strncmp(id, block->idstr, sizeof(id)))
+        if (!strncmp(id, block->idstr, sizeof(id)) && block->length > offset) {
             return memory_region_get_ram_ptr(block->mr) + offset;
+        }
     }
 
     error_report("Can't find block %s!", id);
@@ -1040,8 +1050,7 @@ void ram_handle_compressed(void *host, uint8_t ch, uint64_t size)
 
 static int ram_load(QEMUFile *f, void *opaque, int version_id)
 {
-    ram_addr_t addr;
-    int flags, ret = 0;
+    int flags = 0, ret = 0;
     static uint64_t seq_iter;
 
     seq_iter++;
@@ -1050,21 +1059,24 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
         ret = -EINVAL;
     }
 
-    while (!ret) {
-        addr = qemu_get_be64(f);
+    while (!ret && !(flags & RAM_SAVE_FLAG_EOS)) {
+        ram_addr_t addr, total_ram_bytes;
+        void *host;
+        uint8_t ch;
 
+        addr = qemu_get_be64(f);
         flags = addr & ~TARGET_PAGE_MASK;
         addr &= TARGET_PAGE_MASK;
 
-        if (flags & RAM_SAVE_FLAG_MEM_SIZE) {
+        switch (flags & ~RAM_SAVE_FLAG_CONTINUE) {
+        case RAM_SAVE_FLAG_MEM_SIZE:
             /* Synchronize RAM block list */
-            char id[256];
-            ram_addr_t length;
-            ram_addr_t total_ram_bytes = addr;
-
-            while (total_ram_bytes) {
+            total_ram_bytes = addr;
+            while (!ret && total_ram_bytes) {
                 RAMBlock *block;
                 uint8_t len;
+                char id[256];
+                ram_addr_t length;
 
                 len = qemu_get_byte(f);
                 qemu_get_buffer(f, (uint8_t *)id, len);
@@ -1088,16 +1100,11 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                                  "accept migration", id);
                     ret = -EINVAL;
                 }
-                if (ret) {
-                    break;
-                }
 
                 total_ram_bytes -= length;
             }
-        } else if (flags & RAM_SAVE_FLAG_COMPRESS) {
-            void *host;
-            uint8_t ch;
-
+            break;
+        case RAM_SAVE_FLAG_COMPRESS:
             host = host_from_stream_offset(f, addr, flags);
             if (!host) {
                 error_report("Illegal RAM offset " RAM_ADDR_FMT, addr);
@@ -1107,9 +1114,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 
             ch = qemu_get_byte(f);
             ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
-        } else if (flags & RAM_SAVE_FLAG_PAGE) {
-            void *host;
-
+            break;
+        case RAM_SAVE_FLAG_PAGE:
             host = host_from_stream_offset(f, addr, flags);
             if (!host) {
                 error_report("Illegal RAM offset " RAM_ADDR_FMT, addr);
@@ -1118,8 +1124,9 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
             }
 
             qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
-        } else if (flags & RAM_SAVE_FLAG_XBZRLE) {
-            void *host = host_from_stream_offset(f, addr, flags);
+            break;
+        case RAM_SAVE_FLAG_XBZRLE:
+            host = host_from_stream_offset(f, addr, flags);
             if (!host) {
                 error_report("Illegal RAM offset " RAM_ADDR_FMT, addr);
                 ret = -EINVAL;
@@ -1132,17 +1139,22 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
-        } else if (flags & RAM_SAVE_FLAG_HOOK) {
-            ram_control_load_hook(f, flags);
-        } else if (flags & RAM_SAVE_FLAG_EOS) {
+            break;
+        case RAM_SAVE_FLAG_EOS:
             /* normal exit */
             break;
-        } else {
-            error_report("Unknown migration flags: %#x", flags);
-            ret = -EINVAL;
-            break;
+        default:
+            if (flags & RAM_SAVE_FLAG_HOOK) {
+                ram_control_load_hook(f, flags);
+            } else {
+                error_report("Unknown combination of migration flags: %#x",
+                             flags);
+                ret = -EINVAL;
+            }
         }
-        ret = qemu_file_get_error(f);
+        if (!ret) {
+            ret = qemu_file_get_error(f);
+        }
     }
 
     DPRINTF("Completed load of VM with exit code %d seq iteration "
@@ -1335,11 +1347,6 @@ void cpudef_init(void)
 #if defined(cpudef_setup)
     cpudef_setup(); /* parse cpu definitions in target config file */
 #endif
-}
-
-int tcg_available(void)
-{
-    return 1;
 }
 
 int kvm_available(void)

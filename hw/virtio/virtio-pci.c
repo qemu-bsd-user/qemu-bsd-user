@@ -29,7 +29,7 @@
 #include "hw/pci/msix.h"
 #include "hw/loader.h"
 #include "sysemu/kvm.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "virtio-pci.h"
 #include "qemu/range.h"
 #include "hw/virtio/virtio-bus.h"
@@ -85,9 +85,6 @@
 /* How many bits to shift physical queue address written to QUEUE_PFN.
  * 12 is historical, and due to x86 page size. */
 #define VIRTIO_PCI_QUEUE_ADDR_SHIFT    12
-
-/* Flags track per-device state like workarounds for quirks in older guests. */
-#define VIRTIO_PCI_FLAG_BUS_MASTER_BUG  (1 << 0)
 
 static void virtio_pci_bus_new(VirtioBusState *bus, size_t bus_size,
                                VirtIOPCIProxy *dev);
@@ -323,14 +320,6 @@ static void virtio_ioport_write(void *opaque, uint32_t addr, uint32_t val)
                                      proxy->pci_dev.config[PCI_COMMAND] |
                                      PCI_COMMAND_MASTER, 1);
         }
-
-        /* Linux before 2.6.34 sets the device as OK without enabling
-           the PCI device bus master bit. In this case we need to disable
-           some safety checks. */
-        if ((val & VIRTIO_CONFIG_S_DRIVER_OK) &&
-            !(proxy->pci_dev.config[PCI_COMMAND] & PCI_COMMAND_MASTER)) {
-            proxy->flags |= VIRTIO_PCI_FLAG_BUS_MASTER_BUG;
-        }
         break;
     case VIRTIO_MSI_CONFIG_VECTOR:
         msix_vector_unuse(&proxy->pci_dev, vdev->config_vector);
@@ -483,8 +472,7 @@ static void virtio_write_config(PCIDevice *pci_dev, uint32_t address,
     pci_default_write_config(pci_dev, address, val, len);
 
     if (range_covers_byte(address, len, PCI_COMMAND) &&
-        !(pci_dev->config[PCI_COMMAND] & PCI_COMMAND_MASTER) &&
-        !(proxy->flags & VIRTIO_PCI_FLAG_BUS_MASTER_BUG)) {
+        !(pci_dev->config[PCI_COMMAND] & PCI_COMMAND_MASTER)) {
         virtio_pci_stop_ioeventfd(proxy);
         virtio_set_status(vdev, vdev->status & ~VIRTIO_CONFIG_S_DRIVER_OK);
     }
@@ -895,11 +883,15 @@ static void virtio_pci_vmstate_change(DeviceState *d, bool running)
     VirtIODevice *vdev = virtio_bus_get_device(&proxy->bus);
 
     if (running) {
-        /* Try to find out if the guest has bus master disabled, but is
-           in ready state. Then we have a buggy guest OS. */
-        if ((vdev->status & VIRTIO_CONFIG_S_DRIVER_OK) &&
+        /* Old QEMU versions did not set bus master enable on status write.
+         * Detect DRIVER set and enable it.
+         */
+        if ((proxy->flags & VIRTIO_PCI_FLAG_BUS_MASTER_BUG_MIGRATION) &&
+            (vdev->status & VIRTIO_CONFIG_S_DRIVER) &&
             !(proxy->pci_dev.config[PCI_COMMAND] & PCI_COMMAND_MASTER)) {
-            proxy->flags |= VIRTIO_PCI_FLAG_BUS_MASTER_BUG;
+            pci_default_write_config(&proxy->pci_dev, PCI_COMMAND,
+                                     proxy->pci_dev.config[PCI_COMMAND] |
+                                     PCI_COMMAND_MASTER, 1);
         }
         virtio_pci_start_ioeventfd(proxy);
     } else {
@@ -1040,10 +1032,11 @@ static void virtio_pci_reset(DeviceState *qdev)
     virtio_pci_stop_ioeventfd(proxy);
     virtio_bus_reset(bus);
     msix_unuse_all_vectors(&proxy->pci_dev);
-    proxy->flags &= ~VIRTIO_PCI_FLAG_BUS_MASTER_BUG;
 }
 
 static Property virtio_pci_properties[] = {
+    DEFINE_PROP_BIT("virtio-pci-bus-master-bug-migration", VirtIOPCIProxy, flags,
+                    VIRTIO_PCI_FLAG_BUS_MASTER_BUG_MIGRATION_BIT, false),
     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
     DEFINE_PROP_END_OF_LIST(),
 };
@@ -1115,6 +1108,8 @@ static void virtio_blk_pci_instance_init(Object *obj)
                                 TYPE_VIRTIO_BLK);
     object_property_add_alias(obj, "iothread", OBJECT(&dev->vdev),"iothread",
                               &error_abort);
+    object_property_add_alias(obj, "bootindex", OBJECT(&dev->vdev),
+                              "bootindex", &error_abort);
 }
 
 static const TypeInfo virtio_blk_pci_info = {
@@ -1466,6 +1461,8 @@ static void virtio_net_pci_instance_init(Object *obj)
 
     virtio_instance_init_common(obj, &dev->vdev, sizeof(dev->vdev),
                                 TYPE_VIRTIO_NET);
+    object_property_add_alias(obj, "bootindex", OBJECT(&dev->vdev),
+                              "bootindex", &error_abort);
 }
 
 static const TypeInfo virtio_net_pci_info = {
@@ -1521,11 +1518,8 @@ static void virtio_rng_initfn(Object *obj)
 
     virtio_instance_init_common(obj, &dev->vdev, sizeof(dev->vdev),
                                 TYPE_VIRTIO_RNG);
-    object_property_add_link(obj, "rng", TYPE_RNG_BACKEND,
-                             (Object **)&dev->vdev.conf.rng,
-                             qdev_prop_allow_set_link_before_realize,
-                             OBJ_PROP_LINK_UNREF_ON_RELEASE, NULL);
-
+    object_property_add_alias(obj, "rng", OBJECT(&dev->vdev), "rng",
+                              &error_abort);
 }
 
 static const TypeInfo virtio_rng_pci_info = {
@@ -1542,13 +1536,10 @@ static void virtio_pci_bus_new(VirtioBusState *bus, size_t bus_size,
                                VirtIOPCIProxy *dev)
 {
     DeviceState *qdev = DEVICE(dev);
-    BusState *qbus;
     char virtio_bus_name[] = "virtio-bus";
 
     qbus_create_inplace(bus, bus_size, TYPE_VIRTIO_PCI_BUS, qdev,
                         virtio_bus_name);
-    qbus = BUS(bus);
-    qbus->allow_hotplug = 1;
 }
 
 static void virtio_pci_bus_class_init(ObjectClass *klass, void *data)

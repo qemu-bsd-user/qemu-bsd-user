@@ -25,6 +25,7 @@
 #include "qemu/option.h"
 #include "qemu/config-file.h"
 #include "sysemu/sysemu.h"
+#include "sysemu/accel.h"
 #include "hw/hw.h"
 #include "hw/pci/msi.h"
 #include "hw/s390x/adapter.h"
@@ -72,6 +73,8 @@ typedef struct kvm_dirty_log KVMDirtyLog;
 
 struct KVMState
 {
+    AccelState parent_obj;
+
     KVMSlot *slots;
     int nr_slots;
     int fd;
@@ -106,6 +109,11 @@ struct KVMState
 #endif
 };
 
+#define TYPE_KVM_ACCEL ACCEL_CLASS_NAME("kvm")
+
+#define KVM_STATE(obj) \
+    OBJECT_CHECK(KVMState, (obj), TYPE_KVM_ACCEL)
+
 KVMState *kvm_state;
 bool kvm_kernel_irqchip;
 bool kvm_async_interrupts_allowed;
@@ -124,7 +132,7 @@ static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_LAST_INFO
 };
 
-static KVMSlot *kvm_alloc_slot(KVMState *s)
+static KVMSlot *kvm_get_free_slot(KVMState *s)
 {
     int i;
 
@@ -132,6 +140,22 @@ static KVMSlot *kvm_alloc_slot(KVMState *s)
         if (s->slots[i].memory_size == 0) {
             return &s->slots[i];
         }
+    }
+
+    return NULL;
+}
+
+bool kvm_has_free_slot(MachineState *ms)
+{
+    return kvm_get_free_slot(KVM_STATE(ms->accelerator));
+}
+
+static KVMSlot *kvm_alloc_slot(KVMState *s)
+{
+    KVMSlot *slot = kvm_get_free_slot(s);
+
+    if (slot) {
+        return slot;
     }
 
     fprintf(stderr, "%s: no free slot available\n", __func__);
@@ -626,8 +650,10 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
     unsigned delta;
 
     /* kvm works in page size chunks, but the function may be called
-       with sub-page size and unaligned start address. */
-    delta = TARGET_PAGE_ALIGN(size) - size;
+       with sub-page size and unaligned start address. Pad the start
+       address to next and truncate size to previous page boundary. */
+    delta = (TARGET_PAGE_SIZE - (start_addr & ~TARGET_PAGE_MASK));
+    delta &= ~TARGET_PAGE_MASK;
     if (delta > size) {
         return;
     }
@@ -1377,8 +1403,9 @@ static int kvm_max_vcpus(KVMState *s)
     return (ret) ? ret : kvm_recommended_vcpus(s);
 }
 
-int kvm_init(MachineClass *mc)
+static int kvm_init(MachineState *ms)
 {
+    MachineClass *mc = MACHINE_GET_CLASS(ms);
     static const char upgrade_note[] =
         "Please upgrade to at least kernel 2.6.29 or recent kvm-kmod\n"
         "(see http://sourceforge.net/projects/kvm).\n";
@@ -1397,7 +1424,7 @@ int kvm_init(MachineClass *mc)
     int i, type = 0;
     const char *kvm_type;
 
-    s = g_malloc0(sizeof(KVMState));
+    s = KVM_STATE(ms->accelerator);
 
     /*
      * On systems where the kernel can support different base page
@@ -1586,7 +1613,6 @@ err:
         close(s->fd);
     }
     g_free(s->slots);
-    g_free(s);
 
     return ret;
 }
@@ -2225,3 +2251,25 @@ int kvm_get_one_reg(CPUState *cs, uint64_t id, void *target)
     }
     return r;
 }
+
+static void kvm_accel_class_init(ObjectClass *oc, void *data)
+{
+    AccelClass *ac = ACCEL_CLASS(oc);
+    ac->name = "KVM";
+    ac->init_machine = kvm_init;
+    ac->allowed = &kvm_allowed;
+}
+
+static const TypeInfo kvm_accel_type = {
+    .name = TYPE_KVM_ACCEL,
+    .parent = TYPE_ACCEL,
+    .class_init = kvm_accel_class_init,
+    .instance_size = sizeof(KVMState),
+};
+
+static void kvm_type_init(void)
+{
+    type_register_static(&kvm_accel_type);
+}
+
+type_init(kvm_type_init);

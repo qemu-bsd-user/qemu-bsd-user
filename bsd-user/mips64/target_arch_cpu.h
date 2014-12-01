@@ -42,7 +42,7 @@ static inline void target_cpu_init(CPUMIPSState *env,
     if (regs->cp0_epc & 1) {
         env->hflags |= MIPS_HFLAG_M16;
     }
-    env->hflags |= MIPS_HFLAG_UX | MIPS_HFLAG_64;
+    env->hflags |= MIPS_HFLAG_64;
 }
 
 static int do_store_exclusive(CPUMIPSState *env)

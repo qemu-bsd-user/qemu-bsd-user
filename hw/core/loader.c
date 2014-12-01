@@ -80,6 +80,13 @@ int load_image(const char *filename, uint8_t *addr)
     if (fd < 0)
         return -1;
     size = lseek(fd, 0, SEEK_END);
+    if (size == -1) {
+        fprintf(stderr, "file %-20s: get size error: %s\n",
+                filename, strerror(errno));
+        close(fd);
+        return -1;
+    }
+
     lseek(fd, 0, SEEK_SET);
     if (read(fd, addr, size) != size) {
         close(fd);
@@ -477,7 +484,9 @@ static ssize_t gunzip(void *dst, size_t dstlen, uint8_t *src,
 
 /* Load a U-Boot image.  */
 static int load_uboot_image(const char *filename, hwaddr *ep, hwaddr *loadaddr,
-                            int *is_linux, uint8_t image_type)
+                            int *is_linux, uint8_t image_type,
+                            uint64_t (*translate_fn)(void *, uint64_t),
+                            void *translate_opaque)
 {
     int fd;
     int size;
@@ -511,6 +520,9 @@ static int load_uboot_image(const char *filename, hwaddr *ep, hwaddr *loadaddr,
     switch (hdr->ih_type) {
     case IH_TYPE_KERNEL:
         address = hdr->ih_load;
+        if (translate_fn) {
+            address = translate_fn(translate_opaque, address);
+        }
         if (loadaddr) {
             *loadaddr = hdr->ih_load;
         }
@@ -587,15 +599,19 @@ out:
 }
 
 int load_uimage(const char *filename, hwaddr *ep, hwaddr *loadaddr,
-                int *is_linux)
+                int *is_linux,
+                uint64_t (*translate_fn)(void *, uint64_t),
+                void *translate_opaque)
 {
-    return load_uboot_image(filename, ep, loadaddr, is_linux, IH_TYPE_KERNEL);
+    return load_uboot_image(filename, ep, loadaddr, is_linux, IH_TYPE_KERNEL,
+                            translate_fn, translate_opaque);
 }
 
 /* Load a ramdisk.  */
 int load_ramdisk(const char *filename, hwaddr addr, uint64_t max_sz)
 {
-    return load_uboot_image(filename, NULL, &addr, NULL, IH_TYPE_RAMDISK);
+    return load_uboot_image(filename, NULL, &addr, NULL, IH_TYPE_RAMDISK,
+                            NULL, NULL);
 }
 
 /* This simply prevents g_malloc in the function below from allocating
@@ -739,6 +755,12 @@ int rom_add_file(const char *file, const char *fw_dir,
     }
     rom->addr     = addr;
     rom->romsize  = lseek(fd, 0, SEEK_END);
+    if (rom->romsize == -1) {
+        fprintf(stderr, "rom: file %-20s: get size error: %s\n",
+                rom->name, strerror(errno));
+        goto err;
+    }
+
     rom->datasize = rom->romsize;
     rom->data     = g_malloc0(rom->datasize);
     lseek(fd, 0, SEEK_SET);
@@ -789,12 +811,12 @@ err:
     return -1;
 }
 
-void *rom_add_blob(const char *name, const void *blob, size_t len,
+ram_addr_t rom_add_blob(const char *name, const void *blob, size_t len,
                    hwaddr addr, const char *fw_file_name,
                    FWCfgReadCallback fw_callback, void *callback_opaque)
 {
     Rom *rom;
-    void *data = NULL;
+    ram_addr_t ret = RAM_ADDR_MAX;
 
     rom           = g_malloc0(sizeof(*rom));
     rom->name     = g_strdup(name);
@@ -806,11 +828,13 @@ void *rom_add_blob(const char *name, const void *blob, size_t len,
     rom_insert(rom);
     if (fw_file_name && fw_cfg) {
         char devpath[100];
+        void *data;
 
         snprintf(devpath, sizeof(devpath), "/rom@%s", fw_file_name);
 
         if (rom_file_has_mr) {
             data = rom_set_mr(rom, OBJECT(fw_cfg), devpath);
+            ret = memory_region_get_ram_addr(rom->mr);
         } else {
             data = rom->data;
         }
@@ -819,7 +843,7 @@ void *rom_add_blob(const char *name, const void *blob, size_t len,
                                  fw_callback, callback_opaque,
                                  data, rom->romsize);
     }
-    return data;
+    return ret;
 }
 
 /* This function is specific for elf program because we don't need to allocate

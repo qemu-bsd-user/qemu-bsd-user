@@ -56,6 +56,7 @@
 
 #include "qapi/qmp/qint.h"
 #include "qom/qom-qobject.h"
+#include "exec/ram_addr.h"
 
 /* These are used to size the ACPI tables for -M pc-i440fx-1.7 and
  * -M pc-i440fx-2.0.  Even if the actual amount of AML generated grows
@@ -249,6 +250,7 @@ static void acpi_get_pci_info(PcPciInfo *info)
 
 #define ACPI_BUILD_TABLE_FILE "etc/acpi/tables"
 #define ACPI_BUILD_RSDP_FILE "etc/acpi/rsdp"
+#define ACPI_BUILD_TPMLOG_FILE "etc/tpm/log"
 
 static void
 build_header(GArray *linker, GArray *table_data,
@@ -774,7 +776,7 @@ static void *acpi_set_bsel(PCIBus *bus, void *opaque)
     unsigned *bsel_alloc = opaque;
     unsigned *bus_bsel;
 
-    if (bus->qbus.allow_hotplug) {
+    if (qbus_is_hotpluggable(BUS(bus))) {
         bus_bsel = g_malloc(sizeof *bus_bsel);
 
         *bus_bsel = (*bsel_alloc)++;
@@ -1214,27 +1216,28 @@ build_hpet(GArray *table_data, GArray *linker)
 }
 
 static void
-build_tpm_tcpa(GArray *table_data, GArray *linker)
+build_tpm_tcpa(GArray *table_data, GArray *linker, GArray *tcpalog)
 {
     Acpi20Tcpa *tcpa = acpi_data_push(table_data, sizeof *tcpa);
-    /* the log area will come right after the TCPA table */
-    uint64_t log_area_start_address = acpi_data_len(table_data);
+    uint64_t log_area_start_address = acpi_data_len(tcpalog);
 
     tcpa->platform_class = cpu_to_le16(TPM_TCPA_ACPI_CLASS_CLIENT);
     tcpa->log_area_minimum_length = cpu_to_le32(TPM_LOG_AREA_MINIMUM_SIZE);
     tcpa->log_area_start_address = cpu_to_le64(log_area_start_address);
 
+    bios_linker_loader_alloc(linker, ACPI_BUILD_TPMLOG_FILE, 1,
+                             false /* high memory */);
+
     /* log area start address to be filled by Guest linker */
     bios_linker_loader_add_pointer(linker, ACPI_BUILD_TABLE_FILE,
-                                   ACPI_BUILD_TABLE_FILE,
+                                   ACPI_BUILD_TPMLOG_FILE,
                                    table_data, &tcpa->log_area_start_address,
                                    sizeof(tcpa->log_area_start_address));
 
     build_header(linker, table_data,
                  (void *)tcpa, "TCPA", sizeof(*tcpa), 2);
 
-    /* now only get the log area and with that modify table_data */
-    acpi_data_push(table_data, TPM_LOG_AREA_MINIMUM_SIZE);
+    acpi_data_push(tcpalog, TPM_LOG_AREA_MINIMUM_SIZE);
 }
 
 static void
@@ -1267,8 +1270,7 @@ acpi_build_srat_memory(AcpiSratMemoryAffinity *numamem, uint64_t base,
 }
 
 static void
-build_srat(GArray *table_data, GArray *linker,
-           AcpiCpuInfo *cpu, PcGuestInfo *guest_info)
+build_srat(GArray *table_data, GArray *linker, PcGuestInfo *guest_info)
 {
     AcpiSystemResourceAffinityTable *srat;
     AcpiSratProcessorAffinity *core;
@@ -1298,11 +1300,7 @@ build_srat(GArray *table_data, GArray *linker,
         core->proximity_lo = curnode;
         memset(core->proximity_hi, 0, 3);
         core->local_sapic_eid = 0;
-        if (test_bit(i, cpu->found_cpus)) {
-            core->flags = cpu_to_le32(1);
-        } else {
-            core->flags = cpu_to_le32(0);
-        }
+        core->flags = cpu_to_le32(1);
     }
 
 
@@ -1485,6 +1483,7 @@ typedef
 struct AcpiBuildTables {
     GArray *table_data;
     GArray *rsdp;
+    GArray *tcpalog;
     GArray *linker;
 } AcpiBuildTables;
 
@@ -1492,23 +1491,23 @@ static inline void acpi_build_tables_init(AcpiBuildTables *tables)
 {
     tables->rsdp = g_array_new(false, true /* clear */, 1);
     tables->table_data = g_array_new(false, true /* clear */, 1);
+    tables->tcpalog = g_array_new(false, true /* clear */, 1);
     tables->linker = bios_linker_loader_init();
 }
 
 static inline void acpi_build_tables_cleanup(AcpiBuildTables *tables, bool mfre)
 {
     void *linker_data = bios_linker_loader_cleanup(tables->linker);
-    if (mfre) {
-        g_free(linker_data);
-    }
+    g_free(linker_data);
     g_array_free(tables->rsdp, mfre);
-    g_array_free(tables->table_data, mfre);
+    g_array_free(tables->table_data, true);
+    g_array_free(tables->tcpalog, mfre);
 }
 
 typedef
 struct AcpiBuildState {
     /* Copy of table in RAM (for patching). */
-    uint8_t *table_ram;
+    ram_addr_t table_ram;
     uint32_t table_size;
     /* Is table patched? */
     uint8_t patched;
@@ -1612,14 +1611,14 @@ void acpi_build(PcGuestInfo *guest_info, AcpiBuildTables *tables)
     }
     if (misc.has_tpm) {
         acpi_add_table(table_offsets, tables->table_data);
-        build_tpm_tcpa(tables->table_data, tables->linker);
+        build_tpm_tcpa(tables->table_data, tables->linker, tables->tcpalog);
 
         acpi_add_table(table_offsets, tables->table_data);
         build_tpm_ssdt(tables->table_data, tables->linker);
     }
     if (guest_info->numa_nodes) {
         acpi_add_table(table_offsets, tables->table_data);
-        build_srat(tables->table_data, tables->linker, &cpu, guest_info);
+        build_srat(tables->table_data, tables->linker, guest_info);
     }
     if (acpi_get_mcfg(&mcfg)) {
         acpi_add_table(table_offsets, tables->table_data);
@@ -1713,8 +1712,11 @@ static void acpi_build_update(void *build_opaque, uint32_t offset)
     acpi_build(build_state->guest_info, &tables);
 
     assert(acpi_data_len(tables.table_data) == build_state->table_size);
-    memcpy(build_state->table_ram, tables.table_data->data,
+    memcpy(qemu_get_ram_ptr(build_state->table_ram), tables.table_data->data,
            build_state->table_size);
+
+    cpu_physical_memory_set_dirty_range_nocode(build_state->table_ram,
+                                               build_state->table_size);
 
     acpi_build_tables_cleanup(&tables, true);
 }
@@ -1725,7 +1727,7 @@ static void acpi_build_reset(void *build_opaque)
     build_state->patched = 0;
 }
 
-static void *acpi_add_rom_blob(AcpiBuildState *build_state, GArray *blob,
+static ram_addr_t acpi_add_rom_blob(AcpiBuildState *build_state, GArray *blob,
                                const char *name)
 {
     return rom_add_blob(name, blob->data, acpi_data_len(blob), -1, name,
@@ -1774,9 +1776,13 @@ void acpi_setup(PcGuestInfo *guest_info)
     /* Now expose it all to Guest */
     build_state->table_ram = acpi_add_rom_blob(build_state, tables.table_data,
                                                ACPI_BUILD_TABLE_FILE);
+    assert(build_state->table_ram != RAM_ADDR_MAX);
     build_state->table_size = acpi_data_len(tables.table_data);
 
     acpi_add_rom_blob(NULL, tables.linker, "etc/table-loader");
+
+    fw_cfg_add_file(guest_info->fw_cfg, ACPI_BUILD_TPMLOG_FILE,
+                    tables.tcpalog->data, acpi_data_len(tables.tcpalog));
 
     /*
      * RSDP is small so it's easy to keep it immutable, no need to

@@ -60,9 +60,6 @@
 #define FS_NOCOW_FL                     0x00800000 /* Do not cow file */
 #endif
 #endif
-#ifdef CONFIG_FIEMAP
-#include <linux/fiemap.h>
-#endif
 #ifdef CONFIG_FALLOCATE_PUNCH_HOLE
 #include <linux/falloc.h>
 #endif
@@ -150,9 +147,7 @@ typedef struct BDRVRawState {
     bool has_discard:1;
     bool has_write_zeroes:1;
     bool discard_zeroes:1;
-#ifdef CONFIG_FIEMAP
-    bool skip_fiemap;
-#endif
+    bool needs_alignment;
 } BDRVRawState;
 
 typedef struct BDRVRawReopenState {
@@ -230,7 +225,7 @@ static void raw_probe_alignment(BlockDriverState *bs, int fd, Error **errp)
 
     /* For /dev/sg devices the alignment is not really used.
        With buffered I/O, we don't have any restrictions. */
-    if (bs->sg || !(s->open_flags & O_DIRECT)) {
+    if (bs->sg || !s->needs_alignment) {
         bs->request_alignment = 1;
         s->buf_align = 1;
         return;
@@ -446,6 +441,9 @@ static int raw_open_common(BlockDriverState *bs, QDict *options,
 
     s->has_discard = true;
     s->has_write_zeroes = true;
+    if ((bs->open_flags & BDRV_O_NOCACHE) != 0) {
+        s->needs_alignment = true;
+    }
 
     if (fstat(s->fd, &st) < 0) {
         error_setg_errno(errp, errno, "Could not stat file");
@@ -472,6 +470,17 @@ static int raw_open_common(BlockDriverState *bs, QDict *options,
         }
 #endif
     }
+#ifdef __FreeBSD__
+    if (S_ISCHR(st.st_mode)) {
+        /*
+         * The file is a char device (disk), which on FreeBSD isn't behind
+         * a pager, so force all requests to be aligned. This is needed
+         * so QEMU makes sure all IO operations on the device are aligned
+         * to sector size, or else FreeBSD will reject them with EINVAL.
+         */
+        s->needs_alignment = true;
+    }
+#endif
 
 #ifdef CONFIG_XFS
     if (platform_test_xfs_fd(s->fd)) {
@@ -1041,9 +1050,9 @@ static int paio_submit_co(BlockDriverState *bs, int fd,
     return thread_pool_submit_co(pool, aio_worker, acb);
 }
 
-static BlockDriverAIOCB *paio_submit(BlockDriverState *bs, int fd,
+static BlockAIOCB *paio_submit(BlockDriverState *bs, int fd,
         int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-        BlockDriverCompletionFunc *cb, void *opaque, int type)
+        BlockCompletionFunc *cb, void *opaque, int type)
 {
     RawPosixAIOData *acb = g_slice_new(RawPosixAIOData);
     ThreadPool *pool;
@@ -1066,9 +1075,9 @@ static BlockDriverAIOCB *paio_submit(BlockDriverState *bs, int fd,
     return thread_pool_submit_aio(pool, aio_worker, acb, cb, opaque);
 }
 
-static BlockDriverAIOCB *raw_aio_submit(BlockDriverState *bs,
+static BlockAIOCB *raw_aio_submit(BlockDriverState *bs,
         int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-        BlockDriverCompletionFunc *cb, void *opaque, int type)
+        BlockCompletionFunc *cb, void *opaque, int type)
 {
     BDRVRawState *s = bs->opaque;
 
@@ -1076,11 +1085,12 @@ static BlockDriverAIOCB *raw_aio_submit(BlockDriverState *bs,
         return NULL;
 
     /*
-     * If O_DIRECT is used the buffer needs to be aligned on a sector
-     * boundary.  Check if this is the case or tell the low-level
-     * driver that it needs to copy the buffer.
+     * Check if the underlying device requires requests to be aligned,
+     * and if the request we are trying to submit is aligned or not.
+     * If this is the case tell the low-level driver that it needs
+     * to copy the buffer.
      */
-    if ((bs->open_flags & BDRV_O_NOCACHE)) {
+    if (s->needs_alignment) {
         if (!bdrv_qiov_is_aligned(bs, qiov)) {
             type |= QEMU_AIO_MISALIGNED;
 #ifdef CONFIG_LINUX_AIO
@@ -1125,24 +1135,24 @@ static void raw_aio_flush_io_queue(BlockDriverState *bs)
 #endif
 }
 
-static BlockDriverAIOCB *raw_aio_readv(BlockDriverState *bs,
+static BlockAIOCB *raw_aio_readv(BlockDriverState *bs,
         int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-        BlockDriverCompletionFunc *cb, void *opaque)
+        BlockCompletionFunc *cb, void *opaque)
 {
     return raw_aio_submit(bs, sector_num, qiov, nb_sectors,
                           cb, opaque, QEMU_AIO_READ);
 }
 
-static BlockDriverAIOCB *raw_aio_writev(BlockDriverState *bs,
+static BlockAIOCB *raw_aio_writev(BlockDriverState *bs,
         int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-        BlockDriverCompletionFunc *cb, void *opaque)
+        BlockCompletionFunc *cb, void *opaque)
 {
     return raw_aio_submit(bs, sector_num, qiov, nb_sectors,
                           cb, opaque, QEMU_AIO_WRITE);
 }
 
-static BlockDriverAIOCB *raw_aio_flush(BlockDriverState *bs,
-        BlockDriverCompletionFunc *cb, void *opaque)
+static BlockAIOCB *raw_aio_flush(BlockDriverState *bs,
+        BlockCompletionFunc *cb, void *opaque)
 {
     BDRVRawState *s = bs->opaque;
 
@@ -1441,9 +1451,16 @@ static int raw_create(const char *filename, QemuOpts *opts, Error **errp)
                                  "Could not write to the new file");
                 break;
             }
-            left -= num;
+            left -= result;
         }
-        fsync(fd);
+        if (result >= 0) {
+            result = fsync(fd);
+            if (result < 0) {
+                result = -errno;
+                error_setg_errno(errp, -result,
+                                 "Could not flush new file to disk");
+            }
+        }
         g_free(buf);
         break;
     }
@@ -1465,87 +1482,93 @@ out:
     return result;
 }
 
-static int64_t try_fiemap(BlockDriverState *bs, off_t start, off_t *data,
-                          off_t *hole, int nb_sectors, int *pnum)
-{
-#ifdef CONFIG_FIEMAP
-    BDRVRawState *s = bs->opaque;
-    int64_t ret = BDRV_BLOCK_DATA | BDRV_BLOCK_OFFSET_VALID | start;
-    struct {
-        struct fiemap fm;
-        struct fiemap_extent fe;
-    } f;
-
-    if (s->skip_fiemap) {
-        return -ENOTSUP;
-    }
-
-    f.fm.fm_start = start;
-    f.fm.fm_length = (int64_t)nb_sectors * BDRV_SECTOR_SIZE;
-    f.fm.fm_flags = 0;
-    f.fm.fm_extent_count = 1;
-    f.fm.fm_reserved = 0;
-    if (ioctl(s->fd, FS_IOC_FIEMAP, &f) == -1) {
-        s->skip_fiemap = true;
-        return -errno;
-    }
-
-    if (f.fm.fm_mapped_extents == 0) {
-        /* No extents found, data is beyond f.fm.fm_start + f.fm.fm_length.
-         * f.fm.fm_start + f.fm.fm_length must be clamped to the file size!
-         */
-        off_t length = lseek(s->fd, 0, SEEK_END);
-        *hole = f.fm.fm_start;
-        *data = MIN(f.fm.fm_start + f.fm.fm_length, length);
-    } else {
-        *data = f.fe.fe_logical;
-        *hole = f.fe.fe_logical + f.fe.fe_length;
-        if (f.fe.fe_flags & FIEMAP_EXTENT_UNWRITTEN) {
-            ret |= BDRV_BLOCK_ZERO;
-        }
-    }
-
-    return ret;
-#else
-    return -ENOTSUP;
-#endif
-}
-
-static int64_t try_seek_hole(BlockDriverState *bs, off_t start, off_t *data,
-                             off_t *hole, int *pnum)
+/*
+ * Find allocation range in @bs around offset @start.
+ * May change underlying file descriptor's file offset.
+ * If @start is not in a hole, store @start in @data, and the
+ * beginning of the next hole in @hole, and return 0.
+ * If @start is in a non-trailing hole, store @start in @hole and the
+ * beginning of the next non-hole in @data, and return 0.
+ * If @start is in a trailing hole or beyond EOF, return -ENXIO.
+ * If we can't find out, return a negative errno other than -ENXIO.
+ */
+static int find_allocation(BlockDriverState *bs, off_t start,
+                           off_t *data, off_t *hole)
 {
 #if defined SEEK_HOLE && defined SEEK_DATA
     BDRVRawState *s = bs->opaque;
+    off_t offs;
 
-    *hole = lseek(s->fd, start, SEEK_HOLE);
-    if (*hole == -1) {
-        /* -ENXIO indicates that sector_num was past the end of the file.
-         * There is a virtual hole there.  */
-        assert(errno != -ENXIO);
+    /*
+     * SEEK_DATA cases:
+     * D1. offs == start: start is in data
+     * D2. offs > start: start is in a hole, next data at offs
+     * D3. offs < 0, errno = ENXIO: either start is in a trailing hole
+     *                              or start is beyond EOF
+     *     If the latter happens, the file has been truncated behind
+     *     our back since we opened it.  All bets are off then.
+     *     Treating like a trailing hole is simplest.
+     * D4. offs < 0, errno != ENXIO: we learned nothing
+     */
+    offs = lseek(s->fd, start, SEEK_DATA);
+    if (offs < 0) {
+        return -errno;          /* D3 or D4 */
+    }
+    assert(offs >= start);
 
-        return -errno;
+    if (offs > start) {
+        /* D2: in hole, next data at offs */
+        *hole = start;
+        *data = offs;
+        return 0;
     }
 
-    if (*hole > start) {
+    /* D1: in data, end not yet known */
+
+    /*
+     * SEEK_HOLE cases:
+     * H1. offs == start: start is in a hole
+     *     If this happens here, a hole has been dug behind our back
+     *     since the previous lseek().
+     * H2. offs > start: either start is in data, next hole at offs,
+     *                   or start is in trailing hole, EOF at offs
+     *     Linux treats trailing holes like any other hole: offs ==
+     *     start.  Solaris seeks to EOF instead: offs > start (blech).
+     *     If that happens here, a hole has been dug behind our back
+     *     since the previous lseek().
+     * H3. offs < 0, errno = ENXIO: start is beyond EOF
+     *     If this happens, the file has been truncated behind our
+     *     back since we opened it.  Treat it like a trailing hole.
+     * H4. offs < 0, errno != ENXIO: we learned nothing
+     *     Pretend we know nothing at all, i.e. "forget" about D1.
+     */
+    offs = lseek(s->fd, start, SEEK_HOLE);
+    if (offs < 0) {
+        return -errno;          /* D1 and (H3 or H4) */
+    }
+    assert(offs >= start);
+
+    if (offs > start) {
+        /*
+         * D1 and H2: either in data, next hole at offs, or it was in
+         * data but is now in a trailing hole.  In the latter case,
+         * all bets are off.  Treating it as if it there was data all
+         * the way to EOF is safe, so simply do that.
+         */
         *data = start;
-    } else {
-        /* On a hole.  We need another syscall to find its end.  */
-        *data = lseek(s->fd, start, SEEK_DATA);
-        if (*data == -1) {
-            *data = lseek(s->fd, 0, SEEK_END);
-        }
+        *hole = offs;
+        return 0;
     }
 
-    return BDRV_BLOCK_DATA | BDRV_BLOCK_OFFSET_VALID | start;
+    /* D1 and H1 */
+    return -EBUSY;
 #else
     return -ENOTSUP;
 #endif
 }
 
 /*
- * Returns true iff the specified sector is present in the disk image. Drivers
- * not implementing the functionality are assumed to not support backing files,
- * hence all their sectors are reported as allocated.
+ * Returns the allocation status of the specified sectors.
  *
  * If 'sector_num' is beyond the end of the disk image the return value is 0
  * and 'pnum' is set to 0.
@@ -1562,7 +1585,8 @@ static int64_t coroutine_fn raw_co_get_block_status(BlockDriverState *bs,
                                                     int nb_sectors, int *pnum)
 {
     off_t start, data = 0, hole = 0;
-    int64_t ret;
+    int64_t total_size;
+    int ret;
 
     ret = fd_open(bs);
     if (ret < 0) {
@@ -1570,34 +1594,41 @@ static int64_t coroutine_fn raw_co_get_block_status(BlockDriverState *bs,
     }
 
     start = sector_num * BDRV_SECTOR_SIZE;
-
-    ret = try_fiemap(bs, start, &data, &hole, nb_sectors, pnum);
-    if (ret < 0) {
-        ret = try_seek_hole(bs, start, &data, &hole, pnum);
-        if (ret < 0) {
-            /* Assume everything is allocated. */
-            data = 0;
-            hole = start + nb_sectors * BDRV_SECTOR_SIZE;
-            ret = BDRV_BLOCK_DATA | BDRV_BLOCK_OFFSET_VALID | start;
-        }
+    total_size = bdrv_getlength(bs);
+    if (total_size < 0) {
+        return total_size;
+    } else if (start >= total_size) {
+        *pnum = 0;
+        return 0;
+    } else if (start + nb_sectors * BDRV_SECTOR_SIZE > total_size) {
+        nb_sectors = DIV_ROUND_UP(total_size - start, BDRV_SECTOR_SIZE);
     }
 
-    if (data <= start) {
+    ret = find_allocation(bs, start, &data, &hole);
+    if (ret == -ENXIO) {
+        /* Trailing hole */
+        *pnum = nb_sectors;
+        ret = BDRV_BLOCK_ZERO;
+    } else if (ret < 0) {
+        /* No info available, so pretend there are no holes */
+        *pnum = nb_sectors;
+        ret = BDRV_BLOCK_DATA;
+    } else if (data == start) {
         /* On a data extent, compute sectors to the end of the extent.  */
         *pnum = MIN(nb_sectors, (hole - start) / BDRV_SECTOR_SIZE);
+        ret = BDRV_BLOCK_DATA;
     } else {
         /* On a hole, compute sectors to the beginning of the next extent.  */
+        assert(hole == start);
         *pnum = MIN(nb_sectors, (data - start) / BDRV_SECTOR_SIZE);
-        ret &= ~BDRV_BLOCK_DATA;
-        ret |= BDRV_BLOCK_ZERO;
+        ret = BDRV_BLOCK_ZERO;
     }
-
-    return ret;
+    return ret | BDRV_BLOCK_OFFSET_VALID | start;
 }
 
-static coroutine_fn BlockDriverAIOCB *raw_aio_discard(BlockDriverState *bs,
+static coroutine_fn BlockAIOCB *raw_aio_discard(BlockDriverState *bs,
     int64_t sector_num, int nb_sectors,
-    BlockDriverCompletionFunc *cb, void *opaque)
+    BlockCompletionFunc *cb, void *opaque)
 {
     BDRVRawState *s = bs->opaque;
 
@@ -1935,9 +1966,9 @@ static int hdev_ioctl(BlockDriverState *bs, unsigned long int req, void *buf)
     return ioctl(s->fd, req, buf);
 }
 
-static BlockDriverAIOCB *hdev_aio_ioctl(BlockDriverState *bs,
+static BlockAIOCB *hdev_aio_ioctl(BlockDriverState *bs,
         unsigned long int req, void *buf,
-        BlockDriverCompletionFunc *cb, void *opaque)
+        BlockCompletionFunc *cb, void *opaque)
 {
     BDRVRawState *s = bs->opaque;
     RawPosixAIOData *acb;
@@ -1976,9 +2007,9 @@ static int fd_open(BlockDriverState *bs)
 
 #endif /* !linux && !FreeBSD */
 
-static coroutine_fn BlockDriverAIOCB *hdev_aio_discard(BlockDriverState *bs,
+static coroutine_fn BlockAIOCB *hdev_aio_discard(BlockDriverState *bs,
     int64_t sector_num, int nb_sectors,
-    BlockDriverCompletionFunc *cb, void *opaque)
+    BlockCompletionFunc *cb, void *opaque)
 {
     BDRVRawState *s = bs->opaque;
 

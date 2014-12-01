@@ -748,7 +748,6 @@ static void do_fp_st(DisasContext *s, int srcidx, TCGv_i64 tcg_addr, int size)
     } else {
         TCGv_i64 tcg_hiaddr = tcg_temp_new_i64();
         tcg_gen_qemu_st_i64(tmp, tcg_addr, get_mem_index(s), MO_TEQ);
-        tcg_gen_qemu_st64(tmp, tcg_addr, get_mem_index(s));
         tcg_gen_ld_i64(tmp, cpu_env, fp_reg_hi_offset(s, srcidx));
         tcg_gen_addi_i64(tcg_hiaddr, tcg_addr, 8);
         tcg_gen_qemu_st_i64(tmp, tcg_hiaddr, get_mem_index(s), MO_TEQ);
@@ -1226,7 +1225,7 @@ static void handle_msr_i(DisasContext *s, uint32_t insn,
     int op = op1 << 3 | op2;
     switch (op) {
     case 0x05: /* SPSel */
-        if (s->current_pl == 0) {
+        if (s->current_el == 0) {
             unallocated_encoding(s);
             return;
         }
@@ -1323,7 +1322,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
     }
 
     /* Check access permissions */
-    if (!cp_access_ok(s->current_pl, ri, isread)) {
+    if (!cp_access_ok(s->current_el, ri, isread)) {
         unallocated_encoding(s);
         return;
     }
@@ -1362,7 +1361,7 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
          * guaranteed to be constant by the tb flags.
          */
         tcg_rt = cpu_reg(s, rt);
-        tcg_gen_movi_i64(tcg_rt, s->current_pl << 2);
+        tcg_gen_movi_i64(tcg_rt, s->current_el << 2);
         return;
     case ARM_CP_DC_ZVA:
         /* Writes clear the aligned block of memory which rt points into. */
@@ -1485,7 +1484,7 @@ static void disas_exc(DisasContext *s, uint32_t insn)
             gen_exception_insn(s, 0, EXCP_SWI, syn_aa64_svc(imm16));
             break;
         case 2:
-            if (!arm_dc_feature(s, ARM_FEATURE_EL2) || s->current_pl == 0) {
+            if (s->current_el == 0) {
                 unallocated_encoding(s);
                 break;
             }
@@ -1498,7 +1497,7 @@ static void disas_exc(DisasContext *s, uint32_t insn)
             gen_exception_insn(s, 0, EXCP_HVC, syn_aa64_hvc(imm16));
             break;
         case 3:
-            if (!arm_dc_feature(s, ARM_FEATURE_EL3) || s->current_pl == 0) {
+            if (s->current_el == 0) {
                 unallocated_encoding(s);
                 break;
             }
@@ -1575,7 +1574,7 @@ static void disas_uncond_b_reg(DisasContext *s, uint32_t insn)
         tcg_gen_movi_i64(cpu_reg(s, 30), s->pc);
         break;
     case 4: /* ERET */
-        if (s->current_pl == 0) {
+        if (s->current_el == 0) {
             unallocated_encoding(s);
             return;
         }
@@ -10930,7 +10929,7 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
     dc->vec_len = 0;
     dc->vec_stride = 0;
     dc->cp_regs = cpu->cp_regs;
-    dc->current_pl = arm_current_pl(env);
+    dc->current_el = arm_current_el(env);
     dc->features = env->features;
 
     /* Single step state. The code-generation logic here is:
@@ -10951,7 +10950,7 @@ void gen_intermediate_code_internal_a64(ARMCPU *cpu,
     dc->ss_active = ARM_TBFLAG_AA64_SS_ACTIVE(tb->flags);
     dc->pstate_ss = ARM_TBFLAG_AA64_PSTATE_SS(tb->flags);
     dc->is_ldex = false;
-    dc->ss_same_el = (arm_debug_target_el(env) == dc->current_pl);
+    dc->ss_same_el = (arm_debug_target_el(env) == dc->current_el);
 
     init_tmp_a64_array(dc);
 

@@ -28,13 +28,7 @@
 #include "qapi-visit.h"
 #include "qapi/qmp-output-visitor.h"
 #include "qapi/qmp/types.h"
-#ifdef __linux__
-#include <linux/fs.h>
-#include <sys/ioctl.h>
-#ifndef FS_NOCOW_FL
-#define FS_NOCOW_FL                     0x00800000 /* Do not cow file */
-#endif
-#endif
+#include "sysemu/block-backend.h"
 
 BlockDeviceInfo *bdrv_block_device_info(BlockDriverState *bs)
 {
@@ -179,9 +173,6 @@ void bdrv_query_image_info(BlockDriverState *bs,
     int ret;
     Error *err = NULL;
     ImageInfo *info;
-#ifdef __linux__
-    int fd, attr;
-#endif
 
     size = bdrv_getlength(bs);
     if (size < 0) {
@@ -210,18 +201,6 @@ void bdrv_query_image_info(BlockDriverState *bs,
     }
     info->format_specific     = bdrv_get_specific_info(bs);
     info->has_format_specific = info->format_specific != NULL;
-
-#ifdef __linux__
-    /* get NOCOW info */
-    fd = qemu_open(bs->filename, O_RDONLY | O_NONBLOCK);
-    if (fd >= 0) {
-        if (ioctl(fd, FS_IOC_GETFLAGS, &attr) == 0 && (attr & FS_NOCOW_FL)) {
-            info->has_nocow = true;
-            info->nocow = true;
-        }
-        qemu_close(fd);
-    }
-#endif
 
     backing_filename = bs->backing_file;
     if (backing_filename[0] != '\0') {
@@ -264,22 +243,22 @@ void bdrv_query_image_info(BlockDriverState *bs,
 }
 
 /* @p_info will be set only on success. */
-void bdrv_query_info(BlockDriverState *bs,
-                     BlockInfo **p_info,
-                     Error **errp)
+static void bdrv_query_info(BlockBackend *blk, BlockInfo **p_info,
+                            Error **errp)
 {
     BlockInfo *info = g_malloc0(sizeof(*info));
+    BlockDriverState *bs = blk_bs(blk);
     BlockDriverState *bs0;
     ImageInfo **p_image_info;
     Error *local_err = NULL;
-    info->device = g_strdup(bs->device_name);
+    info->device = g_strdup(blk_name(blk));
     info->type = g_strdup("unknown");
-    info->locked = bdrv_dev_is_medium_locked(bs);
-    info->removable = bdrv_dev_has_removable_media(bs);
+    info->locked = blk_dev_is_medium_locked(blk);
+    info->removable = blk_dev_has_removable_media(blk);
 
-    if (bdrv_dev_has_removable_media(bs)) {
+    if (blk_dev_has_removable_media(blk)) {
         info->has_tray_open = true;
-        info->tray_open = bdrv_dev_is_tray_open(bs);
+        info->tray_open = blk_dev_is_tray_open(blk);
     }
 
     if (bdrv_iostatus_is_enabled(bs)) {
@@ -327,9 +306,9 @@ static BlockStats *bdrv_query_stats(const BlockDriverState *bs)
 
     s = g_malloc0(sizeof(*s));
 
-    if (bs->device_name[0]) {
+    if (bdrv_get_device_name(bs)[0]) {
         s->has_device = true;
-        s->device = g_strdup(bs->device_name);
+        s->device = g_strdup(bdrv_get_device_name(bs));
     }
 
     s->stats = g_malloc0(sizeof(*s->stats));
@@ -360,12 +339,12 @@ static BlockStats *bdrv_query_stats(const BlockDriverState *bs)
 BlockInfoList *qmp_query_block(Error **errp)
 {
     BlockInfoList *head = NULL, **p_next = &head;
-    BlockDriverState *bs = NULL;
+    BlockBackend *blk;
     Error *local_err = NULL;
 
-     while ((bs = bdrv_next(bs))) {
+    for (blk = blk_next(NULL); blk; blk = blk_next(blk)) {
         BlockInfoList *info = g_malloc0(sizeof(*info));
-        bdrv_query_info(bs, &info->value, &local_err);
+        bdrv_query_info(blk, &info->value, &local_err);
         if (local_err) {
             error_propagate(errp, local_err);
             goto err;
@@ -653,9 +632,5 @@ void bdrv_image_info_dump(fprintf_function func_fprintf, void *f,
     if (info->has_format_specific) {
         func_fprintf(f, "Format specific information:\n");
         bdrv_image_info_specific_dump(func_fprintf, f, info->format_specific);
-    }
-
-    if (info->has_nocow && info->nocow) {
-        func_fprintf(f, "NOCOW flag: set\n");
     }
 }
