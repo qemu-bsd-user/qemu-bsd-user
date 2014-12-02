@@ -298,6 +298,14 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_getresgid(arg1, arg2, arg3);
         break;
 
+    case TARGET_FREEBSD_NR_setresuid: /* setresuid(2) */
+        ret = do_bsd_setresuid(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_setresgid: /* setresgid(2) */
+        ret = do_bsd_setresgid(arg1, arg2, arg3);
+        break;
+
     case TARGET_FREEBSD_NR_getsid: /* getsid(2) */
         ret = do_bsd_getsid(arg1);
         break;

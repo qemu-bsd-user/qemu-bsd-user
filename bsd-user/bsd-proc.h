@@ -303,12 +303,18 @@ static inline abi_long do_bsd_setregid(abi_long arg1, abi_long arg2)
     return get_errno(setregid(arg1, arg2));
 }
 
-/* setresuid(2) */
-static inline abi_long do_bsd_setresuid(abi_long arg1, abi_long arg2,
-        abi_long arg3)
+/* setresgid(2) */
+static inline abi_long do_bsd_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
 
-    return get_errno(setresuid(arg1, arg2, arg3));
+	return get_errno(setresgid(rgid, egid, sgid));
+}
+
+/* setresuid(2) */
+static inline abi_long do_bsd_setresuid(uid_t ruid, uid_t euid, uid_t suid)
+{
+
+	return get_errno(setresuid(ruid, euid, suid));
 }
 
 /* getresuid(2) */
