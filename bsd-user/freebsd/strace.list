@@ -191,6 +191,8 @@
 { TARGET_FREEBSD_NR_rmdir, "rmdir", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_rtprio_thread, "rtprio_thread", "%s(%d, %d, %p)", NULL, NULL },
 { TARGET_FREEBSD_NR_sbrk, "sbrk", NULL, NULL, NULL },
+{ TARGET_FREEBSD_NR_sched_get_priority_max, "sched_get_priority_max", NULL, NULL, NULL },
+{ TARGET_FREEBSD_NR_sched_get_priority_min, "sched_get_priority_min", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_sched_yield, "sched_yield", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_select, "select", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_semget, "semget", NULL, NULL, NULL },

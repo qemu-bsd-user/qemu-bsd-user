@@ -1425,9 +1425,22 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_sched_getscheduler(arg1);
         break;
 
+    case TARGET_FREEBSD_NR_sched_get_priority_max: /* sched_get_priority_max(2)*/
+		ret = do_bsd_sched_get_priority_max(arg1);
+		break;
+
+    case TARGET_FREEBSD_NR_sched_get_priority_min: /* sched_get_priority_min(2)*/
+		ret = do_bsd_sched_get_priority_min(arg1);
+		break;
+
     case TARGET_FREEBSD_NR_sched_rr_get_interval: /* sched_rr_get_interval(2) */
         ret = do_freebsd_sched_rr_get_interval(arg1, arg2);
         break;
+
+    case TARGET_FREEBSD_NR_sched_yield: /* sched_yield(2)*/
+		ret = do_bsd_sched_yield();
+		break;
+
 
         /*
          * FreeBSD CPU affinity sets management
