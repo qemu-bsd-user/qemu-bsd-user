@@ -1,7 +1,7 @@
 /*
  *  BSD ioctl(2) emulation
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,10 +29,13 @@
 #include <sys/ttycom.h>
 #include <sys/filio.h>
 
+#include <crypto/cryptodev.h>
+
 #include "qemu.h"
 #include "qemu-common.h"
 
 #include "bsd-ioctl.h"
+#include "os-ioctl-cryptodev.h"
 #include "os-ioctl-filio.h"
 #include "os-ioctl-ttycom.h"
 
@@ -295,6 +298,10 @@ typedef struct IOCTLEntry IOCTLEntry;
 
 #define MAX_STRUCT_SIZE 4096
 
+static abi_long do_ioctl_unsupported(__unused const IOCTLEntry *ie,
+		__unused uint8_t *buf_temp,  __unused int fd,
+		__unused abi_long cmd, __unused abi_long arg);
+
 static IOCTLEntry ioctl_entries[] = {
 #define IOC_    0x0000
 #define IOC_R   0x0001
@@ -329,6 +336,14 @@ static void log_unsupported_ioctl(unsigned long cmd)
 		break;
 	}
 	gemu_log(" '%c' %3d %lu\n", (char)IOCGROUP(cmd), (int)(cmd & 0xff), IOCPARM_LEN(cmd));
+}
+
+static abi_long do_ioctl_unsupported(__unused const IOCTLEntry *ie,
+		__unused uint8_t *buf_temp,  __unused int fd,
+		__unused abi_long cmd, __unused abi_long arg)
+{
+
+	return -TARGET_ENXIO;
 }
 
 abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg)
