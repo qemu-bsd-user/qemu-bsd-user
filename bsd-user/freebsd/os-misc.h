@@ -159,23 +159,37 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
 }
 
 /* cpuset_getaffinity(2) */
-static inline abi_long do_freebsd_cpuset_getaffinity(abi_long arg1,
-        abi_ulong arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
-        abi_ulong arg6)
+static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
+        cpuwhich_t which, id_t id, abi_ulong setsize, abi_ulong target_mask)
 {
+	cpuset_t *mask;
+	abi_long ret;
 
-    qemu_log("qemu: Unsupported syscall cpuset_getaffinity()\n");
-    return -TARGET_ENOSYS;
+	mask = lock_user(VERIFY_WRITE, target_mask, setsize, 0);
+	if (mask == NULL) {
+		return -TARGET_EFAULT;
+	}
+	ret = get_errno(cpuset_getaffinity(level, which, id, setsize, mask));
+	unlock_user(mask, setsize, ret);
+
+    return ret;
 }
 
 /* cpuset_setaffinity(2) */
-static inline abi_long do_freebsd_cpuset_setaffinity(abi_long arg1,
-        abi_ulong arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
-        abi_ulong arg6)
+static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
+        cpuwhich_t which, id_t id, abi_ulong setsize, abi_ulong target_mask)
 {
+	cpuset_t *mask;
+	abi_long ret;
 
-    qemu_log("qemu: Unsupported syscall cpuset_setaffinity()\n");
-    return -TARGET_ENOSYS;
+	mask = lock_user(VERIFY_READ, target_mask, setsize, 1);
+	if (mask == NULL) {
+		return -TARGET_EFAULT;
+	}
+	ret = get_errno(cpuset_setaffinity(level, which, id, setsize, mask));
+	unlock_user(mask, setsize, 0);
+
+	return ret;
 }
 
 

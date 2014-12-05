@@ -1466,11 +1466,11 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_cpuset_getaffinity: /* cpuset_getaffinity(2) */
-        ret = do_freebsd_cpuset_getaffinity(arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_cpuset_getaffinity(arg1, arg2, arg3, arg4, arg5);
         break;
 
     case TARGET_FREEBSD_NR_cpuset_setaffinity: /* cpuset_setaffinity(2) */
-        ret = do_freebsd_cpuset_setaffinity(arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_cpuset_setaffinity(arg1, arg2, arg3, arg4, arg5);
         break;
 
 
