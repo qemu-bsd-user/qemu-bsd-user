@@ -50,3 +50,6 @@ IOCTL(FIOSEEKHOLE, IOC_RW, MK_PTR(TYPE_ULONG))
 
 /* crypto/cryptodev.h */
 IOCTL_SPECIAL(CRIOGET, IOC_RW, do_ioctl_unsupported, TYPE_INT)
+
+/* netinet6/in6_var.h */
+IOCTL_SPECIAL(SIOCGIFAFLAG_IN6, IOC_RW, do_ioctl_unsupported, MK_PTR(TYPE_INT))

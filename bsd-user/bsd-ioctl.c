@@ -31,12 +31,24 @@
 
 #include <crypto/cryptodev.h>
 
+#include <net/if.h>
+#include <net/if_var.h>
+#include <net/if_types.h>
+#include <net/route.h>
+#include <net/if_dl.h>
+#include <net/if_media.h>
+#include <net/ethernet.h>
+#include <netinet/in.h>
+#include <netinet/icmp6.h>
+#include <netinet6/in6_var.h>
+
 #include "qemu.h"
 #include "qemu-common.h"
 
 #include "bsd-ioctl.h"
 #include "os-ioctl-cryptodev.h"
 #include "os-ioctl-filio.h"
+#include "os-ioctl-in6_var.h"
 #include "os-ioctl-ttycom.h"
 
 static const bitmask_transtbl iflag_tbl[] = {
