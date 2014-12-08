@@ -493,25 +493,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
 
 #ifdef UMTX_OP_NWAKE_PRIVATE
     case TARGET_UMTX_OP_NWAKE_PRIVATE:
-        {
-            int i;
-            abi_ulong *uaddr;
-            uint32_t imax = tswap32(INT_MAX);
-
-            if (!access_ok(VERIFY_READ, obj, val * sizeof(uint32_t))) {
-                return -TARGET_EFAULT;
-            }
-            ret = freebsd_umtx_nwake_private(obj, val);
-
-            uaddr = (abi_ulong *)g2h(obj);
-            ret = 0;
-            for (i = 0; i < (int32_t)val; i++) {
-                ret = freebsd_umtx_wake_private(tswapal(uaddr[i]), imax);
-                if (is_error(ret)) {
-                    break;
-                }
-            }
-        }
+        ret = freebsd_umtx_nwake_private(obj, val);
         break;
 #endif /* UMTX_OP_NWAKE_PRIVATE */
 

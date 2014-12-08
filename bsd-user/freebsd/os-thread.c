@@ -35,6 +35,7 @@
 #include "target_arch_thread.h"
 
 // #define DEBUG_UMTX(...)   fprintf(stderr, __VA_ARGS__)
+// #define DEBUG_UMTX(...) qemu_log(__VA_ARGS__)
 #define DEBUG_UMTX(...)
 
 #define NEW_STACK_SIZE  0x40000
@@ -186,8 +187,9 @@ abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t val,
         size_t utsz, struct _umtx_time *ut)
 {
 
-    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%x, %d, %p)\n",
-            __func__, g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE, val, (int)utsz, ut);
+    DEBUG_UMTX("<WAIT> %s: _umtx_op(%p (%u), %d, 0x%x, %d, %p)\n",
+            __func__, g2h(obj), *(uint32_t *)g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE,
+           val, (int)utsz, ut);
     return get_errno(_umtx_op(g2h(obj), UMTX_OP_WAIT_UINT_PRIVATE, val,
 		(void *)utsz, ut));
 }
@@ -202,13 +204,56 @@ abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val)
 
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #if defined(UMTX_OP_NWAKE_PRIVATE)
-abi_long freebsd_umtx_nwake_private(abi_ulong obj, uint32_t val)
+abi_long freebsd_umtx_nwake_private(abi_ulong target_array_addr, uint32_t num)
 {
+#if 0
+    int i;
+    abi_ulong *uaddr;
+    abi_long ret = 0;
 
-    DEBUG_UMTX("<NWAKE> %s: _umtx_op(%p, %d, 0x%x, NULL, NULL)\n",
-            __func__, g2h(obj), UMTX_OP_NWAKE_PRIVATE, val);
-    return get_errno(_umtx_op(g2h(obj), UMTX_OP_NWAKE_PRIVATE, val, NULL,
-                NULL));
+    DEBUG_UMTX("<NWAKE> %s: _umtx_op(%p, %d, %d, NULL, NULL) Waking: ",
+        __func__, g2h(target_array_addr), UMTX_OP_NWAKE_PRIVATE, num);
+    if (!access_ok(VERIFY_READ, target_array_addr, num * sizeof(abi_ulong))) {
+        return -TARGET_EFAULT;
+    }
+    uaddr = (abi_ulong *)g2h(target_array_addr);
+    for (i = 0; i < (int32_t)num; i++) {
+        DEBUG_UMTX("%p ", g2h(tswapal(uaddr[ii])));
+        ret = get_errno(_umtx_op(g2h(tswapal(uaddr[i])), UMTX_OP_WAKE_PRIVATE,
+            INT_MAX, NULL, NULL));
+        if (is_error(ret)) {
+            DEBUG_UMTX("\n");
+            return ret;
+        }
+    }
+    DEBUG_UMTX("\n");
+    return ret;
+
+#else
+
+    uint32_t i;
+    abi_ulong *target_array;
+    void **array;
+
+
+    array = alloca(num * sizeof(void *));
+
+    target_array = lock_user(VERIFY_READ, target_array_addr,
+		num * sizeof(abi_ulong), 1);
+    if (target_array == NULL) {
+	return -TARGET_EFAULT;
+    }
+    DEBUG_UMTX("<NWAKE> %s: _umtx_op(%p, %d, %d, NULL, NULL) Waking: ",
+            __func__, g2h(target_array_addr), UMTX_OP_NWAKE_PRIVATE, num);
+    for(i = 0; i < num; i++) {
+	array[i] = g2h(tswapal(target_array[i]));
+	DEBUG_UMTX("%p ", array[i]);
+    }
+    DEBUG_UMTX("\n");
+    unlock_user(target_array, target_array_addr, 0);
+
+    return get_errno(_umtx_op(array, UMTX_OP_NWAKE_PRIVATE, num, NULL, NULL));
+#endif /* #if 0 */
 }
 #endif /* UMTX_OP_NWAKE_PRIVATE */
 
