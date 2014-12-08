@@ -28,6 +28,7 @@
 #endif
 #include <sys/ttycom.h>
 #include <sys/filio.h>
+#include <sys/socket.h> /* needed for FreeBSD 8.4 */
 
 #include <crypto/cryptodev.h>
 
