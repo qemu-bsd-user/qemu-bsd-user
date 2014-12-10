@@ -1,7 +1,7 @@
 /*
  *  FreeBSD thread and user mutex related system call shims
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-14 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
