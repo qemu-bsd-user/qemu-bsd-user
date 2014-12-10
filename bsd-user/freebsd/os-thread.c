@@ -443,6 +443,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 
     pthread_mutex_lock(&umtx_sem_lck);
     if (!lock_user_struct(VERIFY_WRITE, t__usem2, obj, 0)) {
+        pthread_mutex_unlock(&umtx_sem_lck);
         return -TARGET_EFAULT;
     }
     do {
@@ -471,10 +472,11 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val)
 {
     struct target__usem2 *t__usem2;
-    uint32_t count;
+    uint32_t count, flags;
 
     pthread_mutex_lock(&umtx_sem_lck);
     if (!lock_user_struct(VERIFY_WRITE, t__usem2, obj, 0)) {
+        pthread_mutex_unlock(&umtx_sem_lck);
         return -TARGET_EFAULT;
     }
 again:
@@ -487,14 +489,20 @@ again:
 	    }
 	}
         __get_user(count, &t__usem2->_count);
+        __get_user(flags, &t__usem2->_flags);
 	unlock_user_struct(t__usem2, obj, 1);
 	pthread_mutex_unlock(&umtx_sem_lck);
 
 	DEBUG_UMTX("<WAKE SEM2> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
             __func__,  &t__usem2->_count, UMTX_OP_WAKE, INT_MAX);
 
-	return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE,
+	if (!flags) {
+	    return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE_PRIVATE,
 		INT_MAX /* USEM_COUNT(count) */, NULL, NULL));
+	} else {
+	    return get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE,
+		INT_MAX /* USEM_COUNT(count) */, NULL, NULL));
+	}
     }
     unlock_user_struct(t__usem2, obj, 1);
     pthread_mutex_unlock(&umtx_sem_lck);
