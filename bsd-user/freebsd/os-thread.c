@@ -38,7 +38,7 @@
 // #define DEBUG_UMTX(...) qemu_log(__VA_ARGS__)
 #define DEBUG_UMTX(...)
 
-#define DETECT_DEADLOCK 0
+#define DETECT_DEADLOCK 1
 #define DEADLOCK_TO	100
 
 #define NEW_STACK_SIZE  0x40000
@@ -508,6 +508,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
     flags = (flags & 0x3) | (cnt << 2);
     __put_user(flags, &t__usem2->_flags);
 
+#if 0
     if (cnt == 0) {
 	do {
 	    __get_user(count, &t__usem2->_count);
@@ -516,6 +517,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	} while (!tcmpset_32(&t__usem2->_count, count,
 		count & ~USEM_HAS_WAITERS));
     }
+#endif
     unlock_user_struct(t__usem2, obj, 1);
     pthread_mutex_unlock(&umtx_sem_lck);
 
@@ -538,20 +540,24 @@ abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val)
 
     /* Do we have waiters? */
     cnt = flags >> 2;
+/*
     if (cnt > 0) {
+*/
         /* Yes, then wake one up. */
 	if (flags & 1) {
 	    DEBUG_UMTX("<WAKE SEM2> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
 		__func__,  &t__usem2->_count, UMTX_OP_WAKE_PRIVATE, 1);
 	    ret = get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE_PRIVATE,
-		1, NULL, NULL));
+		INT_MAX /* 1 */, NULL, NULL));
 	} else {
 	    DEBUG_UMTX("<WAKE SEM2> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
 		__func__,  &t__usem2->_count, UMTX_OP_WAKE, 1);
 	    ret = get_errno(_umtx_op(&t__usem2->_count, UMTX_OP_WAKE,
-		1,  NULL, NULL));
+		INT_MAX /* 1 */,  NULL, NULL));
 	}
+/*
     }
+*/
 #if 0  /* XXX Done in freebsd_umtx_sem2_wait(). */
     /* If this was the last sleeping thread then clear USEM_HAS_WAITERS. */
     // cnt = flags >> 2;
