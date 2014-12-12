@@ -502,8 +502,9 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	    do {
 		ret = _umtx_wait_uint_private(&t__usem2->_count,
 			tswap32(USEM_HAS_WAITERS), dutsz, &dut, __func__);
-		if (ret != -TARGET_ETIMEDOUT)
+		if (ret == 0) {
 		    break;
+		}
 		if (!lock_user_struct(VERIFY_READ, t__usem2, obj, 1)) {
 		    return -TARGET_EFAULT;
 		}
@@ -511,13 +512,13 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 		unlock_user_struct(t__usem2, obj, 0);
 		if (USEM_COUNT(count) != 0) {
 		    fprintf(stderr,
-			"Qemu: Deadlock Recovery (sem2 wait priv count!=0)\n");
+			"Qemu: Deadlock Recovery (sem2 wait priv count!=0 ret=%d)\n", (int)ret);
 		    ret = 0;
 		    break;
 		}
 		if ((count & USEM_HAS_WAITERS) == 0) {
 		    fprintf(stderr,
-			"Qemu: Deadlock Recovery (sem2 wait priv !waiters)\n");
+			"Qemu: Deadlock Recovery (sem2 wait priv !waiters ret=%d)\n", (int)ret);
 		    ret = 0;
 		    break;
 		}
@@ -547,7 +548,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	    do {
 		ret = _umtx_wait_uint(&t__usem2->_count,
 			tswap32(USEM_HAS_WAITERS), dutsz, &dut, __func__);
-		if (ret != -TARGET_ETIMEDOUT)
+		if (ret == 0)
 		    break;
 		if (!lock_user_struct(VERIFY_READ, t__usem2, obj, 1)) {
 		    return -TARGET_EFAULT;
@@ -556,13 +557,13 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 		unlock_user_struct(t__usem2, obj, 0);
 		if (USEM_COUNT(count) != 0) {
 		    fprintf(stderr,
-			"Qemu: Deadlock Recovery (sem2 wait count!=0)\n");
+			"Qemu: Deadlock Recovery (sem2 wait count!=0 ret=%d)\n", (int)ret);
 		    ret = 0;
 		    break;
 		}
 		if ((count & USEM_HAS_WAITERS) == 0) {
 		    fprintf(stderr,
-			"Qemu: Deadlock Recovery (sem2 wait !waiters)\n");
+			"Qemu: Deadlock Recovery (sem2 wait !waiters ret=%d)\n", (int)ret);
 		    ret = 0;
 		    break;
 		}
