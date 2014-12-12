@@ -495,7 +495,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	    size_t dutsz = sizeof(struct _umtx_time);
 
 	    dut._clockid = CLOCK_REALTIME;
-	    dut._flags = UMTX_ABSTIME;
+	    dut._flags = 0;
 	    dut._timeout.tv_sec = 30;
 	    dut._timeout.tv_nsec = 0;
 
@@ -541,7 +541,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	    size_t dutsz = sizeof(struct _umtx_time);
 
 	    dut._clockid = CLOCK_REALTIME;
-	    dut._flags = UMTX_ABSTIME;
+	    dut._flags = 0;
 	    dut._timeout.tv_sec = 30;
 	    dut._timeout.tv_nsec = 0;
 
@@ -966,7 +966,7 @@ abi_long freebsd_lock_umutex(abi_ulong target_addr, uint32_t id,
 	    struct _umtx_time ut;
 
 	    ut._clockid = CLOCK_REALTIME;
-            ut._flags = UMTX_ABSTIME;
+            ut._flags = 0;
 	    ut._timeout.tv_sec = ts->tv_sec;
 	    ut._timeout.tv_nsec = ts->tv_nsec;
 
