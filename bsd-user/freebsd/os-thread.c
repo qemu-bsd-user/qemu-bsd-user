@@ -502,6 +502,8 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	    do {
 		ret = _umtx_wait_uint_private(&t__usem2->_count,
 			tswap32(USEM_HAS_WAITERS), dutsz, &dut, __func__);
+		if (ret != -TARGET_ETIMEDOUT)
+		    break;
 		if (!lock_user_struct(VERIFY_READ, t__usem2, obj, 1)) {
 		    return -TARGET_EFAULT;
 		}
@@ -545,6 +547,8 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	    do {
 		ret = _umtx_wait_uint(&t__usem2->_count,
 			tswap32(USEM_HAS_WAITERS), dutsz, &dut, __func__);
+		if (ret != -TARGET_ETIMEDOUT)
+		    break;
 		if (!lock_user_struct(VERIFY_READ, t__usem2, obj, 1)) {
 		    return -TARGET_EFAULT;
 		}
