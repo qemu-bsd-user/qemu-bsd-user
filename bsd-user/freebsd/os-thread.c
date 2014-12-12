@@ -276,7 +276,7 @@ abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t target_val,
 }
 
 static abi_long _umtx_wait(abi_ulong *addr, abi_ulong target_val,
-        size_t utsz, struct _umtx_time *ut)
+        size_t utsz, struct _umtx_time *ut, const char *where)
 {
 #if DETECT_DEADLOCK
     abi_long ret;
@@ -306,7 +306,7 @@ static abi_long _umtx_wait(abi_ulong *addr, abi_ulong target_val,
 		    return ret;
 		}
 		if (cnt++ > DEADLOCK_TO) {
-			fprintf(stderr, "Deadlock in %s\n", __func__);
+			fprintf(stderr, "Deadlock in %s from %s\n", __func__, where);
 			// return -TARGET_ETIMEDOUT;
 			abort();
 		}
@@ -333,7 +333,7 @@ abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong target_id,
 
     DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%llx, %d, %p)\n",
             __func__, g2h(targ_addr), UMTX_OP_WAIT, (long long)target_id, (int)utsz, ut);
-    return _umtx_wait(g2h(targ_addr), target_id, utsz, ut);
+    return _umtx_wait(g2h(targ_addr), target_id, utsz, ut, __func__);
 }
 
 
@@ -728,7 +728,7 @@ abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long id,
         owner = tswapal(owner);
         DEBUG_UMTX("<WAIT> %s: _umtx_op(%p, %d, 0x%llx, NULL, NULL)\n",
                 __func__, g2h(target_addr), UMTX_OP_WAIT, (long long)owner);
-        ret = _umtx_wait(g2h(target_addr), owner, utsz, ut);
+        ret = _umtx_wait(g2h(target_addr), owner, utsz, ut, __func__);
         if (is_error(ret)) {
             return ret;
         }
