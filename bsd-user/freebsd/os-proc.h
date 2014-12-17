@@ -65,14 +65,14 @@ static inline abi_long do_freebsd_wait4(abi_long arg1, abi_ulong target_status,
         rusage_ptr = &rusage;
     }
     ret = get_errno(wait4(arg1, &status, arg3, rusage_ptr));
-    if (!is_error(ret)) {
+    if (target_status != 0) {
         status = host_to_target_waitstatus(status);
         if (put_user_s32(status, target_status) != 0) {
             return -TARGET_EFAULT;
         }
-        if (target_rusage != 0) {
-            host_to_target_rusage(target_rusage, &rusage);
-        }
+    }
+    if (target_rusage != 0) {
+        host_to_target_rusage(target_rusage, &rusage);
     }
     return ret;
 }
@@ -93,23 +93,22 @@ static inline abi_long do_freebsd_wait6(abi_long idtype, abi_long id,
         wrusage_ptr = &wrusage;
     }
     ret = get_errno(wait6(idtype, id, &status, options, wrusage_ptr, &info));
-    if (!is_error(ret)) {
+    if (target_status != 0) {
         status = host_to_target_waitstatus(status);
         if (put_user_s32(status, target_status) != 0) {
             return -TARGET_EFAULT;
         }
-        if (target_wrusage != 0) {
-            host_to_target_wrusage(target_wrusage, &wrusage);
+    }
+    if (target_wrusage != 0) {
+        host_to_target_wrusage(target_wrusage, &wrusage);
+    }
+    if (target_infop != 0) {
+        p = lock_user(VERIFY_WRITE, target_infop, sizeof(target_siginfo_t), 0);
+        if (p == NULL) {
+            return -TARGET_EFAULT;
         }
-	if (target_infop != 0) {
-            p = lock_user(VERIFY_WRITE, target_infop, sizeof(target_siginfo_t),
-			0);
-	    if (p == NULL) {
-		return -TARGET_EFAULT;
-	    }
-	    host_to_target_siginfo(p, &info);
-            unlock_user(p, target_infop, sizeof(target_siginfo_t));
-	}
+        host_to_target_siginfo(p, &info);
+        unlock_user(p, target_infop, sizeof(target_siginfo_t));
     }
     return ret;
 }
@@ -172,14 +171,14 @@ static inline abi_long do_freebsd_pdwait4(abi_long arg1,
         rusage_ptr = &rusage;
     }
     ret = get_errno(pdwait4(arg1, &status, arg3, rusage_ptr));
-    if (!is_error(ret)) {
+    if (target_status != 0) {
         status = host_to_target_waitstatus(status);
         if (put_user_s32(status, target_status) != 0) {
             return -TARGET_EFAULT;
         }
-        if (target_rusage != 0) {
-            host_to_target_rusage(target_rusage, &rusage);
-        }
+    }
+    if (target_rusage != 0) {
+        host_to_target_rusage(target_rusage, &rusage);
     }
     return ret;
 }
