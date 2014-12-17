@@ -500,6 +500,11 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
 #if __FreeBSD_version > 1100000
     case TARGET_UMTX_OP_SEM2_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
+#if 0
+	/* Little endian direct call */
+	ret = get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAIT, val,
+                        g2h(uaddr), g2h(target_time)));
+#else
         if (target_time != 0) {
 	    ut._clockid = CLOCK_REALTIME;
 	    ut._flags = 0;
@@ -511,13 +516,19 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_umtx_sem2_wait(obj, 0, NULL);
         }
+#endif
 	break;
 
     case TARGET_UMTX_OP_SEM2_WAKE:
         /* Don't need to do access_ok(). */
+#if 0
+	/* Little endian direct call */
+	ret = get_errno(_umtx_op(g2h(obj), UMTX_OP_SEM2_WAKE, val, g2h(uaddr), 			g2h(target_time)));
+#else
         ret = freebsd_umtx_sem2_wake(obj, val);
-        break;
 #endif
+        break;
+#endif /* __FreeBSD_version > 1100000 */
     case TARGET_UMTX_OP_SEM_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
         if (target_time != 0) {
