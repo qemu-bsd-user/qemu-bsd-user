@@ -90,13 +90,6 @@ static pthread_mutex_t new_thread_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t *new_freebsd_thread_lock_ptr = &new_thread_lock;
 static pthread_mutex_t umtx_wait_lck = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t *freebsd_umtx_wait_lck_ptr = &umtx_wait_lck;
-#if 0
-static pthread_cond_t umtx_wait_cv = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t *freebsd_umtx_wait_cv_ptr = &umtx_wait_cv;
-static abi_ulong umtx_wait_addr;
-static pthread_mutex_t umtx_sem_lck = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t *freebsd_umtx_sem_lck_ptr = &umtx_sem_lck;
-#endif
 
 static void rtp_to_schedparam(const struct rtprio *rtp, int *policy,
         struct sched_param *param)
@@ -357,8 +350,6 @@ abi_long freebsd_umtx_nwake_private(abi_ulong target_array_addr, uint32_t num)
     abi_ulong *uaddr;
     abi_long ret = 0;
 
-fprintf(stderr, "Qemu: NWAKE\n");
-
     DEBUG_UMTX("<NWAKE_PRIVATE> %s: _umtx_op(%p, %d, %d, NULL, NULL) Waking: ",
         __func__, g2h(target_array_addr), UMTX_OP_NWAKE_PRIVATE, num);
     if (!access_ok(VERIFY_READ, target_array_addr, num * sizeof(abi_ulong))) {
@@ -449,102 +440,6 @@ abi_long freebsd_umtx_mutex_wake2(abi_ulong target_addr, uint32_t flags)
 #endif /* __FreeBSD_version > 900000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
-
-#if 0
-extern void _pthread_cancel_leave(int);
-extern void _pthread_cancel_enter(int);
-
-static void *waddrs[2048];
-static void *waddrs_private[2048];
-
-static void _add_wake_up(void *waddr)
-{
-	int i;
-
-	for(i = 0; i < 2048; i++) {
-		if (waddrs[i] != NULL) {
-			if (waddrs[i] == waddr)
-				return;
-		} else {
-			waddrs[i] = waddr;
-			return;
-		}
-	}
-	fprintf(stderr, "Qemu: Table overflow in %s\n", __func__);
-}
-
-static void _add_wake_up_private(void *waddr)
-{
-	int i;
-
-	for(i = 0; i < 2048; i++) {
-		if (waddrs_private[i] != NULL) {
-			if (waddrs_private[i] == waddr)
-				return;
-		} else {
-			waddrs_private[i] = waddr;
-			return;
-		}
-	}
-	fprintf(stderr, "Qemu: Table overflow in %s\n", __func__);
-}
-
-static int nosleep_parent, nosleep_child;
-
-static void _prefork(void)
-{
-	int i;
-
-	nosleep_parent = nosleep_child = 1;
-
-	for(i = 0; i < 2048; i++) {
-		if (waddrs[i])
-			_umtx_op(waddrs[i], UMTX_OP_WAKE, INT_MAX,
-				NULL, NULL);
-		if (waddrs_private[i])
-			_umtx_op(waddrs_private[i], UMTX_OP_WAKE_PRIVATE,
-				INT_MAX, NULL, NULL);
-	}
-}
-
-pthread_once_t _fork_handlers_init = PTHREAD_ONCE_INIT;
-
-static void _postfork_child(void)
-{
-	int i;
-
-	for(i = 0; i < 2048; i++) {
-		waddrs[i] = waddrs_private[i] = 0;
-	}
-
-	nosleep_child = 0;
-}
-
-static void _postfork_parent(void)
-{
-
-	nosleep_parent = 0;
-}
-
-static void _add_fork_handlers(void)
-{
-
-	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-	pthread_atfork(NULL, _prefork, _postfork_child);
-}
-
-static void _wake_up_everyone_private(void *addr)
-{
-fprintf(stderr, "Qemu: in %s\n", __func__);
-	_umtx_op(addr, UMTX_OP_WAKE_PRIVATE, INT_MAX, NULL, NULL);
-}
-
-static void _wake_up_everyone(void *addr)
-{
-fprintf(stderr, "Qemu: in %s\n", __func__);
-	_umtx_op(addr, UMTX_OP_WAKE, INT_MAX, NULL, NULL);
-}
-#endif /* #if 0 */
 
 abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 	struct _umtx_time *ut)
@@ -672,6 +567,7 @@ abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t utsz,
 				}
 			}
 		}
+#endif /* #if 0 */
     }
 
     return ret;
@@ -771,7 +667,6 @@ abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val)
 
 	return ret;
 }
-#endif /* ! __FreeBSD_version > 900000 */
 
 abi_long t2h_freebsd_rtprio(struct rtprio *host_rtp, abi_ulong target_addr)
 {
