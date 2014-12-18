@@ -94,9 +94,9 @@ pthread_mutex_t *freebsd_umtx_wait_lck_ptr = &umtx_wait_lck;
 static pthread_cond_t umtx_wait_cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t *freebsd_umtx_wait_cv_ptr = &umtx_wait_cv;
 static abi_ulong umtx_wait_addr;
-#endif
 static pthread_mutex_t umtx_sem_lck = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t *freebsd_umtx_sem_lck_ptr = &umtx_sem_lck;
+#endif
 
 static void rtp_to_schedparam(const struct rtprio *rtp, int *policy,
         struct sched_param *param)
@@ -709,75 +709,67 @@ abi_long freebsd_umtx_sem2_wake(abi_ulong obj, uint32_t val)
 abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t utsz,
 	struct _umtx_time *ut)
 {
-    struct target__usem *t__usem;
-    uint32_t count, cnt, flags;
-    abi_long ret;
+	struct target__usem *t__usem;
+	uint32_t count, flags, *addr;
+	abi_long ret;
 
-    pthread_mutex_lock(&umtx_sem_lck); /* XXXss should get rid of lock */
-    if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
-        return -TARGET_EFAULT;
-    }
-    __get_user(cnt, &t__usem->_has_waiters);
-    if (cnt < INT_MAX)
-	cnt++;
-    __put_user(cnt, &t__usem->_has_waiters);
-    __get_user(count, &t__usem->_count);
-    unlock_user_struct(t__usem, obj, 1);
-    if (count != 0) {
-        pthread_mutex_unlock(&umtx_sem_lck); /* XXXss */
-	return (0);
-    }
+	if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
+		return -TARGET_EFAULT;
+	}
+
+	__get_user(count, &t__usem->_count);
+	if (count != 0) {
+		unlock_user_struct(t__usem, obj, 1);
+		return 0;
+	}
+
+	/*
+	 * Make sure the _has_waiters field is set so userland will always
+	 * call freebsd_umtx_sem_wake().
+	 */
+	__put_user(1, &t__usem->_has_waiters);
+
     __get_user(flags, &t__usem->_flags);
-    pthread_mutex_unlock(&umtx_sem_lck); /* XXXss */
+	addr = &t__usem->_count;
+	unlock_user_struct(t__usem, obj, 1);
 
-    if ((flags &  USYNC_PROCESS_SHARED) == 0){
-	DEBUG_UMTX("<WAIT SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
-            __func__,  &t__usem->_count, UMTX_OP_WAKE_PRIVATE, 0);
-	ret = _umtx_wait_uint_private(&t__usem->_count, 0, utsz, ut, __func__);
-    } else {
-	DEBUG_UMTX("<WAIT SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
-            __func__,  &t__usem->_count, UMTX_OP_WAKE, 0);
-	ret = _umtx_wait_uint(&t__usem->_count, 0, utsz, ut, __func__);
-    }
+	if ((flags &  USYNC_PROCESS_SHARED) == 0){
+		DEBUG_UMTX("<WAIT SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
+			__func__,  &t__usem->_count, UMTX_OP_WAKE_PRIVATE, 0);
+		ret = _umtx_wait_uint_private(addr, 0, utsz, ut, __func__);
+	} else {
+		DEBUG_UMTX("<WAIT SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
+			__func__,  &t__usem->_count, UMTX_OP_WAKE, 0);
+		ret = _umtx_wait_uint(addr, 0, utsz, ut, __func__);
+	}
 
-    pthread_mutex_lock(&umtx_sem_lck); /* XXXss */
-    if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
-        return -TARGET_EFAULT;
-    }
-    __get_user(cnt, &t__usem->_has_waiters);
-    if (cnt > 0)
-	cnt--;
-    __put_user(cnt, &t__usem->_has_waiters);
-    unlock_user_struct(t__usem, obj, 1);
-    pthread_mutex_unlock(&umtx_sem_lck); /* XXXss */
-
-    return ret;
+	return ret;
 }
 
 abi_long freebsd_umtx_sem_wake(abi_ulong obj, uint32_t val)
 {
-    struct target__usem *t__usem;
-    uint32_t flags;
-    abi_long ret;
+	struct target__usem *t__usem;
+	uint32_t flags, *addr;
+	abi_long ret;
 
-    if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
-        return -TARGET_EFAULT;
-    }
-    __get_user(flags, &t__usem->_flags);
-    if ((flags & USYNC_PROCESS_SHARED) == 0) {
-	DEBUG_UMTX("<WAKE SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
-            __func__,  &t__usem->_count, UMTX_OP_WAKE_PRIVATE, 1);
-	ret = get_errno(_umtx_op(&t__usem->_count, UMTX_OP_WAKE_PRIVATE,
-		1, NULL, NULL));
-    } else {
-	DEBUG_UMTX("<WAKE SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
-            __func__,  &t__usem->_count, UMTX_OP_WAKE, 1);
-	ret = get_errno(_umtx_op(&t__usem->_count, UMTX_OP_WAKE,
-		1,  NULL, NULL));
-    }
-    unlock_user_struct(t__usem, obj, 1);
+	if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
+		return -TARGET_EFAULT;
+	}
+	__get_user(flags, &t__usem->_flags);
+	addr = &t__usem->_count;
+	unlock_user_struct(t__usem, obj, 1);
 
-    return ret;
+	if ((flags & USYNC_PROCESS_SHARED) == 0) {
+		DEBUG_UMTX("<WAKE SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
+			__func__,  &t__usem->_count, UMTX_OP_WAKE_PRIVATE, 1);
+		ret = get_errno(_umtx_op(addr, UMTX_OP_WAKE_PRIVATE, 1, NULL, NULL));
+	} else {
+		DEBUG_UMTX("<WAKE SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
+			__func__,  &t__usem->_count, UMTX_OP_WAKE, 1);
+		ret = get_errno(_umtx_op(addr, UMTX_OP_WAKE, 1,  NULL, NULL));
+	}
+
+	return ret;
 }
 #endif /* ! __FreeBSD_version > 900000 */
 
