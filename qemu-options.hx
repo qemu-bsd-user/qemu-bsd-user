@@ -2790,6 +2790,14 @@ STEXI
 @findex -qmp
 Like -monitor but opens in 'control' mode.
 ETEXI
+DEF("qmp-pretty", HAS_ARG, QEMU_OPTION_qmp_pretty, \
+    "-qmp-pretty dev like -qmp but uses pretty JSON formatting\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -qmp-pretty @var{dev}
+@findex -qmp-pretty
+Like -qmp but uses pretty JSON formatting.
+ETEXI
 
 DEF("mon", HAS_ARG, QEMU_OPTION_mon, \
     "-mon [chardev=]name[,mode=readline|control][,default]\n", QEMU_ARCH_ALL)
@@ -3218,7 +3226,17 @@ DEF("semihosting", 0, QEMU_OPTION_semihosting,
 STEXI
 @item -semihosting
 @findex -semihosting
-Semihosting mode (ARM, M68K, Xtensa only).
+Enable semihosting mode (ARM, M68K, Xtensa only).
+ETEXI
+DEF("semihosting-config", HAS_ARG, QEMU_OPTION_semihosting_config,
+    "-semihosting-config [enable=on|off,]target=native|gdb|auto   semihosting configuration\n",
+QEMU_ARCH_ARM | QEMU_ARCH_M68K | QEMU_ARCH_XTENSA | QEMU_ARCH_LM32)
+STEXI
+@item -semihosting-config [enable=on|off,]target=native|gdb|auto
+@findex -semihosting-config
+Enable semihosting and define where the semihosting calls will be addressed,
+to QEMU (@code{native}) or to GDB (@code{gdb}). The default is @code{auto}, which means
+@code{gdb} during debug sessions and @code{native} otherwise (ARM, M68K, Xtensa only).
 ETEXI
 DEF("old-param", 0, QEMU_OPTION_old_param,
     "-old-param      old param mode\n", QEMU_ARCH_ARM)
