@@ -181,6 +181,13 @@ struct target_freebsd_timespec {
 #endif
 } __packed;
 
+/* sys/umtx.h */
+struct target_freebsd__umtx_time {
+    struct target_freebsd_timespec  _timeout;
+    uint32_t    _flags;
+    uint32_t    _clockid;
+};
+
 struct target_freebsd_timeval {
     target_freebsd_time_t       tv_sec; /* seconds */
     target_freebsd_suseconds_t  tv_usec;/* and microseconds */
