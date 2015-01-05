@@ -1,7 +1,7 @@
 /*
  *  FreeBSD time related system call shims
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-15 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -471,12 +471,6 @@ static inline abi_long do_freebsd_pselect(int n, abi_ulong rfd_addr,
         }
         if (efd_addr != 0) {
             ret = copy_to_user_fdset(efd_addr, &efds, n);
-            if (is_error(ret)) {
-                return ret;
-            }
-        }
-        if (ts_addr != 0) {
-            ret = h2t_freebsd_timespec(ts_addr, &ts);
             if (is_error(ret)) {
                 return ret;
             }
