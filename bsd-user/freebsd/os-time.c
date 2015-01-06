@@ -17,6 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <errno.h>
 #include <time.h>
 #include <sys/timex.h>
 #include <sys/types.h>
