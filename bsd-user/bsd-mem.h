@@ -1,7 +1,7 @@
 /*
  *  memory management system call shims and definitions
  *
- *  Copyright (c) 2013 Stacey D. Son
+ *  Copyright (c) 2013-15 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -386,8 +386,14 @@ static inline abi_long do_bsd_freebsd6_mmap(abi_long arg1, abi_long arg2,
         abi_long arg7)
 {
 
+#if TARGET_LONG_BITS == 32
     qemu_log("qemu: Unsupported syscall freebsd6_mmap()\n");
     return -TARGET_ENOSYS;
+#else
+    /* XXX the pad argument is ignored */
+    return get_errno(target_mmap(arg1, arg2, arg3,
+                target_to_host_bitmask(arg4, mmap_flags_tbl), arg5, arg7));
+#endif
 }
 
 #endif /* !_BSD_MMAN_H_ */
