@@ -521,13 +521,4 @@ static inline abi_long do_freebsd_auditctl(abi_ulong arg1)
     return -TARGET_ENOSYS;
 }
 
-/* procctl(2) */
-static inline abi_long do_freebsd_procctl(__unused int idtype, __unused int id,
-	__unused int cmd, __unused abi_ulong arg)
-{
-
-    qemu_log("qemu: Unsupported syscall procctl()\n");
-    return -TARGET_ENOSYS;
-}
-
 #endif /* ! __FREEBSD_PROC_H_ */

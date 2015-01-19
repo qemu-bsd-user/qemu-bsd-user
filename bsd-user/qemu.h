@@ -267,6 +267,8 @@ int host_to_target_errno(int err);
 /* os-proc.c */
 abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         abi_ulong guest_envp, int do_fexec);
+abi_long do_freebsd_procctl(int idtype, int64_t id, int target_cmd,
+        abi_ulong target_arg);
 
 /* os-sys.c */
 abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
