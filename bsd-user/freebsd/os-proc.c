@@ -382,32 +382,32 @@ static abi_long
 t2h_procctl_cmd(int target_cmd, int *host_cmd)
 {
 
-	switch(target_cmd) {
-	case TARGET_PROC_SPROTECT:
-		*host_cmd = PROC_SPROTECT;
-		break;
+    switch(target_cmd) {
+    case TARGET_PROC_SPROTECT:
+        *host_cmd = PROC_SPROTECT;
+        break;
 
-	case TARGET_PROC_REAP_ACQUIRE:
-		*host_cmd = PROC_REAP_ACQUIRE;
-		break;
+    case TARGET_PROC_REAP_ACQUIRE:
+        *host_cmd = PROC_REAP_ACQUIRE;
+        break;
 
-	case TARGET_PROC_REAP_RELEASE:
-		*host_cmd = PROC_REAP_RELEASE;
-		break;
+    case TARGET_PROC_REAP_RELEASE:
+        *host_cmd = PROC_REAP_RELEASE;
+        break;
 
-	case TARGET_PROC_REAP_STATUS:
-		*host_cmd = PROC_REAP_STATUS;
-		break;
+    case TARGET_PROC_REAP_STATUS:
+        *host_cmd = PROC_REAP_STATUS;
+        break;
 
-	case TARGET_PROC_REAP_KILL:
-		*host_cmd = PROC_REAP_KILL;
-		break;
+    case TARGET_PROC_REAP_KILL:
+        *host_cmd = PROC_REAP_KILL;
+        break;
 
-	default:
-		return (-TARGET_EINVAL);
-	}
+    default:
+        return (-TARGET_EINVAL);
+    }
 
-	return 0;
+    return 0;
 }
 
 static abi_long
@@ -494,26 +494,26 @@ do_freebsd_procctl(int idtype, int64_t id, int target_cmd, abi_ulong target_arg)
 
     error = t2h_procctl_cmd(target_cmd, &host_cmd);
     if (error)
-		return error;
+        return error;
 
-	switch (host_cmd) {
-	case PROC_SPROTECT:
+    switch (host_cmd) {
+    case PROC_SPROTECT:
         data = &flags;
         break;
 
-	case PROC_REAP_ACQUIRE:
-	case PROC_REAP_RELEASE:
-		if (target_arg == 0)
+    case PROC_REAP_ACQUIRE:
+    case PROC_REAP_RELEASE:
+        if (target_arg == 0)
             data = NULL;
         else
-			error = -TARGET_EINVAL;
-		break;
+            error = -TARGET_EINVAL;
+        break;
 
-	case PROC_REAP_STATUS:
-		data = &host.rs;
-		break;
+    case PROC_REAP_STATUS:
+        data = &host.rs;
+        break;
 
-	case PROC_REAP_GETPIDS:
+    case PROC_REAP_GETPIDS:
         if (!lock_user_struct(VERIFY_READ, target_rp, target_arg, 1)) {
             return -TARGET_EFAULT;
         }
@@ -528,30 +528,30 @@ do_freebsd_procctl(int idtype, int64_t id, int target_cmd, abi_ulong target_arg)
             error = -TARGET_ENOMEM;
         else
             data = &host.rp;
-		break;
+        break;
 
-	case PROC_REAP_KILL:
+    case PROC_REAP_KILL:
         error = t2h_reaper_kill(target_arg, &host.rk);
-		break;
-	}
+        break;
+    }
 
     if (error)
         return error;
 
-	error = get_errno(procctl(idtype, id, host_cmd, data));
+    error = get_errno(procctl(idtype, id, host_cmd, data));
 
-	if (error)
-		return error;
+    if (error)
+        return error;
 
-	switch(host_cmd) {
+    switch(host_cmd) {
     case PROC_SPROTECT:
         if (put_user_s32(flags, target_arg))
             return -TARGET_EINVAL;
         break;
 
-	case PROC_REAP_STATUS:
+    case PROC_REAP_STATUS:
         error = h2t_reaper_status(&host.rs, target_arg);
-		break;
+        break;
 
     case PROC_REAP_GETPIDS:
         /* copyout reaper pidinfo */
@@ -564,12 +564,12 @@ do_freebsd_procctl(int idtype, int64_t id, int target_cmd, abi_ulong target_arg)
         }
         break;
 
-	case PROC_REAP_KILL:
+    case PROC_REAP_KILL:
         error = h2t_reaper_kill(&host.rk, target_arg);
-		break;
-	}
+        break;
+    }
 
-	return error;
+    return error;
 }
 
 #endif /* ! __FreeBSD_version < 1100000 */
