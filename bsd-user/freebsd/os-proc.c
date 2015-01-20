@@ -479,7 +479,8 @@ h2t_procctl_reaper_pidinfo(struct procctl_reaper_pidinfo *host_pi,
 }
 
 abi_long
-do_freebsd_procctl(int idtype, int64_t id, int target_cmd, abi_ulong target_arg)
+do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
+       abi_ulong arg4, abi_ulong arg5, abi_ulong arg6)
 {
     abi_long error = 0, target_rp_pids;
     void *data;
@@ -491,6 +492,26 @@ do_freebsd_procctl(int idtype, int64_t id, int target_cmd, abi_ulong target_arg)
         struct procctl_reaper_kill rk;
     } host;
     struct target_procctl_reaper_pids *target_rp;
+    id_t id; /* 64-bit */
+    int target_cmd;
+    abi_ulong target_arg;
+
+#if TARGET_ABI_BITS == 32
+    /* See if we need to align the register pairs. */
+    if (regpairs_aligned(cpu_env)) {
+        id = (id_t)target_arg64(arg3, arg4);
+        target_cmd = (int)arg5;
+        target_arg = arg6;
+    } else {
+        id = (id_t)target_arg64(arg2, arg3);
+        target_cmd = (int)arg4;
+        target_arg = arg5;
+    }
+#else
+    id = (id_t)arg2;
+    target_cmd = (int)arg3;
+    target_arg = arg4;
+#endif
 
     error = t2h_procctl_cmd(target_cmd, &host_cmd);
     if (error)
@@ -546,7 +567,7 @@ do_freebsd_procctl(int idtype, int64_t id, int target_cmd, abi_ulong target_arg)
     switch(host_cmd) {
     case PROC_SPROTECT:
         if (put_user_s32(flags, target_arg))
-            return -TARGET_EINVAL;
+            return -TARGET_EFAULT;
         break;
 
     case PROC_REAP_STATUS:
