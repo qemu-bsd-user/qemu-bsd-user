@@ -200,6 +200,9 @@ struct target_freebsd_timespec {
 #endif
 } __packed;
 
+#define TARGET_CPUCLOCK_WHICH_PID   0
+#define TARGET_CPUCLOCK_WHICH_TID   1
+
 /* sys/umtx.h */
 struct target_freebsd__umtx_time {
     struct target_freebsd_timespec  _timeout;

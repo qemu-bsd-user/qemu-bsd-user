@@ -963,6 +963,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_ntp_adjtime(arg1);
         break;
 
+    case TARGET_FREEBSD_NR_clock_getcpuclockid2: /* Not documented. */
+        ret = do_freebsd_clock_getcpuclockid2(arg1, arg2, arg3, arg4);
+        break;
+
     case TARGET_FREEBSD_NR_ntp_gettime: /* ntp_gettime(2) */
         ret = do_freebsd_ntp_gettime(arg1);
         break;
