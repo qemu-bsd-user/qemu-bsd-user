@@ -118,10 +118,10 @@ static inline abi_long do_freebsd_cpuset_setid(void *cpu_env, abi_long arg1,
 #if TARGET_ABI_BITS == 32
     /* See if we need to align the register pairs */
     if (regpairs_aligned(cpu_env)) {
-        id = target_offset64(arg3, arg4);
+        id = target_arg64(arg3, arg4);
         setid = arg5;
     } else {
-        id = target_offset64(arg2, arg3);
+        id = target_arg64(arg2, arg3);
         setid = arg4;
     }
 #else
@@ -145,7 +145,7 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
     target_to_host_cpuset_which(&which, arg1);
     target_to_host_cpuset_level(&level, arg2);
 #if TARGET_ABI_BITS == 32
-    id = target_offset64(arg3, arg4);
+    id = target_arg64(arg3, arg4);
     target_setid = arg5;
 #else
     id = arg3;
@@ -211,11 +211,25 @@ static abi_ulong copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
 }
 
 /* cpuset_getaffinity(2) */
+/* cpuset_getaffinity(cpulevel_t, cpuwhich_t, id_t, size_t, cpuset_t *); */
 static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
-        cpuwhich_t which, id_t id, abi_ulong setsize, abi_ulong target_mask)
+        cpuwhich_t which, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
+        abi_ulong arg6)
 {
 	cpuset_t mask;
 	abi_long ret;
+    id_t id;    /* 64-bit */
+    abi_ulong setsize, target_mask;
+
+#if TARGET_ABI_BITS == 32
+    id = (id_t)target_arg64(arg3, arg4);
+    setsize = arg5;
+    target_mask = arg6;
+#else
+    id = (id_t)arg3;
+    setsize = arg4;
+    target_mask = arg5;
+#endif
 
 	ret = get_errno(cpuset_getaffinity(level, which, id, setsize, &mask));
 	if (ret == 0) {
@@ -226,11 +240,25 @@ static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
 }
 
 /* cpuset_setaffinity(2) */
+/* cpuset_setaffinity(cpulevel_t, cpuwhich_t, id_t, size_t, const cpuset_t *);*/
 static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
-        cpuwhich_t which, id_t id, abi_ulong setsize, abi_ulong target_mask)
+        cpuwhich_t which, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
+        abi_ulong arg6)
 {
 	cpuset_t mask;
 	abi_long ret;
+    id_t id; /* 64-bit */
+    abi_ulong setsize, target_mask;
+
+#if TARGET_ABI_BITS == 32
+    id = (id_t)target_arg64(arg3, arg4);
+    setsize = arg5;
+    target_mask = arg6;
+#else
+    id = (id_t)arg3;
+    setsize = arg4;
+    target_mask = arg5;
+#endif
 
 	ret = copy_from_user_cpuset_mask(&mask, target_mask);
 	if (ret == 0) {
