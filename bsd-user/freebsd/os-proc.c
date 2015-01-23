@@ -17,11 +17,14 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
 #include <sys/unistd.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
+#include <sys/socket.h>
+struct kinfo_proc;
 #include <libprocstat.h>
 #endif
 #include <string.h>
@@ -39,24 +42,21 @@ get_filename_from_fd(pid_t pid, int fd, char *filename, size_t len)
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
     unsigned int cnt;
     struct procstat *procstat = NULL;
-    struct kinfo_proc *kipp = NULL;
+    struct kinfo_proc *kp = NULL;
     struct filestat_list *head = NULL;
     struct filestat *fst;
 
     procstat = procstat_open_sysctl();
-    if (NULL == procstat) {
+    if (procstat == NULL)
         goto out;
-    }
 
-    kipp = procstat_getprocs(procstat, KERN_PROC_PID, pid, &cnt);
-    if (NULL == kipp) {
+    kp = procstat_getprocs(procstat, KERN_PROC_PID, pid, &cnt);
+    if (kp == NULL)
         goto out;
-    }
 
-    head = procstat_getfiles(procstat, kipp, 0);
-    if (NULL == head) {
+    head = procstat_getfiles(procstat, kp, 0);
+    if (head == NULL)
         goto out;
-    }
 
     STAILQ_FOREACH(fst, head, next) {
         if (fd == fst->fs_fd) {
@@ -69,15 +69,12 @@ get_filename_from_fd(pid_t pid, int fd, char *filename, size_t len)
     }
 
 out:
-    if (head != NULL) {
+    if (head != NULL)
         procstat_freefiles(procstat, head);
-    }
-    if (kipp != NULL) {
-        procstat_freeprocs(procstat, kipp);
-    }
-    if (procstat != NULL) {
+    if (kp != NULL)
+        procstat_freeprocs(procstat, kp);
+    if (procstat != NULL)
         procstat_close(procstat);
-    }
 #endif
     return ret;
 }
@@ -363,18 +360,11 @@ execve_end:
     return ret;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
+#if !defined(__FreeBSD_version)
+#error __FreeBSD_version not defined!
+#endif
 
-abi_long
-do_freebsd_procctl(__unused int idtype, __unused int64_t id,
-        __unused int target_cmd, __unused abi_ulong target_arg)
-{
-
-    qemu_log("qemu: Unsupported syscall procctl()\n");
-    return -TARGET_ENOSYS;
-}
-
-#else /* ! __FreeBSD_version < 1100000 */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
 
 #include <sys/procctl.h>
 
@@ -593,4 +583,18 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
     return error;
 }
 
-#endif /* ! __FreeBSD_version < 1100000 */
+#else /* ! __FreeBSD_version >= 1100000 */
+
+abi_long
+do_freebsd_procctl(__unused void *cpu_env, __unused int idtype,
+        __unused abi_ulong arg2, __unused abi_ulong arg3,
+        __unused abi_ulong arg4, __unused abi_ulong arg5,
+        __unused abi_ulong arg6)
+{
+
+    qemu_log("qemu: Unsupported syscall procctl()\n");
+    return -TARGET_ENOSYS;
+}
+
+
+#endif /* ! __FreeBSD_version >= 1100000 */
