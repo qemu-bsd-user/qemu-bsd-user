@@ -634,6 +634,7 @@ static inline abi_long do_freebsd_getitimer(int arg1, abi_ulong arg2)
    return ret;
 }
 
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 902503
 /* clock_getcpuclockid2(id_t, int, clockid_t *)  Not documented. */
 static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1,
         abi_ulong arg2, abi_ulong arg3, abi_ulong arg4)
@@ -676,4 +677,16 @@ static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1,
 
     return ret;
 }
+
+#else /* ! __FreeBSD_version >= 902503 */
+
+static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1 __unused,
+        abi_ulong arg2 __unused, abi_ulong arg3 __unused,
+        abi_ulong arg4 __unused)
+{
+
+    qemu_log("qemu: Unsupported syscall clock_getcpuclockid2()\n");
+    return -TARGET_ENOSYS;
+}
+#endif /* ! __FreeBSD_version >= 902503 */
 #endif /* __FREEBSD_OS_TIME_H_ */
