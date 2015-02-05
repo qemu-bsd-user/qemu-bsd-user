@@ -466,7 +466,11 @@
 #define	TARGET_FREEBSD_NR_pipe2	542
 #define	TARGET_FREEBSD_NR_aio_mlock	543
 #define	TARGET_FREEBSD_NR_procctl	544
-#define	TARGET_FREEBSD_NR_MAXSYSCALL	545
+#
+#define	TARGET_FREEBSD_NR_futimens	546
+#define	TARGET_FREEBSD_NR_utimensat	547
+
+#define	TARGET_FREEBSD_NR_MAXSYSCALL	547
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
 #define	TARGET_FREEBSD_NR_killpg	146
