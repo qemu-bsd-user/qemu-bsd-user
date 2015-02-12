@@ -732,7 +732,8 @@ static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
     if (p == NULL) {
         return -TARGET_EFAULT;
     }
-    ret = get_errno(utimensat(arg1, p, tvp, arg4));
+    ret = get_errno(utimensat(arg1, p, tvp,
+	target_to_host_bitmask(arg4, fcntl_flags_tbl)));
     unlock_user(p, arg2, 0);
     return ret;
 }
