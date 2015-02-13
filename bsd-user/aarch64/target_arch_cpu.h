@@ -174,6 +174,8 @@ static inline void target_cpu_loop(CPUARMState *env)
     int trapnr, sig;
     target_siginfo_t info;
 	uint64_t code, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8;
+    uint32_t cpsr;
+    abi_long ret;
 
     for (;;) {
         cpu_exec_start(cs);
@@ -218,8 +220,22 @@ static inline void target_cpu_loop(CPUARMState *env)
                 arg7 = env->xregs[6];
                 arg8 = env->xregs[7];
             }
-            env->xregs[0] = do_freebsd_syscall(env, code, arg1, arg2, arg3,
+            ret = do_freebsd_syscall(env, code, arg1, arg2, arg3,
                     arg4, arg5, arg6, arg7, arg8);
+            /*
+             * The carry bit is cleared for no error; set for error.
+             * See arm64/arm64/vm_machdep.c cpu_set_syscall_retval()
+             */
+            cpsr = cpsr_read(env);
+            if (ret >= 0) {
+                cpsr &= ~CPSR_C;
+            } else if (ret == -TARGET_ERESTART) {
+                env->elr_el[1] -= 4;    /* XXX */
+            } else if (ret != -TARGET_EJUSTRETURN) {
+                cpsr |= CPSR_C;
+            }
+            cpsr_write(env, cpsr, CPSR_C);
+            env->xregs[0] = ret;
             break;
 
 		case EXCP_INTERRUPT:
