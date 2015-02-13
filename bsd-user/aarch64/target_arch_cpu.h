@@ -33,10 +33,10 @@ static inline void target_cpu_init(CPUARMState *env,
 {
     int i;
 
-	if (!(arm_feature(env, ARM_FEATURE_AARCH64))) {
+    if (!(arm_feature(env, ARM_FEATURE_AARCH64))) {
         fprintf(stderr, "The selected ARM CPU does not support 64 bit mode\n");
         exit(1);
-	}
+    }
     for (i = 0; i < 31; i++) {
         env->xregs[i] = regs->regs[i];
     }
@@ -229,13 +229,15 @@ static inline void target_cpu_loop(CPUARMState *env)
             cpsr = cpsr_read(env);
             if (ret >= 0) {
                 cpsr &= ~CPSR_C;
+                env->xregs[0] = ret;
             } else if (ret == -TARGET_ERESTART) {
                 env->elr_el[1] -= 4;    /* XXX */
+                env->xregs[0] = -ret;
             } else if (ret != -TARGET_EJUSTRETURN) {
                 cpsr |= CPSR_C;
+                env->xregs[0] = -ret;
             }
             cpsr_write(env, cpsr, CPSR_C);
-            env->xregs[0] = ret;
             break;
 
 		case EXCP_INTERRUPT:
@@ -294,11 +296,14 @@ static inline void target_cpu_loop(CPUARMState *env)
     } /* for (;;) */
 }
 
+/* See arm64/arm64/vm_machdep.c cpu_fork() */
 static inline void target_cpu_clone_regs(CPUARMState *env, target_ulong newsp)
 {
     if (newsp)
         env->xregs[31] = newsp;
     env->regs[0] = 0;
+    env->regs[1] = 0;
+    env->spsr = 0;
 }
 
 static inline void target_cpu_reset(CPUArchState *cpu)
