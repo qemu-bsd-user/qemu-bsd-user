@@ -46,13 +46,30 @@ struct target_sigcontext {
 };
 
 /* struct __mcontext in sys/arm64/include/ucontext.h */
-typedef struct target_mcontext {
-    uint64_t    mc_sp;
-    uint64_t    mc_lr;
-    uint64_t    mc_elr;
-    uint64_t    mc_spsr;
-    uint64_t    mc_regs[30];
-} target_mcontext_t;
+
+struct target_gpregs {
+    uint64_t    gp_sp;
+    uint64_t    gp_lr;
+    uint64_t    gp_elr;
+    uint64_t    gp_spsr;
+    uint64_t    gp_x[30];
+};
+
+struct target_fpregs {
+    __uint128_t fp_q[32];
+    uint32_t    fp_cr;
+    uint32_t    fp_sr;
+    u_int       fp_flags;
+};
+
+struct target__mcontext {
+    struct target_gpregs mc_gpregs;
+    struct target_fpregs mc_fpregs;
+    uint32_t    mc_flags;
+#define TARGET_MC_FP_VALID  0x1
+};
+
+typedef struct target__mcontext target_mcontext_t;
 
 typedef struct target_ucontext {
     target_sigset_t     uc_sigmask;
@@ -117,7 +134,7 @@ static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
         int flags)
 {
     int err = 0, i;
-    uint64_t *gr = mcp->mc_regs;
+    uint64_t *gr = mcp->mc_gpregs.gp_x;
 
 
     if (flags & TARGET_MC_GET_CLEAR_RET) {
@@ -129,10 +146,12 @@ static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
     for (i = 1; i < 30; i++)
         gr[i] = tswap64(regs->xregs[i]);
 
-    mcp->mc_sp = tswap64(regs->xregs[TARGET_REG_SP]);
-    mcp->mc_lr = tswap64(regs->xregs[TARGET_REG_LR]);
-    mcp->mc_elr = tswap64(regs->elr_el[1]); /* XXX not sure the level (1) is correct */
-    mcp->mc_spsr = (uint64_t)tswap32(cpsr_read(regs));
+    mcp->mc_gpregs.gp_sp = tswap64(regs->xregs[TARGET_REG_SP]);
+    mcp->mc_gpregs.gp_lr = tswap64(regs->xregs[TARGET_REG_LR]);
+    mcp->mc_gpregs.gp_elr = tswap64(regs->elr_el[1]); /* XXX */
+    mcp->mc_gpregs.gp_spsr = (uint64_t)tswap32(cpsr_read(regs));
+
+    /* XXX FP? */
 
     return err;
 }
@@ -142,17 +161,19 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
         int srflag)
 {
     int err = 0, i;
-    const uint64_t *gr = mcp->mc_regs;
+    const uint64_t *gr = mcp->mc_gpregs.gp_x;
     uint32_t cpsr;
 
     for (i = 1; i < 30; i++)
         regs->xregs[i] = tswap64(gr[i]);
 
-    regs->xregs[TARGET_REG_SP] = tswap64(mcp->mc_sp);
-    regs->xregs[TARGET_REG_LR] = tswap64(mcp->mc_lr);
-    regs->elr_el[1] = tswap64(mcp->mc_elr); /* XXX not sure the level is correct */
-    cpsr = tswap32((uint32_t)mcp->mc_spsr);
-    cpsr_write(regs, cpsr, CPSR_USER | CPSR_EXEC);
+    regs->xregs[TARGET_REG_SP] = tswap64(mcp->mc_gpregs.gp_sp);
+    regs->xregs[TARGET_REG_LR] = tswap64(mcp->mc_gpregs.gp_lr);
+    regs->elr_el[1] = tswap64(mcp->mc_gpregs.gp_elr); /* XXX */
+    cpsr = tswap32((uint32_t)mcp->mc_gpregs.gp_spsr);
+    cpsr_write(regs, cpsr, CPSR_USER | CPSR_EXEC); /* XXX */
+
+    /* XXX FP? */
 
     return err;
 }
