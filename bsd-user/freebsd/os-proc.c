@@ -364,8 +364,7 @@ execve_end:
 #error __FreeBSD_version not defined!
 #endif
 
-#if defined(__FreeBSD_version) && \
-	(__FreeBSD_version >= 1100000 || __FreeBSD_version >= 1001510)
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1001510
 
 #include <sys/procctl.h>
 
