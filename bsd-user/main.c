@@ -488,16 +488,17 @@ int main(int argc, char **argv)
         cpu_model = TARGET_DEFAULT_CPU_MODEL;
     }
     tcg_exec_init(0);
-    cpu_exec_init_all();
     /* NOTE: we need to init the CPU at this stage to get
        qemu_host_page_size */
-    env = cpu_init(cpu_model);
-    if (!env) {
+    cpu = cpu_init(cpu_model);
+    if (!cpu) {
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
-    cpu = ENV_GET_CPU(env);
-    TARGET_CPU_RESET(env);
+    env = cpu->env_ptr;
+#if defined(TARGET_SPARC) || defined(TARGET_PPC)
+    cpu_reset(cpu);
+#endif
     thread_cpu = cpu;
 
     if (getenv("QEMU_STRACE")) {

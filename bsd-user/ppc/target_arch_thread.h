@@ -59,9 +59,13 @@ static inline void target_thread_init(struct target_pt_regs *regs,
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
     regs->gpr[1] = -roundup(-stack + 48, 16);
-    regs->gpr[2] = ldq_raw(infop->entry + 8) + infop->load_addr;
-    regs->gpr[11] = ldq_raw(infop->entry + 16) + infop->load_addr;
-    infop->entry = ldq_raw(infop->entry) + infop->load_addr;
+    get_user_u64(regs->gpr[2], infop->entry + 8);
+    regs->gpr[2] += infop->load_addr;
+    get_user_u64(regs->gpr[11], infop->entry + 16);
+    regs->gpr[11] += infop->load_addr; 
+
+    get_user_u64(infop->entry, infop->entry);
+    infop->entry += infop->load_addr;
 #else
     regs->gpr[1] = -roundup(-stack + 8, 16);
 #endif

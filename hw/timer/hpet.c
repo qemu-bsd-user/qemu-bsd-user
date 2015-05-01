@@ -206,8 +206,9 @@ static void update_irq(struct HPETTimer *timer, int set)
             }
         }
     } else if (timer_fsb_route(timer)) {
-        stl_le_phys(&address_space_memory,
-                    timer->fsb >> 32, timer->fsb & 0xffffffff);
+        address_space_stl_le(&address_space_memory, timer->fsb >> 32,
+                             timer->fsb & 0xffffffff, MEMTXATTRS_UNSPECIFIED,
+                             NULL);
     } else if (timer->config & HPET_TN_TYPE_LEVEL) {
         s->isr |= mask;
         /* fold the ICH PIRQ# pin's internal inversion logic into hpet */
@@ -299,7 +300,7 @@ static const VMStateDescription vmstate_hpet_timer = {
         VMSTATE_UINT64(fsb, HPETTimer),
         VMSTATE_UINT64(period, HPETTimer),
         VMSTATE_UINT8(wrap_flag, HPETTimer),
-        VMSTATE_TIMER(qemu_timer, HPETTimer),
+        VMSTATE_TIMER_PTR(qemu_timer, HPETTimer),
         VMSTATE_END_OF_LIST()
     }
 };

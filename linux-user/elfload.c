@@ -829,8 +829,11 @@ static inline void init_thread(struct target_pt_regs *_regs, struct image_info *
     _regs->gpr[1] = infop->start_stack;
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
     if (get_ppc64_abi(infop) < 2) {
-        _regs->gpr[2] = ldq_raw(infop->entry + 8) + infop->load_bias;
-        infop->entry = ldq_raw(infop->entry) + infop->load_bias;
+        uint64_t val;
+        get_user_u64(val, infop->entry + 8);
+        _regs->gpr[2] = val + infop->load_bias;
+        get_user_u64(val, infop->entry);
+        infop->entry = val + infop->load_bias;
     } else {
         _regs->gpr[12] = infop->entry;  /* r12 set to global entry address */
     }
@@ -2884,8 +2887,7 @@ static int write_note_info(struct elf_note_info *info, int fd)
             return (error);
 
     /* write prstatus for each thread */
-    for (ets = info->thread_list.tqh_first; ets != NULL;
-         ets = ets->ets_link.tqe_next) {
+    QTAILQ_FOREACH(ets, &info->thread_list, ets_link) {
         if ((error = write_note(&ets->notes[0], fd)) != 0)
             return (error);
     }

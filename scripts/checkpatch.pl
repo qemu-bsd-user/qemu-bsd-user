@@ -1639,7 +1639,13 @@ sub process {
 			#print "realcnt<$realcnt> ctx_cnt<$ctx_cnt>\n";
 			#print "pre<$pre_ctx>\nline<$line>\nctx<$ctx>\nnext<$lines[$ctx_ln - 1]>\n";
 
-			if ($ctx !~ /{\s*/ && defined($lines[$ctx_ln -1]) && $lines[$ctx_ln - 1] =~ /^\+\s*{/) {
+			# The length of the "previous line" is checked against 80 because it
+			# includes the + at the beginning of the line (if the actual line has
+			# 79 or 80 characters, it is no longer possible to add a space and an
+			# opening brace there)
+			if ($#ctx == 0 && $ctx !~ /{\s*/ &&
+			    defined($lines[$ctx_ln - 1]) && $lines[$ctx_ln - 1] =~ /^\+\s*{/ &&
+			    defined($lines[$ctx_ln - 2]) && length($lines[$ctx_ln - 2]) < 80) {
 				ERROR("that open brace { should be on the previous line\n" .
 					"$here\n$ctx\n$rawlines[$ctx_ln - 1]\n");
 			}
@@ -2542,7 +2548,10 @@ sub process {
 
 					substr($block, 0, length($cond), '');
 
-					$seen++ if ($block =~ /^\s*{/);
+					my $spaced_block = $block;
+					$spaced_block =~ s/\n\+/ /g;
+
+					$seen++ if ($spaced_block =~ /^\s*{/);
 
                                         print "APW: cond<$cond> block<$block> allowed<$allowed>\n"
                                             if $dbg_adv_apw;
@@ -2901,6 +2910,17 @@ sub process {
 # QEMU specific tests
 		if ($rawline =~ /\b(?:Qemu|QEmu)\b/) {
 			WARN("use QEMU instead of Qemu or QEmu\n" . $herecurr);
+		}
+
+# check for non-portable ffs() calls that have portable alternatives in QEMU
+		if ($line =~ /\bffs\(/) {
+			ERROR("use ctz32() instead of ffs()\n" . $herecurr);
+		}
+		if ($line =~ /\bffsl\(/) {
+			ERROR("use ctz32() or ctz64() instead of ffsl()\n" . $herecurr);
+		}
+		if ($line =~ /\bffsll\(/) {
+			ERROR("use ctz64() instead of ffsll()\n" . $herecurr);
 		}
 	}
 

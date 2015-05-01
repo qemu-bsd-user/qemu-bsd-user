@@ -217,10 +217,6 @@ void *qemu_oom_check(void *ptr);
 
 ssize_t qemu_write_full(int fd, const void *buf, size_t count)
     QEMU_WARN_UNUSED_RESULT;
-ssize_t qemu_send_full(int fd, const void *buf, size_t count, int flags)
-    QEMU_WARN_UNUSED_RESULT;
-ssize_t qemu_recv_full(int fd, void *buf, size_t count, int flags)
-    QEMU_WARN_UNUSED_RESULT;
 
 #ifndef _WIN32
 int qemu_pipe(int pipefd[2]);
@@ -370,6 +366,12 @@ static inline uint8_t from_bcd(uint8_t val)
 }
 
 /* compute with 96 bit intermediate result: (a*b)/c */
+#ifdef CONFIG_INT128
+static inline uint64_t muldiv64(uint64_t a, uint32_t b, uint32_t c)
+{
+    return (__int128_t)a * b / c;
+}
+#else
 static inline uint64_t muldiv64(uint64_t a, uint32_t b, uint32_t c)
 {
     union {
@@ -392,6 +394,7 @@ static inline uint64_t muldiv64(uint64_t a, uint32_t b, uint32_t c)
     res.l.low = (((rh % c) << 32) + (rl & 0xffffffff)) / c;
     return res.ll;
 }
+#endif
 
 /* Round number down to multiple */
 #define QEMU_ALIGN_DOWN(n, m) ((n) / (m) * (m))
@@ -410,6 +413,9 @@ static inline bool is_power_of_2(uint64_t value)
 
 /* round down to the nearest power of 2*/
 int64_t pow2floor(int64_t value);
+
+/* round up to the nearest power of 2 (0 if overflow) */
+uint64_t pow2ceil(uint64_t value);
 
 #include "qemu/module.h"
 

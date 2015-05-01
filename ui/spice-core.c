@@ -273,14 +273,6 @@ static SpiceCoreInterface core_interface = {
     .channel_event      = channel_event,
 };
 
-typedef struct SpiceMigration {
-    SpiceMigrateInstance sin;
-    struct {
-        MonitorCompletion *cb;
-        void *opaque;
-    } connect_complete;
-} SpiceMigration;
-
 static void migrate_connect_complete_cb(SpiceMigrateInstance *sin);
 static void migrate_end_complete_cb(SpiceMigrateInstance *sin);
 
@@ -293,15 +285,11 @@ static const SpiceMigrateInterface migrate_interface = {
     .migrate_end_complete = migrate_end_complete_cb,
 };
 
-static SpiceMigration spice_migrate;
+static SpiceMigrateInstance spice_migrate;
 
 static void migrate_connect_complete_cb(SpiceMigrateInstance *sin)
 {
-    SpiceMigration *sm = container_of(sin, SpiceMigration, sin);
-    if (sm->connect_complete.cb) {
-        sm->connect_complete.cb(sm->connect_complete.opaque, NULL);
-    }
-    sm->connect_complete.cb = NULL;
+    /* nothing, but libspice-server expects this cb being present. */
 }
 
 static void migrate_end_complete_cb(SpiceMigrateInstance *sin)
@@ -436,6 +424,11 @@ static QemuOptsList qemu_spice_opts = {
         },{
             .name = "ipv6",
             .type = QEMU_OPT_BOOL,
+#ifdef SPICE_ADDR_FLAG_UNIX_ONLY
+        },{
+            .name = "unix",
+            .type = QEMU_OPT_BOOL,
+#endif
         },{
             .name = "password",
             .type = QEMU_OPT_STRING,
@@ -580,13 +573,10 @@ static void migration_state_notifier(Notifier *notifier, void *data)
 }
 
 int qemu_spice_migrate_info(const char *hostname, int port, int tls_port,
-                            const char *subject,
-                            MonitorCompletion *cb, void *opaque)
+                            const char *subject)
 {
     int ret;
 
-    spice_migrate.connect_complete.cb = cb;
-    spice_migrate.connect_complete.opaque = opaque;
     ret = spice_server_migrate_connect(spice_server, hostname,
                                        port, tls_port, subject);
     spice_have_target_host = true;
@@ -708,6 +698,10 @@ void qemu_spice_init(void)
         addr_flags |= SPICE_ADDR_FLAG_IPV4_ONLY;
     } else if (qemu_opt_get_bool(opts, "ipv6", 0)) {
         addr_flags |= SPICE_ADDR_FLAG_IPV6_ONLY;
+#ifdef SPICE_ADDR_FLAG_UNIX_ONLY
+    } else if (qemu_opt_get_bool(opts, "unix", 0)) {
+        addr_flags |= SPICE_ADDR_FLAG_UNIX_ONLY;
+#endif
     }
 
     spice_server = spice_server_new();
@@ -803,9 +797,8 @@ void qemu_spice_init(void)
 
     migration_state.notify = migration_state_notifier;
     add_migration_state_change_notifier(&migration_state);
-    spice_migrate.sin.base.sif = &migrate_interface.base;
-    spice_migrate.connect_complete.cb = NULL;
-    qemu_spice_add_interface(&spice_migrate.sin.base);
+    spice_migrate.base.sif = &migrate_interface.base;
+    qemu_spice_add_interface(&spice_migrate.base);
 
     qemu_spice_input_init();
     qemu_spice_audio_init();

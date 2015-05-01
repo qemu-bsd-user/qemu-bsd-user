@@ -177,13 +177,14 @@ bool apic_next_timer(APICCommonState *s, int64_t current_time)
 
 void apic_init_reset(DeviceState *dev)
 {
-    APICCommonState *s = APIC_COMMON(dev);
-    APICCommonClass *info = APIC_COMMON_GET_CLASS(s);
+    APICCommonState *s;
+    APICCommonClass *info;
     int i;
 
-    if (!s) {
+    if (!dev) {
         return;
     }
+    s = APIC_COMMON(dev);
     s->tpr = 0;
     s->spurious_vec = 0xff;
     s->log_dest = 0;
@@ -208,19 +209,24 @@ void apic_init_reset(DeviceState *dev)
     }
     s->timer_expiry = -1;
 
+    info = APIC_COMMON_GET_CLASS(s);
     if (info->reset) {
         info->reset(s);
     }
 }
 
-void apic_designate_bsp(DeviceState *dev)
+void apic_designate_bsp(DeviceState *dev, bool bsp)
 {
     if (dev == NULL) {
         return;
     }
 
     APICCommonState *s = APIC_COMMON(dev);
-    s->apicbase |= MSR_IA32_APICBASE_BSP;
+    if (bsp) {
+        s->apicbase |= MSR_IA32_APICBASE_BSP;
+    } else {
+        s->apicbase &= ~MSR_IA32_APICBASE_BSP;
+    }
 }
 
 static void apic_reset_common(DeviceState *dev)
@@ -237,15 +243,6 @@ static void apic_reset_common(DeviceState *dev)
     info->vapic_base_update(s);
 
     apic_init_reset(dev);
-
-    if (bsp) {
-        /*
-         * LINT0 delivery mode on CPU #0 is set to ExtInt at initialization
-         * time typically by BIOS, so PIC interrupt can be delivered to the
-         * processor when local APIC is enabled.
-         */
-        s->lvt[APIC_LVT_LINT0] = 0x700;
-    }
 }
 
 /* This function is only used for old state version 1 and 2 */

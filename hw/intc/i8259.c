@@ -430,7 +430,7 @@ static void pic_realize(DeviceState *dev, Error **errp)
     pc->parent_realize(dev, errp);
 }
 
-void pic_info(Monitor *mon, const QDict *qdict)
+void hmp_info_pic(Monitor *mon, const QDict *qdict)
 {
     int i;
     PICCommonState *s;
@@ -448,7 +448,7 @@ void pic_info(Monitor *mon, const QDict *qdict)
     }
 }
 
-void irq_info(Monitor *mon, const QDict *qdict)
+void hmp_info_irq(Monitor *mon, const QDict *qdict)
 {
 #ifndef DEBUG_IRQ_COUNT
     monitor_printf(mon, "irq statistic code not compiled.\n");

@@ -269,7 +269,7 @@ void graphic_hw_invalidate(QemuConsole *con)
     }
 }
 
-static void ppm_save(const char *filename, struct DisplaySurface *ds,
+static void ppm_save(const char *filename, DisplaySurface *ds,
                      Error **errp)
 {
     int width = pixman_image_get_width(ds->image);
@@ -1285,9 +1285,9 @@ DisplaySurface *qemu_create_displaysurface_guestmem(int width, int height,
         linesize = width * PIXMAN_FORMAT_BPP(format) / 8;
     }
 
-    size = linesize * height;
+    size = (hwaddr)linesize * height;
     data = cpu_physical_memory_map(addr, &size, 0);
-    if (size != linesize * height) {
+    if (size != (hwaddr)linesize * height) {
         cpu_physical_memory_unmap(data, size, 0, 0);
         return NULL;
     }
@@ -1439,6 +1439,31 @@ void dpy_gfx_replace_surface(QemuConsole *con,
     qemu_free_displaysurface(old_surface);
 }
 
+bool dpy_gfx_check_format(QemuConsole *con,
+                          pixman_format_code_t format)
+{
+    DisplayChangeListener *dcl;
+    DisplayState *s = con->ds;
+
+    QLIST_FOREACH(dcl, &s->listeners, next) {
+        if (dcl->con && dcl->con != con) {
+            /* dcl bound to another console -> skip */
+            continue;
+        }
+        if (dcl->ops->dpy_gfx_check_format) {
+            if (!dcl->ops->dpy_gfx_check_format(dcl, format)) {
+                return false;
+            }
+        } else {
+            /* default is to whitelist native 32 bpp only */
+            if (format != qemu_default_pixman_format(32, true)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static void dpy_refresh(DisplayState *s)
 {
     DisplayChangeListener *dcl;
@@ -1510,7 +1535,7 @@ void dpy_text_update(QemuConsole *con, int x, int y, int w, int h)
 void dpy_text_resize(QemuConsole *con, int w, int h)
 {
     DisplayState *s = con->ds;
-    struct DisplayChangeListener *dcl;
+    DisplayChangeListener *dcl;
 
     if (!qemu_console_is_visible(con)) {
         return;
@@ -1763,6 +1788,21 @@ bool qemu_console_is_fixedsize(QemuConsole *con)
     return con && (con->console_type != TEXT_CONSOLE);
 }
 
+char *qemu_console_get_label(QemuConsole *con)
+{
+    if (con->console_type == GRAPHIC_CONSOLE) {
+        if (con->device) {
+            return g_strdup(object_get_typename(con->device));
+        }
+        return g_strdup("VGA");
+    } else {
+        if (con->chr && con->chr->label) {
+            return g_strdup(con->chr->label);
+        }
+        return g_strdup_printf("vc%d", con->index);
+    }
+}
+
 int qemu_console_get_index(QemuConsole *con)
 {
     if (con == NULL) {
@@ -1978,18 +2018,6 @@ void qemu_console_copy(QemuConsole *con, int src_x, int src_y,
 DisplaySurface *qemu_console_surface(QemuConsole *console)
 {
     return console->surface;
-}
-
-DisplayState *qemu_console_displaystate(QemuConsole *console)
-{
-    return console->ds;
-}
-
-PixelFormat qemu_different_endianness_pixelformat(int bpp)
-{
-    pixman_format_code_t fmt = qemu_default_pixman_format(bpp, false);
-    PixelFormat pf = qemu_pixelformat_from_pixman(fmt);
-    return pf;
 }
 
 PixelFormat qemu_default_pixelformat(int bpp)

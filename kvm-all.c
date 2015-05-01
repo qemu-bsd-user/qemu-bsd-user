@@ -126,6 +126,7 @@ bool kvm_gsi_routing_allowed;
 bool kvm_gsi_direct_mapping;
 bool kvm_allowed;
 bool kvm_readonly_mem_allowed;
+bool kvm_vm_attributes_allowed;
 
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
@@ -366,7 +367,7 @@ static void kvm_log_stop(MemoryListener *listener,
     }
 }
 
-static int kvm_set_migration_log(int enable)
+static int kvm_set_migration_log(bool enable)
 {
     KVMState *s = kvm_state;
     KVMSlot *mem;
@@ -527,17 +528,37 @@ int kvm_vm_check_extension(KVMState *s, unsigned int extension)
     return ret;
 }
 
+static uint32_t adjust_ioeventfd_endianness(uint32_t val, uint32_t size)
+{
+#if defined(HOST_WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
+    /* The kernel expects ioeventfd values in HOST_WORDS_BIGENDIAN
+     * endianness, but the memory core hands them in target endianness.
+     * For example, PPC is always treated as big-endian even if running
+     * on KVM and on PPC64LE.  Correct here.
+     */
+    switch (size) {
+    case 2:
+        val = bswap16(val);
+        break;
+    case 4:
+        val = bswap32(val);
+        break;
+    }
+#endif
+    return val;
+}
+
 static int kvm_set_ioeventfd_mmio(int fd, hwaddr addr, uint32_t val,
                                   bool assign, uint32_t size, bool datamatch)
 {
     int ret;
-    struct kvm_ioeventfd iofd;
-
-    iofd.datamatch = datamatch ? val : 0;
-    iofd.addr = addr;
-    iofd.len = size;
-    iofd.flags = 0;
-    iofd.fd = fd;
+    struct kvm_ioeventfd iofd = {
+        .datamatch = datamatch ? adjust_ioeventfd_endianness(val, size) : 0,
+        .addr = addr,
+        .len = size,
+        .flags = 0,
+        .fd = fd,
+    };
 
     if (!kvm_enabled()) {
         return -ENOSYS;
@@ -563,7 +584,7 @@ static int kvm_set_ioeventfd_pio(int fd, uint16_t addr, uint16_t val,
                                  bool assign, uint32_t size, bool datamatch)
 {
     struct kvm_ioeventfd kick = {
-        .datamatch = datamatch ? val : 0,
+        .datamatch = datamatch ? adjust_ioeventfd_endianness(val, size) : 0,
         .addr = addr,
         .flags = KVM_IOEVENTFD_FLAG_PIO,
         .len = size,
@@ -694,7 +715,7 @@ static void kvm_set_phys_mem(MemoryRegionSection *section, bool add)
 
         old = *mem;
 
-        if (mem->flags & KVM_MEM_LOG_DIRTY_PAGES) {
+        if ((mem->flags & KVM_MEM_LOG_DIRTY_PAGES) || s->migration_log) {
             kvm_physical_sync_dirty_bitmap(section);
         }
 
@@ -1120,18 +1141,18 @@ static int kvm_irqchip_get_virq(KVMState *s)
 {
     uint32_t *word = s->used_gsi_bitmap;
     int max_words = ALIGN(s->gsi_count, 32) / 32;
-    int i, bit;
+    int i, zeroes;
     bool retry = true;
 
 again:
     /* Return the lowest unused GSI in the bitmap */
     for (i = 0; i < max_words; i++) {
-        bit = ffs(~word[i]);
-        if (!bit) {
+        zeroes = ctz32(~word[i]);
+        if (zeroes == 32) {
             continue;
         }
 
-        return bit - 1 + i * 32;
+        return zeroes + i * 32;
     }
     if (!s->direct_msi && retry) {
         retry = false;
@@ -1225,6 +1246,10 @@ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg)
     kroute.u.msi.address_lo = (uint32_t)msg.address;
     kroute.u.msi.address_hi = msg.address >> 32;
     kroute.u.msi.data = le32_to_cpu(msg.data);
+    if (kvm_arch_fixup_msi_route(&kroute, msg.address, msg.data)) {
+        kvm_irqchip_release_virq(s, virq);
+        return -EINVAL;
+    }
 
     kvm_add_routing_entry(s, &kroute);
     kvm_irqchip_commit_routes(s);
@@ -1250,6 +1275,9 @@ int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg)
     kroute.u.msi.address_lo = (uint32_t)msg.address;
     kroute.u.msi.address_hi = msg.address >> 32;
     kroute.u.msi.data = le32_to_cpu(msg.data);
+    if (kvm_arch_fixup_msi_route(&kroute, msg.address, msg.data)) {
+        return -EINVAL;
+    }
 
     return kvm_update_routing_entry(s, &kroute);
 }
@@ -1353,11 +1381,11 @@ int kvm_irqchip_remove_irqfd_notifier(KVMState *s, EventNotifier *n, int virq)
            false);
 }
 
-static int kvm_irqchip_create(KVMState *s)
+static int kvm_irqchip_create(MachineState *machine, KVMState *s)
 {
     int ret;
 
-    if (!qemu_opt_get_bool(qemu_get_machine_opts(), "kernel_irqchip", true) ||
+    if (!machine_kernel_irqchip_allowed(machine) ||
         (!kvm_check_extension(s, KVM_CAP_IRQCHIP) &&
          (kvm_vm_enable_cap(s, KVM_CAP_S390_IRQCHIP, 0) < 0))) {
         return 0;
@@ -1516,8 +1544,17 @@ static int kvm_init(MachineState *ms)
                 strerror(-ret));
 
 #ifdef TARGET_S390X
-        fprintf(stderr, "Please add the 'switch_amode' kernel parameter to "
-                        "your host kernel command line\n");
+        if (ret == -EINVAL) {
+            fprintf(stderr,
+                    "Host kernel setup problem detected. Please verify:\n");
+            fprintf(stderr, "- for kernels supporting the switch_amode or"
+                    " user_mode parameters, whether\n");
+            fprintf(stderr,
+                    "  user space is running in primary address space\n");
+            fprintf(stderr,
+                    "- for kernels supporting the vm.allocate_pgste sysctl, "
+                    "whether it is enabled\n");
+        }
 #endif
         goto err;
     }
@@ -1591,12 +1628,15 @@ static int kvm_init(MachineState *ms)
     kvm_resamplefds_allowed =
         (kvm_check_extension(s, KVM_CAP_IRQFD_RESAMPLE) > 0);
 
-    ret = kvm_arch_init(s);
+    kvm_vm_attributes_allowed =
+        (kvm_check_extension(s, KVM_CAP_VM_ATTRIBUTES) > 0);
+
+    ret = kvm_arch_init(ms, s);
     if (ret < 0) {
         goto err;
     }
 
-    ret = kvm_irqchip_create(s);
+    ret = kvm_irqchip_create(ms, s);
     if (ret < 0) {
         goto err;
     }
@@ -1636,7 +1676,8 @@ static void kvm_handle_io(uint16_t port, void *data, int direction, int size,
     uint8_t *ptr = data;
 
     for (i = 0; i < count; i++) {
-        address_space_rw(&address_space_io, port, ptr, size,
+        address_space_rw(&address_space_io, port, MEMTXATTRS_UNSPECIFIED,
+                         ptr, size,
                          direction == KVM_EXIT_IO_OUT);
         ptr += size;
     }
@@ -1929,6 +1970,23 @@ int kvm_device_ioctl(int fd, int type, ...)
     return ret;
 }
 
+int kvm_vm_check_attr(KVMState *s, uint32_t group, uint64_t attr)
+{
+    int ret;
+    struct kvm_device_attr attribute = {
+        .group = group,
+        .attr = attr,
+    };
+
+    if (!kvm_vm_attributes_allowed) {
+        return 0;
+    }
+
+    ret = kvm_vm_ioctl(s, KVM_HAS_DEVICE_ATTR, &attribute);
+    /* kvm returns 0 on success for HAS_DEVICE_ATTR */
+    return ret ? 0 : 1;
+}
+
 int kvm_has_sync_mmu(void)
 {
     return kvm_check_extension(kvm_state, KVM_CAP_SYNC_MMU);
@@ -2063,10 +2121,6 @@ int kvm_insert_breakpoint(CPUState *cpu, target_ulong addr,
         }
 
         bp = g_malloc(sizeof(struct kvm_sw_breakpoint));
-        if (!bp) {
-            return -ENOMEM;
-        }
-
         bp->pc = addr;
         bp->use_count = 1;
         err = kvm_arch_insert_sw_breakpoint(cpu, bp);
