@@ -1456,24 +1456,26 @@ static PciBridgeInfo *qmp_query_pci_bridge(PCIDevice *dev, PCIBus *bus,
                                            int bus_num)
 {
     PciBridgeInfo *info;
+    PciMemoryRange *range;
 
-    info = g_malloc0(sizeof(*info));
+    info = g_new0(PciBridgeInfo, 1);
 
-    info->bus.number = dev->config[PCI_PRIMARY_BUS];
-    info->bus.secondary = dev->config[PCI_SECONDARY_BUS];
-    info->bus.subordinate = dev->config[PCI_SUBORDINATE_BUS];
+    info->bus = g_new0(PciBusInfo, 1);
+    info->bus->number = dev->config[PCI_PRIMARY_BUS];
+    info->bus->secondary = dev->config[PCI_SECONDARY_BUS];
+    info->bus->subordinate = dev->config[PCI_SUBORDINATE_BUS];
 
-    info->bus.io_range = g_malloc0(sizeof(*info->bus.io_range));
-    info->bus.io_range->base = pci_bridge_get_base(dev, PCI_BASE_ADDRESS_SPACE_IO);
-    info->bus.io_range->limit = pci_bridge_get_limit(dev, PCI_BASE_ADDRESS_SPACE_IO);
+    range = info->bus->io_range = g_new0(PciMemoryRange, 1);
+    range->base = pci_bridge_get_base(dev, PCI_BASE_ADDRESS_SPACE_IO);
+    range->limit = pci_bridge_get_limit(dev, PCI_BASE_ADDRESS_SPACE_IO);
 
-    info->bus.memory_range = g_malloc0(sizeof(*info->bus.memory_range));
-    info->bus.memory_range->base = pci_bridge_get_base(dev, PCI_BASE_ADDRESS_SPACE_MEMORY);
-    info->bus.memory_range->limit = pci_bridge_get_limit(dev, PCI_BASE_ADDRESS_SPACE_MEMORY);
+    range = info->bus->memory_range = g_new0(PciMemoryRange, 1);
+    range->base = pci_bridge_get_base(dev, PCI_BASE_ADDRESS_SPACE_MEMORY);
+    range->limit = pci_bridge_get_limit(dev, PCI_BASE_ADDRESS_SPACE_MEMORY);
 
-    info->bus.prefetchable_range = g_malloc0(sizeof(*info->bus.prefetchable_range));
-    info->bus.prefetchable_range->base = pci_bridge_get_base(dev, PCI_BASE_ADDRESS_MEM_PREFETCH);
-    info->bus.prefetchable_range->limit = pci_bridge_get_limit(dev, PCI_BASE_ADDRESS_MEM_PREFETCH);
+    range = info->bus->prefetchable_range = g_new0(PciMemoryRange, 1);
+    range->base = pci_bridge_get_base(dev, PCI_BASE_ADDRESS_MEM_PREFETCH);
+    range->limit = pci_bridge_get_limit(dev, PCI_BASE_ADDRESS_MEM_PREFETCH);
 
     if (dev->config[PCI_SECONDARY_BUS] != 0) {
         PCIBus *child_bus = pci_find_bus_nr(bus, dev->config[PCI_SECONDARY_BUS]);
@@ -1494,21 +1496,23 @@ static PciDeviceInfo *qmp_query_pci_device(PCIDevice *dev, PCIBus *bus,
     uint8_t type;
     int class;
 
-    info = g_malloc0(sizeof(*info));
+    info = g_new0(PciDeviceInfo, 1);
     info->bus = bus_num;
     info->slot = PCI_SLOT(dev->devfn);
     info->function = PCI_FUNC(dev->devfn);
 
+    info->class_info = g_new0(PciDeviceClass, 1);
     class = pci_get_word(dev->config + PCI_CLASS_DEVICE);
-    info->class_info.q_class = class;
+    info->class_info->q_class = class;
     desc = get_class_desc(class);
     if (desc->desc) {
-        info->class_info.has_desc = true;
-        info->class_info.desc = g_strdup(desc->desc);
+        info->class_info->has_desc = true;
+        info->class_info->desc = g_strdup(desc->desc);
     }
 
-    info->id.vendor = pci_get_word(dev->config + PCI_VENDOR_ID);
-    info->id.device = pci_get_word(dev->config + PCI_DEVICE_ID);
+    info->id = g_new0(PciDeviceId, 1);
+    info->id->vendor = pci_get_word(dev->config + PCI_VENDOR_ID);
+    info->id->device = pci_get_word(dev->config + PCI_DEVICE_ID);
     info->regions = qmp_query_pci_regions(dev);
     info->qdev_id = g_strdup(dev->qdev.id ? dev->qdev.id : "");
 
@@ -1611,28 +1615,32 @@ static const char * const pci_nic_names[] = {
 };
 
 /* Initialize a PCI NIC.  */
-static PCIDevice *pci_nic_init(NICInfo *nd, PCIBus *rootbus,
+PCIDevice *pci_nic_init_nofail(NICInfo *nd, PCIBus *rootbus,
                                const char *default_model,
-                               const char *default_devaddr,
-                               Error **errp)
+                               const char *default_devaddr)
 {
     const char *devaddr = nd->devaddr ? nd->devaddr : default_devaddr;
     Error *err = NULL;
     PCIBus *bus;
-    int devfn;
     PCIDevice *pci_dev;
     DeviceState *dev;
+    int devfn;
     int i;
 
+    if (qemu_show_nic_models(nd->model, pci_nic_models)) {
+        exit(0);
+    }
+
     i = qemu_find_nic_model(nd, pci_nic_models, default_model);
-    if (i < 0)
-        return NULL;
+    if (i < 0) {
+        exit(1);
+    }
 
     bus = pci_get_bus_devfn(&devfn, rootbus, devaddr);
     if (!bus) {
         error_report("Invalid PCI device address %s for device %s",
                      devaddr, pci_nic_names[i]);
-        return NULL;
+        exit(1);
     }
 
     pci_dev = pci_create(bus, devfn, pci_nic_names[i]);
@@ -1641,31 +1649,12 @@ static PCIDevice *pci_nic_init(NICInfo *nd, PCIBus *rootbus,
 
     object_property_set_bool(OBJECT(dev), true, "realized", &err);
     if (err) {
-        error_propagate(errp, err);
+        error_report_err(err);
         object_unparent(OBJECT(dev));
-        return NULL;
-    }
-    return pci_dev;
-}
-
-PCIDevice *pci_nic_init_nofail(NICInfo *nd, PCIBus *rootbus,
-                               const char *default_model,
-                               const char *default_devaddr)
-{
-    Error *err = NULL;
-    PCIDevice *res;
-
-    if (qemu_show_nic_models(nd->model, pci_nic_models))
-        exit(0);
-
-    res = pci_nic_init(nd, rootbus, default_model, default_devaddr, &err);
-    if (!res) {
-        if (err) {
-            error_report_err(err);
-        }
         exit(1);
     }
-    return res;
+
+    return pci_dev;
 }
 
 PCIDevice *pci_vga_init(PCIBus *bus)

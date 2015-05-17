@@ -2859,6 +2859,13 @@ static mon_cmd_t info_cmds[] = {
         .mhandler.cmd = hmp_info_migrate_capabilities,
     },
     {
+        .name       = "migrate_parameters",
+        .args_type  = "",
+        .params     = "",
+        .help       = "show current migration parameters",
+        .mhandler.cmd = hmp_info_migrate_parameters,
+    },
+    {
         .name       = "migrate_cache_size",
         .args_type  = "",
         .params     = "",
@@ -4464,11 +4471,12 @@ void set_link_completion(ReadLineState *rs, int nb_args, const char *str)
     len = strlen(str);
     readline_set_completion_index(rs, len);
     if (nb_args == 2) {
-        NetClientState *ncs[255];
+        NetClientState *ncs[MAX_QUEUE_NUM];
         int count, i;
         count = qemu_find_net_clients_except(NULL, ncs,
-                                             NET_CLIENT_OPTIONS_KIND_NONE, 255);
-        for (i = 0; i < count; i++) {
+                                             NET_CLIENT_OPTIONS_KIND_NONE,
+                                             MAX_QUEUE_NUM);
+        for (i = 0; i < MIN(count, MAX_QUEUE_NUM); i++) {
             const char *name = ncs[i]->name;
             if (!strncmp(str, name, len)) {
                 readline_add_completion(rs, name);
@@ -4483,7 +4491,7 @@ void set_link_completion(ReadLineState *rs, int nb_args, const char *str)
 void netdev_del_completion(ReadLineState *rs, int nb_args, const char *str)
 {
     int len, count, i;
-    NetClientState *ncs[255];
+    NetClientState *ncs[MAX_QUEUE_NUM];
 
     if (nb_args != 2) {
         return;
@@ -4492,8 +4500,8 @@ void netdev_del_completion(ReadLineState *rs, int nb_args, const char *str)
     len = strlen(str);
     readline_set_completion_index(rs, len);
     count = qemu_find_net_clients_except(NULL, ncs, NET_CLIENT_OPTIONS_KIND_NIC,
-                                         255);
-    for (i = 0; i < count; i++) {
+                                         MAX_QUEUE_NUM);
+    for (i = 0; i < MIN(count, MAX_QUEUE_NUM); i++) {
         QemuOpts *opts;
         const char *name = ncs[i]->name;
         if (strncmp(str, name, len)) {
@@ -4540,6 +4548,24 @@ void migrate_set_capability_completion(ReadLineState *rs, int nb_args,
     }
 }
 
+void migrate_set_parameter_completion(ReadLineState *rs, int nb_args,
+                                      const char *str)
+{
+    size_t len;
+
+    len = strlen(str);
+    readline_set_completion_index(rs, len);
+    if (nb_args == 2) {
+        int i;
+        for (i = 0; i < MIGRATION_PARAMETER_MAX; i++) {
+            const char *name = MigrationParameter_lookup[i];
+            if (!strncmp(str, name, len)) {
+                readline_add_completion(rs, name);
+            }
+        }
+    }
+}
+
 void host_net_add_completion(ReadLineState *rs, int nb_args, const char *str)
 {
     int i;
@@ -4558,15 +4584,16 @@ void host_net_add_completion(ReadLineState *rs, int nb_args, const char *str)
 
 void host_net_remove_completion(ReadLineState *rs, int nb_args, const char *str)
 {
-    NetClientState *ncs[255];
+    NetClientState *ncs[MAX_QUEUE_NUM];
     int count, i, len;
 
     len = strlen(str);
     readline_set_completion_index(rs, len);
     if (nb_args == 2) {
         count = qemu_find_net_clients_except(NULL, ncs,
-                                             NET_CLIENT_OPTIONS_KIND_NONE, 255);
-        for (i = 0; i < count; i++) {
+                                             NET_CLIENT_OPTIONS_KIND_NONE,
+                                             MAX_QUEUE_NUM);
+        for (i = 0; i < MIN(count, MAX_QUEUE_NUM); i++) {
             int id;
             char name[16];
 
@@ -4581,8 +4608,9 @@ void host_net_remove_completion(ReadLineState *rs, int nb_args, const char *str)
         return;
     } else if (nb_args == 3) {
         count = qemu_find_net_clients_except(NULL, ncs,
-                                             NET_CLIENT_OPTIONS_KIND_NIC, 255);
-        for (i = 0; i < count; i++) {
+                                             NET_CLIENT_OPTIONS_KIND_NIC,
+                                             MAX_QUEUE_NUM);
+        for (i = 0; i < MIN(count, MAX_QUEUE_NUM); i++) {
             int id;
             const char *name;
 
