@@ -2397,7 +2397,7 @@
     '*br':     'str',
     '*helper': 'str' } }
 
-{ 'type': 'NetdevPcapOptions',
+{ 'struct': 'NetdevPcapOptions',
   'data': {
     '*ifname':     'str' } }
 
