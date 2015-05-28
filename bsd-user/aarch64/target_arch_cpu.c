@@ -23,18 +23,12 @@
 /* See cpu_set_user_tls() in arm64/arm64/vm_machdep.c */
 void target_cpu_set_tls(CPUARMState *env, target_ulong newtls)
 {
-    printf("%s: Not implemented yet!\n", __func__);
-#if 0
-    env->cp15.tpidrro_el0 = newtls;
-#endif
+
+    env->cp15.tpidr_el[0] = newtls;
 }
 
 target_ulong target_cpu_get_tls(CPUARMState *env)
 {
-    printf("%s: Not implemented yet!\n", __func__);
-#if 0
-    return (env->cp15.tpidrro_el0);
-#else
-    return 0;
-#endif
+
+    return (env->cp15.tpidr_el[0]);
 }
