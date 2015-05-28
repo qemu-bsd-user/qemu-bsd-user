@@ -48,18 +48,20 @@ struct target_sigcontext {
 /* struct __mcontext in sys/arm64/include/ucontext.h */
 
 struct target_gpregs {
-    uint64_t    gp_sp;
-    uint64_t    gp_lr;
-    uint64_t    gp_elr;
-    uint64_t    gp_spsr;
     uint64_t    gp_x[30];
+    uint64_t    gp_lr;
+    uint64_t    gp_sp;
+    uint64_t    gp_elr;
+    uint32_t    gp_spsr;
+    uint32_t	gp_pad;
 };
 
 struct target_fpregs {
     __uint128_t fp_q[32];
-    uint32_t    fp_cr;
     uint32_t    fp_sr;
-    u_int       fp_flags;
+    uint32_t    fp_cr;
+    uint32_t    fp_flags;
+    uint32_t	fp_pad;
 };
 
 struct target__mcontext {
@@ -67,6 +69,8 @@ struct target__mcontext {
     struct target_fpregs mc_fpregs;
     uint32_t    mc_flags;
 #define TARGET_MC_FP_VALID  0x1
+    uint32_t	mc_pad;
+    uint64_t	mc_spare[8];
 };
 
 typedef struct target__mcontext target_mcontext_t;
@@ -108,7 +112,7 @@ set_sigtramp_args(CPUARMState *regs, int sig, struct target_sigframe *frame,
      *  x0 = signal number
      *  x1 = siginfo pointer
      *  x2 = ucontext pointer
-     *  elr = signal handler pointer
+     *  pc/elr = signal handler pointer
      *  sp = sigframe struct pointer
      *  lr = sigtramp at base of user stack
      */
@@ -119,7 +123,7 @@ set_sigtramp_args(CPUARMState *regs, int sig, struct target_sigframe *frame,
     regs->xregs[2] = frame_addr +
         offsetof(struct target_sigframe, sf_uc);
 
-    regs->elr_el[1] = ka->_sa_handler;  /* XXX not sure the level (1) is correct */
+    regs->pc = ka->_sa_handler;
     regs->xregs[TARGET_REG_SP] = frame_addr;
     regs->xregs[TARGET_REG_LR] = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
 
@@ -148,8 +152,8 @@ static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
 
     mcp->mc_gpregs.gp_sp = tswap64(regs->xregs[TARGET_REG_SP]);
     mcp->mc_gpregs.gp_lr = tswap64(regs->xregs[TARGET_REG_LR]);
-    mcp->mc_gpregs.gp_elr = tswap64(regs->elr_el[1]); /* XXX */
-    mcp->mc_gpregs.gp_spsr = (uint64_t)tswap32(cpsr_read(regs));
+    mcp->mc_gpregs.gp_elr = tswap64(regs->pc);
+    mcp->mc_gpregs.gp_spsr = (uint64_t)tswap32(regs->spsr);
 
     /* XXX FP? */
 
@@ -162,16 +166,14 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
 {
     int err = 0, i;
     const uint64_t *gr = mcp->mc_gpregs.gp_x;
-    uint32_t cpsr;
 
     for (i = 1; i < 30; i++)
         regs->xregs[i] = tswap64(gr[i]);
 
     regs->xregs[TARGET_REG_SP] = tswap64(mcp->mc_gpregs.gp_sp);
     regs->xregs[TARGET_REG_LR] = tswap64(mcp->mc_gpregs.gp_lr);
-    regs->elr_el[1] = tswap64(mcp->mc_gpregs.gp_elr); /* XXX */
-    cpsr = tswap32((uint32_t)mcp->mc_gpregs.gp_spsr);
-    cpsr_write(regs, cpsr, CPSR_USER | CPSR_EXEC); /* XXX */
+    regs->pc = mcp->mc_gpregs.gp_elr;
+    regs->spsr = tswap32((uint32_t)mcp->mc_gpregs.gp_spsr);
 
     /* XXX FP? */
 
@@ -182,16 +184,15 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
 static inline abi_long get_ucontext_sigreturn(CPUARMState *regs,
         abi_ulong target_sf, abi_ulong *target_uc)
 {
-#if 0
-    uint32_t cpsr = cpsr_read(regs);
+    uint32_t spsr = regs->spsr;
 
     *target_uc = 0;
 
-    if ((cpsr & CPSR_M) != ARM_CPU_MODE_USR ||
-            (cpsr & (CPSR_I | CPSR_F)) != 0) {
+    if ((spsr & PSTATE_M) != PSTATE_MODE_EL0t  ||
+        (spsr & (PSTATE_F | PSTATE_I | PSTATE_A | PSTATE_D)) != 0) {
         return -TARGET_EINVAL;
     }
-#endif
+
     *target_uc = target_sf;
 
     return 0;
