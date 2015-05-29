@@ -245,17 +245,18 @@ static inline abi_long do_freebsd___setugid(abi_long arg1)
 static inline abi_long do_freebsd_fork(void *cpu_env)
 {
     abi_long ret;
-    abi_ulong child_flag = 0;
+    abi_ulong child_flag;
 
     fork_start();
     ret = fork();
     if (ret == 0) {
         /* child */
         child_flag = 1;
+        rcu_after_fork();
         target_cpu_clone_regs(cpu_env, 0);
     } else {
         /* parent */
-        fork_end(0);
+        child_flag = 0;
     }
 
     /*
@@ -263,6 +264,8 @@ static inline abi_long do_freebsd_fork(void *cpu_env)
      * value: 0 for parent process, 1 for child process.
      */
     set_second_rval(cpu_env, child_flag);
+
+    fork_end(child_flag);
 
     return ret;
 }
@@ -278,17 +281,18 @@ static inline abi_long do_freebsd_vfork(void *cpu_env)
 static inline abi_long do_freebsd_rfork(void *cpu_env, abi_long flags)
 {
     abi_long ret;
-    abi_ulong child_flag = 0;
+    abi_ulong child_flag;
 
     fork_start();
     ret = rfork(flags);
     if (ret == 0) {
         /* child */
         child_flag = 1;
+        rcu_after_fork();
         target_cpu_clone_regs(cpu_env, 0);
     } else {
         /* parent */
-        fork_end(0);
+        child_flag = 0;
     }
 
     /*
@@ -296,6 +300,7 @@ static inline abi_long do_freebsd_rfork(void *cpu_env, abi_long flags)
      * value: 0 for parent process, 1 for child process.
      */
     set_second_rval(cpu_env, child_flag);
+    fork_end(child_flag);
 
     return ret;
 
@@ -307,7 +312,7 @@ static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
         abi_long flags)
 {
     abi_long ret;
-    abi_ulong child_flag = 0;
+    abi_ulong child_flag;
     int fd;
 
     fork_start();
@@ -315,10 +320,11 @@ static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
     if (ret == 0) {
         /* child */
         child_flag = 1;
+        rcu_after_fork();
         target_cpu_clone_regs(cpu_env, 0);
     } else {
         /* parent */
-        fork_end(0);
+        child_flag = 0;
     }
     if (put_user_s32(fd, target_fdp)) {
         return -TARGET_EFAULT;
@@ -329,6 +335,7 @@ static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
      * value: 0 for parent process, 1 for child process.
      */
     set_second_rval(cpu_env, child_flag);
+    fork_end(child_flag);
 
     return ret;
 }
