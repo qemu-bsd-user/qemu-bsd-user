@@ -77,17 +77,21 @@ struct target_priority {
 };
 
 /* From sys/user.h */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
 #define TARGET_KI_NSPARE_INT        4
+#else
+#define TARGET_KI_NSPARE_INT        7
+#endif /* ! __FreeBSD_version >= 1100000 */
 #define TARGET_KI_NSPARE_LONG       12
 #define TARGET_KI_NSPARE_PTR        6
 
-#define TARGET_KI_NGROUPS           16
-#define TARGET_TDNAMLEN             16
 #define TARGET_WMESGLEN             8
-#define TARGET_LOGNAMELEN           17
 #define TARGET_LOCKNAMELEN          8
+#define TARGET_TDNAMLEN             16
 #define TARGET_COMMLEN              19
 #define TARGET_KI_EMULNAMELEN       16
+#define TARGET_KI_NGROUPS           16
+#define TARGET_LOGNAMELEN           17
 #define TARGET_LOGINCLASSLEN        17
 
 struct target_kinfo_proc {
@@ -155,8 +159,13 @@ struct target_kinfo_proc {
     int8_t      ki_nice;            /* Process "nice" value */
     char        ki_lock;            /* Process lock (prevent swap) count */
     char        ki_rqindex;         /* Run queue index */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     u_char      ki_oncpu_old;       /* Which cpu we are on (legacy) */
     u_char      ki_lastcpu_old;     /* Last cpu we were on (legacy) */
+#else
+    u_char      ki_oncpu;           /* Which cpu we are on */
+    u_char      ki_lastcpu;         /* Last cpu we were on */
+#endif /* ! __FreeBSD_version >= 1100000 */
     char        ki_tdname[TARGET_TDNAMLEN+1];  /* thread name */
     char        ki_wmesg[TARGET_WMESGLEN+1];   /* wchan message */
     char        ki_login[TARGET_LOGNAMELEN+1]; /* setlogin name */
@@ -167,9 +176,11 @@ struct target_kinfo_proc {
 
     char        ki_sparestrings[50];    /* spare string space */
     int32_t     ki_spareints[TARGET_KI_NSPARE_INT]; /* spare room for growth */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     int32_t     ki_oncpu;           /* Which cpu we are on */
     int32_t     ki_lastcpu;         /* Last cpu we were on */
     int32_t     ki_tracer;          /* Pid of tracing process */
+#endif /* __FreeBSD_version >= 1100000 */
     int32_t     ki_flag2;           /* P2_* flags */
     int32_t     ki_fibnum;          /* Default FIB number */
     uint32_t    ki_cr_flags;        /* Credential flags */
@@ -260,8 +271,13 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     __put_user(hki->ki_nice, &tki->ki_nice);
     __put_user(hki->ki_lock, &tki->ki_lock);
     __put_user(hki->ki_rqindex, &tki->ki_rqindex);
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     __put_user(hki->ki_oncpu_old, &tki->ki_oncpu_old);
-    __put_user(hki->ki_oncpu_old, &tki->ki_lastcpu_old);
+    __put_user(hki->ki_lastcpu_old, &tki->ki_lastcpu_old);
+#else
+    __put_user(hki->ki_oncpu, &tki->ki_oncpu);
+    __put_user(hki->ki_lastcpu, &tki->ki_lastcpu);
+#endif /* ! __FreeBSD_version >= 1100000 */
 
     strncpy(tki->ki_tdname, hki->ki_tdname, TARGET_TDNAMLEN+1);
     strncpy(tki->ki_wmesg, hki->ki_wmesg, TARGET_WMESGLEN+1);
@@ -271,9 +287,11 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     strncpy(tki->ki_emul, hki->ki_emul, TARGET_KI_EMULNAMELEN+1);
     strncpy(tki->ki_loginclass, hki->ki_loginclass, TARGET_LOGINCLASSLEN+1);
 
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     __put_user(hki->ki_oncpu, &tki->ki_oncpu);
     __put_user(hki->ki_lastcpu, &tki->ki_lastcpu);
     __put_user(hki->ki_tracer, &tki->ki_tracer);
+#endif /* __FreeBSD_version >= 1100000 */
     __put_user(hki->ki_flag2, &tki->ki_flag2);
     __put_user(hki->ki_fibnum, &tki->ki_fibnum);
     __put_user(hki->ki_cr_flags, &tki->ki_cr_flags);
