@@ -53,6 +53,8 @@ abi_long host_to_target_wrusage(abi_ulong target_addr,
         const struct __wrusage *wrusage);
 #endif /*  __FreeBSD_version >= 1000000 */
 int host_to_target_waitstatus(int status);
+void h2t_rusage(const struct rusage *rusage,
+        struct target_freebsd_rusage *target_rusage);
 
 /* bsd-socket.c */
 abi_long target_to_host_sockaddr(struct sockaddr *addr, abi_ulong target_addr,

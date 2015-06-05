@@ -109,7 +109,7 @@ abi_ulong host_to_target_rlim(rlim_t rlim)
     return result;
 }
 
-static void h2t_rusage(const struct rusage *rusage,
+void h2t_rusage(const struct rusage *rusage,
 	struct target_freebsd_rusage *target_rusage)
 {
     __put_user(rusage->ru_utime.tv_sec, &target_rusage->ru_utime.tv_sec);
