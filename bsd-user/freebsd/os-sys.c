@@ -79,9 +79,11 @@ struct target_priority {
 /* From sys/user.h */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
 #define TARGET_KI_NSPARE_INT        4
-#else
+#elif defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 #define TARGET_KI_NSPARE_INT        7
-#endif /* ! __FreeBSD_version >= 1100000 */
+#else
+#define TARGET_KI_NSPARE_INT        9
+#endif /* ! __FreeBSD_version >= 1000000 */
 #define TARGET_KI_NSPARE_LONG       12
 #define TARGET_KI_NSPARE_PTR        6
 
@@ -166,23 +168,35 @@ struct target_kinfo_proc {
     u_char      ki_oncpu;           /* Which cpu we are on */
     u_char      ki_lastcpu;         /* Last cpu we were on */
 #endif /* ! __FreeBSD_version >= 1100000 */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     char        ki_tdname[TARGET_TDNAMLEN+1];  /* thread name */
+#else
+    char        ki_ocomm[TARGET_TDNAMLEN+1];   /* thread name */
+#endif /* ! __FreeBSD_version >= 900000 */
     char        ki_wmesg[TARGET_WMESGLEN+1];   /* wchan message */
     char        ki_login[TARGET_LOGNAMELEN+1]; /* setlogin name */
     char        ki_lockname[TARGET_LOCKNAMELEN+1]; /* lock name */
     char        ki_comm[TARGET_COMMLEN+1];     /* command name */
     char        ki_emul[TARGET_KI_EMULNAMELEN+1];  /* emulation name */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     char        ki_loginclass[TARGET_LOGINCLASSLEN+1]; /* login class */
+#endif /* ! __FreeBSD_version >= 900000 */
 
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
+    char        ki_sparestrings[68];    /* spare string space */
+#else
     char        ki_sparestrings[50];    /* spare string space */
+#endif /* ! __FreeBSD_version >= 900000 */
     int32_t     ki_spareints[TARGET_KI_NSPARE_INT]; /* spare room for growth */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     int32_t     ki_oncpu;           /* Which cpu we are on */
     int32_t     ki_lastcpu;         /* Last cpu we were on */
     int32_t     ki_tracer;          /* Pid of tracing process */
 #endif /* __FreeBSD_version >= 1100000 */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     int32_t     ki_flag2;           /* P2_* flags */
     int32_t     ki_fibnum;          /* Default FIB number */
+#endif /* ! __FreeBSD_version >= 900000 */
     uint32_t    ki_cr_flags;        /* Credential flags */
     int32_t     ki_jid;             /* Process jail ID */
     int32_t     ki_numthreads;      /* XXXKSE number of threads in total */
@@ -279,21 +293,29 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     __put_user(hki->ki_lastcpu, &tki->ki_lastcpu);
 #endif /* ! __FreeBSD_version >= 1100000 */
 
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     strncpy(tki->ki_tdname, hki->ki_tdname, TARGET_TDNAMLEN+1);
+#else
+    strncpy(tki->ki_ocomm, hki->ki_ocomm, TARGET_TDNAMLEN+1);
+#endif /* __FreeBSD_version >= 900000 */
     strncpy(tki->ki_wmesg, hki->ki_wmesg, TARGET_WMESGLEN+1);
     strncpy(tki->ki_login, hki->ki_login, TARGET_LOGNAMELEN+1);
     strncpy(tki->ki_lockname, hki->ki_lockname, TARGET_LOCKNAMELEN+1);
     strncpy(tki->ki_comm, hki->ki_comm, TARGET_COMMLEN+1);
     strncpy(tki->ki_emul, hki->ki_emul, TARGET_KI_EMULNAMELEN+1);
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     strncpy(tki->ki_loginclass, hki->ki_loginclass, TARGET_LOGINCLASSLEN+1);
+#endif /* __FreeBSD_version >= 900000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     __put_user(hki->ki_oncpu, &tki->ki_oncpu);
     __put_user(hki->ki_lastcpu, &tki->ki_lastcpu);
     __put_user(hki->ki_tracer, &tki->ki_tracer);
 #endif /* __FreeBSD_version >= 1100000 */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     __put_user(hki->ki_flag2, &tki->ki_flag2);
     __put_user(hki->ki_fibnum, &tki->ki_fibnum);
+#endif /* __FreeBSD_version >= 900000 */
     __put_user(hki->ki_cr_flags, &tki->ki_cr_flags);
     __put_user(hki->ki_jid, &tki->ki_jid);
     __put_user(hki->ki_numthreads, &tki->ki_numthreads);
