@@ -47,8 +47,6 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
 #else
     regs->nip = entry;
 #endif
-
-    /* TODO:ppc64 target_thread_set_upcall */
 }
 
 static inline void target_thread_init(struct target_pt_regs *regs,

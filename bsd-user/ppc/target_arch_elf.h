@@ -23,24 +23,22 @@
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
 
-#define elf_check_arch(x) ( (x) == EM_PPC64 )
 #define ELF_CLASS       ELFCLASS64
+#define ELF_ARCH        EM_PPC64
 
 #else
 
-#define elf_check_arch(x) ( (x) == EM_PPC )
 #define ELF_CLASS       ELFCLASS32
+#define ELF_ARCH        EM_PPC
 
 #endif
 
-#define ELF_ARCH        EM_PPC
-
+#define elf_check_arch(x) ( (x) == ELF_ARCH )
 #ifdef TARGET_WORDS_BIGENDIAN
 #define ELF_DATA        ELFDATA2MSB
 #else
 #define ELF_DATA        ELFDATA2LSB
 #endif
-#define ELF_ARCH        EM_PPC
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE       4096

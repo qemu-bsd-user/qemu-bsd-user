@@ -209,11 +209,12 @@ static inline abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
     }
 
     if (mcp->mc_flags & TARGET_MC_AV_VALID) {
-        /* restore fpu context if we have used it before */
+        /* restore altivec context if we have used it before */
         for (i = 0; i < 32*2; i++) {
             regs->avr[i/2].u64[i%2] = tswapal(mcp->mc_avec[i]);
         }
-        regs->fpscr = tswapal(mcp->mc_fpreg[32]);
+        regs->vscr = tswapal(mcp->mc_av[0]);
+        regs->spr[SPR_VRSAVE] = tswapal(mcp->mc_av[1]);
     }
 
     return err;
