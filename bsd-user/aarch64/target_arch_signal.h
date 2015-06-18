@@ -153,7 +153,7 @@ static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
     mcp->mc_gpregs.gp_sp = tswap64(regs->xregs[TARGET_REG_SP]);
     mcp->mc_gpregs.gp_lr = tswap64(regs->xregs[TARGET_REG_LR]);
     mcp->mc_gpregs.gp_elr = tswap64(regs->pc);
-    mcp->mc_gpregs.gp_spsr = (uint64_t)tswap32(regs->spsr);
+    mcp->mc_gpregs.gp_spsr = pstate_read(regs);
 
     /* XXX FP? */
 
@@ -167,13 +167,13 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
     int err = 0, i;
     const uint64_t *gr = mcp->mc_gpregs.gp_x;
 
-    for (i = 1; i < 30; i++)
+    for (i = 0; i < 30; i++)
         regs->xregs[i] = tswap64(gr[i]);
 
     regs->xregs[TARGET_REG_SP] = tswap64(mcp->mc_gpregs.gp_sp);
     regs->xregs[TARGET_REG_LR] = tswap64(mcp->mc_gpregs.gp_lr);
     regs->pc = mcp->mc_gpregs.gp_elr;
-    regs->spsr = tswap32((uint32_t)mcp->mc_gpregs.gp_spsr);
+    pstate_write(regs, mcp->mc_gpregs.gp_spsr);
 
     /* XXX FP? */
 
@@ -184,12 +184,12 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
 static inline abi_long get_ucontext_sigreturn(CPUARMState *regs,
         abi_ulong target_sf, abi_ulong *target_uc)
 {
-    uint32_t spsr = regs->spsr;
+    uint32_t pstate = pstate_read(regs);
 
     *target_uc = 0;
 
-    if ((spsr & PSTATE_M) != PSTATE_MODE_EL0t  ||
-        (spsr & (PSTATE_F | PSTATE_I | PSTATE_A | PSTATE_D)) != 0) {
+    if ((pstate & PSTATE_M) != PSTATE_MODE_EL0t  ||
+        (pstate & (PSTATE_F | PSTATE_I | PSTATE_A | PSTATE_D)) != 0) {
         return -TARGET_EINVAL;
     }
 

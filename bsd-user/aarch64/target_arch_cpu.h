@@ -51,7 +51,7 @@ static inline void target_cpu_init(CPUARMState *env,
  * rt = register that is stored
  * rt2 = second register store (in STP)
  */
-static inline int do_strex(CPUARMState *env)
+static inline int do_strex_a64(CPUARMState *env)
 {
     uint64_t val;
     int size;
@@ -70,7 +70,6 @@ static inline int do_strex(CPUARMState *env)
     rt2 = extract32(env->exclusive_info, 14, 5);
 
     addr = env->exclusive_addr;
-
     if (addr != env->exclusive_test) {
         goto finish;
     }
@@ -93,7 +92,7 @@ static inline int do_strex(CPUARMState *env)
     }
     if (segv) {
         env->exception.vaddress = addr;
-        goto done;
+        goto error;
     }
     if (val != env->exclusive_val) {
         goto finish;
@@ -113,7 +112,7 @@ static inline int do_strex(CPUARMState *env)
         }
     }
     /* Handle the zero register */
-    val = rt = 31 ? 0 : env->xregs[rt];
+    val = rt == 31 ? 0 : env->xregs[rt];
     switch (size) {
     case 0:
         segv = put_user_u8(val, addr);
@@ -162,8 +161,6 @@ error:
      * release any exclusive lock we have.
      */
     env->exclusive_addr = -1;
-
-done:
     end_exclusive();
     return segv;
 }
@@ -173,8 +170,8 @@ static inline void target_cpu_loop(CPUARMState *env)
     CPUState *cs = CPU(arm_env_get_cpu(env));
     int trapnr, sig;
     target_siginfo_t info;
-	uint64_t code, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8;
-    uint32_t cpsr;
+    uint64_t code, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8;
+    uint32_t pstate;
     abi_long ret;
 
     for (;;) {
@@ -226,18 +223,18 @@ static inline void target_cpu_loop(CPUARMState *env)
              * The carry bit is cleared for no error; set for error.
              * See arm64/arm64/vm_machdep.c cpu_set_syscall_retval()
              */
-            cpsr = cpsr_read(env);
+            pstate = pstate_read(env);
             if (ret >= 0) {
-                cpsr &= ~CPSR_C;
+                pstate &= ~PSTATE_C;
                 env->xregs[0] = ret;
             } else if (ret == -TARGET_ERESTART) {
-                env->elr_el[1] -= 4;    /* XXX */
+                env->pc -= 4;
                 env->xregs[0] = -ret;
             } else if (ret != -TARGET_EJUSTRETURN) {
-                cpsr |= CPSR_C;
+                pstate |= PSTATE_C;
                 env->xregs[0] = -ret;
             }
-            cpsr_write(env, cpsr, CPSR_C);
+            pstate_write(env, pstate);
             break;
 
 		case EXCP_INTERRUPT:
@@ -252,8 +249,8 @@ static inline void target_cpu_loop(CPUARMState *env)
             queue_signal(env, info.si_signo, &info);
             break;
 
-		case EXCP_STREX:
-            if (!do_strex(env)) {
+        case EXCP_STREX:
+            if (!do_strex_a64(env)) {
                 break;
             }
             /* Fall through for segv... */
@@ -303,7 +300,7 @@ static inline void target_cpu_clone_regs(CPUARMState *env, target_ulong newsp)
         env->xregs[31] = newsp;
     env->regs[0] = 0;
     env->regs[1] = 0;
-    env->spsr = 0;
+    pstate_write(env, 0);
 }
 
 static inline void target_cpu_reset(CPUArchState *cpu)
