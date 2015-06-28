@@ -63,163 +63,7 @@
 
 #include "target_arch_sysarch.h"
 #include "target_os_vmparam.h"
-
-/*
- * XXX The following should maybe go some place else.
- */
-
-/* From sys/priority.h */
-struct target_priority {
-    uint8_t     pri_class;      /* Scheduling class. */
-    uint8_t     pri_level;      /* Normal priority level. */
-    uint8_t     pri_native;     /* Priority before propogation. */
-    uint8_t     pri_user;       /* User priority based on p_cpu and p_nice. */
-};
-
-/* From sys/user.h */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
-#define TARGET_KI_NSPARE_INT        4
-#elif defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
-#define TARGET_KI_NSPARE_INT        7
-#else
-#define TARGET_KI_NSPARE_INT        9
-#endif /* ! __FreeBSD_version >= 1000000 */
-#define TARGET_KI_NSPARE_LONG       12
-#define TARGET_KI_NSPARE_PTR        6
-
-#define TARGET_WMESGLEN             8
-#define TARGET_LOCKNAMELEN          8
-#define TARGET_TDNAMLEN             16
-#define TARGET_COMMLEN              19
-#define TARGET_KI_EMULNAMELEN       16
-#define TARGET_KI_NGROUPS           16
-#define TARGET_LOGNAMELEN           17
-#define TARGET_LOGINCLASSLEN        17
-
-struct target_kinfo_proc {
-    int32_t     ki_structsize;      /* size of this structure */
-    int32_t     ki_layout;          /* reserved: layout identifier */
-    abi_ulong   ki_args;            /* address of command arguments */
-    abi_ulong   ki_paddr;           /* address of proc */
-    abi_ulong   ki_addr;            /* kernel virtual addr of u-area */
-    abi_ulong   ki_tracep;          /* pointer to trace file */
-    abi_ulong   ki_textvp;          /* pointer to executable file */
-    abi_ulong   ki_fd;              /* pointer to open file info */
-    abi_ulong   ki_vmspace;         /* pointer to kernel vmspace struct */
-    abi_ulong   ki_wchan;           /* sleep address */
-    int32_t     ki_pid;             /* Process identifier */
-    int32_t     ki_ppid;            /* parent process id */
-    int32_t     ki_pgid;            /* process group id */
-    int32_t     ki_tpgid;           /* tty process group id */
-    int32_t     ki_sid;             /* Process session ID */
-    int32_t     ki_tsid;            /* Terminal session ID */
-    int16_t     ki_jobc;            /* job control counter */
-    int16_t     ki_spare_short1;    /* unused (just here for alignment) */
-    int32_t     ki_tdev;            /* controlling tty dev */
-
-    target_sigset_t ki_siglist;     /* Signals arrived but not delivered */
-    target_sigset_t ki_sigmask;     /* Current signal mask */
-    target_sigset_t ki_sigignore;   /* Signals being ignored */
-    target_sigset_t ki_sigcatch;    /* Signals being caught by user */
-
-    int32_t     ki_uid;             /* effective user id */
-    int32_t     ki_ruid;            /* Real user id */
-    int32_t     ki_svuid;           /* Saved effective user id */
-    int32_t     ki_rgid;            /* Real group id */
-    int32_t     ki_svgid;           /* Saved effective group id */
-    int16_t     ki_ngroups;         /* number of groups */
-    int16_t     ki_spare_short2;    /* unused (just here for alignment) */
-    int32_t     ki_groups[TARGET_KI_NGROUPS];  /* groups */
-
-    abi_long    ki_size;            /* virtual size */
-
-    abi_long    ki_rssize;          /* current resident set size in pages */
-    abi_long    ki_swrss;           /* resident set size before last swap */
-    abi_long    ki_tsize;           /* text size (pages) XXX */
-    abi_long    ki_dsize;           /* data size (pages) XXX */
-    abi_long    ki_ssize;           /* stack size (pages) */
-
-    uint16_t    ki_xstat;           /* Exit status for wait & stop signal */
-    uint16_t    ki_acflag;          /* Accounting flags */
-
-    uint32_t    ki_pctcpu;          /* %cpu for process during ki_swtime */
-
-    uint32_t    ki_estcpu;          /* Time averaged value of ki_cpticks */
-    uint32_t    ki_slptime;         /* Time since last blocked */
-    uint32_t    ki_swtime;          /* Time swapped in or out */
-    uint32_t    ki_cow;             /* number of copy-on-write faults */
-    uint64_t    ki_runtime;         /* Real time in microsec */
-
-    struct  target_freebsd_timeval ki_start;  /* starting time */
-    struct  target_freebsd_timeval ki_childtime; /* time used by process
-                                                    children */
-
-    abi_long    ki_flag;            /* P_* flags */
-    abi_long    ki_kiflag;          /* KI_* flags (below) */
-    int32_t     ki_traceflag;       /* Kernel trace points */
-    char        ki_stat;            /* S* process status */
-    int8_t      ki_nice;            /* Process "nice" value */
-    char        ki_lock;            /* Process lock (prevent swap) count */
-    char        ki_rqindex;         /* Run queue index */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
-    u_char      ki_oncpu_old;       /* Which cpu we are on (legacy) */
-    u_char      ki_lastcpu_old;     /* Last cpu we were on (legacy) */
-#else
-    u_char      ki_oncpu;           /* Which cpu we are on */
-    u_char      ki_lastcpu;         /* Last cpu we were on */
-#endif /* ! __FreeBSD_version >= 1100000 */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char        ki_tdname[TARGET_TDNAMLEN+1];  /* thread name */
-#else
-    char        ki_ocomm[TARGET_TDNAMLEN+1];   /* thread name */
-#endif /* ! __FreeBSD_version >= 900000 */
-    char        ki_wmesg[TARGET_WMESGLEN+1];   /* wchan message */
-    char        ki_login[TARGET_LOGNAMELEN+1]; /* setlogin name */
-    char        ki_lockname[TARGET_LOCKNAMELEN+1]; /* lock name */
-    char        ki_comm[TARGET_COMMLEN+1];     /* command name */
-    char        ki_emul[TARGET_KI_EMULNAMELEN+1];  /* emulation name */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char        ki_loginclass[TARGET_LOGINCLASSLEN+1]; /* login class */
-#endif /* ! __FreeBSD_version >= 900000 */
-
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char        ki_sparestrings[50];    /* spare string space */
-#else
-    char        ki_sparestrings[68];    /* spare string space */
-#endif /* ! __FreeBSD_version >= 900000 */
-    int32_t     ki_spareints[TARGET_KI_NSPARE_INT]; /* spare room for growth */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
-    int32_t     ki_oncpu;           /* Which cpu we are on */
-    int32_t     ki_lastcpu;         /* Last cpu we were on */
-    int32_t     ki_tracer;          /* Pid of tracing process */
-#endif /* __FreeBSD_version >= 1100000 */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    int32_t     ki_flag2;           /* P2_* flags */
-    int32_t     ki_fibnum;          /* Default FIB number */
-#endif /* ! __FreeBSD_version >= 900000 */
-    uint32_t    ki_cr_flags;        /* Credential flags */
-    int32_t     ki_jid;             /* Process jail ID */
-    int32_t     ki_numthreads;      /* XXXKSE number of threads in total */
-
-    int32_t     ki_tid;             /* XXXKSE thread id */
-
-    struct  target_priority ki_pri; /* process priority */
-    struct  target_freebsd_rusage ki_rusage;  /* process rusage statistics */
-        /* XXX - most fields in ki_rusage_ch are not (yet) filled in */
-    struct  target_freebsd_rusage ki_rusage_ch; /* rusage of children
-                                                   processes */
-
-
-    abi_ulong   ki_pcb;             /* kernel virtual addr of pcb */
-    abi_ulong   ki_kstack;          /* kernel virtual addr of stack */
-    abi_ulong   ki_udata;           /* User convenience pointer */
-    abi_ulong   ki_tdaddr;          /* address of thread */
-
-    abi_ulong   ki_spareptrs[TARGET_KI_NSPARE_PTR];  /* spare room for growth */
-    abi_long    ki_sparelongs[TARGET_KI_NSPARE_LONG];/* spare room for growth */
-    abi_long    ki_sflag;           /* PS_* flags */
-    abi_long    ki_tdflags;         /* XXXKSE kthread flag */
-};
+#include "target_os_user.h"
 
 static void
 host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
@@ -335,7 +179,7 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     __put_user(hki->ki_tdflags, &tki->ki_tdflags);
 }
 
-static abi_long
+abi_long
 do_sysctl_kern_getprocs(int op, int arg, size_t olen,
         struct target_kinfo_proc *tki, size_t *tlen)
 {
@@ -343,6 +187,9 @@ do_sysctl_kern_getprocs(int op, int arg, size_t olen,
     struct kinfo_proc *kipp;
     int mib[4], num, i, miblen;
     size_t len;
+
+    if (tlen == NULL)
+        return -TARGET_EINVAL;
 
     mib[0] = CTL_KERN;
     mib[1] = KERN_PROC;
@@ -364,7 +211,7 @@ do_sysctl_kern_getprocs(int op, int arg, size_t olen,
     if (olen < *tlen)
         return -TARGET_EINVAL;
 
-    kipp = malloc(len);
+    kipp = g_malloc(len);
     if (kipp == NULL)
         return -TARGET_ENOMEM;
     ret = get_errno(sysctl(mib, miblen, kipp, &len, NULL, 0));
@@ -377,8 +224,213 @@ do_sysctl_kern_getprocs(int op, int arg, size_t olen,
             host_to_target_kinfo_proc(&tki[i], &kipp[i]);
     }
 
-    free(kipp);
+    g_free(kipp);
     return ret;
+}
+
+
+static void
+host_to_target_kinfo_file(struct target_kinfo_file *tkif,
+        struct kinfo_file *hkif)
+{
+    int i, type = hkif->kf_type;
+
+    __put_user(hkif->kf_structsize, &tkif->kf_structsize);
+    __put_user(hkif->kf_type, &tkif->kf_type);
+    __put_user(hkif->kf_fd, &tkif->kf_fd);
+    __put_user(hkif->kf_ref_count, &tkif->kf_ref_count);
+    __put_user(hkif->kf_flags, &tkif->kf_flags);
+    __put_user(hkif->kf_offset, &tkif->kf_offset);
+    __put_user(hkif->kf_vnode_type, &tkif->kf_vnode_type);
+    __put_user(hkif->kf_sock_domain, &tkif->kf_sock_domain);
+    __put_user(hkif->kf_sock_type, &tkif->kf_sock_type);
+    __put_user(hkif->kf_sock_protocol, &tkif->kf_sock_protocol);
+
+    switch(type) {
+    case KF_TYPE_FIFO:
+    case KF_TYPE_SHM:
+    case KF_TYPE_VNODE:
+        __put_user(hkif->kf_un.kf_file.kf_file_fileid,
+                &tkif->kf_un.kf_file.kf_file_fileid);
+        __put_user(hkif->kf_un.kf_file.kf_file_size,
+                &tkif->kf_un.kf_file.kf_file_size);
+        __put_user(hkif->kf_un.kf_file.kf_file_fsid,
+                &tkif->kf_un.kf_file.kf_file_fsid);
+        __put_user(hkif->kf_un.kf_file.kf_file_rdev,
+                &tkif->kf_un.kf_file.kf_file_rdev);
+        __put_user(hkif->kf_un.kf_file.kf_file_mode,
+                &tkif->kf_un.kf_file.kf_file_mode);
+        break;
+
+    case KF_TYPE_SOCKET:
+        __put_user(hkif->kf_un.kf_sock.kf_sock_pcb,
+                &tkif->kf_un.kf_sock.kf_sock_pcb);
+        __put_user(hkif->kf_un.kf_sock.kf_sock_inpcb,
+                &tkif->kf_un.kf_sock.kf_sock_inpcb);
+        __put_user(hkif->kf_un.kf_sock.kf_sock_unpconn,
+                &tkif->kf_un.kf_sock.kf_sock_unpconn);
+        __put_user(hkif->kf_un.kf_sock.kf_sock_snd_sb_state,
+                &tkif->kf_un.kf_sock.kf_sock_snd_sb_state);
+        __put_user(hkif->kf_un.kf_sock.kf_sock_rcv_sb_state,
+                &tkif->kf_un.kf_sock.kf_sock_rcv_sb_state);
+        break;
+
+    case KF_TYPE_PIPE:
+        __put_user(hkif->kf_un.kf_pipe.kf_pipe_addr,
+                &tkif->kf_un.kf_pipe.kf_pipe_addr);
+        __put_user(hkif->kf_un.kf_pipe.kf_pipe_peer,
+                &tkif->kf_un.kf_pipe.kf_pipe_peer);
+        __put_user(hkif->kf_un.kf_pipe.kf_pipe_buffer_cnt,
+                &tkif->kf_un.kf_pipe.kf_pipe_buffer_cnt);
+        break;
+
+    case KF_TYPE_SEM:
+        __put_user(hkif->kf_un.kf_sem.kf_sem_value,
+                &tkif->kf_un.kf_sem.kf_sem_value);
+        __put_user(hkif->kf_un.kf_sem.kf_sem_mode,
+                &tkif->kf_un.kf_sem.kf_sem_mode);
+        break;
+
+    case KF_TYPE_PTS:
+        __put_user(hkif->kf_un.kf_pts.kf_pts_dev,
+                &tkif->kf_un.kf_pts.kf_pts_dev);
+        break;
+
+    case KF_TYPE_PROCDESC:
+        __put_user(hkif->kf_un.kf_proc.kf_pid,
+                &tkif->kf_un.kf_proc.kf_pid);
+        break;
+
+
+    case KF_TYPE_CRYPTO:
+    case KF_TYPE_KQUEUE:
+    case KF_TYPE_MQUEUE:
+    case KF_TYPE_NONE:
+    case KF_TYPE_UNKNOWN:
+    default:
+        /* Do nothing. */
+        break;
+    }
+    __put_user(hkif->kf_status, &tkif->kf_status);
+    for (i = 0; i < (CAP_RIGHTS_VERSION + 2); i++)
+        __put_user(hkif->kf_cap_rights.cr_rights[i],
+                &tkif->kf_cap_rights.cr_rights[i]);
+    strncpy(tkif->kf_path, hkif->kf_path, PATH_MAX);
+}
+
+abi_long
+do_sysctl_kern_proc_filedesc(int pid, size_t olen,
+        struct target_kinfo_file *tkif, size_t *tlen)
+{
+    abi_long ret;
+    struct kinfo_file *kifp;
+    int mib[4], num, i;
+    size_t len;
+
+    if (tlen == NULL)
+        return -TARGET_EINVAL;
+
+    len = 0;
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_FILEDESC;
+    mib[3] = pid;
+
+    ret = get_errno(sysctl(mib, 4, NULL, &len, NULL, 0));
+    if (is_error(ret))
+        return ret;
+    num = len / sizeof(*kifp);
+    *tlen = num * sizeof(struct target_kinfo_file);
+    if (tkif == NULL)
+        return ret;
+    if (olen < *tlen)
+        return -TARGET_EINVAL;
+    kifp = g_malloc(len);
+    if (kifp == NULL)
+        return -TARGET_ENOMEM;
+    ret = get_errno(sysctl(mib, 4, kifp, &len, NULL, 0));
+    num = len / sizeof(*kifp);
+    *tlen = num * sizeof(struct target_kinfo_file);
+    if (len % sizeof(*kifp) != 0 || kifp->kf_structsize != sizeof(*kifp)) {
+        ret = -TARGET_EINVAL; /* XXX */
+    } else if (!is_error(ret)) {
+        for(i = 0; i < num; i++)
+            host_to_target_kinfo_file(&tkif[i], &kifp[i]);
+    }
+
+    g_free(kifp);
+    return ret;
+}
+
+static void
+host_to_target_kinfo_vmentry(struct target_kinfo_vmentry *tkve,
+        struct kinfo_vmentry *hkve)
+{
+
+    __put_user(hkve->kve_structsize, &tkve->kve_structsize);
+    __put_user(hkve->kve_type, &tkve->kve_type);
+    __put_user(hkve->kve_start, &tkve->kve_start);
+    __put_user(hkve->kve_end, &tkve->kve_end);
+    __put_user(hkve->kve_offset, &tkve->kve_offset);
+    __put_user(hkve->kve_vn_fileid, &tkve->kve_vn_fileid);
+    __put_user(hkve->kve_vn_fsid, &tkve->kve_vn_fsid);
+    __put_user(hkve->kve_flags, &tkve->kve_flags);
+    __put_user(hkve->kve_resident, &tkve->kve_resident);
+    __put_user(hkve->kve_private_resident, &tkve->kve_private_resident);
+    __put_user(hkve->kve_protection, &tkve->kve_protection);
+    __put_user(hkve->kve_ref_count, &tkve->kve_ref_count);
+    __put_user(hkve->kve_shadow_count, &tkve->kve_shadow_count);
+    __put_user(hkve->kve_vn_type, &tkve->kve_vn_type);
+    __put_user(hkve->kve_vn_size, &tkve->kve_vn_size);
+    __put_user(hkve->kve_vn_rdev, &tkve->kve_vn_rdev);
+    __put_user(hkve->kve_vn_mode, &tkve->kve_vn_mode);
+    __put_user(hkve->kve_status, &tkve->kve_status);
+}
+
+abi_long
+do_sysctl_kern_proc_vmmap(int pid, size_t olen,
+        struct target_kinfo_vmentry *tkve, size_t *tlen)
+{
+    abi_long ret;
+    struct kinfo_vmentry *kve;
+    int mib[4], num, i;
+    size_t len;
+
+    if (tlen == NULL)
+        return -TARGET_EINVAL;
+
+    len = 0;
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_VMMAP;
+    mib[3] = pid;
+
+    ret = get_errno(sysctl(mib, 4, NULL, &len, NULL, 0));
+    if (is_error(ret))
+        return ret;
+    num = len / sizeof(*kve);
+    *tlen = num * sizeof(struct target_kinfo_vmentry);
+    if (tkve == NULL)
+        return ret;
+
+    if (olen < *tlen)
+        return -TARGET_EINVAL;
+
+    kve = g_malloc(len);
+    if (kve == NULL)
+        return -TARGET_ENOMEM;
+    ret = get_errno(sysctl(mib, 4, kve, &len, NULL, 0));
+    num = len / sizeof(*kve);
+    *tlen = num * sizeof(struct target_kinfo_vmentry);
+    if (len % sizeof(*kve) != 0 || kve->kve_structsize != sizeof(*kve)) {
+        ret = -TARGET_EINVAL; /* XXX */
+    } else if (!is_error(ret)) {
+        for(i = 0; i < num; i++)
+            host_to_target_kinfo_vmentry(&tkve[i], &kve[i]);
+    }
+
+    g_free(kve);
+    return  ret;
 }
 
 /*
@@ -637,6 +689,16 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
             case KERN_PROC_RUID | KERN_PROC_INC_THREAD:
                 ret = do_sysctl_kern_getprocs(snamep[2], snamep[3], oldlen,
                         holdp, &holdlen);
+                goto out;
+
+            case KERN_PROC_FILEDESC:
+                ret = do_sysctl_kern_proc_filedesc(snamep[3], oldlen, holdp,
+                        &holdlen);
+                goto out;
+
+            case KERN_PROC_VMMAP:
+                ret = do_sysctl_kern_proc_vmmap(snamep[3], oldlen, holdp,
+                        &holdlen);
                 goto out;
 
             default:
