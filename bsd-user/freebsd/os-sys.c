@@ -183,9 +183,9 @@ struct target_kinfo_proc {
 #endif /* ! __FreeBSD_version >= 900000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char        ki_sparestrings[68];    /* spare string space */
-#else
     char        ki_sparestrings[50];    /* spare string space */
+#else
+    char        ki_sparestrings[68];    /* spare string space */
 #endif /* ! __FreeBSD_version >= 900000 */
     int32_t     ki_spareints[TARGET_KI_NSPARE_INT]; /* spare room for growth */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
