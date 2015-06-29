@@ -569,9 +569,9 @@ static int sysctl_oldcvt(void *holdp, size_t holdlen, uint32_t kind)
  */
 static inline void sysctl_name2oid(uint32_t *holdp, size_t holdlen)
 {
-    size_t i;
+    size_t i, num = holdlen / sizeof(uint32_t);
 
-    for (i = 0; i < holdlen; i++) {
+    for (i = 0; i < num; i++) {
         holdp[i] = tswap32(holdp[i]);
     }
 }
@@ -870,13 +870,20 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 
     ret = get_errno(sysctl(snamep, namelen, holdp, &holdlen, hnewp, newlen));
     if (!ret && (holdp != 0 && holdlen != 0)) {
-        if (0 == snamep[0] && (3 == snamep[1] || 4 == snamep[1])) {
-            if (3 == snamep[1]) {
+        if (0 == snamep[0] && (2 == snamep[1] || 3 == snamep[1] ||
+                    4 == snamep[1])) {
+            switch (snamep[1]) {
+            case 2:
+            case 3:
                 /* Handle the undocumented name2oid special case. */
                 sysctl_name2oid(holdp, holdlen);
-            } else {
+                break;
+
+            case 4:
+            default:
                 /* Handle oidfmt */
                 sysctl_oidfmt(holdp);
+                break;
             }
         } else {
             sysctl_oldcvt(holdp, holdlen, kind);
