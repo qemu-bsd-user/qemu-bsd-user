@@ -219,6 +219,7 @@ struct target_kinfo_file {
 	int32_t		kf_sock_protocol;	/* Socket protocol. */
 	struct target_sockaddr_storage kf_sa_local;	/* Socket address. */
 	struct target_sockaddr_storage	kf_sa_peer;	/* Peer address. */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
 	union {
 		struct {
 			/* Address of so_pcb. */
@@ -272,8 +273,17 @@ struct target_kinfo_file {
 	uint16_t	kf_status;		/* Status flags. */
 	uint16_t	kf_pad1;		/* Round to 32 bit alignment. */
 	int32_t		_kf_ispare0;		/* Space for more stuff. */
-	target_cap_rights_t	kf_cap_rights;		/* Capability rights. */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
+	target_cap_rights_t	kf_cap_rights;	/* Capability rights. */
 	uint64_t	_kf_cap_spare;	/* Space for future cap_rights_t. */
+#else /* ! __FreeBSD_version >= 1000000 */
+	uint64_t        kf_cap_rights;
+	int		_kf_ispare[4];
+#endif /* ! __FreeBSD_version >= 1000000 */
+
+#else /* ! __FreeBSD_version >= 900000 */
+	int		_kf_ispare[16];
+#endif /* ! __FreeBSD_version >= 900000 */
 	/* Truncated before copyout in sysctl */
 	char		kf_path[PATH_MAX];	/* Path to file, if any. */
 };
@@ -284,20 +294,30 @@ struct target_kinfo_vmentry {
 	uint64_t kve_start;			/* Starting address. */
 	uint64_t kve_end;			/* Finishing address. */
 	uint64_t kve_offset;			/* Mapping offset in object */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
 	uint64_t kve_vn_fileid;			/* inode number if vnode */
 	uint32_t kve_vn_fsid;			/* dev_t of vnode location */
+#else /* !  __FreeBSD_version >= 900000 */
+	uint64_t kve_fileid;			/* inode number if vnode */
+	uint32_t kve_fsid;			/* dev_t of vnode location */
+#endif /* !  __FreeBSD_version >= 900000 */
 	int32_t	 kve_flags;			/* Flags on map entry. */
 	int32_t	 kve_resident;			/* Number of resident pages. */
 	int32_t	 kve_private_resident;		/* Number of private pages. */
 	int32_t	 kve_protection;		/* Protection bitmask. */
 	int32_t	 kve_ref_count;			/* VM obj ref count. */
 	int32_t	 kve_shadow_count;		/* VM obj shadow count. */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
 	int32_t	 kve_vn_type;			/* Vnode type. */
 	uint64_t kve_vn_size;			/* File size. */
 	uint32_t kve_vn_rdev;			/* Device id if device. */
 	uint16_t kve_vn_mode;			/* File mode. */
 	uint16_t kve_status;			/* Status flags. */
 	int32_t	 _kve_ispare[12];		/* Space for more stuff. */
+#else /* !  __FreeBSD_version >= 900000 */
+	int	 _kve_pad0;
+	int32_t	 _kve_ispare[16];		/* Space for more stuff. */
+#endif /* !  __FreeBSD_version >= 900000 */
 	/* Truncated before copyout in sysctl */
 	char	 kve_path[PATH_MAX];		/* Path to VM obj, if any. */
 };

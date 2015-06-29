@@ -170,10 +170,10 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     h2t_rusage(&hki->ki_rusage, &tki->ki_rusage);
     h2t_rusage(&hki->ki_rusage_ch, &tki->ki_rusage_ch);
 
-    __put_user(hki->ki_pcb, &tki->ki_pcb);
-    __put_user(hki->ki_kstack, &tki->ki_kstack);
-    __put_user(hki->ki_udata, &tki->ki_udata);
-    __put_user(hki->ki_tdaddr, &tki->ki_tdaddr);
+    __put_user(((uintptr_t)hki->ki_pcb), &tki->ki_pcb);
+    __put_user(((uintptr_t)hki->ki_kstack), &tki->ki_kstack);
+    __put_user(((uintptr_t)hki->ki_udata), &tki->ki_udata);
+    __put_user(((uintptr_t)hki->ki_tdaddr), &tki->ki_tdaddr);
 
     __put_user(hki->ki_sflag, &tki->ki_sflag);
     __put_user(hki->ki_tdflags, &tki->ki_tdflags);
@@ -233,7 +233,9 @@ static void
 host_to_target_kinfo_file(struct target_kinfo_file *tkif,
         struct kinfo_file *hkif)
 {
-    int i, type = hkif->kf_type;
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
+    int type = hkif->kf_type;
+#endif /* __FreeBSD_version >= 900000 */
 
     __put_user(hkif->kf_structsize, &tkif->kf_structsize);
     __put_user(hkif->kf_type, &tkif->kf_type);
@@ -246,6 +248,7 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
     __put_user(hkif->kf_sock_type, &tkif->kf_sock_type);
     __put_user(hkif->kf_sock_protocol, &tkif->kf_sock_protocol);
 
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     switch(type) {
     case KF_TYPE_FIFO:
     case KF_TYPE_SHM:
@@ -312,9 +315,14 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
         break;
     }
     __put_user(hkif->kf_status, &tkif->kf_status);
-    for (i = 0; i < (CAP_RIGHTS_VERSION + 2); i++)
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
+    for (int i = 0; i < (CAP_RIGHTS_VERSION + 2); i++)
         __put_user(hkif->kf_cap_rights.cr_rights[i],
                 &tkif->kf_cap_rights.cr_rights[i]);
+#else /* !  __FreeBSD_version >= 1000000 */
+    __put_user(hkif->kf_cap_rights, &tkif->kf_cap_rights);
+#endif /* *  __FreeBSD_version >= 1000000 */
+#endif /* ! __FreeBSD_version >= 900000 */
     strncpy(tkif->kf_path, hkif->kf_path, PATH_MAX);
 }
 
@@ -372,19 +380,27 @@ host_to_target_kinfo_vmentry(struct target_kinfo_vmentry *tkve,
     __put_user(hkve->kve_start, &tkve->kve_start);
     __put_user(hkve->kve_end, &tkve->kve_end);
     __put_user(hkve->kve_offset, &tkve->kve_offset);
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     __put_user(hkve->kve_vn_fileid, &tkve->kve_vn_fileid);
     __put_user(hkve->kve_vn_fsid, &tkve->kve_vn_fsid);
+#else /* ! __FreeBSD_version >= 900000 */
+    __put_user(hkve->kve_fileid, &tkve->kve_fileid);
+    __put_user(hkve->kve_fsid, &tkve->kve_fsid);
+#endif /* ! __FreeBSD_version >= 900000 */
     __put_user(hkve->kve_flags, &tkve->kve_flags);
     __put_user(hkve->kve_resident, &tkve->kve_resident);
     __put_user(hkve->kve_private_resident, &tkve->kve_private_resident);
     __put_user(hkve->kve_protection, &tkve->kve_protection);
     __put_user(hkve->kve_ref_count, &tkve->kve_ref_count);
     __put_user(hkve->kve_shadow_count, &tkve->kve_shadow_count);
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     __put_user(hkve->kve_vn_type, &tkve->kve_vn_type);
     __put_user(hkve->kve_vn_size, &tkve->kve_vn_size);
     __put_user(hkve->kve_vn_rdev, &tkve->kve_vn_rdev);
     __put_user(hkve->kve_vn_mode, &tkve->kve_vn_mode);
     __put_user(hkve->kve_status, &tkve->kve_status);
+#endif /* __FreeBSD_version >= 900000 */
+    strncpy(tkve->kve_path, hkve->kve_path, PATH_MAX);
 }
 
 abi_long
