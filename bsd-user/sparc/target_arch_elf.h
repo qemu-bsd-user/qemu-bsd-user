@@ -19,6 +19,10 @@
 #ifndef _TARGET_ARCH_ELF_H_
 #define _TARGET_ARCH_ELF_H_
 
+#define USE_ELF_CORE_DUMP
+
+#define ELF_EXEC_PAGESIZE       4096
+
 #define ELF_START_MMAP 0x80000000
 
 #define elf_check_arch(x) ( (x) == EM_SPARC )
