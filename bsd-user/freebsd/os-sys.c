@@ -73,6 +73,16 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     __put_user(sizeof(struct target_kinfo_proc), &tki->ki_structsize);
     __put_user(hki->ki_layout, &tki->ki_layout);
 
+    /* Some of these are used as flags (e.g. ki_fd == NULL in procstat). */
+    __put_user((abi_ulong)hki->ki_args, &tki->ki_args);
+    __put_user((abi_ulong)hki->ki_paddr, &tki->ki_paddr);
+    __put_user((abi_ulong)hki->ki_addr, &tki->ki_addr);
+    __put_user((abi_ulong)hki->ki_tracep, &tki->ki_tracep);
+    __put_user((abi_ulong)hki->ki_textvp, &tki->ki_textvp);
+    __put_user((abi_ulong)hki->ki_fd, &tki->ki_fd);
+    __put_user((abi_ulong)hki->ki_vmspace, &tki->ki_vmspace);
+    __put_user((abi_ulong)hki->ki_wchan, &tki->ki_wchan);
+
     __put_user(hki->ki_pid, &tki->ki_pid);
     __put_user(hki->ki_ppid, &tki->ki_ppid);
     __put_user(hki->ki_pgid, &tki->ki_pgid);
@@ -331,9 +341,11 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
         struct target_kinfo_file *tkif, size_t *tlen)
 {
     abi_long ret;
-    struct kinfo_file *kifp;
-    int mib[4], num, i;
+    int mib[4], cnt, sz;
     size_t len;
+    char *buf, *bp, *eb, *tp;
+    struct kinfo_file *kf, kif;
+    struct target_kinfo_file target_kif;
 
     if (tlen == NULL)
         return -TARGET_EINVAL;
@@ -347,26 +359,66 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
     ret = get_errno(sysctl(mib, 4, NULL, &len, NULL, 0));
     if (is_error(ret))
         return ret;
-    num = len / sizeof(*kifp);
-    *tlen = num * sizeof(struct target_kinfo_file);
-    if (tkif == NULL)
+    if (tkif == NULL) {
+        *tlen = len;
         return ret;
-    if (olen < *tlen)
-        return -TARGET_EINVAL;
-    kifp = g_malloc(len);
-    if (kifp == NULL)
+    }
+    len = len * 4 / 3;
+    buf = g_malloc(len);
+    if (buf == NULL)
         return -TARGET_ENOMEM;
-    ret = get_errno(sysctl(mib, 4, kifp, &len, NULL, 0));
-    num = len / sizeof(*kifp);
-    *tlen = num * sizeof(struct target_kinfo_file);
-    if (len % sizeof(*kifp) != 0 || kifp->kf_structsize != sizeof(*kifp)) {
-        ret = -TARGET_EINVAL; /* XXX */
-    } else if (!is_error(ret)) {
-        for(i = 0; i < num; i++)
-            host_to_target_kinfo_file(&tkif[i], &kifp[i]);
+
+    /*
+     * Count the number of records.
+     *
+     * Given that the kinfo_file information returned by
+     * the kernel may be different sizes per record we have
+     * to read it in and count the variable length records
+     * by walking them.
+     */
+    ret = get_errno(sysctl(mib, 4, buf, &len, NULL, 0));
+    if (is_error(ret)) {
+        g_free(buf);
+        return ret;
+    }
+    *tlen = len;
+    cnt = 0;
+    bp = buf;
+    eb = buf + len;
+    while (bp < eb) {
+        kf = (struct kinfo_file *)(uintptr_t)bp;
+        bp += kf->kf_structsize;
+        cnt++;
+    }
+    if (olen < *tlen) {
+        g_free(buf);
+        return -TARGET_EINVAL;
     }
 
-    g_free(kifp);
+    /*
+     * Unpack the records from the kernel into full length records
+     * and byte swap, if needed.
+     */
+    bp = buf;
+    eb = buf + len;
+    tp = (char *)tkif;
+    while (bp < eb) {
+        kf = (struct kinfo_file *)(uintptr_t)bp;
+        sz = kf->kf_structsize;
+        /* Copy/expand into a zeroed buffer */
+        memset(&kif, 0, sizeof (kif));
+        memcpy(&kif, kf, sz);
+        /* Byte swap and copy into a target buffer. */
+        host_to_target_kinfo_file(&target_kif, &kif);
+        /* Copy target buffer to user buffer and pack */
+        memcpy(tp, &target_kif, sz);
+        /* Advance to next packed record. */
+        bp += sz;
+        /* Advance to next packed, target record. */
+        tp += sz;
+    }
+
+    g_free(buf);
     return ret;
 }
 
@@ -408,9 +460,11 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
         struct target_kinfo_vmentry *tkve, size_t *tlen)
 {
     abi_long ret;
-    struct kinfo_vmentry *kve;
-    int mib[4], num, i;
+    int mib[4], cnt, sz;
     size_t len;
+    char *buf, *bp, *eb, *tp;
+    struct kinfo_vmentry *kve, kvme;
+    struct target_kinfo_vmentry target_kvme;
 
     if (tlen == NULL)
         return -TARGET_EINVAL;
@@ -424,29 +478,67 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
     ret = get_errno(sysctl(mib, 4, NULL, &len, NULL, 0));
     if (is_error(ret))
         return ret;
-    num = len / sizeof(*kve);
-    *tlen = num * sizeof(struct target_kinfo_vmentry);
-    if (tkve == NULL)
+    if (tkve == NULL) {
+        *tlen = len;
         return ret;
-
-    if (olen < *tlen)
-        return -TARGET_EINVAL;
-
-    kve = g_malloc(len);
-    if (kve == NULL)
+    }
+    len = len * 4 / 3;
+    buf = g_malloc(len);
+    if (buf == NULL)
         return -TARGET_ENOMEM;
-    ret = get_errno(sysctl(mib, 4, kve, &len, NULL, 0));
-    num = len / sizeof(*kve);
-    *tlen = num * sizeof(struct target_kinfo_vmentry);
-    if (len % sizeof(*kve) != 0 || kve->kve_structsize != sizeof(*kve)) {
-        ret = -TARGET_EINVAL; /* XXX */
-    } else if (!is_error(ret)) {
-        for(i = 0; i < num; i++)
-            host_to_target_kinfo_vmentry(&tkve[i], &kve[i]);
+
+    /*
+     * Count the number of records.
+     *
+     * Given that the kinfo_file information returned by
+     * the kernel may be differents sizes per record we have
+     * to read it in and count the variable length records
+     * by walking them.
+     */
+    ret = get_errno(sysctl(mib, 4, buf, &len, NULL, 0));
+    if (is_error(ret)) {
+        g_free(buf);
+        return ret;
+    }
+    *tlen = len;
+    cnt = 0;
+    bp = buf;
+    eb = buf + len;
+    while (bp < eb) {
+        kve = (struct kinfo_vmentry *)(uintptr_t)bp;
+        bp += kve->kve_structsize;
+        cnt++;
+    }
+    if (olen < *tlen) {
+        g_free(buf);
+        return -TARGET_EINVAL;
     }
 
-    g_free(kve);
-    return  ret;
+    /*
+     * Unpack the records from the kernel into full length records
+     * and byte swap, if needed.
+     */
+    bp = buf;
+    eb = buf + len;
+    tp = (char *)tkve;
+    while (bp < eb) {
+        kve = (struct kinfo_vmentry *)(uintptr_t)bp;
+        sz = kve->kve_structsize;
+        /* Copy/expand into a zeroed buffer */
+        memset(&kvme, 0, sizeof (kvme));
+        memcpy(&kvme, kve, sz);
+        /* Byte swap and copy into a target aligned buffer. */
+        host_to_target_kinfo_vmentry(&target_kvme, &kvme);
+        /* Copy target buffer to user buffer, packed. */
+        memcpy(tp, &target_kvme, sz);
+        /* Advance to next packed record. */
+        bp += sz;
+        /* Advance to next packed, target record. */
+        tp += sz;
+    }
+
+    g_free(buf);
+    return ret;
 }
 
 /*
