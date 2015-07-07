@@ -22,6 +22,7 @@
 #include <sys/disk.h>
 #include <sys/ioccom.h>
 #include <sys/ioctl.h>
+#include <sys/sockio.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/_termios.h>
 #else
@@ -52,6 +53,7 @@
 #include "os-ioctl-disk.h"
 #include "os-ioctl-filio.h"
 #include "os-ioctl-in6_var.h"
+#include "os-ioctl-sockio.h"
 #include "os-ioctl-ttycom.h"
 
 static const bitmask_transtbl iflag_tbl[] = {
