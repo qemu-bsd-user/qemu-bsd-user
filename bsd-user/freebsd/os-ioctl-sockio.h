@@ -124,4 +124,23 @@ struct  target_ifdrv {
 #define TARGET_SIOCSDRVSPEC    TARGET_IOW('i', 123, struct target_ifdrv)
 #define TARGET_SIOCGDRVSPEC    TARGET_IOWR('i', 123, struct target_ifdrv)
 
+/* See net/if.h */
+struct target_ifg_req {
+    union {
+        char        ifgrqu_group[TARGET_IFNAMSIZ];
+        char        ifgrqu_member[TARGET_IFNAMSIZ];
+    } ifgrq_ifgrqu;
+};
+
+struct target_ifgroupreq {
+    char            ifgr_name[TARGET_IFNAMSIZ];
+    uint32_t        ifgr_len;
+    union {
+        char        ifgru_group[TARGET_IFNAMSIZ];
+        struct target_ifg_req *ifgru_groups;
+    } ifgr_ifgru;
+};
+
+#define TARGET_SIOCGIFGROUP    TARGET_IOWR('i', 136, struct target_ifgroupreq)
+
 #endif /* _OS_IOCTL_SOCKIO_H_ */
