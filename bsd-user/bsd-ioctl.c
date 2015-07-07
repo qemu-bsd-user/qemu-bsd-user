@@ -1,7 +1,7 @@
 /*
  *  BSD ioctl(2) emulation
  *
- *  Copyright (c) 2013-14 Stacey D. Son
+ *  Copyright (c) 2013-15 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/param.h>
+#include <sys/disk.h>
 #include <sys/ioccom.h>
 #include <sys/ioctl.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version > 900000
@@ -48,6 +49,7 @@
 
 #include "bsd-ioctl.h"
 #include "os-ioctl-cryptodev.h"
+#include "os-ioctl-disk.h"
 #include "os-ioctl-filio.h"
 #include "os-ioctl-in6_var.h"
 #include "os-ioctl-ttycom.h"
