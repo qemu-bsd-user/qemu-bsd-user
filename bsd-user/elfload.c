@@ -61,7 +61,7 @@ static size_t target_auxents_sz;   /* Size of AUX entries including AT_NULL */
 #define TARGET_NT_PROCSTAT_PSSTRINGS   15       /* Procstat ps_strings data. */
 #define TARGET_NT_PROCSTAT_AUXV        16       /* Procstat auxv data. */
 
-static int elf_core_dump(int signr, const CPUArchState *env);
+static int elf_core_dump(int signr, CPUArchState *env);
 
 abi_ulong target_stksiz;
 abi_ulong target_stkbas;
@@ -1901,7 +1901,7 @@ static size_t note_size(const struct memelfnote *note)
 }
 
 static abi_long fill_thread_info(struct elf_note_info *info, int signr,
-    const CPUArchState *env)
+    CPUArchState *env)
 {
     CPUState *cpu = ENV_GET_CPU((CPUArchState *)env);
     TaskState *ts = (TaskState *)cpu->opaque;
@@ -2003,7 +2003,7 @@ static abi_long fill_psstrings(abi_ulong *psstrings)
 #define MAXNUMNOTES    13
 
 static int fill_note_info(struct elf_note_info *info,
-        int signr, const CPUArchState *env)
+        int signr, CPUArchState *env)
 {
     CPUState *cpu = ENV_GET_CPU((CPUArchState *)env);
     TaskState *ts = (TaskState *)cpu->opaque;
@@ -2194,13 +2194,13 @@ edone:
     return (err);
 }
 
-static int elf_core_dump(int signr, const CPUArchState *env)
+static int elf_core_dump(int signr, CPUArchState *env)
 {
     int fd = -1;
     int segs = 0;
     off_t offset = 0, data_offset = 0;
-    const CPUState *cpu = ENV_GET_CPU((CPUArchState *)env);
-    const TaskState *ts = (const TaskState *)cpu->opaque;
+    CPUState *cpu = ENV_GET_CPU((CPUArchState *)env);
+    TaskState *ts = (TaskState *)cpu->opaque;
     struct vm_area_struct *vma = NULL;
     struct mm_struct *mm = NULL;
     struct rlimit dumpsize;

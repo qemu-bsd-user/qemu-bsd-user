@@ -20,9 +20,9 @@
 #ifndef __FREEBSD_OS_SIGNAL_H_
 #define __FREEBSD_OS_SIGNAL_H_
 
+#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/procdesc.h>
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 /* pdkill(2) */
 static inline abi_long do_freebsd_pdkill(abi_long arg1, abi_long arg2)
 {
