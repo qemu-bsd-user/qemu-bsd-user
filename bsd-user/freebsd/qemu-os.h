@@ -72,8 +72,6 @@ abi_long t2h_freebsd_rtprio(struct rtprio *host_rtp, abi_ulong target_addr);
 abi_long h2t_freebsd_rtprio(abi_ulong target_addr, struct rtprio *host_rtp);
 abi_long do_freebsd_thr_new(CPUArchState *env, abi_ulong target_param_addr,
         int32_t param_size);
-abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t tsz, void *t);
-abi_long freebsd_umtx_sem_wake(abi_ulong obj);
 
 /* os-extattr.c */
 struct acl;
