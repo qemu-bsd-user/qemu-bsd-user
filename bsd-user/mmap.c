@@ -192,12 +192,15 @@ static int mmap_frag(abi_ulong real_start,
     return 0;
 }
 
-#if defined(__CYGWIN__)
+#if HOST_LONG_BITS == 64 && TARGET_ABI_BITS == 64
+# define TASK_UNMAPPED_BASE  (1ul << 38)
+#elif defined(__CYGWIN__)
 /* Cygwin doesn't have a whole lot of address space.  */
-static abi_ulong mmap_next_start = 0x18000000;
+# define TASK_UNMAPPED_BASE  0x18000000
 #else
-static abi_ulong mmap_next_start = 0x40000000;
+# define TASK_UNMAPPED_BASE  0x40000000
 #endif
+static abi_ulong mmap_next_start = TASK_UNMAPPED_BASE;
 
 unsigned long last_brk;
 
@@ -210,8 +213,10 @@ unsigned long last_brk;
    to use them. */
 abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size)
 {
-    abi_ulong addr, addr1, addr_start;
-    int prot;
+    void *ptr, *prev;
+    abi_ulong addr;
+    int wrapped, repeat;
+#if 0
     unsigned long new_brk;
 
     new_brk = (unsigned long)sbrk(0);
@@ -226,42 +231,107 @@ abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size)
                        PAGE_RESERVED);
     }
     last_brk = new_brk;
+#endif
+
+    /* If 'start' == 0, then a default start address is used. */
+    if (start == 0) {
+        start = mmap_next_start;
+    } else {
+        start &= qemu_host_page_mask;
+    }
 
     size = HOST_PAGE_ALIGN(size);
-    start = start & qemu_host_page_mask;
+
     addr = start;
-    if (addr == 0)
-        addr = mmap_next_start;
-    addr_start = addr;
-    for (;;) {
-        prot = 0;
-        for (addr1 = addr; addr1 < (addr + size); addr1 += TARGET_PAGE_SIZE) {
-            prot |= page_get_flags(addr1);
+    wrapped = repeat = 0;
+    prev = 0;
+
+    for (;; prev = ptr) {
+        /*
+         * Reserve needed memory area to avoid a race.
+         * It should be discarded using:
+         *  - mmap() with MAP_FIXED flag
+         *  - mremap() with MREMAP_FIXED flag
+         *  - shmat() with SHM_REMAP flag
+         */
+        ptr = mmap(g2h(addr), size, PROT_NONE,
+                   MAP_ANON|MAP_PRIVATE /* |MAP_NORESERVE */, -1, 0);
+
+        /* ENOMEM, if host address space has no memory */
+        if (ptr == MAP_FAILED) {
+            return (abi_ulong)-1;
         }
-        if (prot == 0) {
-            if (reserved_va && addr + size >= reserved_va) {
+
+        /* Count the number of sequential returns of the same address.
+           This is used to modify the search algorithm below.  */
+        repeat = (ptr == prev ? repeat + 1 : 0);
+
+        if (h2g_valid(ptr + size - 1)) {
+            addr = h2g(ptr);
+
+            if ((addr & ~TARGET_PAGE_MASK) == 0) {
+                /* Success.  */
+                if (start == mmap_next_start && addr >= TASK_UNMAPPED_BASE) {
+                    mmap_next_start = addr + size;
+                }
+                return addr;
+            }
+
+            /* The address is not properly aligned for the target.  */
+            switch (repeat) {
+            case 0:
+                /* Assume the result that the kernel gave us is the
+                   first with enough free space, so start again at the
+                   next higher target page.  */
+                addr = TARGET_PAGE_ALIGN(addr);
+                break;
+            case 1:
+                /* Sometimes the kernel decides to perform the allocation
+                   at the top end of memory instead.  */
+                addr &= TARGET_PAGE_MASK;
+                break;
+            case 2:
+                /* Start over at low memory.  */
                 addr = 0;
-            } else {
+                break;
+            default:
+                /* Fail.  This unaligned block must the last.  */
+                addr = -1;
                 break;
             }
+        } else {
+            /* Since the result the kernel gave didn't fit, start
+               again at low memory.  If any repetition, fail.  */
+            addr = (repeat ? -1 : 0);
         }
-        addr += qemu_host_page_size;
-        /* we found nothing */
-        if (addr == addr_start)
+
+        /* Unmap and try again.  */
+        munmap(ptr, size);
+
+        /* ENOMEM if we checked the whole of the target address space.  */
+        if (addr == (abi_ulong)-1) {
             return (abi_ulong)-1;
+        } else if (addr == 0) {
+            if (wrapped) {
+                return (abi_ulong)-1;
+            }
+            wrapped = 1;
+            /* Don't actually use 0 when wrapping, instead indicate
+               that we'd truly like an allocation in low memory.  */
+            addr = (mmap_min_addr > TARGET_PAGE_SIZE
+                     ? TARGET_PAGE_ALIGN(mmap_min_addr)
+                     : TARGET_PAGE_SIZE);
+        } else if (wrapped && addr >= start) {
+            return (abi_ulong)-1;
+        }
     }
-    if (start == 0)
-        mmap_next_start = addr + size;
-    return addr;
 }
 
 /* NOTE: all the constants are the HOST ones */
 abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                      int flags, int fd, off_t offset)
 {
-    abi_ulong ret, end, real_start, real_end, retaddr, host_len;
-    off_t host_offset;
-    unsigned long host_start;
+    abi_ulong ret, end, real_start, real_end, retaddr, host_offset, host_len;
 
     mmap_lock();
 #ifdef DEBUG_MMAP
@@ -290,14 +360,6 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     }
 #endif
 
-    /*
-     * Enforce the constraints.
-     */
-    if (len == 0 && fd != -1) {
-            errno = EINVAL;
-            goto fail;
-    }
-
 #ifdef MAP_STACK
     if (flags & MAP_STACK) {
         if ((fd != -1) || ((prot & (PROT_READ | PROT_WRITE)) !=
@@ -307,7 +369,6 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         }
     }
 #endif /* MAP_STACK */
-
     if (offset & ~TARGET_PAGE_MASK) {
         errno = EINVAL;
         goto fail;
@@ -317,35 +378,84 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     if (len == 0)
         goto the_end;
     real_start = start & qemu_host_page_mask;
+    host_offset = offset & qemu_host_page_mask;
 
+    /*
+     * If the user is asking for the kernel to find then do
+     * that before trancating the length for mapping file below.
+     */
     if (!(flags & MAP_FIXED)) {
-        abi_ulong mmap_start;
-        void *p;
-        host_offset = offset & qemu_host_page_mask;
         host_len = len + offset - host_offset;
         host_len = HOST_PAGE_ALIGN(host_len);
-        mmap_start = mmap_find_vma(real_start, host_len);
-        if (mmap_start == (abi_ulong)-1) {
+        start = mmap_find_vma(real_start, host_len);
+        if (start == (abi_ulong)-1) {
             errno = ENOMEM;
             goto fail;
         }
+    }
+
+    /*
+     * When mapping files into a memory area larger than the file,
+     * accesses to pages beyond the file size will cause a SIGBUS.
+     *
+     * For example, if mmaping a file of 100 bytes on a host with 4K
+     * pages emulating a target with 8K pages, the target expects to be
+     * able to access the first 8K. But the host will trap us on any
+     * access beyond 4K.
+     *
+     * When emulating a target with a larger page-size than the hosts,
+     * we need to truncate file maps at EOF and add extra anonymous
+     * pages up to the targets page boundary.
+     */
+    if ((qemu_real_host_page_size < TARGET_PAGE_SIZE)
+            && !(flags & MAP_ANONYMOUS)) {
+        struct stat sb;
+
+        if (fstat (fd, &sb) == -1)
+            goto fail;
+
+        /* Are we trying to create a map beyond EOF?. */
+        if (offset + len > sb.st_size) {
+            /*
+             * If so, truncate the file map at eof aligned with
+             * the hosts real pagesize. Additional anonymous maps
+             * will be created beyond EOF.
+             */
+            len = (sb.st_size - offset);
+            len += qemu_real_host_page_size - 1;
+            len &= ~(qemu_real_host_page_size - 1);
+        }
+    }
+
+
+    if (!(flags & MAP_FIXED)) {
+        unsigned long host_start;
+        void *p;
+
+        host_len = len + offset - host_offset;
+        host_len = HOST_PAGE_ALIGN(host_len);
+
         /* Note: we prefer to control the mapping address. It is
            especially important if qemu_host_page_size >
            qemu_real_host_page_size */
-        p = mmap(g2h(mmap_start),
-                 host_len, prot, flags | MAP_FIXED, fd, host_offset);
+        p = mmap(g2h(start), host_len, prot,
+                flags | MAP_FIXED | MAP_ANON, -1, 0);
         if (p == MAP_FAILED) {
             goto fail;
         }
         /* update start so that it points to the file position at 'offset' */
         host_start = (unsigned long)p;
-        if (!(flags & MAP_ANON))
+        if (!(flags & MAP_ANON)) {
+            p = mmap(g2h(start), len, prot,
+                    flags | MAP_FIXED, fd, host_offset);
+            if (p == MAP_FAILED) {
+                munmap(g2h(start), host_len);
+                goto fail;
+            }
             host_start += offset - host_offset;
+        }
         start = h2g(host_start);
     } else {
-        int flg;
-        target_ulong addr;
-
         if (start & ~TARGET_PAGE_MASK) {
             errno = EINVAL;
             goto fail;
@@ -353,6 +463,18 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         end = start + len;
         real_end = HOST_PAGE_ALIGN(end);
 
+        /*
+         * Test if requested memory area fits target address space
+         * It can fail only on 64-bit host with 32-bit target.
+         * On any other target/host host mmap() handles this error
+         * correctly.
+         */
+        if ((unsigned long)start + len - 1 > (abi_ulong) -1) {
+            errno = EINVAL;
+            goto fail;
+        }
+
+#if 0
         for (addr = real_start; addr < real_end; addr += TARGET_PAGE_SIZE) {
             flg = page_get_flags(addr);
             if (flg & PAGE_RESERVED) {
@@ -360,6 +482,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                 goto fail;
             }
         }
+#endif
 
         /* worst case: we cannot map the file because the offset is not
            aligned, so we read it */
@@ -377,7 +500,8 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                                   -1, 0);
             if (retaddr == -1)
                 goto fail;
-            pread(fd, g2h(start), len, offset);
+            if (pread(fd, g2h(start), len, offset) == -1)
+                goto fail;
             if (!(prot & PROT_WRITE)) {
                 ret = target_mprotect(start, len, prot);
                 if (ret != 0) {
@@ -437,6 +561,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     page_dump(stdout);
     printf("\n");
 #endif
+    tb_invalidate_phys_range(start, start + len, 0);
     mmap_unlock();
     return start;
 fail:
