@@ -143,4 +143,17 @@ struct target_ifgroupreq {
 
 #define TARGET_SIOCGIFGROUP    TARGET_IOWR('i', 136, struct target_ifgroupreq)
 
+struct target_ifmediareq {
+    char        ifm_name[TARGET_IFNAMSIZ];
+    int32_t     ifm_current;
+    int32_t     ifm_mask;
+    int32_t     ifm_status;
+    int32_t     ifm_active;
+    int32_t     ifm_count;
+    abi_ulong   ifm_ulist;
+};
+
+#define TARGET_SIOCGIFMEDIA  TARGET_IOWR('i', 56, struct target_ifmediareq)
+
+
 #endif /* _OS_IOCTL_SOCKIO_H_ */
