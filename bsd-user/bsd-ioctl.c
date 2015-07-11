@@ -34,6 +34,7 @@
 
 #include <crypto/cryptodev.h>
 
+#include <net/ethernet.h>
 #include <net/if.h>
 #include <net/if_var.h>
 #include <net/if_types.h>
@@ -41,6 +42,7 @@
 #include <net/if_dl.h>
 #include <net/if_gif.h>
 #include <net/if_gre.h>
+#include <net/if_lagg.h>
 #include <net/if_media.h>
 #include <netpfil/pf/pf.h>
 #include <net/pfvar.h>
