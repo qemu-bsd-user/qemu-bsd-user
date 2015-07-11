@@ -98,9 +98,27 @@ struct target_ifreq {
 #define TARGET_SIOCSIFRVNET     TARGET_IOWR('i', 91, struct target_ifreq)
 #define TARGET_SIOCGIFFIB       TARGET_IOWR('i', 92, struct target_ifreq)
 #define TARGET_SIOCSIFFIB       TARGET_IOW('i', 93, struct target_ifreq)
+#define TARGET_SIOCGTUNFIB      TARGET_IOWR('i', 94, struct target_ifreq)
 #define TARGET_SIOCIFCREATE     TARGET_IOWR('i', 122, struct target_ifreq)
 #define TARGET_SIOCIFCREATE2    TARGET_IOWR('i', 124, struct target_ifreq)
 #define TARGET_SIOCIFDESTROY    TARGET_IOW('i', 121, struct target_ifreq)
+
+/* net/if_gre.h */
+#define TARGET_GREGKEY          TARGET_IOWR('i', 107, struct target_ifreq)
+#define TARGET_GREGOPTS         TARGET_IOWR('i', 109, struct target_ifreq)
+
+/* net/if_gif.h */
+#define TARGET_GIFGOPTS         TARGET_IOWR('i', 150, struct target_ifreq)
+
+/* netinet/ip_carp.h */
+#define TARGET_SIOCGVH          TARGET_IOWR('i', 246, struct target_ifreq)
+
+/* netinet/ip_carp.h */
+#define TARGET_SIOCGVH          TARGET_IOWR('i', 246, struct target_ifreq)
+
+/* net/if_pfsync.h */
+#define TARGET_SIOCGETPFSYNC    TARGET_IOWR('i', 248, struct target_ifreq)
+
 
 /* See net/if.h */
 struct target_ifconf {
@@ -155,5 +173,23 @@ struct target_ifmediareq {
 
 #define TARGET_SIOCGIFMEDIA  TARGET_IOWR('i', 56, struct target_ifmediareq)
 
+#define TARGET_IFSTATMAX    800
+struct target_ifstat {
+    char    ifs_name[TARGET_IFNAMSIZ];
+    char    ascii[TARGET_IFSTATMAX + 1];
+};
+
+#define TARGET_SIOCGIFSTATUS TARGET_IOWR('i', 59, struct target_ifstat)
+
+/* net80211/ieee80211_ioctl.h */
+struct target_ieee80211req {
+    char            i_name[TARGET_IFNAMSIZ];
+    uint16_t        i_type;
+    int16_t         i_val;
+    uint16_t        i_len;
+    abi_ulong       i_data;
+};
+
+#define TARGET_SIOCG80211 TARGET_IOWR('i', 235, struct target_ieee80211req)
 
 #endif /* _OS_IOCTL_SOCKIO_H_ */
