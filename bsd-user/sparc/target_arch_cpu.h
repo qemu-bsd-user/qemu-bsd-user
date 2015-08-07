@@ -48,7 +48,7 @@ static inline void target_cpu_loop(CPUSPARCState *env)
     /* target_siginfo_t info; */
 
     while (1) {
-        trapnr = cpu_sparc_exec(env);
+        trapnr = cpu_sparc_exec(cs);
 
         switch (trapnr) {
         case 0x80:

@@ -97,6 +97,72 @@ static void generate_pattern(void *buffer, size_t len, size_t cycle_len)
     }
 }
 
+/**
+ * Verify that the transfer did not corrupt our state at all.
+ */
+static void verify_state(AHCIQState *ahci)
+{
+    int i, j;
+    uint32_t ahci_fingerprint;
+    uint64_t hba_base;
+    uint64_t hba_stored;
+    AHCICommandHeader cmd;
+
+    ahci_fingerprint = qpci_config_readl(ahci->dev, PCI_VENDOR_ID);
+    g_assert_cmphex(ahci_fingerprint, ==, ahci->fingerprint);
+
+    /* If we haven't initialized, this is as much as can be validated. */
+    if (!ahci->hba_base) {
+        return;
+    }
+
+    hba_base = (uint64_t)qpci_config_readl(ahci->dev, PCI_BASE_ADDRESS_5);
+    hba_stored = (uint64_t)(uintptr_t)ahci->hba_base;
+    g_assert_cmphex(hba_base, ==, hba_stored);
+
+    g_assert_cmphex(ahci_rreg(ahci, AHCI_CAP), ==, ahci->cap);
+    g_assert_cmphex(ahci_rreg(ahci, AHCI_CAP2), ==, ahci->cap2);
+
+    for (i = 0; i < 32; i++) {
+        g_assert_cmphex(ahci_px_rreg(ahci, i, AHCI_PX_FB), ==,
+                        ahci->port[i].fb);
+        g_assert_cmphex(ahci_px_rreg(ahci, i, AHCI_PX_CLB), ==,
+                        ahci->port[i].clb);
+        for (j = 0; j < 32; j++) {
+            ahci_get_command_header(ahci, i, j, &cmd);
+            g_assert_cmphex(cmd.prdtl, ==, ahci->port[i].prdtl[j]);
+            g_assert_cmphex(cmd.ctba, ==, ahci->port[i].ctba[j]);
+        }
+    }
+}
+
+static void ahci_migrate(AHCIQState *from, AHCIQState *to, const char *uri)
+{
+    QOSState *tmp = to->parent;
+    QPCIDevice *dev = to->dev;
+    if (uri == NULL) {
+        uri = "tcp:127.0.0.1:1234";
+    }
+
+    /* context will be 'to' after completion. */
+    migrate(from->parent, to->parent, uri);
+
+    /* We'd like for the AHCIState objects to still point
+     * to information specific to its specific parent
+     * instance, but otherwise just inherit the new data. */
+    memcpy(to, from, sizeof(AHCIQState));
+    to->parent = tmp;
+    to->dev = dev;
+
+    tmp = from->parent;
+    dev = from->dev;
+    memset(from, 0x00, sizeof(AHCIQState));
+    from->parent = tmp;
+    from->dev = dev;
+
+    verify_state(to);
+}
+
 /*** Test Setup & Teardown ***/
 
 /**
@@ -146,6 +212,8 @@ static AHCIQState *ahci_boot(const char *cli, ...)
 static void ahci_shutdown(AHCIQState *ahci)
 {
     QOSState *qs = ahci->parent;
+
+    set_context(qs);
     ahci_clean_mem(ahci);
     free_ahci_device(ahci->dev);
     g_free(ahci);
@@ -160,6 +228,8 @@ static AHCIQState *ahci_boot_and_enable(const char *cli, ...)
 {
     AHCIQState *ahci;
     va_list ap;
+    uint16_t buff[256];
+    uint8_t port;
 
     if (cli) {
         va_start(ap, cli);
@@ -171,6 +241,10 @@ static AHCIQState *ahci_boot_and_enable(const char *cli, ...)
 
     ahci_pci_enable(ahci);
     ahci_hba_enable(ahci);
+    /* Initialize test device */
+    port = ahci_port_select(ahci);
+    ahci_port_clear(ahci, port);
+    ahci_io(ahci, port, CMD_IDENTIFY, &buff, sizeof(buff), 0);
 
     return ahci;
 }
@@ -806,7 +880,7 @@ static void ahci_test_io_rw_simple(AHCIQState *ahci, unsigned bufsize,
 
     /* Write some indicative pattern to our buffer. */
     generate_pattern(tx, bufsize, AHCI_SECTOR_SIZE);
-    memwrite(ptr, tx, bufsize);
+    bufwrite(ptr, tx, bufsize);
 
     /* Write this buffer to disk, then read it back to the DMA buffer. */
     ahci_guest_io(ahci, port, write_cmd, ptr, bufsize, sector);
@@ -814,7 +888,7 @@ static void ahci_test_io_rw_simple(AHCIQState *ahci, unsigned bufsize,
     ahci_guest_io(ahci, port, read_cmd, ptr, bufsize, sector);
 
     /*** Read back the Data ***/
-    memread(ptr, rx, bufsize);
+    bufread(ptr, rx, bufsize);
     g_assert_cmphex(memcmp(tx, rx, bufsize), ==, 0);
 
     ahci_free(ahci, ptr);
@@ -822,26 +896,55 @@ static void ahci_test_io_rw_simple(AHCIQState *ahci, unsigned bufsize,
     g_free(rx);
 }
 
-static void ahci_test_nondata(AHCIQState *ahci, uint8_t ide_cmd)
+static uint8_t ahci_test_nondata(AHCIQState *ahci, uint8_t ide_cmd)
 {
-    uint8_t px;
+    uint8_t port;
     AHCICommand *cmd;
 
     /* Sanitize */
-    px = ahci_port_select(ahci);
-    ahci_port_clear(ahci, px);
+    port = ahci_port_select(ahci);
+    ahci_port_clear(ahci, port);
 
     /* Issue Command */
     cmd = ahci_command_create(ide_cmd);
-    ahci_command_commit(ahci, cmd, px);
+    ahci_command_commit(ahci, cmd, port);
     ahci_command_issue(ahci, cmd);
     ahci_command_verify(ahci, cmd);
     ahci_command_free(cmd);
+
+    return port;
 }
 
 static void ahci_test_flush(AHCIQState *ahci)
 {
     ahci_test_nondata(ahci, CMD_FLUSH_CACHE);
+}
+
+static void ahci_test_max(AHCIQState *ahci)
+{
+    RegD2HFIS *d2h = g_malloc0(0x20);
+    uint64_t nsect;
+    uint8_t port;
+    uint8_t cmd;
+    uint64_t config_sect = TEST_IMAGE_SECTORS - 1;
+
+    if (config_sect > 0xFFFFFF) {
+        cmd = CMD_READ_MAX_EXT;
+    } else {
+        cmd = CMD_READ_MAX;
+    }
+
+    port = ahci_test_nondata(ahci, cmd);
+    memread(ahci->port[port].fb + 0x40, d2h, 0x20);
+    nsect = (uint64_t)d2h->lba_hi[2] << 40 |
+        (uint64_t)d2h->lba_hi[1] << 32 |
+        (uint64_t)d2h->lba_hi[0] << 24 |
+        (uint64_t)d2h->lba_lo[2] << 16 |
+        (uint64_t)d2h->lba_lo[1] << 8 |
+        (uint64_t)d2h->lba_lo[0];
+
+    g_assert_cmphex(nsect, ==, config_sect);
+    g_free(d2h);
 }
 
 
@@ -950,7 +1053,7 @@ static void test_dma_fragmented(void)
     /* Create a DMA buffer in guest memory, and write our pattern to it. */
     ptr = guest_alloc(ahci->parent->alloc, bufsize);
     g_assert(ptr);
-    memwrite(ptr, tx, bufsize);
+    bufwrite(ptr, tx, bufsize);
 
     cmd = ahci_command_create(CMD_WRITE_DMA);
     ahci_command_adjust(cmd, 0, ptr, bufsize, 32);
@@ -967,7 +1070,7 @@ static void test_dma_fragmented(void)
     g_free(cmd);
 
     /* Read back the guest's receive buffer into local memory */
-    memread(ptr, rx, bufsize);
+    bufread(ptr, rx, bufsize);
     guest_free(ahci->parent->alloc, ptr);
 
     g_assert_cmphex(memcmp(tx, rx, bufsize), ==, 0);
@@ -1003,7 +1106,7 @@ static void test_flush_retry(void)
                                 debug_path,
                                 tmp_path);
 
-    /* Issue Flush Command */
+    /* Issue Flush Command and wait for error */
     port = ahci_port_select(ahci);
     ahci_port_clear(ahci, port);
     cmd = ahci_command_create(CMD_FLUSH_CACHE);
@@ -1019,6 +1122,323 @@ static void test_flush_retry(void)
     ahci_command_verify(ahci, cmd);
 
     ahci_command_free(cmd);
+    ahci_shutdown(ahci);
+}
+
+/**
+ * Basic sanity test to boot a machine, find an AHCI device, and shutdown.
+ */
+static void test_migrate_sanity(void)
+{
+    AHCIQState *src, *dst;
+    const char *uri = "tcp:127.0.0.1:1234";
+
+    src = ahci_boot("-m 1024 -M q35 "
+                    "-hda %s ", tmp_path);
+    dst = ahci_boot("-m 1024 -M q35 "
+                    "-hda %s "
+                    "-incoming %s", tmp_path, uri);
+
+    ahci_migrate(src, dst, uri);
+
+    ahci_shutdown(src);
+    ahci_shutdown(dst);
+}
+
+/**
+ * Simple migration test: Write a pattern, migrate, then read.
+ */
+static void ahci_migrate_simple(uint8_t cmd_read, uint8_t cmd_write)
+{
+    AHCIQState *src, *dst;
+    uint8_t px;
+    size_t bufsize = 4096;
+    unsigned char *tx = g_malloc(bufsize);
+    unsigned char *rx = g_malloc0(bufsize);
+    unsigned i;
+    const char *uri = "tcp:127.0.0.1:1234";
+
+    src = ahci_boot_and_enable("-m 1024 -M q35 "
+                               "-hda %s ", tmp_path);
+    dst = ahci_boot("-m 1024 -M q35 "
+                    "-hda %s "
+                    "-incoming %s", tmp_path, uri);
+
+    set_context(src->parent);
+
+    /* initialize */
+    px = ahci_port_select(src);
+    ahci_port_clear(src, px);
+
+    /* create pattern */
+    for (i = 0; i < bufsize; i++) {
+        tx[i] = (bufsize - i);
+    }
+
+    /* Write, migrate, then read. */
+    ahci_io(src, px, cmd_write, tx, bufsize, 0);
+    ahci_migrate(src, dst, uri);
+    ahci_io(dst, px, cmd_read, rx, bufsize, 0);
+
+    /* Verify pattern */
+    g_assert_cmphex(memcmp(tx, rx, bufsize), ==, 0);
+
+    ahci_shutdown(src);
+    ahci_shutdown(dst);
+    g_free(rx);
+    g_free(tx);
+}
+
+static void test_migrate_dma(void)
+{
+    ahci_migrate_simple(CMD_READ_DMA, CMD_WRITE_DMA);
+}
+
+static void test_migrate_ncq(void)
+{
+    ahci_migrate_simple(READ_FPDMA_QUEUED, WRITE_FPDMA_QUEUED);
+}
+
+/**
+ * Halted IO Error Test
+ *
+ * Simulate an error on first write, Try to write a pattern,
+ * Confirm the VM has stopped, resume the VM, verify command
+ * has completed, then read back the data and verify.
+ */
+static void ahci_halted_io_test(uint8_t cmd_read, uint8_t cmd_write)
+{
+    AHCIQState *ahci;
+    uint8_t port;
+    size_t bufsize = 4096;
+    unsigned char *tx = g_malloc(bufsize);
+    unsigned char *rx = g_malloc0(bufsize);
+    unsigned i;
+    uint64_t ptr;
+    AHCICommand *cmd;
+
+    prepare_blkdebug_script(debug_path, "write_aio");
+
+    ahci = ahci_boot_and_enable("-drive file=blkdebug:%s:%s,if=none,id=drive0,"
+                                "format=qcow2,cache=writeback,"
+                                "rerror=stop,werror=stop "
+                                "-M q35 "
+                                "-device ide-hd,drive=drive0 ",
+                                debug_path,
+                                tmp_path);
+
+    /* Initialize and prepare */
+    port = ahci_port_select(ahci);
+    ahci_port_clear(ahci, port);
+
+    for (i = 0; i < bufsize; i++) {
+        tx[i] = (bufsize - i);
+    }
+
+    /* create DMA source buffer and write pattern */
+    ptr = ahci_alloc(ahci, bufsize);
+    g_assert(ptr);
+    memwrite(ptr, tx, bufsize);
+
+    /* Attempt to write (and fail) */
+    cmd = ahci_guest_io_halt(ahci, port, cmd_write,
+                             ptr, bufsize, 0);
+
+    /* Attempt to resume the command */
+    ahci_guest_io_resume(ahci, cmd);
+    ahci_free(ahci, ptr);
+
+    /* Read back and verify */
+    ahci_io(ahci, port, cmd_read, rx, bufsize, 0);
+    g_assert_cmphex(memcmp(tx, rx, bufsize), ==, 0);
+
+    /* Cleanup and go home */
+    ahci_shutdown(ahci);
+    g_free(rx);
+    g_free(tx);
+}
+
+static void test_halted_dma(void)
+{
+    ahci_halted_io_test(CMD_READ_DMA, CMD_WRITE_DMA);
+}
+
+static void test_halted_ncq(void)
+{
+    ahci_halted_io_test(READ_FPDMA_QUEUED, WRITE_FPDMA_QUEUED);
+}
+
+/**
+ * IO Error Migration Test
+ *
+ * Simulate an error on first write, Try to write a pattern,
+ * Confirm the VM has stopped, migrate, resume the VM,
+ * verify command has completed, then read back the data and verify.
+ */
+static void ahci_migrate_halted_io(uint8_t cmd_read, uint8_t cmd_write)
+{
+    AHCIQState *src, *dst;
+    uint8_t port;
+    size_t bufsize = 4096;
+    unsigned char *tx = g_malloc(bufsize);
+    unsigned char *rx = g_malloc0(bufsize);
+    unsigned i;
+    uint64_t ptr;
+    AHCICommand *cmd;
+    const char *uri = "tcp:127.0.0.1:1234";
+
+    prepare_blkdebug_script(debug_path, "write_aio");
+
+    src = ahci_boot_and_enable("-drive file=blkdebug:%s:%s,if=none,id=drive0,"
+                               "format=qcow2,cache=writeback,"
+                               "rerror=stop,werror=stop "
+                               "-M q35 "
+                               "-device ide-hd,drive=drive0 ",
+                               debug_path,
+                               tmp_path);
+
+    dst = ahci_boot("-drive file=%s,if=none,id=drive0,"
+                    "format=qcow2,cache=writeback,"
+                    "rerror=stop,werror=stop "
+                    "-M q35 "
+                    "-device ide-hd,drive=drive0 "
+                    "-incoming %s",
+                    tmp_path, uri);
+
+    set_context(src->parent);
+
+    /* Initialize and prepare */
+    port = ahci_port_select(src);
+    ahci_port_clear(src, port);
+
+    for (i = 0; i < bufsize; i++) {
+        tx[i] = (bufsize - i);
+    }
+
+    /* create DMA source buffer and write pattern */
+    ptr = ahci_alloc(src, bufsize);
+    g_assert(ptr);
+    memwrite(ptr, tx, bufsize);
+
+    /* Write, trigger the VM to stop, migrate, then resume. */
+    cmd = ahci_guest_io_halt(src, port, cmd_write,
+                             ptr, bufsize, 0);
+    ahci_migrate(src, dst, uri);
+    ahci_guest_io_resume(dst, cmd);
+    ahci_free(dst, ptr);
+
+    /* Read back */
+    ahci_io(dst, port, cmd_read, rx, bufsize, 0);
+
+    /* Verify TX and RX are identical */
+    g_assert_cmphex(memcmp(tx, rx, bufsize), ==, 0);
+
+    /* Cleanup and go home. */
+    ahci_shutdown(src);
+    ahci_shutdown(dst);
+    g_free(rx);
+    g_free(tx);
+}
+
+static void test_migrate_halted_dma(void)
+{
+    ahci_migrate_halted_io(CMD_READ_DMA, CMD_WRITE_DMA);
+}
+
+static void test_migrate_halted_ncq(void)
+{
+    ahci_migrate_halted_io(READ_FPDMA_QUEUED, WRITE_FPDMA_QUEUED);
+}
+
+/**
+ * Migration test: Try to flush, migrate, then resume.
+ */
+static void test_flush_migrate(void)
+{
+    AHCIQState *src, *dst;
+    AHCICommand *cmd;
+    uint8_t px;
+    const char *s;
+    const char *uri = "tcp:127.0.0.1:1234";
+
+    prepare_blkdebug_script(debug_path, "flush_to_disk");
+
+    src = ahci_boot_and_enable("-drive file=blkdebug:%s:%s,if=none,id=drive0,"
+                               "cache=writeback,rerror=stop,werror=stop "
+                               "-M q35 "
+                               "-device ide-hd,drive=drive0 ",
+                               debug_path, tmp_path);
+    dst = ahci_boot("-drive file=%s,if=none,id=drive0,"
+                    "cache=writeback,rerror=stop,werror=stop "
+                    "-M q35 "
+                    "-device ide-hd,drive=drive0 "
+                    "-incoming %s", tmp_path, uri);
+
+    set_context(src->parent);
+
+    /* Issue Flush Command */
+    px = ahci_port_select(src);
+    ahci_port_clear(src, px);
+    cmd = ahci_command_create(CMD_FLUSH_CACHE);
+    ahci_command_commit(src, cmd, px);
+    ahci_command_issue_async(src, cmd);
+    qmp_eventwait("STOP");
+
+    /* Migrate over */
+    ahci_migrate(src, dst, uri);
+
+    /* Complete the command */
+    s = "{'execute':'cont' }";
+    qmp_async(s);
+    qmp_eventwait("RESUME");
+    ahci_command_wait(dst, cmd);
+    ahci_command_verify(dst, cmd);
+
+    ahci_command_free(cmd);
+    ahci_shutdown(src);
+    ahci_shutdown(dst);
+}
+
+static void test_max(void)
+{
+    AHCIQState *ahci;
+
+    ahci = ahci_boot_and_enable(NULL);
+    ahci_test_max(ahci);
+    ahci_shutdown(ahci);
+}
+
+static void test_reset(void)
+{
+    AHCIQState *ahci;
+    int i;
+
+    ahci = ahci_boot(NULL);
+    ahci_test_pci_spec(ahci);
+    ahci_pci_enable(ahci);
+
+    for (i = 0; i < 2; i++) {
+        ahci_test_hba_spec(ahci);
+        ahci_hba_enable(ahci);
+        ahci_test_identify(ahci);
+        ahci_test_io_rw_simple(ahci, 4096, 0,
+                               CMD_READ_DMA_EXT,
+                               CMD_WRITE_DMA_EXT);
+        ahci_set(ahci, AHCI_GHC, AHCI_GHC_HR);
+        ahci_clean_mem(ahci);
+    }
+
+    ahci_shutdown(ahci);
+}
+
+static void test_ncq_simple(void)
+{
+    AHCIQState *ahci;
+
+    ahci = ahci_boot_and_enable(NULL);
+    ahci_test_io_rw_simple(ahci, 4096, 0,
+                           READ_FPDMA_QUEUED,
+                           WRITE_FPDMA_QUEUED);
     ahci_shutdown(ahci);
 }
 
@@ -1174,7 +1594,6 @@ static void test_io_interface(gconstpointer opaque)
 static void create_ahci_io_test(enum IOMode type, enum AddrMode addr,
                                 enum BuffLen len, enum OffsetType offset)
 {
-    static const char *arch;
     char *name;
     AHCIIOTestOptions *opts = g_malloc(sizeof(AHCIIOTestOptions));
 
@@ -1183,17 +1602,13 @@ static void create_ahci_io_test(enum IOMode type, enum AddrMode addr,
     opts->io_type = type;
     opts->offset = offset;
 
-    if (!arch) {
-        arch = qtest_get_arch();
-    }
-
-    name = g_strdup_printf("/%s/ahci/io/%s/%s/%s/%s", arch,
+    name = g_strdup_printf("ahci/io/%s/%s/%s/%s",
                            io_mode_str[type],
                            addr_mode_str[addr],
                            buff_len_str[len],
                            offset_str[offset]);
 
-    g_test_add_data_func(name, opts, test_io_interface);
+    qtest_add_data_func(name, opts, test_io_interface);
     g_free(name);
 }
 
@@ -1270,6 +1685,20 @@ int main(int argc, char **argv)
 
     qtest_add_func("/ahci/flush/simple", test_flush);
     qtest_add_func("/ahci/flush/retry", test_flush_retry);
+    qtest_add_func("/ahci/flush/migrate", test_flush_migrate);
+
+    qtest_add_func("/ahci/migrate/sanity", test_migrate_sanity);
+    qtest_add_func("/ahci/migrate/dma/simple", test_migrate_dma);
+    qtest_add_func("/ahci/io/dma/lba28/retry", test_halted_dma);
+    qtest_add_func("/ahci/migrate/dma/halted", test_migrate_halted_dma);
+
+    qtest_add_func("/ahci/max", test_max);
+    qtest_add_func("/ahci/reset", test_reset);
+
+    qtest_add_func("/ahci/io/ncq/simple", test_ncq_simple);
+    qtest_add_func("/ahci/migrate/ncq/simple", test_migrate_ncq);
+    qtest_add_func("/ahci/io/ncq/retry", test_halted_ncq);
+    qtest_add_func("/ahci/migrate/ncq/halted", test_migrate_halted_ncq);
 
     ret = g_test_run();
 

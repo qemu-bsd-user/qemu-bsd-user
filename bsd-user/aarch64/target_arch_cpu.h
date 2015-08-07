@@ -176,7 +176,7 @@ static inline void target_cpu_loop(CPUARMState *env)
 
     for (;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_arm_exec(env);
+        trapnr = cpu_arm_exec(cs);
         cpu_exec_end(cs);
 
         switch (trapnr) {

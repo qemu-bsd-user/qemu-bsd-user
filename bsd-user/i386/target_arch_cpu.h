@@ -105,12 +105,14 @@ static inline void target_cpu_init(CPUX86State *env,
 
 static inline void target_cpu_loop(CPUX86State *env)
 {
+    X86CPU *cpu = x86_env_get_cpu(env);
+    CPUState *cs = CPU(cpu);
     int trapnr;
     abi_ulong pc;
     /* target_siginfo_t info; */
 
     for (;;) {
-        trapnr = cpu_x86_exec(env);
+        trapnr = cpu_x86_exec(cs);
         switch (trapnr) {
         case 0x80:
             /* syscall from int $0x80 */

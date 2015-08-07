@@ -326,6 +326,29 @@ class QMPTestCase(unittest.TestCase):
         self.assert_no_active_block_jobs()
         return event
 
+    def wait_ready(self, drive='drive0'):
+        '''Wait until a block job BLOCK_JOB_READY event'''
+        f = {'data': {'type': 'mirror', 'device': drive } }
+        event = self.vm.event_wait(name='BLOCK_JOB_READY', match=f)
+
+    def wait_ready_and_cancel(self, drive='drive0'):
+        self.wait_ready(drive=drive)
+        event = self.cancel_and_wait(drive=drive)
+        self.assertEquals(event['event'], 'BLOCK_JOB_COMPLETED')
+        self.assert_qmp(event, 'data/type', 'mirror')
+        self.assert_qmp(event, 'data/offset', event['data']['len'])
+
+    def complete_and_wait(self, drive='drive0', wait_ready=True):
+        '''Complete a block job and wait for it to finish'''
+        if wait_ready:
+            self.wait_ready(drive=drive)
+
+        result = self.vm.qmp('block-job-complete', device=drive)
+        self.assert_qmp(result, 'return', {})
+
+        event = self.wait_until_completed(drive=drive)
+        self.assert_qmp(event, 'data/type', 'mirror')
+
 def notrun(reason):
     '''Skip this test suite'''
     # Each test in qemu-iotests has a number ("seq")
@@ -338,6 +361,8 @@ def notrun(reason):
 def main(supported_fmts=[], supported_oses=['linux']):
     '''Run tests'''
 
+    debug = '-d' in sys.argv
+    verbosity = 1
     if supported_fmts and (imgfmt not in supported_fmts):
         notrun('not suitable for this image format: %s' % imgfmt)
 
@@ -347,14 +372,20 @@ def main(supported_fmts=[], supported_oses=['linux']):
     # We need to filter out the time taken from the output so that qemu-iotest
     # can reliably diff the results against master output.
     import StringIO
-    output = StringIO.StringIO()
+    if debug:
+        output = sys.stdout
+        verbosity = 2
+        sys.argv.remove('-d')
+    else:
+        output = StringIO.StringIO()
 
     class MyTestRunner(unittest.TextTestRunner):
-        def __init__(self, stream=output, descriptions=True, verbosity=1):
+        def __init__(self, stream=output, descriptions=True, verbosity=verbosity):
             unittest.TextTestRunner.__init__(self, stream, descriptions, verbosity)
 
     # unittest.main() will use sys.exit() so expect a SystemExit exception
     try:
         unittest.main(testRunner=MyTestRunner)
     finally:
-        sys.stderr.write(re.sub(r'Ran (\d+) tests? in [\d.]+s', r'Ran \1 tests', output.getvalue()))
+        if not debug:
+            sys.stderr.write(re.sub(r'Ran (\d+) tests? in [\d.]+s', r'Ran \1 tests', output.getvalue()))

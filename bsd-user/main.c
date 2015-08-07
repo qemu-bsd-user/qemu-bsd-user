@@ -115,15 +115,7 @@ void fork_end(int child)
         pthread_cond_init(&exclusive_cond, NULL);
         pthread_cond_init(&exclusive_resume, NULL);
         pthread_mutex_init(&tcg_ctx.tb_ctx.tb_lock, NULL);
-
-	/* Global mutexes from os-thread.c: */
-        pthread_mutex_init(new_freebsd_thread_lock_ptr, NULL);
-        pthread_mutex_init(freebsd_umtx_wait_lck_ptr, NULL);
-
-        gdbserver_fork((CPUArchState *)thread_cpu->env_ptr);
-    } else {
-        pthread_mutex_unlock(&exclusive_lock);
-        pthread_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
+        gdbserver_fork(thread_cpu);
     }
 }
 

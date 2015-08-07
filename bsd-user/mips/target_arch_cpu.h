@@ -103,7 +103,7 @@ static inline void target_cpu_loop(CPUMIPSState *env)
 
     for (;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_mips_exec(env);
+        trapnr = cpu_mips_exec(cs);
         cpu_exec_end(cs);
         switch (trapnr) {
         case EXCP_SYSCALL: /* syscall exception */

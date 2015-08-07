@@ -254,6 +254,7 @@ enum tricore_features {
     TRICORE_FEATURE_13,
     TRICORE_FEATURE_131,
     TRICORE_FEATURE_16,
+    TRICORE_FEATURE_161,
 };
 
 static inline int tricore_feature(CPUTriCoreState *env, int feature)
@@ -371,7 +372,7 @@ enum {
 };
 
 void cpu_state_reset(CPUTriCoreState *s);
-int cpu_tricore_exec(CPUTriCoreState *s);
+int cpu_tricore_exec(CPUState *cpu);
 void tricore_tcg_init(void);
 int cpu_tricore_signal_handler(int host_signum, void *pinfo, void *puc);
 

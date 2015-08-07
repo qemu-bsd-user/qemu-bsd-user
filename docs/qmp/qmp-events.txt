@@ -232,7 +232,7 @@ Example:
 { "event": "GUEST_PANICKED",
      "data": { "action": "pause" } }
 
-MEM_HOT_UNPLUG_ERROR
+MEM_UNPLUG_ERROR
 --------------------
 Emitted when memory hot unplug error occurs.
 
@@ -243,7 +243,7 @@ Data:
 
 Example:
 
-{ "event": "MEM_HOT_UNPLUG_ERROR"
+{ "event": "MEM_UNPLUG_ERROR"
   "data": { "device": "dimm1",
             "msg": "acpi: device unplug for unsupported device"
   },
@@ -473,6 +473,20 @@ Example:
 { "timestamp": {"seconds": 1290688046, "microseconds": 417172},
   "event": "SPICE_MIGRATE_COMPLETED" }
 
+MIGRATION
+---------
+
+Emitted when a migration event happens
+
+Data: None.
+
+ - "status": migration status
+     See MigrationStatus in ~/qapi-schema.json for possible values
+
+Example:
+
+{"timestamp": {"seconds": 1432121972, "microseconds": 744001},
+ "event": "MIGRATION", "data": {"status": "completed"}}
 
 STOP
 ----
