@@ -298,6 +298,7 @@ static const StructEntry struct_termios_def = {
 #define STRUCT_SPECIAL(name) STRUCT_ ## name,
 enum {
 #include "os-ioctl-types.h"
+STRUCT_MAX
 };
 #undef STRUCT
 #undef STRUCT_SPECIAL
@@ -526,6 +527,8 @@ void init_bsd_ioctl(void)
     IOCTLEntry *ie;
     const argtype *arg_type;
     int size;
+
+    thunk_init(STRUCT_MAX);
 
 #define STRUCT(name, ...) \
  thunk_register_struct(STRUCT_ ## name, #name, struct_ ## name ## _def);
