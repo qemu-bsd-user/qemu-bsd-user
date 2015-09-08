@@ -1210,7 +1210,7 @@ static void *file_ram_alloc(RAMBlock *block,
     unlink(filename);
     g_free(filename);
 
-    memory = (memory+hpagesize-1) & ~(hpagesize-1);
+    memory = ROUND_UP(memory, hpagesize);
 
     /*
      * ftruncate is not supported by hugetlbfs in older
@@ -2374,9 +2374,7 @@ static int memory_access_size(MemoryRegion *mr, unsigned l, hwaddr addr)
     if (l > access_size_max) {
         l = access_size_max;
     }
-    if (l & (l - 1)) {
-        l = 1 << (qemu_fls(l) - 1);
-    }
+    l = pow2floor(l);
 
     return l;
 }

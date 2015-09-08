@@ -96,8 +96,46 @@ bool qemu_in_vcpu_thread(void);
 void cpu_reload_memory_map(CPUState *cpu);
 void tcg_cpu_address_space_init(CPUState *cpu, AddressSpace *as);
 /* cputlb.c */
+/**
+ * tlb_flush_page:
+ * @cpu: CPU whose TLB should be flushed
+ * @addr: virtual address of page to be flushed
+ *
+ * Flush one page from the TLB of the specified CPU, for all
+ * MMU indexes.
+ */
 void tlb_flush_page(CPUState *cpu, target_ulong addr);
+/**
+ * tlb_flush:
+ * @cpu: CPU whose TLB should be flushed
+ * @flush_global: ignored
+ *
+ * Flush the entire TLB for the specified CPU.
+ * The flush_global flag is in theory an indicator of whether the whole
+ * TLB should be flushed, or only those entries not marked global.
+ * In practice QEMU does not implement any global/not global flag for
+ * TLB entries, and the argument is ignored.
+ */
 void tlb_flush(CPUState *cpu, int flush_global);
+/**
+ * tlb_flush_page_by_mmuidx:
+ * @cpu: CPU whose TLB should be flushed
+ * @addr: virtual address of page to be flushed
+ * @...: list of MMU indexes to flush, terminated by a negative value
+ *
+ * Flush one page from the TLB of the specified CPU, for the specified
+ * MMU indexes.
+ */
+void tlb_flush_page_by_mmuidx(CPUState *cpu, target_ulong addr, ...);
+/**
+ * tlb_flush_by_mmuidx:
+ * @cpu: CPU whose TLB should be flushed
+ * @...: list of MMU indexes to flush, terminated by a negative value
+ *
+ * Flush all entries from the TLB of the specified CPU, for the specified
+ * MMU indexes.
+ */
+void tlb_flush_by_mmuidx(CPUState *cpu, ...);
 void tlb_set_page(CPUState *cpu, target_ulong vaddr,
                   hwaddr paddr, int prot,
                   int mmu_idx, target_ulong size);
@@ -113,6 +151,15 @@ static inline void tlb_flush_page(CPUState *cpu, target_ulong addr)
 }
 
 static inline void tlb_flush(CPUState *cpu, int flush_global)
+{
+}
+
+static inline void tlb_flush_page_by_mmuidx(CPUState *cpu,
+                                            target_ulong addr, ...)
+{
+}
+
+static inline void tlb_flush_by_mmuidx(CPUState *cpu, ...)
 {
 }
 #endif
@@ -155,6 +202,8 @@ struct TranslationBlock {
     void *tc_ptr;    /* pointer to the translated code */
     /* next matching tb for physical address. */
     struct TranslationBlock *phys_hash_next;
+    /* original tb when cflags has CF_NOCACHE */
+    struct TranslationBlock *orig_tb;
     /* first and second physical page containing code. The lower bit
        of the pointer tells the index in page_next[] */
     struct TranslationBlock *page_next[2];
@@ -308,11 +357,7 @@ extern uintptr_t tci_tb_ptr;
    to indicate the compressed mode; subtracting two works around that.  It
    is also the case that there are no host isas that contain a call insn
    smaller than 4 bytes, so we don't worry about special-casing this.  */
-#if defined(CONFIG_TCG_INTERPRETER)
-# define GETPC_ADJ   0
-#else
-# define GETPC_ADJ   2
-#endif
+#define GETPC_ADJ   2
 
 #define GETPC()  (GETRA() - GETPC_ADJ)
 
@@ -343,27 +388,6 @@ extern int singlestep;
 
 /* cpu-exec.c */
 extern volatile sig_atomic_t exit_request;
-
-/**
- * cpu_can_do_io:
- * @cpu: The CPU for which to check IO.
- *
- * Deterministic execution requires that IO only be performed on the last
- * instruction of a TB so that interrupts take effect immediately.
- *
- * Returns: %true if memory-mapped IO is safe, %false otherwise.
- */
-static inline bool cpu_can_do_io(CPUState *cpu)
-{
-    if (!use_icount) {
-        return true;
-    }
-    /* If not executing code then assume we are ok.  */
-    if (cpu->current_tb == NULL) {
-        return true;
-    }
-    return cpu->can_do_io != 0;
-}
 
 #if !defined(CONFIG_USER_ONLY)
 void migration_bitmap_extend(ram_addr_t old, ram_addr_t new);

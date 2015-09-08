@@ -145,11 +145,6 @@ time_t mktimegm(struct tm *tm)
     return t;
 }
 
-int qemu_fls(int i)
-{
-    return 32 - clz32(i);
-}
-
 /*
  * Make sure data goes on disk, but if possible do not bother to
  * write out the inode just for timestamp updates.
@@ -472,29 +467,6 @@ int qemu_parse_fd(const char *param)
         return -1;
     }
     return fd;
-}
-
-/* round down to the nearest power of 2*/
-int64_t pow2floor(int64_t value)
-{
-    if (!is_power_of_2(value)) {
-        value = 0x8000000000000000ULL >> clz64(value);
-    }
-    return value;
-}
-
-/* round up to the nearest power of 2 (0 if overflow) */
-uint64_t pow2ceil(uint64_t value)
-{
-    uint8_t nlz = clz64(value);
-
-    if (is_power_of_2(value)) {
-        return value;
-    }
-    if (!nlz) {
-        return 0;
-    }
-    return 1ULL << (64 - nlz);
 }
 
 /*

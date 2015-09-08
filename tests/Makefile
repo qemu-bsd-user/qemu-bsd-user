@@ -201,6 +201,7 @@ check-qtest-sparc64-y = tests/endianness-test$(EXESUF)
 gcov-files-sparc-y += hw/timer/m48t59.c
 gcov-files-sparc64-y += hw/timer/m48t59.c
 check-qtest-arm-y = tests/tmp105-test$(EXESUF)
+check-qtest-arm-y = tests/ds1338-test$(EXESUF)
 gcov-files-arm-y += hw/misc/tmp105.c
 check-qtest-arm-y += tests/virtio-blk-test$(EXESUF)
 gcov-files-arm-y += arm-softmmu/hw/block/virtio-blk.c
@@ -229,13 +230,17 @@ check-qapi-schema-y := $(addprefix tests/qapi-schema/, \
 	redefined-type.json redefined-command.json redefined-builtin.json \
 	redefined-event.json command-int.json bad-data.json event-max.json \
 	type-bypass.json type-bypass-no-gen.json type-bypass-bad-gen.json \
-	data-array-empty.json data-array-unknown.json data-int.json \
-	data-unknown.json data-member-unknown.json data-member-array.json \
-	data-member-array-bad.json returns-array-bad.json returns-int.json \
+	args-invalid.json \
+	args-array-empty.json args-array-unknown.json args-int.json \
+	args-unknown.json args-member-unknown.json args-member-array.json \
+	args-member-array-bad.json args-alternate.json args-union.json \
+	returns-array-bad.json returns-int.json returns-dict.json \
 	returns-unknown.json returns-alternate.json returns-whitelist.json \
 	missing-colon.json missing-comma-list.json missing-comma-object.json \
-	nested-struct-data.json nested-struct-returns.json non-objects.json \
+	struct-data-invalid.json struct-member-invalid.json \
+	nested-struct-data.json non-objects.json \
 	qapi-schema-test.json quoted-structural-chars.json \
+	leading-comma-list.json leading-comma-object.json \
 	trailing-comma-list.json trailing-comma-object.json \
 	unclosed-list.json unclosed-object.json unclosed-string.json \
 	duplicate-key.json union-invalid-base.json union-bad-branch.json \
@@ -354,6 +359,7 @@ libqos-pc-obj-y = $(libqos-obj-y) tests/libqos/pci-pc.o
 libqos-pc-obj-y += tests/libqos/malloc-pc.o tests/libqos/libqos-pc.o
 libqos-pc-obj-y += tests/libqos/ahci.o
 libqos-omap-obj-y = $(libqos-obj-y) tests/libqos/i2c-omap.o
+libqos-imx-obj-y = $(libqos-obj-y) tests/libqos/i2c-imx.o
 libqos-usb-obj-y = $(libqos-pc-obj-y) tests/libqos/usb.o
 libqos-virtio-obj-y = $(libqos-pc-obj-y) tests/libqos/virtio.o tests/libqos/virtio-pci.o tests/libqos/virtio-mmio.o tests/libqos/malloc-generic.o
 
@@ -368,6 +374,7 @@ tests/hd-geo-test$(EXESUF): tests/hd-geo-test.o
 tests/boot-order-test$(EXESUF): tests/boot-order-test.o $(libqos-obj-y)
 tests/bios-tables-test$(EXESUF): tests/bios-tables-test.o $(libqos-obj-y)
 tests/tmp105-test$(EXESUF): tests/tmp105-test.o $(libqos-omap-obj-y)
+tests/ds1338-test$(EXESUF): tests/ds1338-test.o $(libqos-imx-obj-y)
 tests/i440fx-test$(EXESUF): tests/i440fx-test.o $(libqos-pc-obj-y)
 tests/q35-test$(EXESUF): tests/q35-test.o $(libqos-pc-obj-y)
 tests/fw_cfg-test$(EXESUF): tests/fw_cfg-test.o $(libqos-pc-obj-y)
@@ -381,7 +388,7 @@ tests/wdt_ib700-test$(EXESUF): tests/wdt_ib700-test.o
 tests/tco-test$(EXESUF): tests/tco-test.o $(libqos-pc-obj-y)
 tests/virtio-balloon-test$(EXESUF): tests/virtio-balloon-test.o
 tests/virtio-blk-test$(EXESUF): tests/virtio-blk-test.o $(libqos-virtio-obj-y)
-tests/virtio-net-test$(EXESUF): tests/virtio-net-test.o $(libqos-pc-obj-y)
+tests/virtio-net-test$(EXESUF): tests/virtio-net-test.o $(libqos-pc-obj-y) $(libqos-virtio-obj-y)
 tests/virtio-rng-test$(EXESUF): tests/virtio-rng-test.o $(libqos-pc-obj-y)
 tests/virtio-scsi-test$(EXESUF): tests/virtio-scsi-test.o $(libqos-virtio-obj-y)
 tests/virtio-9p-test$(EXESUF): tests/virtio-9p-test.o

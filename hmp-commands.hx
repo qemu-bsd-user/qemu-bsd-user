@@ -271,6 +271,7 @@ ETEXI
         .params     = "name on|off",
         .help       = "changes status of a specific trace event",
         .mhandler.cmd = hmp_trace_event,
+        .command_completion = trace_event_completion,
     },
 
 STEXI
@@ -1053,6 +1054,22 @@ gdb. Without -z|-l|-s, the dump format is ELF.
             together with begin.
 ETEXI
 
+#if defined(TARGET_S390X)
+    {
+        .name       = "dump-skeys",
+        .args_type  = "filename:F",
+        .params     = "",
+        .help       = "Save guest storage keys into file 'filename'.\n",
+        .mhandler.cmd = hmp_dump_skeys,
+    },
+#endif
+
+STEXI
+@item dump-skeys @var{filename}
+@findex dump-skeys
+Save guest storage keys to a file.
+ETEXI
+
     {
         .name       = "snapshot_blkdev",
         .args_type  = "reuse:-n,device:B,snapshot-file:s?,format:s?",
@@ -1790,6 +1807,10 @@ show roms
 show the TPM device
 @item info memory-devices
 show the memory devices
+@item info skeys
+Display the value of a storage key (s390 only)
+@item info iothreads
+show iothreads
 @end table
 ETEXI
 

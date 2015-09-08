@@ -313,7 +313,6 @@ static void dec_sub(DisasContext *dc)
 static void dec_pattern(DisasContext *dc)
 {
     unsigned int mode;
-    TCGLabel *l1;
 
     if ((dc->tb_flags & MSR_EE_FLAG)
           && (dc->cpu->env.pvr.regs[2] & PVR2_ILL_OPCODE_EXC_MASK)
@@ -333,29 +332,15 @@ static void dec_pattern(DisasContext *dc)
         case 2:
             LOG_DIS("pcmpeq r%d r%d r%d\n", dc->rd, dc->ra, dc->rb);
             if (dc->rd) {
-                TCGv t0 = tcg_temp_local_new();
-                l1 = gen_new_label();
-                tcg_gen_movi_tl(t0, 1);
-                tcg_gen_brcond_tl(TCG_COND_EQ,
-                                  cpu_R[dc->ra], cpu_R[dc->rb], l1);
-                tcg_gen_movi_tl(t0, 0);
-                gen_set_label(l1);
-                tcg_gen_mov_tl(cpu_R[dc->rd], t0);
-                tcg_temp_free(t0);
+                tcg_gen_setcond_tl(TCG_COND_EQ, cpu_R[dc->rd],
+                                   cpu_R[dc->ra], cpu_R[dc->rb]);
             }
             break;
         case 3:
             LOG_DIS("pcmpne r%d r%d r%d\n", dc->rd, dc->ra, dc->rb);
-            l1 = gen_new_label();
             if (dc->rd) {
-                TCGv t0 = tcg_temp_local_new();
-                tcg_gen_movi_tl(t0, 1);
-                tcg_gen_brcond_tl(TCG_COND_NE,
-                                  cpu_R[dc->ra], cpu_R[dc->rb], l1);
-                tcg_gen_movi_tl(t0, 0);
-                gen_set_label(l1);
-                tcg_gen_mov_tl(cpu_R[dc->rd], t0);
-                tcg_temp_free(t0);
+                tcg_gen_setcond_tl(TCG_COND_NE, cpu_R[dc->rd],
+                                   cpu_R[dc->ra], cpu_R[dc->rb]);
             }
             break;
         default:
@@ -598,9 +583,9 @@ static void t_gen_muls(TCGv d, TCGv d2, TCGv a, TCGv b)
     tcg_gen_ext_i32_i64(t1, b);
     tcg_gen_mul_i64(t0, t0, t1);
 
-    tcg_gen_trunc_i64_i32(d, t0);
+    tcg_gen_extrl_i64_i32(d, t0);
     tcg_gen_shri_i64(t0, t0, 32);
-    tcg_gen_trunc_i64_i32(d2, t0);
+    tcg_gen_extrl_i64_i32(d2, t0);
 
     tcg_temp_free_i64(t0);
     tcg_temp_free_i64(t1);
@@ -618,9 +603,9 @@ static void t_gen_mulu(TCGv d, TCGv d2, TCGv a, TCGv b)
     tcg_gen_extu_i32_i64(t1, b);
     tcg_gen_mul_i64(t0, t0, t1);
 
-    tcg_gen_trunc_i64_i32(d, t0);
+    tcg_gen_extrl_i64_i32(d, t0);
     tcg_gen_shri_i64(t0, t0, 32);
-    tcg_gen_trunc_i64_i32(d2, t0);
+    tcg_gen_extrl_i64_i32(d2, t0);
 
     tcg_temp_free_i64(t0);
     tcg_temp_free_i64(t1);

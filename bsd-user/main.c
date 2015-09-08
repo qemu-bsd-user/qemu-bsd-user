@@ -42,7 +42,6 @@
 int singlestep;
 static const char *cpu_model;
 unsigned long mmap_min_addr;
-#if defined(CONFIG_USE_GUEST_BASE)
 unsigned long guest_base;
 int have_guest_base;
 #if (TARGET_LONG_BITS == 32) && (HOST_LONG_BITS == 64)
@@ -57,7 +56,6 @@ unsigned long reserved_va = TARGET_RESERVED_VA;
 #else
 unsigned long reserved_va;
 #endif
-#endif /* CONFIG_USE_GUEST_BASE */
 
 const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
 const char *qemu_uname_release;
@@ -214,9 +212,7 @@ static void usage(void)
            "-drop-ld-preload  drop LD_PRELOAD for target process\n"
            "-E var=value      sets/modifies targets environment variable(s)\n"
            "-U var            unsets targets environment variable(s)\n"
-#if defined(CONFIG_USE_GUEST_BASE)
            "-B address        set guest_base address to address\n"
-#endif
            "-bsd type         select emulated BSD type FreeBSD/NetBSD/OpenBSD (default)\n"
            "\n"
            "Debug options:\n"
@@ -415,11 +411,9 @@ int main(int argc, char **argv)
 #endif
                 exit(1);
             }
-#if defined(CONFIG_USE_GUEST_BASE)
         } else if (!strcmp(r, "B")) {
            guest_base = strtol(argv[optind++], NULL, 0);
            have_guest_base = 1;
-#endif
         } else if (!strcmp(r, "drop-ld-preload")) {
             (void) envlist_unsetenv(envlist, "LD_PRELOAD");
         } else if (!strcmp(r, "bsd")) {
@@ -496,7 +490,6 @@ int main(int argc, char **argv)
     target_environ = envlist_to_environ(envlist, NULL);
     envlist_free(envlist);
 
-#if defined(CONFIG_USE_GUEST_BASE)
     /*
      * Now that page sizes are configured in cpu_init() we can do
      * proper page alignment for guest_base.
@@ -523,7 +516,6 @@ int main(int argc, char **argv)
             fclose(fp);
         }
     }
-#endif /* CONFIG_USE_GUEST_BASE */
 
     if (loader_exec(filename, argv+optind, target_environ, regs, info, &bprm)) {
         printf("Error loading %s\n", filename);
@@ -537,9 +529,7 @@ int main(int argc, char **argv)
     free(target_environ);
 
     if (qemu_log_enabled()) {
-#if defined(CONFIG_USE_GUEST_BASE)
         qemu_log("guest_base  0x%lx\n", guest_base);
-#endif
         log_page_dump();
 
         qemu_log("start_brk   0x" TARGET_ABI_FMT_lx "\n", info->start_brk);
@@ -559,12 +549,10 @@ int main(int argc, char **argv)
     syscall_init();
     signal_init();
 
-#if defined(CONFIG_USE_GUEST_BASE)
     /* Now that we've loaded the binary, GUEST_BASE is fixed.  Delay
        generating the prologue until now so that the prologue can take
        the real value of GUEST_BASE into account.  */
     tcg_prologue_init(&tcg_ctx);
-#endif
 
     /* build Task State */
     memset(ts, 0, sizeof(TaskState));

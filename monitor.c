@@ -82,6 +82,10 @@
 #endif
 #include "hw/lm32/lm32_pic.h"
 
+#if defined(TARGET_S390X)
+#include "hw/s390x/storage-keys.h"
+#endif
+
 /*
  * Supported types:
  *
@@ -678,7 +682,7 @@ static int get_str(char *buf, int buf_size, const char **pp)
                 case '\"':
                     break;
                 default:
-                    qemu_printf("unsupported escape code: '\\%c'\n", c);
+                    printf("unsupported escape code: '\\%c'\n", c);
                     goto fail;
                 }
                 if ((q - buf) < buf_size - 1) {
@@ -692,7 +696,7 @@ static int get_str(char *buf, int buf_size, const char **pp)
             }
         }
         if (*p != '\"') {
-            qemu_printf("unterminated string\n");
+            printf("unterminated string\n");
             goto fail;
         }
         p++;
@@ -2850,6 +2854,13 @@ static mon_cmd_t info_cmds[] = {
         .mhandler.cmd = hmp_info_memory_devices,
     },
     {
+        .name       = "iothreads",
+        .args_type  = "",
+        .params     = "",
+        .help       = "show iothreads",
+        .mhandler.cmd = hmp_info_iothreads,
+    },
+    {
         .name       = "rocker",
         .args_type  = "name:s",
         .params     = "name",
@@ -2877,6 +2888,15 @@ static mon_cmd_t info_cmds[] = {
         .help       = "Show rocker OF-DPA groups",
         .mhandler.cmd = hmp_rocker_of_dpa_groups,
     },
+#if defined(TARGET_S390X)
+    {
+        .name       = "skeys",
+        .args_type  = "addr:l",
+        .params     = "address",
+        .help       = "Display the value of a storage key",
+        .mhandler.cmd = hmp_info_skeys,
+    },
+#endif
     {
         .name       = NULL,
     },
@@ -4429,6 +4449,26 @@ void netdev_del_completion(ReadLineState *rs, int nb_args, const char *str)
     }
 }
 
+void trace_event_completion(ReadLineState *rs, int nb_args, const char *str)
+{
+    size_t len;
+
+    len = strlen(str);
+    readline_set_completion_index(rs, len);
+    if (nb_args == 2) {
+        TraceEventID id;
+        for (id = 0; id < trace_event_count(); id++) {
+            const char *event_name = trace_event_get_name(trace_event_id(id));
+            if (!strncmp(str, event_name, len)) {
+                readline_add_completion(rs, event_name);
+            }
+        }
+    } else if (nb_args == 3) {
+        add_completion_option(rs, str, "on");
+        add_completion_option(rs, str, "off");
+    }
+}
+
 void watchdog_action_completion(ReadLineState *rs, int nb_args, const char *str)
 {
     int i;
@@ -5359,5 +5399,12 @@ QemuOptsList qemu_mon_opts = {
 void qmp_rtc_reset_reinjection(Error **errp)
 {
     error_setg(errp, QERR_FEATURE_DISABLED, "rtc-reset-reinjection");
+}
+#endif
+
+#ifndef TARGET_S390X
+void qmp_dump_skeys(const char *filename, Error **errp)
+{
+    error_setg(errp, QERR_FEATURE_DISABLED, "dump-skeys");
 }
 #endif
