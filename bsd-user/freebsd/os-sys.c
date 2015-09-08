@@ -902,15 +902,17 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
 
 #if TARGET_ABI_BITS != HOST_LONG_BITS
 	case HW_PHYSMEM:
+	case HW_USERMEM:
+	case HW_REALMEM:
 	    holdlen = sizeof(abi_ulong);
 	    ret = 0;
 
 	    if (oldlen) {
+	    	int mib[2] = {snamep[0], snamep[1]};
 		unsigned long lvalue;
 		size_t len = sizeof(lvalue);
 
-		if (sysctlbyname("hw.physmem", &lvalue, &len, NULL, 0)
-		    == -1) {
+		if (sysctl(mib, 2, &lvalue, &len, NULL, 0) == -1 ) {
 			ret = -1;
 		} else {
 			abi_ulong maxmem = -0x100c000;
