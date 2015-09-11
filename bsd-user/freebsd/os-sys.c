@@ -633,7 +633,7 @@ oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
  * try and convert sysctl return data for the target.
  * XXX doesn't handle CTLTYPE_OPAQUE and CTLTYPE_STRUCT.
  */
-static int sysctl_oldcvt(void *holdp, size_t holdlen, uint32_t kind)
+static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
 {
     switch (kind & CTLTYPE) {
     case CTLTYPE_INT:
@@ -644,7 +644,23 @@ static int sysctl_oldcvt(void *holdp, size_t holdlen, uint32_t kind)
 #ifdef TARGET_ABI32
     case CTLTYPE_LONG:
     case CTLTYPE_ULONG:
-        *(uint32_t *)holdp = tswap32(*(long *)holdp);
+	/* If the sysctl has a type of long/ulong but seems to be bigger
+	 * than these data types, its probably an array.  Double check that
+	 * its evenly divisible by the size of long and convert holdp to 
+	 * a series of 32bit elements instead, adjusting holdlen to the new
+	 * size.
+	 */
+	if ((*holdlen > sizeof(long)) && ((*holdlen % sizeof(long)) == 0) ) {
+		int array_size = *holdlen / sizeof(long);
+		for (int i = 0; i < array_size; i++) {
+			((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
+		}
+		*holdlen = array_size * sizeof(uint32_t);
+		
+	} else {
+        	*(uint32_t *)holdp = tswap32(*(long *)holdp);
+		*holdlen = sizeof(uint32_t);
+	}
         break;
 #else
     case CTLTYPE_LONG:
@@ -996,7 +1012,7 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
                 break;
             }
         } else {
-            sysctl_oldcvt(holdp, holdlen, kind);
+            sysctl_oldcvt(holdp, &holdlen, kind);
         }
     }
 #ifdef DEBUG
