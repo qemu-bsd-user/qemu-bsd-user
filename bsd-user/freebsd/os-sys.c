@@ -650,12 +650,16 @@ static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
 	 * a series of 32bit elements instead, adjusting holdlen to the new
 	 * size.
 	 */
-	if ((*holdlen > sizeof(long)) && ((*holdlen % sizeof(long)) == 0) ) {
+	if ((*holdlen > sizeof(abi_ulong)) && ((*holdlen % sizeof(abi_ulong)) == 0) ) {
 		int array_size = *holdlen / sizeof(long);
-		for (int i = 0; i < array_size; i++) {
-			((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
+		if (holdp) {
+			for (int i = 0; i < array_size; i++) {
+				((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
+			}
+			*holdlen = array_size * sizeof(abi_ulong);
+		} else {
+			*holdlen = sizeof(abi_ulong);
 		}
-		*holdlen = array_size * sizeof(uint32_t);
 		
 	} else {
         	*(uint32_t *)holdp = tswap32(*(long *)holdp);
@@ -995,7 +999,7 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
     }
 
     ret = get_errno(sysctl(snamep, namelen, holdp, &holdlen, hnewp, newlen));
-    if (!ret && (holdp != 0 && holdlen != 0)) {
+    if (!ret && (holdp != 0)) {
         if (0 == snamep[0] && (2 == snamep[1] || 3 == snamep[1] ||
                     4 == snamep[1])) {
             switch (snamep[1]) {
