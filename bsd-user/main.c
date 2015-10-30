@@ -90,6 +90,7 @@ static pthread_mutex_t exclusive_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t exclusive_cond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t exclusive_resume = PTHREAD_COND_INITIALIZER;
 static int pending_cpus;
+static CPUState *exclusive_cpu;
 
 /* Make sure everything is in a consistent state for calling fork(). */
 void fork_start(void)
@@ -129,7 +130,7 @@ void fork_end(int child)
  */
 static inline void exclusive_idle(void)
 {
-    while (pending_cpus) {
+    while (pending_cpus > 1 || (pending_cpus == 1 && exclusive_cpu != thread_cpu)) {
         pthread_cond_wait(&exclusive_resume, &exclusive_lock);
     }
 }
@@ -145,7 +146,7 @@ void start_exclusive(void)
     pending_cpus = 1;
     /* Make all other cpus stop executing. */
     CPU_FOREACH(other_cpu) {
-        if (other_cpu->running) {
+        if (other_cpu != thread_cpu && other_cpu->running) {
             pending_cpus++;
             cpu_exit(other_cpu);
         }
@@ -153,12 +154,14 @@ void start_exclusive(void)
     if (pending_cpus > 1) {
         pthread_cond_wait(&exclusive_cond, &exclusive_lock);
     }
+    exclusive_cpu = thread_cpu;
 }
 
 /* Finish an exclusive operation. */
 void end_exclusive(void)
 {
     pending_cpus = 0;
+    exclusive_cpu = NULL;
     pthread_cond_broadcast(&exclusive_resume);
     pthread_mutex_unlock(&exclusive_lock);
 }
@@ -184,6 +187,16 @@ void cpu_exec_end(CPUState *cpu)
         }
     }
     exclusive_idle();
+    /*
+     * This is a hack, we gotta keep an exclusive section while handling signals
+     * but it will returns using longjmp, so we never have the opportunity to
+     * call end_exclusive()
+     */
+    if (exclusive_cpu == thread_cpu && pending_cpus == 1) {
+	    pending_cpus--;
+	    exclusive_cpu = NULL;
+	    pthread_cond_signal(&exclusive_resume);
+    }
     pthread_mutex_unlock(&exclusive_lock);
 }
 
