@@ -652,8 +652,9 @@ static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
 	 */
 	if ((*holdlen > sizeof(abi_ulong)) && ((*holdlen % sizeof(abi_ulong)) == 0) ) {
 		int array_size = *holdlen / sizeof(long);
+		int i;
 		if (holdp) {
-			for (int i = 0; i < array_size; i++) {
+			for (i = 0; i < array_size; i++) {
 				((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
 			}
 			*holdlen = array_size * sizeof(abi_ulong);
