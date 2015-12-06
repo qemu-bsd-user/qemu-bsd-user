@@ -33,7 +33,7 @@ void cpu_smm_update(X86CPU *cpu)
 
 uint64_t cpu_get_tsc(CPUX86State *env)
 {
-    return cpu_get_real_ticks();
+    return cpu_get_host_ticks();
 }
 
 int cpu_get_pic_interrupt(CPUX86State *env)
