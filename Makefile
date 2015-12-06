@@ -52,6 +52,8 @@ endif
 GENERATED_HEADERS = config-host.h qemu-options.def
 GENERATED_HEADERS += qmp-commands.h qapi-types.h qapi-visit.h qapi-event.h
 GENERATED_SOURCES += qmp-marshal.c qapi-types.c qapi-visit.c qapi-event.c
+GENERATED_HEADERS += qmp-introspect.h
+GENERATED_SOURCES += qmp-introspect.c
 
 GENERATED_HEADERS += trace/generated-events.h
 GENERATED_SOURCES += trace/generated-events.c
@@ -149,17 +151,19 @@ dummy := $(call unnest-vars,, \
                 stub-obj-y \
                 util-obj-y \
                 qga-obj-y \
+                ivshmem-client-obj-y \
+                ivshmem-server-obj-y \
                 qga-vss-dll-obj-y \
                 block-obj-y \
                 block-obj-m \
+                crypto-obj-y \
+                crypto-aes-obj-y \
+                qom-obj-y \
                 common-obj-y \
                 common-obj-m)
 
 ifneq ($(wildcard config-host.mak),)
 include $(SRC_PATH)/tests/Makefile
-endif
-ifeq ($(CONFIG_SMARTCARD_NSS),y)
-include $(SRC_PATH)/libcacard/Makefile
 endif
 
 all: $(DOCS) $(TOOLS) $(HELPERS-y) recurse-all modules
@@ -173,6 +177,7 @@ SUBDIR_RULES=$(patsubst %,subdir-%, $(TARGET_DIRS))
 SOFTMMU_SUBDIR_RULES=$(filter %-softmmu,$(SUBDIR_RULES))
 
 $(SOFTMMU_SUBDIR_RULES): $(block-obj-y)
+$(SOFTMMU_SUBDIR_RULES): $(crypto-obj-y)
 $(SOFTMMU_SUBDIR_RULES): config-all-devices.mak
 
 subdir-%:
@@ -197,7 +202,7 @@ subdir-dtc:dtc/libfdt dtc/tests
 dtc/%:
 	mkdir -p $@
 
-$(SUBDIR_RULES): libqemuutil.a libqemustub.a $(common-obj-y)
+$(SUBDIR_RULES): libqemuutil.a libqemustub.a $(common-obj-y) $(qom-obj-y) $(crypto-aes-obj-$(CONFIG_USER_ONLY))
 
 ROMSUBDIR_RULES=$(patsubst %,romsubdir-%, $(ROMS))
 romsubdir-%:
@@ -227,9 +232,9 @@ util/module.o-cflags = -D'CONFIG_BLOCK_MODULES=$(block-modules)'
 
 qemu-img.o: qemu-img-cmds.h
 
-qemu-img$(EXESUF): qemu-img.o $(block-obj-y) libqemuutil.a libqemustub.a
-qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) libqemuutil.a libqemustub.a
-qemu-io$(EXESUF): qemu-io.o $(block-obj-y) libqemuutil.a libqemustub.a
+qemu-img$(EXESUF): qemu-img.o $(block-obj-y) $(crypto-obj-y) $(qom-obj-y) libqemuutil.a libqemustub.a
+qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) $(crypto-obj-y) $(qom-obj-y) libqemuutil.a libqemustub.a
+qemu-io$(EXESUF): qemu-io.o $(block-obj-y) $(crypto-obj-y) $(qom-obj-y) libqemuutil.a libqemustub.a
 
 qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o
 
@@ -264,7 +269,7 @@ $(SRC_PATH)/qga/qapi-schema.json $(SRC_PATH)/scripts/qapi-commands.py $(qapi-py)
 
 qapi-modules = $(SRC_PATH)/qapi-schema.json $(SRC_PATH)/qapi/common.json \
                $(SRC_PATH)/qapi/block.json $(SRC_PATH)/qapi/block-core.json \
-               $(SRC_PATH)/qapi/event.json
+               $(SRC_PATH)/qapi/event.json $(SRC_PATH)/qapi/introspect.json
 
 qapi-types.c qapi-types.h :\
 $(qapi-modules) $(SRC_PATH)/scripts/qapi-types.py $(qapi-py)
@@ -286,22 +291,24 @@ $(qapi-modules) $(SRC_PATH)/scripts/qapi-commands.py $(qapi-py)
 	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-commands.py \
 		$(gen-out-type) -o "." -m $<, \
 		"  GEN   $@")
+qmp-introspect.h qmp-introspect.c :\
+$(qapi-modules) $(SRC_PATH)/scripts/qapi-introspect.py $(qapi-py)
+	$(call quiet-command,$(PYTHON) $(SRC_PATH)/scripts/qapi-introspect.py \
+		$(gen-out-type) -o "." $<, \
+		"  GEN   $@")
 
 QGALIB_GEN=$(addprefix qga/qapi-generated/, qga-qapi-types.h qga-qapi-visit.h qga-qmp-commands.h)
 $(qga-obj-y) qemu-ga.o: $(QGALIB_GEN)
 
-# we require QGA_VSS_PROVIDER files to be built alongside qemu-ga
-# executable since they are shipped together, but we don't want to actually
-# link against them
-qemu-ga$(EXESUF): $(qga-obj-y) libqemuutil.a libqemustub.a $(QGA_VSS_PROVIDER)
-	$(call LINK, $(filter-out $(QGA_VSS_PROVIDER), $^))
+qemu-ga$(EXESUF): $(qga-obj-y) libqemuutil.a libqemustub.a
+	$(call LINK, $^)
 
 ifdef QEMU_GA_MSI_ENABLED
 QEMU_GA_MSI=qemu-ga-$(ARCH).msi
 
 msi: $(QEMU_GA_MSI)
 
-$(QEMU_GA_MSI): qemu-ga.exe
+$(QEMU_GA_MSI): qemu-ga.exe $(QGA_VSS_PROVIDER)
 
 $(QEMU_GA_MSI): config-host.mak
 
@@ -312,6 +319,16 @@ else
 msi:
 	@echo "MSI build not configured or dependency resolution failed (reconfigure with --enable-guest-agent-msi option)"
 endif
+
+ifneq ($(EXESUF),)
+.PHONY: qemu-ga
+qemu-ga: qemu-ga$(EXESUF) $(QGA_VSS_PROVIDER) $(QEMU_GA_MSI)
+endif
+
+ivshmem-client$(EXESUF): $(ivshmem-client-obj-y)
+	$(call LINK, $^)
+ivshmem-server$(EXESUF): $(ivshmem-server-obj-y) libqemuutil.a libqemustub.a
+	$(call LINK, $^)
 
 clean:
 # avoid old build problems by removing potentially incorrect old files
@@ -344,7 +361,7 @@ qemu-%.tar.bz2:
 	$(SRC_PATH)/scripts/make-release "$(SRC_PATH)" "$(patsubst qemu-%.tar.bz2,%,$@)"
 
 distclean: clean
-	rm -f config-host.mak config-host.h* config-host.ld $(DOCS) qemu-options.texi qemu-img-cmds.texi qemu-monitor.texi
+	rm -f config-host.mak config-host.h* config-host.ld $(DOCS) qemu-options.texi qemu-img-cmds.texi qemu-monitor.texi qemu-monitor-info.texi
 	rm -f config-all-devices.mak config-all-disas.mak config.status
 	rm -f po/*.mo tests/qemu-iotests/common.env
 	rm -f roms/seabios/config.mak roms/vgabios/config.mak
@@ -423,7 +440,7 @@ endif
 install: all $(if $(BUILD_DOCS),install-doc) \
 install-datadir install-localstatedir
 ifneq ($(TOOLS),)
-	$(call install-prog,$(TOOLS),$(DESTDIR)$(bindir))
+	$(call install-prog,$(subst qemu-ga,qemu-ga$(EXESUF),$(TOOLS)),$(DESTDIR)$(bindir))
 endif
 ifneq ($(CONFIG_MODULES),)
 	$(INSTALL_DIR) "$(DESTDIR)$(qemu_moddir)"
@@ -511,13 +528,16 @@ qemu-options.texi: $(SRC_PATH)/qemu-options.hx
 qemu-monitor.texi: $(SRC_PATH)/hmp-commands.hx
 	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -t < $< > $@,"  GEN   $@")
 
+qemu-monitor-info.texi: $(SRC_PATH)/hmp-commands-info.hx
+	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -t < $< > $@,"  GEN   $@")
+
 qmp-commands.txt: $(SRC_PATH)/qmp-commands.hx
 	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -q < $< > $@,"  GEN   $@")
 
 qemu-img-cmds.texi: $(SRC_PATH)/qemu-img-cmds.hx
 	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -t < $< > $@,"  GEN   $@")
 
-qemu.1: qemu-doc.texi qemu-options.texi qemu-monitor.texi
+qemu.1: qemu-doc.texi qemu-options.texi qemu-monitor.texi qemu-monitor-info.texi
 	$(call quiet-command, \
 	  perl -Ww -- $(SRC_PATH)/scripts/texi2pod.pl $< qemu.pod && \
 	  $(POD2MAN) --section=1 --center=" " --release=" " qemu.pod > $@, \
@@ -560,7 +580,8 @@ pdf: qemu-doc.pdf qemu-tech.pdf
 
 qemu-doc.dvi qemu-doc.html qemu-doc.info qemu-doc.pdf: \
 	qemu-img.texi qemu-nbd.texi qemu-options.texi \
-	qemu-monitor.texi qemu-img-cmds.texi qemu-ga.texi
+	qemu-monitor.texi qemu-img-cmds.texi qemu-ga.texi \
+	qemu-monitor-info.texi
 
 ifdef CONFIG_WIN32
 
@@ -610,6 +631,7 @@ endif # SIGNCODE
                 $(if $(DLL_PATH),-DDLLDIR="$(DLL_PATH)") \
                 -DSRCDIR="$(SRC_PATH)" \
                 -DOUTFILE="$(INSTALLER)" \
+                -DDISPLAYVERSION="$(VERSION)" \
                 $(SRC_PATH)/qemu.nsi
 	rm -r ${INSTDIR}
 ifdef SIGNCODE

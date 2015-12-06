@@ -120,6 +120,29 @@ QDict *qtest_qmp_receive(QTestState *s);
 void qtest_qmp_eventwait(QTestState *s, const char *event);
 
 /**
+ * qtest_hmpv:
+ * @s: #QTestState instance to operate on.
+ * @fmt...: HMP command to send to QEMU
+ *
+ * Send HMP command to QEMU via QMP's human-monitor-command.
+ *
+ * Returns: the command's output.  The caller should g_free() it.
+ */
+char *qtest_hmp(QTestState *s, const char *fmt, ...);
+
+/**
+ * qtest_hmpv:
+ * @s: #QTestState instance to operate on.
+ * @fmt: HMP command to send to QEMU
+ * @ap: HMP command arguments
+ *
+ * Send HMP command to QEMU via QMP's human-monitor-command.
+ *
+ * Returns: the command's output.  The caller should g_free() it.
+ */
+char *qtest_hmpv(QTestState *s, const char *fmt, va_list ap);
+
+/**
  * qtest_get_irq:
  * @s: #QTestState instance to operate on.
  * @num: Interrupt to observe.
@@ -427,6 +450,8 @@ void qtest_add_data_func(const char *str, const void *data, void (*fn));
         g_free(path); \
     } while (0)
 
+void qtest_add_abrt_handler(void (*fn), const void *data);
+
 /**
  * qtest_start:
  * @args: other arguments to pass to QEMU
@@ -497,6 +522,16 @@ static inline void qmp_eventwait(const char *event)
 {
     return qtest_qmp_eventwait(global_qtest, event);
 }
+
+/**
+ * hmp:
+ * @fmt...: HMP command to send to QEMU
+ *
+ * Send HMP command to QEMU via QMP's human-monitor-command.
+ *
+ * Returns: the command's output.  The caller should g_free() it.
+ */
+char *hmp(const char *fmt, ...);
 
 /**
  * get_irq:
@@ -817,5 +852,12 @@ static inline int64_t clock_set(int64_t val)
  * Returns: True if the architecture under test has a big endian configuration.
  */
 bool qtest_big_endian(void);
+
+
+QDict *qmp_fd_receive(int fd);
+void qmp_fd_sendv(int fd, const char *fmt, va_list ap);
+void qmp_fd_send(int fd, const char *fmt, ...);
+QDict *qmp_fdv(int fd, const char *fmt, va_list ap);
+QDict *qmp_fd(int fd, const char *fmt, ...);
 
 #endif

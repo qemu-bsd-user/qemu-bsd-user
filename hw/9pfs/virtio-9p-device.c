@@ -43,6 +43,16 @@ static void virtio_9p_get_config(VirtIODevice *vdev, uint8_t *config)
     g_free(cfg);
 }
 
+static void virtio_9p_save(QEMUFile *f, void *opaque)
+{
+    virtio_save(VIRTIO_DEVICE(opaque), f);
+}
+
+static int virtio_9p_load(QEMUFile *f, void *opaque, int version_id)
+{
+    return virtio_load(VIRTIO_DEVICE(opaque), f, version_id);
+}
+
 static void virtio_9p_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
@@ -106,10 +116,6 @@ static void virtio_9p_device_realize(DeviceState *dev, Error **errp)
                    " and export path:%s", s->fsconf.fsdev_id, s->ctx.fs_root);
         goto out;
     }
-    if (v9fs_init_worker_threads() < 0) {
-        error_setg(errp, "worker thread initialization failed");
-        goto out;
-    }
 
     /*
      * Check details of export path, We need to use fs driver
@@ -130,6 +136,7 @@ static void virtio_9p_device_realize(DeviceState *dev, Error **errp)
     }
     v9fs_path_free(&path);
 
+    register_savevm(dev, "virtio-9p", -1, 1, virtio_9p_save, virtio_9p_load, s);
     return;
 out:
     g_free(s->ctx.fs_root);

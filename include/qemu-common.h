@@ -203,28 +203,37 @@ time_t mktimegm(struct tm *tm);
 int qemu_fdatasync(int fd);
 int fcntl_setfl(int fd, int flag);
 int qemu_parse_fd(const char *param);
+int qemu_strtol(const char *nptr, const char **endptr, int base,
+                long *result);
+int qemu_strtoul(const char *nptr, const char **endptr, int base,
+                 unsigned long *result);
+int qemu_strtoll(const char *nptr, const char **endptr, int base,
+                 int64_t *result);
+int qemu_strtoull(const char *nptr, const char **endptr, int base,
+                  uint64_t *result);
 
 int parse_uint(const char *s, unsigned long long *value, char **endptr,
                int base);
 int parse_uint_full(const char *s, unsigned long long *value, int base);
 
 /*
- * strtosz() suffixes used to specify the default treatment of an
- * argument passed to strtosz() without an explicit suffix.
+ * qemu_strtosz() suffixes used to specify the default treatment of an
+ * argument passed to qemu_strtosz() without an explicit suffix.
  * These should be defined using upper case characters in the range
- * A-Z, as strtosz() will use qemu_toupper() on the given argument
+ * A-Z, as qemu_strtosz() will use qemu_toupper() on the given argument
  * prior to comparison.
  */
-#define STRTOSZ_DEFSUFFIX_EB	'E'
-#define STRTOSZ_DEFSUFFIX_PB	'P'
-#define STRTOSZ_DEFSUFFIX_TB	'T'
-#define STRTOSZ_DEFSUFFIX_GB	'G'
-#define STRTOSZ_DEFSUFFIX_MB	'M'
-#define STRTOSZ_DEFSUFFIX_KB	'K'
-#define STRTOSZ_DEFSUFFIX_B	'B'
-int64_t strtosz(const char *nptr, char **end);
-int64_t strtosz_suffix(const char *nptr, char **end, const char default_suffix);
-int64_t strtosz_suffix_unit(const char *nptr, char **end,
+#define QEMU_STRTOSZ_DEFSUFFIX_EB 'E'
+#define QEMU_STRTOSZ_DEFSUFFIX_PB 'P'
+#define QEMU_STRTOSZ_DEFSUFFIX_TB 'T'
+#define QEMU_STRTOSZ_DEFSUFFIX_GB 'G'
+#define QEMU_STRTOSZ_DEFSUFFIX_MB 'M'
+#define QEMU_STRTOSZ_DEFSUFFIX_KB 'K'
+#define QEMU_STRTOSZ_DEFSUFFIX_B 'B'
+int64_t qemu_strtosz(const char *nptr, char **end);
+int64_t qemu_strtosz_suffix(const char *nptr, char **end,
+                            const char default_suffix);
+int64_t qemu_strtosz_suffix_unit(const char *nptr, char **end,
                             const char default_suffix, int64_t unit);
 #define K_BYTE     (1ULL << 10)
 #define M_BYTE     (1ULL << 20)
@@ -237,6 +246,14 @@ int64_t strtosz_suffix_unit(const char *nptr, char **end,
 #define STR_OR_NULL(str) ((str) ? (str) : "null")
 
 /* id.c */
+
+typedef enum IdSubSystems {
+    ID_QDEV,
+    ID_BLOCK,
+    ID_MAX      /* last element, used as array size */
+} IdSubSystems;
+
+char *id_generate(IdSubSystems id);
 bool id_wellformed(const char *id);
 
 /* path.c */
@@ -484,5 +501,6 @@ size_t buffer_find_nonzero_offset(const void *buf, size_t len);
 int parse_debug_env(const char *name, int max, int initial);
 
 const char *qemu_ether_ntoa(const MACAddr *mac);
+void page_size_init(void);
 
 #endif

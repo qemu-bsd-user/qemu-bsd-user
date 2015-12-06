@@ -55,14 +55,14 @@ struct Qcow2Cache {
 static inline void *qcow2_cache_get_table_addr(BlockDriverState *bs,
                     Qcow2Cache *c, int table)
 {
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     return (uint8_t *) c->table_array + (size_t) table * s->cluster_size;
 }
 
 static inline int qcow2_cache_get_table_idx(BlockDriverState *bs,
                   Qcow2Cache *c, void *table)
 {
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     ptrdiff_t table_offset = (uint8_t *) table - (uint8_t *) c->table_array;
     int idx = table_offset / s->cluster_size;
     assert(idx >= 0 && idx < c->size && table_offset % s->cluster_size == 0);
@@ -73,7 +73,7 @@ static void qcow2_cache_table_release(BlockDriverState *bs, Qcow2Cache *c,
                                       int i, int num_tables)
 {
 #if QEMU_MADV_DONTNEED != QEMU_MADV_INVALID
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     void *t = qcow2_cache_get_table_addr(bs, c, i);
     int align = getpagesize();
     size_t mem_size = (size_t) s->cluster_size * num_tables;
@@ -121,13 +121,13 @@ void qcow2_cache_clean_unused(BlockDriverState *bs, Qcow2Cache *c)
 
 Qcow2Cache *qcow2_cache_create(BlockDriverState *bs, int num_tables)
 {
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     Qcow2Cache *c;
 
     c = g_new0(Qcow2Cache, 1);
     c->size = num_tables;
     c->entries = g_try_new0(Qcow2CachedTable, num_tables);
-    c->table_array = qemu_try_blockalign(bs->file,
+    c->table_array = qemu_try_blockalign(bs->file->bs,
                                          (size_t) num_tables * s->cluster_size);
 
     if (!c->entries || !c->table_array) {
@@ -172,7 +172,7 @@ static int qcow2_cache_flush_dependency(BlockDriverState *bs, Qcow2Cache *c)
 
 static int qcow2_cache_entry_flush(BlockDriverState *bs, Qcow2Cache *c, int i)
 {
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     int ret = 0;
 
     if (!c->entries[i].dirty || !c->entries[i].offset) {
@@ -185,7 +185,7 @@ static int qcow2_cache_entry_flush(BlockDriverState *bs, Qcow2Cache *c, int i)
     if (c->depends) {
         ret = qcow2_cache_flush_dependency(bs, c);
     } else if (c->depends_on_flush) {
-        ret = bdrv_flush(bs->file);
+        ret = bdrv_flush(bs->file->bs);
         if (ret >= 0) {
             c->depends_on_flush = false;
         }
@@ -216,7 +216,7 @@ static int qcow2_cache_entry_flush(BlockDriverState *bs, Qcow2Cache *c, int i)
         BLKDBG_EVENT(bs->file, BLKDBG_L2_UPDATE);
     }
 
-    ret = bdrv_pwrite(bs->file, c->entries[i].offset,
+    ret = bdrv_pwrite(bs->file->bs, c->entries[i].offset,
                       qcow2_cache_get_table_addr(bs, c, i), s->cluster_size);
     if (ret < 0) {
         return ret;
@@ -229,7 +229,7 @@ static int qcow2_cache_entry_flush(BlockDriverState *bs, Qcow2Cache *c, int i)
 
 int qcow2_cache_flush(BlockDriverState *bs, Qcow2Cache *c)
 {
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     int result = 0;
     int ret;
     int i;
@@ -244,7 +244,7 @@ int qcow2_cache_flush(BlockDriverState *bs, Qcow2Cache *c)
     }
 
     if (result == 0) {
-        ret = bdrv_flush(bs->file);
+        ret = bdrv_flush(bs->file->bs);
         if (ret < 0) {
             result = ret;
         }
@@ -306,7 +306,7 @@ int qcow2_cache_empty(BlockDriverState *bs, Qcow2Cache *c)
 static int qcow2_cache_do_get(BlockDriverState *bs, Qcow2Cache *c,
     uint64_t offset, void **table, bool read_from_disk)
 {
-    BDRVQcowState *s = bs->opaque;
+    BDRVQcow2State *s = bs->opaque;
     int i;
     int ret;
     int lookup_index;
@@ -356,7 +356,8 @@ static int qcow2_cache_do_get(BlockDriverState *bs, Qcow2Cache *c,
             BLKDBG_EVENT(bs->file, BLKDBG_L2_LOAD);
         }
 
-        ret = bdrv_pread(bs->file, offset, qcow2_cache_get_table_addr(bs, c, i),
+        ret = bdrv_pread(bs->file->bs, offset,
+                         qcow2_cache_get_table_addr(bs, c, i),
                          s->cluster_size);
         if (ret < 0) {
             return ret;

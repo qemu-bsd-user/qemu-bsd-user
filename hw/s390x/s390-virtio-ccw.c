@@ -20,6 +20,7 @@
 #include "qemu/config-file.h"
 #include "s390-pci-bus.h"
 #include "hw/s390x/storage-keys.h"
+#include "hw/compat.h"
 
 #define TYPE_S390_CCW_MACHINE               "s390-ccw-machine"
 
@@ -35,26 +36,23 @@ typedef struct S390CcwMachineState {
     bool dea_key_wrap;
 } S390CcwMachineState;
 
-void io_subsystem_reset(void)
-{
-    DeviceState *css, *sclp, *flic, *diag288;
+static const char *const reset_dev_types[] = {
+    "virtual-css-bridge",
+    "s390-sclp-event-facility",
+    "s390-flic",
+    "diag288",
+};
 
-    css = DEVICE(object_resolve_path_type("", "virtual-css-bridge", NULL));
-    if (css) {
-        qdev_reset_all(css);
-    }
-    sclp = DEVICE(object_resolve_path_type("",
-                  "s390-sclp-event-facility", NULL));
-    if (sclp) {
-        qdev_reset_all(sclp);
-    }
-    flic = DEVICE(object_resolve_path_type("", "s390-flic", NULL));
-    if (flic) {
-        qdev_reset_all(flic);
-    }
-    diag288 = DEVICE(object_resolve_path_type("", "diag288", NULL));
-    if (diag288) {
-        qdev_reset_all(diag288);
+void subsystem_reset(void)
+{
+    DeviceState *dev;
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(reset_dev_types); i++) {
+        dev = DEVICE(object_resolve_path_type("", reset_dev_types[i], NULL));
+        if (dev) {
+            qdev_reset_all(dev);
+        }
     }
 }
 
@@ -106,8 +104,7 @@ void s390_memory_init(ram_addr_t mem_size)
     MemoryRegion *ram = g_new(MemoryRegion, 1);
 
     /* allocate RAM for core */
-    memory_region_init_ram(ram, NULL, "s390.ram", mem_size, &error_abort);
-    vmstate_register_ram_global(ram);
+    memory_region_allocate_system_memory(ram, NULL, "s390.ram", mem_size);
     memory_region_add_subregion(sysmem, 0, ram);
 
     /* Initialize storage key device */
@@ -164,6 +161,7 @@ static void ccw_machine_class_init(ObjectClass *oc, void *data)
     NMIClass *nc = NMI_CLASS(oc);
 
     mc->init = ccw_init;
+    mc->reset = s390_machine_reset;
     mc->block_default_type = IF_VIRTIO;
     mc->no_cdrom = 1;
     mc->no_floppy = 1;
@@ -238,10 +236,43 @@ static const TypeInfo ccw_machine_info = {
 };
 
 #define CCW_COMPAT_2_4 \
+        HW_COMPAT_2_4 \
         {\
             .driver   = TYPE_S390_SKEYS,\
             .property = "migration-enabled",\
             .value    = "off",\
+        },{\
+            .driver   = "virtio-blk-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "virtio-balloon-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "virtio-serial-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "virtio-9p-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "virtio-rng-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "virtio-net-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "virtio-scsi-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
+        },{\
+            .driver   = "vhost-scsi-ccw",\
+            .property = "max_revision",\
+            .value    = "0",\
         },
 
 static void ccw_machine_2_4_class_init(ObjectClass *oc, void *data)
@@ -252,13 +283,12 @@ static void ccw_machine_2_4_class_init(ObjectClass *oc, void *data)
         { /* end of list */ }
     };
 
-    mc->name = "s390-ccw-virtio-2.4";
     mc->desc = "VirtIO-ccw based S390 machine v2.4";
     mc->compat_props = compat_props;
 }
 
 static const TypeInfo ccw_machine_2_4_info = {
-    .name          = TYPE_S390_CCW_MACHINE "2.4",
+    .name          = MACHINE_TYPE_NAME("s390-ccw-virtio-2.4"),
     .parent        = TYPE_S390_CCW_MACHINE,
     .class_init    = ccw_machine_2_4_class_init,
 };
@@ -267,14 +297,13 @@ static void ccw_machine_2_5_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
 
-    mc->name = "s390-ccw-virtio-2.5";
     mc->alias = "s390-ccw-virtio";
     mc->desc = "VirtIO-ccw based S390 machine v2.5";
     mc->is_default = 1;
 }
 
 static const TypeInfo ccw_machine_2_5_info = {
-    .name          = TYPE_S390_CCW_MACHINE "2.5",
+    .name          = MACHINE_TYPE_NAME("s390-ccw-virtio-2.5"),
     .parent        = TYPE_S390_CCW_MACHINE,
     .class_init    = ccw_machine_2_5_class_init,
 };

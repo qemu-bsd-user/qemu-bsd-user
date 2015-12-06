@@ -31,15 +31,16 @@
 #include "hw/boards.h"
 #include "hw/loader.h"
 #include "hw/virtio/virtio.h"
-#include "hw/sysbus.h"
 #include "sysemu/kvm.h"
 #include "exec/address-spaces.h"
+#include "sysemu/qtest.h"
 
 #include "hw/s390x/s390-virtio-bus.h"
 #include "hw/s390x/sclp.h"
 #include "hw/s390x/s390_flic.h"
 #include "hw/s390x/s390-virtio.h"
 #include "hw/s390x/storage-keys.h"
+#include "hw/s390x/ipl.h"
 #include "cpu.h"
 
 //#define DEBUG_S390
@@ -54,7 +55,8 @@
 
 #define MAX_BLK_DEVS                    10
 #define ZIPL_FILENAME                   "s390-zipl.rom"
-#define TYPE_S390_MACHINE               "s390-machine"
+#define S390_MACHINE                    "s390-virtio"
+#define TYPE_S390_MACHINE               MACHINE_TYPE_NAME(S390_MACHINE)
 
 #define S390_TOD_CLOCK_VALUE_MISSING    0x00
 #define S390_TOD_CLOCK_VALUE_PRESENT    0x01
@@ -149,9 +151,9 @@ void s390_init_ipl_dev(const char *kernel_filename,
                        const char *firmware,
                        bool enforce_bios)
 {
-    DeviceState *dev;
+    Object *new = object_new(TYPE_S390_IPL);
+    DeviceState *dev = DEVICE(new);
 
-    dev  = qdev_create(NULL, "s390-ipl");
     if (kernel_filename) {
         qdev_prop_set_string(dev, "kernel", kernel_filename);
     }
@@ -161,8 +163,9 @@ void s390_init_ipl_dev(const char *kernel_filename,
     qdev_prop_set_string(dev, "cmdline", kernel_cmdline);
     qdev_prop_set_string(dev, "firmware", firmware);
     qdev_prop_set_bit(dev, "enforce_bios", enforce_bios);
-    object_property_add_child(qdev_get_machine(), "s390-ipl",
-                              OBJECT(dev), NULL);
+    object_property_add_child(qdev_get_machine(), TYPE_S390_IPL,
+                              new, NULL);
+    object_unref(new);
     qdev_init_nofail(dev);
 }
 
@@ -266,6 +269,12 @@ static void s390_init(MachineState *machine)
     hwaddr virtio_region_len;
     hwaddr virtio_region_start;
 
+    if (!qtest_enabled()) {
+        error_printf("WARNING\n"
+                     "The s390-virtio machine (non-ccw) is deprecated.\n"
+                     "It will be removed in 2.6. Please use s390-ccw-virtio\n");
+    }
+
     if (machine->ram_slots) {
         error_report("Memory hotplug not supported by the selected machine.");
         exit(EXIT_FAILURE);
@@ -313,15 +322,28 @@ void s390_nmi(NMIState *n, int cpu_index, Error **errp)
     }
 }
 
+void s390_machine_reset(void)
+{
+    S390CPU *ipl_cpu = S390_CPU(qemu_get_cpu(0));
+
+    qemu_devices_reset();
+    s390_cmma_reset();
+    s390_crypto_reset();
+
+    /* all cpus are stopped - configure and start the ipl cpu only */
+    s390_ipl_prepare_cpu(ipl_cpu);
+    s390_cpu_set_state(CPU_STATE_OPERATING, ipl_cpu);
+}
+
 static void s390_machine_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     NMIClass *nc = NMI_CLASS(oc);
 
-    mc->name = "s390-virtio";
     mc->alias = "s390";
-    mc->desc = "VirtIO based S390 machine";
+    mc->desc = "VirtIO based S390 machine (deprecated)";
     mc->init = s390_init;
+    mc->reset = s390_machine_reset;
     mc->block_default_type = IF_VIRTIO;
     mc->max_cpus = 255;
     mc->no_serial = 1;
