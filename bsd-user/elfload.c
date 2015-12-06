@@ -47,6 +47,10 @@ static size_t target_auxents_sz;   /* Size of AUX entries including AT_NULL */
 #define ELF_NOTE_ROUNDSIZE  4
 #endif
 
+#ifndef ELF_MACHINE
+#define ELF_MACHINE ELF_ARCH
+#endif
+
 #define TARGET_NT_PRSTATUS              1       /* Process status. */
 #define TARGET_NT_FPREGSET              2       /* Floating point registers. */
 #define TARGET_NT_PRPSINFO              3       /* Process state info. */
