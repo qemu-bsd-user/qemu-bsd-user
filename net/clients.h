@@ -49,7 +49,7 @@ int net_init_bridge(const NetClientOptions *opts, const char *name,
 
 #ifdef CONFIG_PCAP
 int net_init_pcap(const NetClientOptions *opts, const char *name,
-                  NetClientState *peer);
+                  NetClientState *peer, Error **errp);
 #endif
 
 int net_init_l2tpv3(const NetClientOptions *opts, const char *name,
