@@ -641,7 +641,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     int i;
 
     frame_addr = get_sigframe(ka, regs, sizeof(*frame));
-    trace_user_setup_frame(env, frame_addr);
+    trace_user_setup_frame(regs, frame_addr);
     if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0)) {
         goto give_sigsegv;
     }
@@ -744,7 +744,7 @@ long do_sigreturn(CPUArchState *regs, abi_ulong addr)
     if (is_error(ret)) {
         return ret;
     }
-    trace_user_do_sigreturn(env, frame_addr);
+    trace_user_do_sigreturn(regs, addr);
     if (!lock_user_struct(VERIFY_READ, ucontext, target_ucontext, 0)) {
         goto badframe;
     }
