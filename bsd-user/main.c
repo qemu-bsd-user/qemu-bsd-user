@@ -541,7 +541,7 @@ int main(int argc, char **argv)
             unsigned long tmp;
             if (fscanf(fp, "%lu", &tmp) == 1) {
                 mmap_min_addr = tmp;
-                qemu_log("host mmap_min_addr=0x%lx\n", mmap_min_addr);
+                qemu_log_mask(CPU_LOG_PAGE, "host mmap_min_addr=0x%lx\n", mmap_min_addr);
             }
             fclose(fp);
         }
@@ -558,7 +558,7 @@ int main(int argc, char **argv)
 
     free(target_environ);
 
-    if (qemu_log_enabled()) {
+    if (qemu_loglevel_mask(CPU_LOG_PAGE)) {
         qemu_log("guest_base  0x%lx\n", guest_base);
         log_page_dump();
 

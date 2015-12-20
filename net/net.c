@@ -1164,7 +1164,7 @@ fail:
 
 #endif
 
-static int (* const net_client_init_fun[NET_CLIENT_OPTIONS_KIND_MAX])(
+static int (* const net_client_init_fun[NET_CLIENT_OPTIONS_KIND__MAX])(
     const NetClientOptions *opts,
     const char *name,
     NetClientState *peer, Error **errp) = {
@@ -1520,7 +1520,7 @@ void qmp_set_link(const char *name, bool up, Error **errp)
     int queues, i;
 
     queues = qemu_find_net_clients_except(name, ncs,
-                                          NET_CLIENT_OPTIONS_KIND_MAX,
+                                          NET_CLIENT_OPTIONS_KIND__MAX,
                                           MAX_QUEUE_NUM);
 
     if (queues == 0) {

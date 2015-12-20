@@ -28,8 +28,7 @@
 #include <sys/resource.h>
 
 #include "qemu.h"
-
-//#define DEBUG_SIGNAL
+#include "trace.h"
 
 static target_stack_t target_sigaltstack_used = {
     .ss_sp = 0,
@@ -388,10 +387,7 @@ int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
          */
         handler = TARGET_SIG_DFL;
     }
-#ifdef DEBUG_SIGNAL
-    fprintf(stderr, "queue_signal: sig=%d handler=0x%lx flags=0x%x\n", sig,
-        handler, (uint32_t)sigact_table[sig - 1].sa_flags);
-#endif
+    trace_user_queue_signal(env, sig);
     if (!queue && (TARGET_SIG_DFL == handler)) {
         if (sig == TARGET_SIGTSTP || sig == TARGET_SIGTTIN ||
             sig == TARGET_SIGTTOU) {
@@ -467,9 +463,7 @@ static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
     if (sig < 1 || sig > TARGET_NSIG) {
         return;
     }
-#ifdef DEBUG_SIGNAL
-    fprintf(stderr, "qemu: got signal %d\n", sig);
-#endif
+    trace_user_host_signal(env, host_signum, sig);
     host_to_target_siginfo_noswap(&tinfo, info);
     if (queue_signal(env, sig, &tinfo) == 1) {
         /* Interrupt the virtual CPU as soon as possible. */
@@ -574,10 +568,6 @@ int do_sigaction(int sig, const struct target_sigaction *act,
         return -EINVAL;
     }
     k = &sigact_table[sig - 1];
-#if defined(DEBUG_SIGNAL)
-    fprintf(stderr, "do_sigaction sig=%d act=%p, oact=%p\n",
-        sig, act, oact);
-#endif
     if (oact) {
         oact->_sa_handler = tswapal(k->_sa_handler);
         oact->sa_flags = tswap32(k->sa_flags);
@@ -615,11 +605,6 @@ int do_sigaction(int sig, const struct target_sigaction *act,
                 act1.sa_sigaction = host_signal_handler;
             }
             ret = sigaction(host_sig, &act1, NULL);
-#if defined(DEBUG_SIGNAL)
-            fprintf(stderr, "sigaction (action = %p "
-                    "(host_signal_handler = %p)) returned: %d\n",
-                    act1.sa_sigaction, host_signal_handler, ret);
-#endif
         }
     }
     return ret;
@@ -655,10 +640,8 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     abi_ulong frame_addr;
     int i;
 
-#ifdef DEBUG_SIGNAL
-    fprintf(stderr, "setup_frame()\n");
-#endif
     frame_addr = get_sigframe(ka, regs, sizeof(*frame));
+    trace_user_setup_frame(env, frame_addr);
     if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0)) {
         goto give_sigsegv;
     }
@@ -761,6 +744,7 @@ long do_sigreturn(CPUArchState *regs, abi_ulong addr)
     if (is_error(ret)) {
         return ret;
     }
+    trace_user_do_sigreturn(env, frame_addr);
     if (!lock_user_struct(VERIFY_READ, ucontext, target_ucontext, 0)) {
         goto badframe;
     }
@@ -861,17 +845,12 @@ void process_pending_signals(CPUArchState *cpu_env)
         }
         k++;
     }
-#ifdef DEBUG_SIGNAL
-    fprintf(stderr, "qemu: process_pending_signals has no signals\n");
-#endif
     /* If no signal is pending then just return. */
     ts->signal_pending = 0;
     return;
 
 handle_signal:
-#ifdef DEBUG_SIGNAL
-    fprintf(stderr, "qemu: process signal %d\n", sig);
-#endif
+    trace_user_handle_signal(cpu_env, sig);
 
     /* Dequeue signal. */
     q = k->first;
@@ -890,9 +869,6 @@ handle_signal:
     }
 
     if (handler == TARGET_SIG_DFL) {
-#ifdef DEBUG_SIGNAL
-        fprintf(stderr, "qemu: TARGET_SIG_DFL\n");
-#endif
         /*
          * default handler : ignore some signal. The other are job
          * control or fatal.
@@ -907,13 +883,7 @@ handle_signal:
         }
     } else if (TARGET_SIG_IGN == handler) {
         /* ignore sig */
-#ifdef DEBUG_SIGNAL
-        fprintf(stderr, "qemu: TARGET_SIG_IGN\n");
-#endif
     } else if (TARGET_SIG_ERR == handler) {
-#ifdef DEBUG_SIGNAL
-        fprintf(stderr, "qemu: TARGET_SIG_ERR\n");
-#endif
         force_sig(sig);
     } else {
         /* compute the blocked signals during the handler execution */
