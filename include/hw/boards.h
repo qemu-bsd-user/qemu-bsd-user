@@ -93,6 +93,8 @@ struct MachineClass {
     GlobalProperty *compat_props;
     const char *hw_version;
     ram_addr_t default_ram_size;
+    bool option_rom_has_mr;
+    bool rom_file_has_mr;
 
     HotplugHandler *(*get_hotplug_handler)(MachineState *machine,
                                            DeviceState *dev);
@@ -154,5 +156,14 @@ struct MachineState {
         type_register_static(&machine_initfn##_typeinfo); \
     } \
     machine_init(machine_initfn##_register_types)
+
+#define SET_MACHINE_COMPAT(m, COMPAT) \
+    do {                              \
+        static GlobalProperty props[] = {       \
+            COMPAT                              \
+            { /* end of list */ }               \
+        };                                      \
+        (m)->compat_props = props;              \
+    } while (0)
 
 #endif
