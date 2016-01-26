@@ -10,6 +10,7 @@
  * or later.  See the COPYING.LIB file in the top-level directory.
  */
 
+#include "qemu/osdep.h"
 #include "sysemu/block-backend.h"
 #include "block/block_int.h"
 #include "block/blockjob.h"
@@ -1031,6 +1032,11 @@ int blk_get_max_iov(BlockBackend *blk)
 void blk_set_guest_block_size(BlockBackend *blk, int align)
 {
     blk->guest_block_size = align;
+}
+
+void *blk_try_blockalign(BlockBackend *blk, size_t size)
+{
+    return qemu_try_blockalign(blk ? blk->bs : NULL, size);
 }
 
 void *blk_blockalign(BlockBackend *blk, size_t size)

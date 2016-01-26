@@ -121,9 +121,8 @@ static void pc_init1(MachineState *machine,
         pcms->below_4g_mem_size = machine->ram_size;
     }
 
-    if (xen_enabled() && xen_hvm_init(pcms, &ram_memory) != 0) {
-        fprintf(stderr, "xen hardware virtual machine initialisation failed\n");
-        exit(1);
+    if (xen_enabled()) {
+        xen_hvm_init(pcms, &ram_memory);
     }
 
     pc_cpus_init(pcms);
@@ -432,9 +431,11 @@ DEFINE_I440FX_MACHINE(v2_6, "pc-i440fx-2.6", NULL,
 
 static void pc_i440fx_2_5_machine_options(MachineClass *m)
 {
+    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
     pc_i440fx_2_6_machine_options(m);
     m->alias = NULL;
     m->is_default = 0;
+    pcmc->save_tsc_khz = false;
     SET_MACHINE_COMPAT(m, PC_COMPAT_2_5);
 }
 

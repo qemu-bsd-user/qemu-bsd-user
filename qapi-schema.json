@@ -2169,8 +2169,7 @@
 # @dump-guest-memory
 #
 # Dump guest's memory to vmcore. It is a synchronous operation that can take
-# very long depending on the amount of guest memory. This command is only
-# supported on i386 and x86_64.
+# very long depending on the amount of guest memory.
 #
 # @paging: if true, do paging to get guest's memory mapping. This allows
 #          using gdb to process the core file.
@@ -2186,6 +2185,7 @@
 #             2. The guest can be in real-mode even if paging is enabled. For
 #                example, the guest uses ACPI to sleep, and ACPI sleep state
 #                goes in real-mode
+#             3. Currently only supported on i386 and x86_64.
 #
 # @protocol: the filename or file descriptor of the vmcore. The supported
 #            protocols are:
@@ -3098,6 +3098,21 @@
 ##
 { 'command': 'screendump', 'data': {'filename': 'str'} }
 
+
+##
+# @ChardevCommon:
+#
+# Configuration shared across all chardev backends
+#
+# @logfile: #optional The name of a logfile to save output
+# @logappend: #optional true to append instead of truncate
+#             (default to false to truncate)
+#
+# Since: 2.6
+##
+{ 'struct': 'ChardevCommon', 'data': { '*logfile': 'str',
+                                       '*logappend': 'bool' } }
+
 ##
 # @ChardevFile:
 #
@@ -3112,7 +3127,8 @@
 ##
 { 'struct': 'ChardevFile', 'data': { '*in' : 'str',
                                    'out' : 'str',
-                                   '*append': 'bool' } }
+                                   '*append': 'bool' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevHostdev:
@@ -3125,7 +3141,8 @@
 #
 # Since: 1.4
 ##
-{ 'struct': 'ChardevHostdev', 'data': { 'device' : 'str' } }
+{ 'struct': 'ChardevHostdev', 'data': { 'device' : 'str' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevSocket:
@@ -3152,7 +3169,8 @@
                                      '*wait'      : 'bool',
                                      '*nodelay'   : 'bool',
                                      '*telnet'    : 'bool',
-                                     '*reconnect' : 'int' } }
+                                     '*reconnect' : 'int' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevUdp:
@@ -3165,7 +3183,8 @@
 # Since: 1.5
 ##
 { 'struct': 'ChardevUdp', 'data': { 'remote' : 'SocketAddress',
-                                  '*local' : 'SocketAddress' } }
+                                  '*local' : 'SocketAddress' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevMux:
@@ -3176,7 +3195,8 @@
 #
 # Since: 1.5
 ##
-{ 'struct': 'ChardevMux', 'data': { 'chardev' : 'str' } }
+{ 'struct': 'ChardevMux', 'data': { 'chardev' : 'str' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevStdio:
@@ -3189,7 +3209,9 @@
 #
 # Since: 1.5
 ##
-{ 'struct': 'ChardevStdio', 'data': { '*signal' : 'bool' } }
+{ 'struct': 'ChardevStdio', 'data': { '*signal' : 'bool' },
+  'base': 'ChardevCommon' }
+
 
 ##
 # @ChardevSpiceChannel:
@@ -3200,7 +3222,8 @@
 #
 # Since: 1.5
 ##
-{ 'struct': 'ChardevSpiceChannel', 'data': { 'type'  : 'str' } }
+{ 'struct': 'ChardevSpiceChannel', 'data': { 'type'  : 'str' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevSpicePort:
@@ -3211,7 +3234,8 @@
 #
 # Since: 1.5
 ##
-{ 'struct': 'ChardevSpicePort', 'data': { 'fqdn'  : 'str' } }
+{ 'struct': 'ChardevSpicePort', 'data': { 'fqdn'  : 'str' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevVC:
@@ -3228,7 +3252,8 @@
 { 'struct': 'ChardevVC', 'data': { '*width'  : 'int',
                                  '*height' : 'int',
                                  '*cols'   : 'int',
-                                 '*rows'   : 'int' } }
+                                 '*rows'   : 'int' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevRingbuf:
@@ -3239,7 +3264,8 @@
 #
 # Since: 1.5
 ##
-{ 'struct': 'ChardevRingbuf', 'data': { '*size'  : 'int' } }
+{ 'struct': 'ChardevRingbuf', 'data': { '*size'  : 'int' },
+  'base': 'ChardevCommon' }
 
 ##
 # @ChardevBackend:
@@ -3248,7 +3274,8 @@
 #
 # Since: 1.4 (testdev since 2.2)
 ##
-{ 'struct': 'ChardevDummy', 'data': { } }
+{ 'struct': 'ChardevDummy', 'data': { },
+  'base': 'ChardevCommon' }
 
 { 'union': 'ChardevBackend', 'data': { 'file'   : 'ChardevFile',
                                        'serial' : 'ChardevHostdev',
