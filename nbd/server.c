@@ -16,6 +16,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "nbd-internal.h"
 
 static int system_errno_to_nbd_errno(int err)
@@ -64,6 +65,8 @@ struct NBDExport {
     QTAILQ_ENTRY(NBDExport) next;
 
     AioContext *ctx;
+
+    Notifier eject_notifier;
 };
 
 static QTAILQ_HEAD(, NBDExport) exports = QTAILQ_HEAD_INITIALIZER(exports);
@@ -414,12 +417,12 @@ static coroutine_fn int nbd_negotiate(NBDClientNewData *data)
     memcpy(buf, "NBDMAGIC", 8);
     if (client->exp) {
         assert ((client->exp->nbdflags & ~65535) == 0);
-        cpu_to_be64w((uint64_t*)(buf + 8), NBD_CLIENT_MAGIC);
-        cpu_to_be64w((uint64_t*)(buf + 16), client->exp->size);
-        cpu_to_be16w((uint16_t*)(buf + 26), client->exp->nbdflags | myflags);
+        stq_be_p(buf + 8, NBD_CLIENT_MAGIC);
+        stq_be_p(buf + 16, client->exp->size);
+        stw_be_p(buf + 26, client->exp->nbdflags | myflags);
     } else {
-        cpu_to_be64w((uint64_t*)(buf + 8), NBD_OPTS_MAGIC);
-        cpu_to_be16w((uint16_t *)(buf + 16), NBD_FLAG_FIXED_NEWSTYLE);
+        stq_be_p(buf + 8, NBD_OPTS_MAGIC);
+        stw_be_p(buf + 16, NBD_FLAG_FIXED_NEWSTYLE);
     }
 
     if (client->exp) {
@@ -439,8 +442,8 @@ static coroutine_fn int nbd_negotiate(NBDClientNewData *data)
         }
 
         assert ((client->exp->nbdflags & ~65535) == 0);
-        cpu_to_be64w((uint64_t*)(buf + 18), client->exp->size);
-        cpu_to_be16w((uint16_t*)(buf + 26), client->exp->nbdflags | myflags);
+        stq_be_p(buf + 18, client->exp->size);
+        stw_be_p(buf + 26, client->exp->nbdflags | myflags);
         if (nbd_negotiate_write(csock, buf + 18,
                                 sizeof(buf) - 18) != sizeof(buf) - 18) {
             LOG("write failed");
@@ -525,9 +528,9 @@ static ssize_t nbd_send_reply(int csock, struct nbd_reply *reply)
        [ 4 ..  7]    error   (0 == no error)
        [ 7 .. 15]    handle
      */
-    cpu_to_be32w((uint32_t*)buf, NBD_REPLY_MAGIC);
-    cpu_to_be32w((uint32_t*)(buf + 4), reply->error);
-    cpu_to_be64w((uint64_t*)(buf + 8), reply->handle);
+    stl_be_p(buf, NBD_REPLY_MAGIC);
+    stl_be_p(buf + 4, reply->error);
+    stq_be_p(buf + 8, reply->handle);
 
     TRACE("Sending response to client");
 
@@ -644,6 +647,12 @@ static void blk_aio_detach(void *opaque)
     exp->ctx = NULL;
 }
 
+static void nbd_eject_notifier(Notifier *n, void *data)
+{
+    NBDExport *exp = container_of(n, NBDExport, eject_notifier);
+    nbd_export_close(exp);
+}
+
 NBDExport *nbd_export_new(BlockBackend *blk, off_t dev_offset, off_t size,
                           uint32_t nbdflags, void (*close)(NBDExport *),
                           Error **errp)
@@ -666,12 +675,18 @@ NBDExport *nbd_export_new(BlockBackend *blk, off_t dev_offset, off_t size,
     exp->ctx = blk_get_aio_context(blk);
     blk_ref(blk);
     blk_add_aio_context_notifier(blk, blk_aio_attached, blk_aio_detach, exp);
+
+    exp->eject_notifier.notify = nbd_eject_notifier;
+    blk_add_remove_bs_notifier(blk, &exp->eject_notifier);
+
     /*
      * NBD exports are used for non-shared storage migration.  Make sure
      * that BDRV_O_INACTIVE is cleared and the image is ready for write
      * access since the export could be available before migration handover.
      */
+    aio_context_acquire(exp->ctx);
     blk_invalidate_cache(blk, NULL);
+    aio_context_release(exp->ctx);
     return exp;
 
 fail:
@@ -745,6 +760,7 @@ void nbd_export_put(NBDExport *exp)
         }
 
         if (exp->blk) {
+            notifier_remove(&exp->eject_notifier);
             blk_remove_aio_context_notifier(exp->blk, blk_aio_attached,
                                             blk_aio_detach, exp);
             blk_unref(exp->blk);
@@ -1080,8 +1096,7 @@ static coroutine_fn void nbd_co_client_start(void *opaque)
         nbd_export_get(exp);
     }
     if (nbd_negotiate(data)) {
-        shutdown(client->sock, 2);
-        client->close(client);
+        client_close(client);
         goto out;
     }
     qemu_co_mutex_init(&client->send_lock);

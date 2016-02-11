@@ -15,13 +15,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "qemu/osdep.h"
 
 #include "qemu.h"
 #include "qemu/error-report.h"

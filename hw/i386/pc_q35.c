@@ -27,6 +27,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
 #include "hw/hw.h"
 #include "hw/loader.h"
 #include "sysemu/arch_init.h"
@@ -70,7 +71,6 @@ static void pc_q35_init(MachineState *machine)
     int i;
     ICH9LPCState *ich9_lpc;
     PCIDevice *ahci;
-    PcGuestInfo *guest_info;
     ram_addr_t lowmem;
     DriveInfo *hd[MAX_SATA_PORTS];
     MachineClass *mc = MACHINE_GET_CLASS(machine);
@@ -133,16 +133,7 @@ static void pc_q35_init(MachineState *machine)
         rom_memory = get_system_memory();
     }
 
-    guest_info = pc_guest_info_init(pcms);
-    guest_info->isapc_ram_fw = false;
-    guest_info->has_acpi_build = pcmc->has_acpi_build;
-    guest_info->has_reserved_memory = pcmc->has_reserved_memory;
-    guest_info->rsdp_in_ram = pcmc->rsdp_in_ram;
-
-    /* Migration was not supported in 2.0 for Q35, so do not bother
-     * with this hack (see hw/i386/acpi-build.c).
-     */
-    guest_info->legacy_acpi_table_size = 0;
+    pc_guest_info_init(pcms);
 
     if (pcmc->smbios_defaults) {
         /* These values are guest ABI, do not change */
@@ -155,7 +146,7 @@ static void pc_q35_init(MachineState *machine)
     /* allocate ram and load rom/bios */
     if (!xen_enabled()) {
         pc_memory_init(pcms, get_system_memory(),
-                       rom_memory, &ram_memory, guest_info);
+                       rom_memory, &ram_memory);
     }
 
     /* irq lines */

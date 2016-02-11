@@ -17,16 +17,12 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdio.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <time.h>
-#include <sys/types.h>
+#include "qemu/osdep.h"
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <utime.h>
 
 #include "qemu.h"
 #include "qemu-common.h"

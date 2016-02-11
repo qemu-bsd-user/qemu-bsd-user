@@ -250,6 +250,7 @@ vnc_jpeg=""
 vnc_png=""
 xen=""
 xen_ctrl_version=""
+xen_pv_domain_build="no"
 xen_pci_passthrough=""
 linux_aio=""
 cap_ng=""
@@ -302,7 +303,7 @@ pkgversion=""
 pie=""
 zero_malloc=""
 qom_cast_debug="yes"
-trace_backends="nop"
+trace_backends="log"
 trace_file="trace"
 spice=""
 rbd=""
@@ -934,6 +935,10 @@ for opt do
   --disable-xen-pci-passthrough) xen_pci_passthrough="no"
   ;;
   --enable-xen-pci-passthrough) xen_pci_passthrough="yes"
+  ;;
+  --disable-xen-pv-domain-build) xen_pv_domain_build="no"
+  ;;
+  --enable-xen-pv-domain-build) xen_pv_domain_build="yes"
   ;;
   --disable-brlapi) brlapi="no"
   ;;
@@ -1946,6 +1951,7 @@ fi
 
 if test "$xen" != "no" ; then
   xen_libs="-lxenstore -lxenctrl -lxenguest"
+  xen_stable_libs="-lxenforeignmemory -lxengnttab -lxenevtchn"
 
   # First we test whether Xen headers and libraries are available.
   # If no, we are done and there is no Xen support.
@@ -1966,6 +1972,57 @@ EOF
     xen=no
 
   # Xen unstable
+  elif
+      cat > $TMPC <<EOF &&
+/*
+ * If we have stable libs the we don't want the libxc compat
+ * layers, regardless of what CFLAGS we may have been given.
+ */
+#undef XC_WANT_COMPAT_EVTCHN_API
+#undef XC_WANT_COMPAT_GNTTAB_API
+#undef XC_WANT_COMPAT_MAP_FOREIGN_API
+#include <xenctrl.h>
+#include <xenstore.h>
+#include <xenevtchn.h>
+#include <xengnttab.h>
+#include <xenforeignmemory.h>
+#include <stdint.h>
+#include <xen/hvm/hvm_info_table.h>
+#if !defined(HVM_MAX_VCPUS)
+# error HVM_MAX_VCPUS not defined
+#endif
+int main(void) {
+  xc_interface *xc = NULL;
+  xenforeignmemory_handle *xfmem;
+  xenevtchn_handle *xe;
+  xengnttab_handle *xg;
+  xen_domain_handle_t handle;
+
+  xs_daemon_open();
+
+  xc = xc_interface_open(0, 0, 0);
+  xc_hvm_set_mem_type(0, 0, HVMMEM_ram_ro, 0, 0);
+  xc_domain_add_to_physmap(0, 0, XENMAPSPACE_gmfn, 0, 0);
+  xc_hvm_inject_msi(xc, 0, 0xf0000000, 0x00000000);
+  xc_hvm_create_ioreq_server(xc, 0, HVM_IOREQSRV_BUFIOREQ_ATOMIC, NULL);
+  xc_domain_create(xc, 0, handle, 0, NULL, NULL);
+
+  xfmem = xenforeignmemory_open(0, 0);
+  xenforeignmemory_map(xfmem, 0, 0, 0, 0, 0);
+
+  xe = xenevtchn_open(0, 0);
+  xenevtchn_fd(xe);
+
+  xg = xengnttab_open(0, 0);
+  xengnttab_map_grant_ref(xg, 0, 0, 0);
+
+  return 0;
+}
+EOF
+      compile_prog "" "$xen_libs $xen_stable_libs"
+    then
+    xen_ctrl_version=471
+    xen=yes
   elif
       cat > $TMPC <<EOF &&
 #include <xenctrl.h>
@@ -2161,6 +2218,9 @@ EOF
   fi
 
   if test "$xen" = yes; then
+    if test $xen_ctrl_version -ge 471  ; then
+      libs_softmmu="$xen_stable_libs $libs_softmmu"
+    fi
     libs_softmmu="$xen_libs $libs_softmmu"
   fi
 fi
@@ -2180,6 +2240,12 @@ if test "$xen_pci_passthrough" != "no"; then
     fi
     xen_pci_passthrough=no
   fi
+fi
+
+if test "$xen_pv_domain_build" = "yes" &&
+   test "$xen" != "yes"; then
+    error_exit "User requested Xen PV domain builder support" \
+	       "which requires Xen support."
 fi
 
 ##########################################
@@ -3048,6 +3114,30 @@ for i in $glib_modules; do
         error_exit "glib-$glib_req_ver $i is required to compile QEMU"
     fi
 done
+
+# Sanity check that the current size_t matches the
+# size that glib thinks it should be. This catches
+# problems on multi-arch where people try to build
+# 32-bit QEMU while pointing at 64-bit glib headers
+cat > $TMPC <<EOF
+#include <glib.h>
+#include <unistd.h>
+
+#define QEMU_BUILD_BUG_ON(x) \
+  typedef char qemu_build_bug_on[(x)?-1:1] __attribute__((unused));
+
+int main(void) {
+   QEMU_BUILD_BUG_ON(sizeof(size_t) != GLIB_SIZEOF_SIZE_T);
+   return 0;
+}
+EOF
+
+if ! compile_prog "-Werror $CFLAGS" "$LIBS" ; then
+    error_exit "sizeof(size_t) doesn't match GLIB_SIZEOF_SIZE_T."\
+               "You probably need to set PKG_CONFIG_LIBDIR"\
+	       "to point to the right pkg-config files for your"\
+	       "build target"
+fi
 
 # g_test_trap_subprocess added in 2.38. Used by some tests.
 glib_subprocess=yes
@@ -4861,6 +4951,7 @@ fi
 echo "xen support       $xen"
 if test "$xen" = "yes" ; then
   echo "xen ctrl version  $xen_ctrl_version"
+  echo "pv dom build      $xen_pv_domain_build"
 fi
 echo "brlapi support    $brlapi"
 echo "bluez  support    $bluez"
@@ -5241,6 +5332,9 @@ fi
 if test "$xen" = "yes" ; then
   echo "CONFIG_XEN_BACKEND=y" >> $config_host_mak
   echo "CONFIG_XEN_CTRL_INTERFACE_VERSION=$xen_ctrl_version" >> $config_host_mak
+  if test "$xen_pv_domain_build" = "yes" ; then
+    echo "CONFIG_XEN_PV_DOMAIN_BUILD=y" >> $config_host_mak
+  fi
 fi
 if test "$linux_aio" = "yes" ; then
   echo "CONFIG_LINUX_AIO=y" >> $config_host_mak
@@ -5452,8 +5546,8 @@ if have_backend "simple"; then
   # Set the appropriate trace file.
   trace_file="\"$trace_file-\" FMT_pid"
 fi
-if have_backend "stderr"; then
-  echo "CONFIG_TRACE_STDERR=y" >> $config_host_mak
+if have_backend "log"; then
+  echo "CONFIG_TRACE_LOG=y" >> $config_host_mak
 fi
 if have_backend "ust"; then
   echo "CONFIG_TRACE_UST=y" >> $config_host_mak
@@ -5709,20 +5803,20 @@ case "$target_name" in
   ppc64)
     TARGET_BASE_ARCH=ppc
     TARGET_ABI_DIR=ppc
-    gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml"
+    gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml power-vsx.xml"
   ;;
   ppc64le)
     TARGET_ARCH=ppc64
     TARGET_BASE_ARCH=ppc
     TARGET_ABI_DIR=ppc
-    gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml"
+    gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml power-vsx.xml"
   ;;
   ppc64abi32)
     TARGET_ARCH=ppc64
     TARGET_BASE_ARCH=ppc
     TARGET_ABI_DIR=ppc
     echo "TARGET_ABI32=y" >> $config_target_mak
-    gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml"
+    gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml power-vsx.xml"
   ;;
   sh4|sh4eb)
     TARGET_ARCH=sh4

@@ -18,6 +18,7 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "cpu.h"
 #include "exec/gdbstub.h"
 #include "qemu/timer.h"
@@ -162,8 +163,9 @@ hwaddr s390_cpu_get_phys_page_debug(CPUState *cs, vaddr vaddr)
         vaddr &= 0x7fffffff;
     }
 
-    mmu_translate(env, vaddr, MMU_INST_FETCH, asc, &raddr, &prot, false);
-
+    if (mmu_translate(env, vaddr, MMU_INST_FETCH, asc, &raddr, &prot, false)) {
+        return -1;
+    }
     return raddr;
 }
 

@@ -23,7 +23,7 @@
  */
 
 /* Needed early for CONFIG_BSD etc. */
-#include "config-host.h"
+#include "qemu/osdep.h"
 
 #include "monitor/monitor.h"
 #include "qapi/qmp/qerror.h"
@@ -986,7 +986,7 @@ static void qemu_wait_io_event_common(CPUState *cpu)
     if (cpu->stop) {
         cpu->stop = false;
         cpu->stopped = true;
-        qemu_cond_signal(&qemu_pause_cond);
+        qemu_cond_broadcast(&qemu_pause_cond);
     }
     flush_queued_work(cpu);
     cpu->thread_kicked = false;
@@ -1396,7 +1396,7 @@ void cpu_stop_current(void)
         current_cpu->stop = false;
         current_cpu->stopped = true;
         cpu_exit(current_cpu);
-        qemu_cond_signal(&qemu_pause_cond);
+        qemu_cond_broadcast(&qemu_pause_cond);
     }
 }
 
@@ -1576,13 +1576,13 @@ CpuInfoList *qmp_query_cpus(Error **errp)
         info->value->u.ppc->nip = env->nip;
 #elif defined(TARGET_SPARC)
         info->value->arch = CPU_INFO_ARCH_SPARC;
-        info->value->u.sparc = g_new0(CpuInfoSPARC, 1);
-        info->value->u.sparc->pc = env->pc;
-        info->value->u.sparc->npc = env->npc;
+        info->value->u.q_sparc = g_new0(CpuInfoSPARC, 1);
+        info->value->u.q_sparc->pc = env->pc;
+        info->value->u.q_sparc->npc = env->npc;
 #elif defined(TARGET_MIPS)
         info->value->arch = CPU_INFO_ARCH_MIPS;
-        info->value->u.mips = g_new0(CpuInfoMIPS, 1);
-        info->value->u.mips->PC = env->active_tc.PC;
+        info->value->u.q_mips = g_new0(CpuInfoMIPS, 1);
+        info->value->u.q_mips->PC = env->active_tc.PC;
 #elif defined(TARGET_TRICORE)
         info->value->arch = CPU_INFO_ARCH_TRICORE;
         info->value->u.tricore = g_new0(CpuInfoTricore, 1);

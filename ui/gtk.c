@@ -34,6 +34,7 @@
 #define GETTEXT_PACKAGE "qemu"
 #define LOCALEDIR "po"
 
+#include "qemu/osdep.h"
 #include "qemu-common.h"
 
 #include "ui/console.h"
@@ -1598,11 +1599,16 @@ static void gd_vc_chr_set_echo(CharDriverState *chr, bool echo)
 static int nb_vcs;
 static CharDriverState *vcs[MAX_VCS];
 
-static CharDriverState *gd_vc_handler(ChardevVC *unused, Error **errp)
+static CharDriverState *gd_vc_handler(ChardevVC *vc, Error **errp)
 {
+    ChardevCommon *common = qapi_ChardevVC_base(vc);
     CharDriverState *chr;
 
-    chr = g_malloc0(sizeof(*chr));
+    chr = qemu_chr_alloc(common, errp);
+    if (!chr) {
+        return NULL;
+    }
+
     chr->chr_write = gd_vc_chr_write;
     chr->chr_set_echo = gd_vc_chr_set_echo;
 

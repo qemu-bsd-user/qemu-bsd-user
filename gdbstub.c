@@ -16,16 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#include "config.h"
+#include "qemu/osdep.h"
 #include "qemu-common.h"
 #ifdef CONFIG_USER_ONLY
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <fcntl.h>
 
 #include "qemu.h"
 #else
@@ -540,13 +533,20 @@ static const char *get_feature_xml(const char *p, const char **newp,
             GDBRegisterState *r;
             CPUState *cpu = first_cpu;
 
-            snprintf(target_xml, sizeof(target_xml),
-                     "<?xml version=\"1.0\"?>"
-                     "<!DOCTYPE target SYSTEM \"gdb-target.dtd\">"
-                     "<target>"
-                     "<xi:include href=\"%s\"/>",
-                     cc->gdb_core_xml_file);
-
+            pstrcat(target_xml, sizeof(target_xml),
+                    "<?xml version=\"1.0\"?>"
+                    "<!DOCTYPE target SYSTEM \"gdb-target.dtd\">"
+                    "<target>");
+            if (cc->gdb_arch_name) {
+                gchar *arch = cc->gdb_arch_name(cpu);
+                pstrcat(target_xml, sizeof(target_xml), "<architecture>");
+                pstrcat(target_xml, sizeof(target_xml), arch);
+                pstrcat(target_xml, sizeof(target_xml), "</architecture>");
+                g_free(arch);
+            }
+            pstrcat(target_xml, sizeof(target_xml), "<xi:include href=\"");
+            pstrcat(target_xml, sizeof(target_xml), cc->gdb_core_xml_file);
+            pstrcat(target_xml, sizeof(target_xml), "\"/>");
             for (r = cpu->gdb_regs; r; r = r->next) {
                 pstrcat(target_xml, sizeof(target_xml), "<xi:include href=\"");
                 pstrcat(target_xml, sizeof(target_xml), r->xml);

@@ -16,22 +16,10 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/sysctl.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <err.h>
-#include <errno.h>
-#include <libgen.h>
-#include <unistd.h>
+#include "qemu/osdep.h"
 #include <sys/mman.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "qemu.h"
-#include "qemu/error-report.h"
 #include "disas/disas.h"
 
 static abi_ulong target_auxents;   /* Where the AUX entries are in target */

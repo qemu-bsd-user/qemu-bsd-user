@@ -21,6 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "ui/console.h"
 #include "hw/qdev-core.h"
@@ -258,6 +259,16 @@ void graphic_hw_update(QemuConsole *con)
     }
     if (con && con->hw_ops->gfx_update) {
         con->hw_ops->gfx_update(con->hw);
+    }
+}
+
+void graphic_hw_gl_block(QemuConsole *con, bool block)
+{
+    if (!con) {
+        con = active_console;
+    }
+    if (con && con->hw_ops->gl_block) {
+        con->hw_ops->gl_block(con->hw, block);
     }
 }
 

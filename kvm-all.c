@@ -13,10 +13,9 @@
  *
  */
 
-#include <sys/types.h>
+#include "qemu/osdep.h"
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <stdarg.h>
 
 #include <linux/kvm.h>
 
@@ -2362,7 +2361,7 @@ int kvm_set_one_reg(CPUState *cs, uint64_t id, void *source)
     reg.addr = (uintptr_t) source;
     r = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
     if (r) {
-        trace_kvm_failed_reg_set(id, strerror(r));
+        trace_kvm_failed_reg_set(id, strerror(-r));
     }
     return r;
 }
@@ -2376,7 +2375,7 @@ int kvm_get_one_reg(CPUState *cs, uint64_t id, void *target)
     reg.addr = (uintptr_t) target;
     r = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &reg);
     if (r) {
-        trace_kvm_failed_reg_get(id, strerror(r));
+        trace_kvm_failed_reg_get(id, strerror(-r));
     }
     return r;
 }

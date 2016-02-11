@@ -8,6 +8,7 @@
  * GNU GPL, version 2 or (at your option) any later version.
  */
 
+#include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "hw/xen/xen.h"
 #include "exec/memory.h"
@@ -28,6 +29,11 @@ void xen_piix_pci_write_config_client(uint32_t address, uint32_t val, int len)
 
 void xen_hvm_inject_msi(uint64_t addr, uint32_t data)
 {
+}
+
+int xen_is_pirq_msi(uint32_t msi_data)
+{
+    return 0;
 }
 
 void xen_ram_alloc(ram_addr_t ram_addr, ram_addr_t size, MemoryRegion *mr,

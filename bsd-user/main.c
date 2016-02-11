@@ -17,15 +17,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
+#include "qemu/osdep.h"
 #include <machine/trap.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
 #include <sys/mman.h>
 
 #include "qemu.h"
@@ -34,7 +27,7 @@
 #include "tcg.h"
 #include "qemu/timer.h"
 #include "qemu/envlist.h"
-#include "qemu/error-report.h"
+#include "exec/log.h"
 
 #include "host_os.h"
 #include "target_arch_cpu.h"

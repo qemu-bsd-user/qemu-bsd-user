@@ -18,6 +18,7 @@
  *
  */
 
+#include "qemu/osdep.h"
 #include "io/channel-socket.h"
 #include "io/channel-watch.h"
 #include "trace.h"
@@ -257,7 +258,7 @@ int qio_channel_socket_dgram_sync(QIOChannelSocket *ioc,
     int fd;
 
     trace_qio_channel_socket_dgram_sync(ioc, localAddr, remoteAddr);
-    fd = socket_dgram(localAddr, remoteAddr, errp);
+    fd = socket_dgram(remoteAddr, localAddr, errp);
     if (fd < 0) {
         trace_qio_channel_socket_dgram_fail(ioc);
         return -1;

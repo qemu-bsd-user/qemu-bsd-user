@@ -41,14 +41,15 @@
 
 /********************************************************/
 /* debug Floppy devices */
-//#define DEBUG_FLOPPY
 
-#ifdef DEBUG_FLOPPY
+#define DEBUG_FLOPPY 0
+
 #define FLOPPY_DPRINTF(fmt, ...)                                \
-    do { printf("FLOPPY: " fmt , ## __VA_ARGS__); } while (0)
-#else
-#define FLOPPY_DPRINTF(fmt, ...)
-#endif
+    do {                                                        \
+        if (DEBUG_FLOPPY) {                                     \
+            fprintf(stderr, "FLOPPY: " fmt , ## __VA_ARGS__);   \
+        }                                                       \
+    } while (0)
 
 /********************************************************/
 /* Floppy drive emulation                               */
@@ -173,12 +174,26 @@ typedef struct FDrive {
     uint8_t media_changed;    /* Is media changed       */
     uint8_t media_rate;       /* Data rate of medium    */
 
-    bool media_inserted;      /* Is there a medium in the tray */
     bool media_validated;     /* Have we validated the media? */
 } FDrive;
 
 
 static FloppyDriveType get_fallback_drive_type(FDrive *drv);
+
+/* Hack: FD_SEEK is expected to work on empty drives. However, QEMU
+ * currently goes through some pains to keep seeks within the bounds
+ * established by last_sect and max_track. Correcting this is difficult,
+ * as refactoring FDC code tends to expose nasty bugs in the Linux kernel.
+ *
+ * For now: allow empty drives to have large bounds so we can seek around,
+ * with the understanding that when a diskette is inserted, the bounds will
+ * properly tighten to match the geometry of that inserted medium.
+ */
+static void fd_empty_seek_hack(FDrive *drv)
+{
+    drv->last_sect = 0xFF;
+    drv->max_track = 0xFF;
+}
 
 static void fd_init(FDrive *drv)
 {
@@ -249,7 +264,7 @@ static int fd_seek(FDrive *drv, uint8_t head, uint8_t track, uint8_t sect,
 #endif
         drv->head = head;
         if (drv->track != track) {
-            if (drv->media_inserted) {
+            if (drv->blk != NULL && blk_is_inserted(drv->blk)) {
                 drv->media_changed = 0;
             }
             ret = 1;
@@ -258,7 +273,7 @@ static int fd_seek(FDrive *drv, uint8_t head, uint8_t track, uint8_t sect,
         drv->sect = sect;
     }
 
-    if (!drv->media_inserted) {
+    if (drv->blk == NULL || !blk_is_inserted(drv->blk)) {
         ret = 2;
     }
 
@@ -288,7 +303,9 @@ static int pick_geometry(FDrive *drv)
     bool magic = drv->drive == FLOPPY_DRIVE_TYPE_AUTO;
 
     /* We can only pick a geometry if we have a diskette. */
-    if (!drv->media_inserted || drv->drive == FLOPPY_DRIVE_TYPE_NONE) {
+    if (!drv->blk || !blk_is_inserted(drv->blk) ||
+        drv->drive == FLOPPY_DRIVE_TYPE_NONE)
+    {
         return -1;
     }
 
@@ -337,7 +354,7 @@ static int pick_geometry(FDrive *drv)
             parse = &fd_formats[size_match];
             FLOPPY_DPRINTF("User requested floppy drive type '%s', "
                            "but inserted medium appears to be a "
-                           "%d sector '%s' type\n",
+                           "%"PRId64" sector '%s' type\n",
                            FloppyDriveType_lookup[drv->drive],
                            nb_sectors,
                            FloppyDriveType_lookup[parse->drive]);
@@ -390,9 +407,10 @@ static void fd_revalidate(FDrive *drv)
     FLOPPY_DPRINTF("revalidate\n");
     if (drv->blk != NULL) {
         drv->ro = blk_is_read_only(drv->blk);
-        if (!drv->media_inserted) {
+        if (!blk_is_inserted(drv->blk)) {
             FLOPPY_DPRINTF("No disk in drive\n");
             drv->disk = FLOPPY_DRIVE_TYPE_NONE;
+            fd_empty_seek_hack(drv);
         } else if (!drv->media_validated) {
             rc = pick_geometry(drv);
             if (rc) {
@@ -627,6 +645,7 @@ struct FDCtrl {
     QEMUTimer *result_timer;
     int dma_chann;
     uint8_t phase;
+    IsaDma *dma;
     /* Controller's identification */
     uint8_t version;
     /* HW */
@@ -793,7 +812,7 @@ static bool fdrive_media_changed_needed(void *opaque)
 {
     FDrive *drive = opaque;
 
-    return (drive->media_inserted && drive->media_changed != 1);
+    return (drive->blk != NULL && drive->media_changed != 1);
 }
 
 static const VMStateDescription vmstate_fdrive_media_changed = {
@@ -1412,7 +1431,8 @@ static void fdctrl_stop_transfer(FDCtrl *fdctrl, uint8_t status0,
     fdctrl->fifo[6] = FD_SECTOR_SC;
     fdctrl->data_dir = FD_DIR_READ;
     if (!(fdctrl->msr & FD_MSR_NONDMA)) {
-        DMA_release_DREQ(fdctrl->dma_chann);
+        IsaDmaClass *k = ISADMA_GET_CLASS(fdctrl->dma);
+        k->release_DREQ(fdctrl->dma, fdctrl->dma_chann);
     }
     fdctrl->msr |= FD_MSR_RQM | FD_MSR_DIO;
     fdctrl->msr &= ~FD_MSR_NONDMA;
@@ -1498,27 +1518,43 @@ static void fdctrl_start_transfer(FDCtrl *fdctrl, int direction)
     }
     fdctrl->eot = fdctrl->fifo[6];
     if (fdctrl->dor & FD_DOR_DMAEN) {
-        int dma_mode;
+        IsaDmaTransferMode dma_mode;
+        IsaDmaClass *k = ISADMA_GET_CLASS(fdctrl->dma);
+        bool dma_mode_ok;
         /* DMA transfer are enabled. Check if DMA channel is well programmed */
-        dma_mode = DMA_get_channel_mode(fdctrl->dma_chann);
-        dma_mode = (dma_mode >> 2) & 3;
+        dma_mode = k->get_transfer_mode(fdctrl->dma, fdctrl->dma_chann);
         FLOPPY_DPRINTF("dma_mode=%d direction=%d (%d - %d)\n",
                        dma_mode, direction,
                        (128 << fdctrl->fifo[5]) *
                        (cur_drv->last_sect - ks + 1), fdctrl->data_len);
-        if (((direction == FD_DIR_SCANE || direction == FD_DIR_SCANL ||
-              direction == FD_DIR_SCANH) && dma_mode == 0) ||
-            (direction == FD_DIR_WRITE && dma_mode == 2) ||
-            (direction == FD_DIR_READ && dma_mode == 1) ||
-            (direction == FD_DIR_VERIFY)) {
+        switch (direction) {
+        case FD_DIR_SCANE:
+        case FD_DIR_SCANL:
+        case FD_DIR_SCANH:
+            dma_mode_ok = (dma_mode == ISADMA_TRANSFER_VERIFY);
+            break;
+        case FD_DIR_WRITE:
+            dma_mode_ok = (dma_mode == ISADMA_TRANSFER_WRITE);
+            break;
+        case FD_DIR_READ:
+            dma_mode_ok = (dma_mode == ISADMA_TRANSFER_READ);
+            break;
+        case FD_DIR_VERIFY:
+            dma_mode_ok = true;
+            break;
+        default:
+            dma_mode_ok = false;
+            break;
+        }
+        if (dma_mode_ok) {
             /* No access is allowed until DMA transfer has completed */
             fdctrl->msr &= ~FD_MSR_RQM;
             if (direction != FD_DIR_VERIFY) {
                 /* Now, we just have to wait for the DMA controller to
                  * recall us...
                  */
-                DMA_hold_DREQ(fdctrl->dma_chann);
-                DMA_schedule();
+                k->hold_DREQ(fdctrl->dma, fdctrl->dma_chann);
+                k->schedule(fdctrl->dma);
             } else {
                 /* Start transfer */
                 fdctrl_transfer_handler(fdctrl, fdctrl->dma_chann, 0,
@@ -1557,12 +1593,14 @@ static int fdctrl_transfer_handler (void *opaque, int nchan,
     FDrive *cur_drv;
     int len, start_pos, rel_pos;
     uint8_t status0 = 0x00, status1 = 0x00, status2 = 0x00;
+    IsaDmaClass *k;
 
     fdctrl = opaque;
     if (fdctrl->msr & FD_MSR_RQM) {
         FLOPPY_DPRINTF("Not in DMA transfer mode !\n");
         return 0;
     }
+    k = ISADMA_GET_CLASS(fdctrl->dma);
     cur_drv = get_cur_drv(fdctrl);
     if (fdctrl->data_dir == FD_DIR_SCANE || fdctrl->data_dir == FD_DIR_SCANL ||
         fdctrl->data_dir == FD_DIR_SCANH)
@@ -1601,8 +1639,8 @@ static int fdctrl_transfer_handler (void *opaque, int nchan,
         switch (fdctrl->data_dir) {
         case FD_DIR_READ:
             /* READ commands */
-            DMA_write_memory (nchan, fdctrl->fifo + rel_pos,
-                              fdctrl->data_pos, len);
+            k->write_memory(fdctrl->dma, nchan, fdctrl->fifo + rel_pos,
+                            fdctrl->data_pos, len);
             break;
         case FD_DIR_WRITE:
             /* WRITE commands */
@@ -1616,8 +1654,8 @@ static int fdctrl_transfer_handler (void *opaque, int nchan,
                 goto transfer_error;
             }
 
-            DMA_read_memory (nchan, fdctrl->fifo + rel_pos,
-                             fdctrl->data_pos, len);
+            k->read_memory(fdctrl->dma, nchan, fdctrl->fifo + rel_pos,
+                           fdctrl->data_pos, len);
             if (blk_write(cur_drv->blk, fd_sector(cur_drv),
                           fdctrl->fifo, 1) < 0) {
                 FLOPPY_DPRINTF("error writing sector %d\n",
@@ -1634,7 +1672,8 @@ static int fdctrl_transfer_handler (void *opaque, int nchan,
             {
                 uint8_t tmpbuf[FD_SECTOR_LEN];
                 int ret;
-                DMA_read_memory (nchan, tmpbuf, fdctrl->data_pos, len);
+                k->read_memory(fdctrl->dma, nchan, tmpbuf, fdctrl->data_pos,
+                               len);
                 ret = memcmp(tmpbuf, fdctrl->fifo + rel_pos, len);
                 if (ret == 0) {
                     status2 = FD_SR2_SEH;
@@ -2285,22 +2324,13 @@ static void fdctrl_change_cb(void *opaque, bool load)
 {
     FDrive *drive = opaque;
 
-    drive->media_inserted = load && drive->blk && blk_is_inserted(drive->blk);
-
     drive->media_changed = 1;
     drive->media_validated = false;
     fd_revalidate(drive);
 }
 
-static bool fdctrl_is_tray_open(void *opaque)
-{
-    FDrive *drive = opaque;
-    return !drive->media_inserted;
-}
-
 static const BlockDevOps fdctrl_block_ops = {
     .change_media_cb = fdctrl_change_cb,
-    .is_tray_open = fdctrl_is_tray_open,
 };
 
 /* Init functions */
@@ -2327,7 +2357,6 @@ static void fdctrl_connect_drives(FDCtrl *fdctrl, Error **errp)
         fd_init(drive);
         if (drive->blk) {
             blk_set_dev_ops(drive->blk, &fdctrl_block_ops, drive);
-            drive->media_inserted = blk_is_inserted(drive->blk);
             pick_drive_type(drive);
         }
         fd_revalidate(drive);
@@ -2434,7 +2463,11 @@ static void fdctrl_realize_common(FDCtrl *fdctrl, Error **errp)
     fdctrl->num_floppies = MAX_FD;
 
     if (fdctrl->dma_chann != -1) {
-        DMA_register_channel(fdctrl->dma_chann, &fdctrl_transfer_handler, fdctrl);
+        IsaDmaClass *k;
+        assert(fdctrl->dma);
+        k = ISADMA_GET_CLASS(fdctrl->dma);
+        k->register_channel(fdctrl->dma, fdctrl->dma_chann,
+                            &fdctrl_transfer_handler, fdctrl);
     }
     fdctrl_connect_drives(fdctrl, errp);
 }
@@ -2457,6 +2490,10 @@ static void isabus_fdc_realize(DeviceState *dev, Error **errp)
 
     isa_init_irq(isadev, &fdctrl->irq, isa->irq);
     fdctrl->dma_chann = isa->dma;
+    if (fdctrl->dma_chann != -1) {
+        fdctrl->dma = isa_get_dma(isa_bus_from_device(isadev), isa->dma);
+        assert(fdctrl->dma);
+    }
 
     qdev_set_legacy_instance_id(dev, isa->iobase, 2);
     fdctrl_realize_common(fdctrl, &err);
@@ -2484,6 +2521,8 @@ static void sun4m_fdc_initfn(Object *obj)
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
     FDCtrlSysBus *sys = SYSBUS_FDC(obj);
     FDCtrl *fdctrl = &sys->state;
+
+    fdctrl->dma_chann = -1;
 
     memory_region_init_io(&fdctrl->iomem, obj, &fdctrl_mem_strict_ops,
                           fdctrl, "fdctrl", 0x08);

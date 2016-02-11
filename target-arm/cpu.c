@@ -650,6 +650,15 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
         cpu->id_aa64pfr0 &= ~0xf000;
     }
 
+    if (!arm_feature(env, ARM_FEATURE_EL2)) {
+        /* Disable the hypervisor feature bits in the processor feature
+         * registers if we don't have EL2. These are id_pfr1[15:12] and
+         * id_aa64pfr0_el1[11:8].
+         */
+        cpu->id_aa64pfr0 &= ~0xf00;
+        cpu->id_pfr1 &= ~0xf000;
+    }
+
     if (!cpu->has_mpu) {
         unset_feature(env, ARM_FEATURE_MPU);
     }
@@ -1426,6 +1435,17 @@ static int arm_cpu_handle_mmu_fault(CPUState *cs, vaddr address, int rw,
 }
 #endif
 
+static gchar *arm_gdb_arch_name(CPUState *cs)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    if (arm_feature(env, ARM_FEATURE_IWMMXT)) {
+        return g_strdup("iwmmxt");
+    }
+    return g_strdup("arm");
+}
+
 static void arm_cpu_class_init(ObjectClass *oc, void *data)
 {
     ARMCPUClass *acc = ARM_CPU_CLASS(oc);
@@ -1460,8 +1480,10 @@ static void arm_cpu_class_init(ObjectClass *oc, void *data)
 #endif
     cc->gdb_num_core_regs = 26;
     cc->gdb_core_xml_file = "arm-core.xml";
+    cc->gdb_arch_name = arm_gdb_arch_name;
     cc->gdb_stop_before_watchpoint = true;
     cc->debug_excp_handler = arm_debug_excp_handler;
+    cc->debug_check_watchpoint = arm_debug_check_watchpoint;
 
     cc->disas_set_info = arm_disas_set_info;
 

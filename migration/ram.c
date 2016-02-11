@@ -25,7 +25,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include <stdint.h>
+#include "qemu/osdep.h"
 #include <zlib.h>
 #include "qapi-event.h"
 #include "qemu/bitops.h"
@@ -609,7 +609,6 @@ static void migration_bitmap_sync_init(void)
     iterations_prev = 0;
 }
 
-/* Called with iothread lock held, to protect ram_list.dirty_memory[] */
 static void migration_bitmap_sync(void)
 {
     RAMBlock *block;
@@ -729,7 +728,7 @@ static int save_zero_page(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
  * @last_stage: if we are at the completion stage
  * @bytes_transferred: increase it with the number of transferred bytes
  */
-static int ram_save_page(QEMUFile *f, RAMBlock* block, ram_addr_t offset,
+static int ram_save_page(QEMUFile *f, PageSearchStatus *pss,
                          bool last_stage, uint64_t *bytes_transferred)
 {
     int pages = -1;
@@ -738,6 +737,8 @@ static int ram_save_page(QEMUFile *f, RAMBlock* block, ram_addr_t offset,
     uint8_t *p;
     int ret;
     bool send_async = true;
+    RAMBlock *block = pss->block;
+    ram_addr_t offset = pss->offset;
 
     p = block->host + offset;
 
@@ -912,14 +913,16 @@ static int compress_page_with_multi_thread(QEMUFile *f, RAMBlock *block,
  * @last_stage: if we are at the completion stage
  * @bytes_transferred: increase it with the number of transferred bytes
  */
-static int ram_save_compressed_page(QEMUFile *f, RAMBlock *block,
-                                    ram_addr_t offset, bool last_stage,
+static int ram_save_compressed_page(QEMUFile *f, PageSearchStatus *pss,
+                                    bool last_stage,
                                     uint64_t *bytes_transferred)
 {
     int pages = -1;
     uint64_t bytes_xmit;
     uint8_t *p;
     int ret;
+    RAMBlock *block = pss->block;
+    ram_addr_t offset = pss->offset;
 
     p = block->host + offset;
 
@@ -1229,7 +1232,7 @@ err:
  * Returns: Number of pages written.
  */
 static int ram_save_target_page(MigrationState *ms, QEMUFile *f,
-                                RAMBlock *block, ram_addr_t offset,
+                                PageSearchStatus *pss,
                                 bool last_stage,
                                 uint64_t *bytes_transferred,
                                 ram_addr_t dirty_ram_abs)
@@ -1240,11 +1243,11 @@ static int ram_save_target_page(MigrationState *ms, QEMUFile *f,
     if (migration_bitmap_clear_dirty(dirty_ram_abs)) {
         unsigned long *unsentmap;
         if (compression_switch && migrate_use_compression()) {
-            res = ram_save_compressed_page(f, block, offset,
+            res = ram_save_compressed_page(f, pss,
                                            last_stage,
                                            bytes_transferred);
         } else {
-            res = ram_save_page(f, block, offset, last_stage,
+            res = ram_save_page(f, pss, last_stage,
                                 bytes_transferred);
         }
 
@@ -1260,7 +1263,7 @@ static int ram_save_target_page(MigrationState *ms, QEMUFile *f,
          * to the stream.
          */
         if (res > 0) {
-            last_sent_block = block;
+            last_sent_block = pss->block;
         }
     }
 
@@ -1284,26 +1287,27 @@ static int ram_save_target_page(MigrationState *ms, QEMUFile *f,
  * @bytes_transferred: increase it with the number of transferred bytes
  * @dirty_ram_abs: Address of the start of the dirty page in ram_addr_t space
  */
-static int ram_save_host_page(MigrationState *ms, QEMUFile *f, RAMBlock *block,
-                              ram_addr_t *offset, bool last_stage,
+static int ram_save_host_page(MigrationState *ms, QEMUFile *f,
+                              PageSearchStatus *pss,
+                              bool last_stage,
                               uint64_t *bytes_transferred,
                               ram_addr_t dirty_ram_abs)
 {
     int tmppages, pages = 0;
     do {
-        tmppages = ram_save_target_page(ms, f, block, *offset, last_stage,
+        tmppages = ram_save_target_page(ms, f, pss, last_stage,
                                         bytes_transferred, dirty_ram_abs);
         if (tmppages < 0) {
             return tmppages;
         }
 
         pages += tmppages;
-        *offset += TARGET_PAGE_SIZE;
+        pss->offset += TARGET_PAGE_SIZE;
         dirty_ram_abs += TARGET_PAGE_SIZE;
-    } while (*offset & (qemu_host_page_size - 1));
+    } while (pss->offset & (qemu_host_page_size - 1));
 
     /* The offset we leave with is the last one we looked at */
-    *offset -= TARGET_PAGE_SIZE;
+    pss->offset -= TARGET_PAGE_SIZE;
     return pages;
 }
 
@@ -1351,7 +1355,7 @@ static int ram_find_and_save_block(QEMUFile *f, bool last_stage,
         }
 
         if (found) {
-            pages = ram_save_host_page(ms, f, pss.block, &pss.offset,
+            pages = ram_save_host_page(ms, f, &pss,
                                        last_stage, bytes_transferred,
                                        dirty_ram_abs);
         }
@@ -1916,8 +1920,6 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
         acct_clear();
     }
 
-    /* iothread lock needed for ram_list.dirty_memory[] */
-    qemu_mutex_lock_iothread();
     qemu_mutex_lock_ramlist();
     rcu_read_lock();
     bytes_transferred = 0;
@@ -1942,7 +1944,6 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
     memory_global_dirty_log_start();
     migration_bitmap_sync();
     qemu_mutex_unlock_ramlist();
-    qemu_mutex_unlock_iothread();
 
     qemu_put_be64(f, ram_bytes_total() | RAM_SAVE_FLAG_MEM_SIZE);
 
@@ -2124,28 +2125,24 @@ static int load_xbzrle(QEMUFile *f, ram_addr_t addr, void *host)
  * Returns a pointer from within the RCU-protected ram_list.
  */
 /*
- * Read a RAMBlock ID from the stream f, find the host address of the
- * start of that block and add on 'offset'
+ * Read a RAMBlock ID from the stream f.
  *
  * f: Stream to read from
- * offset: Offset within the block
  * flags: Page flags (mostly to see if it's a continuation of previous block)
  */
-static inline void *host_from_stream_offset(QEMUFile *f,
-                                            ram_addr_t offset,
-                                            int flags)
+static inline RAMBlock *ram_block_from_stream(QEMUFile *f,
+                                              int flags)
 {
     static RAMBlock *block = NULL;
     char id[256];
     uint8_t len;
 
     if (flags & RAM_SAVE_FLAG_CONTINUE) {
-        if (!block || block->max_length <= offset) {
+        if (!block) {
             error_report("Ack, bad migration stream!");
             return NULL;
         }
-
-        return block->host + offset;
+        return block;
     }
 
     len = qemu_get_byte(f);
@@ -2153,12 +2150,22 @@ static inline void *host_from_stream_offset(QEMUFile *f,
     id[len] = 0;
 
     block = qemu_ram_block_by_name(id);
-    if (block && block->max_length > offset) {
-        return block->host + offset;
+    if (!block) {
+        error_report("Can't find block %s", id);
+        return NULL;
     }
 
-    error_report("Can't find block %s", id);
-    return NULL;
+    return block;
+}
+
+static inline void *host_from_ram_block_offset(RAMBlock *block,
+                                               ram_addr_t offset)
+{
+    if (!offset_in_ramblock(block, offset)) {
+        return NULL;
+    }
+
+    return block->host + offset;
 }
 
 /*
@@ -2302,7 +2309,9 @@ static int ram_load_postcopy(QEMUFile *f)
         trace_ram_load_postcopy_loop((uint64_t)addr, flags);
         place_needed = false;
         if (flags & (RAM_SAVE_FLAG_COMPRESS | RAM_SAVE_FLAG_PAGE)) {
-            host = host_from_stream_offset(f, addr, flags);
+            RAMBlock *block = ram_block_from_stream(f, flags);
+
+            host = host_from_ram_block_offset(block, addr);
             if (!host) {
                 error_report("Illegal RAM offset " RAM_ADDR_FMT, addr);
                 ret = -EINVAL;
@@ -2433,7 +2442,9 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 
         if (flags & (RAM_SAVE_FLAG_COMPRESS | RAM_SAVE_FLAG_PAGE |
                      RAM_SAVE_FLAG_COMPRESS_PAGE | RAM_SAVE_FLAG_XBZRLE)) {
-            host = host_from_stream_offset(f, addr, flags);
+            RAMBlock *block = ram_block_from_stream(f, flags);
+
+            host = host_from_ram_block_offset(block, addr);
             if (!host) {
                 error_report("Illegal RAM offset " RAM_ADDR_FMT, addr);
                 ret = -EINVAL;

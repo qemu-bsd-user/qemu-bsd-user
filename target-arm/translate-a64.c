@@ -31,6 +31,7 @@
 
 #include "exec/helper-proto.h"
 #include "exec/helper-gen.h"
+#include "exec/log.h"
 
 #include "trace-tcg.h"
 
@@ -85,16 +86,16 @@ void a64_translate_init(void)
 {
     int i;
 
-    cpu_pc = tcg_global_mem_new_i64(TCG_AREG0,
+    cpu_pc = tcg_global_mem_new_i64(cpu_env,
                                     offsetof(CPUARMState, pc),
                                     "pc");
     for (i = 0; i < 32; i++) {
-        cpu_X[i] = tcg_global_mem_new_i64(TCG_AREG0,
+        cpu_X[i] = tcg_global_mem_new_i64(cpu_env,
                                           offsetof(CPUARMState, xregs[i]),
                                           regnames[i]);
     }
 
-    cpu_exclusive_high = tcg_global_mem_new_i64(TCG_AREG0,
+    cpu_exclusive_high = tcg_global_mem_new_i64(cpu_env,
         offsetof(CPUARMState, exclusive_high), "exclusive_high");
 }
 
@@ -1366,16 +1367,18 @@ static void handle_sys(DisasContext *s, uint32_t insn, bool isread,
          * runtime; this may result in an exception.
          */
         TCGv_ptr tmpptr;
-        TCGv_i32 tcg_syn;
+        TCGv_i32 tcg_syn, tcg_isread;
         uint32_t syndrome;
 
         gen_a64_set_pc_im(s->pc - 4);
         tmpptr = tcg_const_ptr(ri);
         syndrome = syn_aa64_sysregtrap(op0, op1, op2, crn, crm, rt, isread);
         tcg_syn = tcg_const_i32(syndrome);
-        gen_helper_access_check_cp_reg(cpu_env, tmpptr, tcg_syn);
+        tcg_isread = tcg_const_i32(isread);
+        gen_helper_access_check_cp_reg(cpu_env, tmpptr, tcg_syn, tcg_isread);
         tcg_temp_free_ptr(tmpptr);
         tcg_temp_free_i32(tcg_syn);
+        tcg_temp_free_i32(tcg_isread);
     }
 
     /* Handle special cases first */

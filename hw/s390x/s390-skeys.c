@@ -9,6 +9,7 @@
  * directory.
  */
 
+#include "qemu/osdep.h"
 #include "hw/boards.h"
 #include "qmp-commands.h"
 #include "migration/qemu-file.h"
@@ -237,7 +238,7 @@ static const TypeInfo qemu_s390_skeys_info = {
     .instance_init = qemu_s390_skeys_init,
     .instance_size = sizeof(QEMUS390SKeysState),
     .class_init    = qemu_s390_skeys_class_init,
-    .instance_size = sizeof(S390SKeysClass),
+    .class_size    = sizeof(S390SKeysClass),
 };
 
 static void s390_storage_keys_save(QEMUFile *f, void *opaque)

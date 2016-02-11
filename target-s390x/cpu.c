@@ -23,6 +23,7 @@
  * GNU GPL, version 2 or (at your option) any later version.
  */
 
+#include "qemu/osdep.h"
 #include "cpu.h"
 #include "qemu-common.h"
 #include "qemu/timer.h"
@@ -325,6 +326,11 @@ unsigned int s390_cpu_set_state(uint8_t cpu_state, S390CPU *cpu)
 }
 #endif
 
+static gchar *s390_gdb_arch_name(CPUState *cs)
+{
+    return g_strdup("s390:64-bit");
+}
+
 static void s390_cpu_class_init(ObjectClass *oc, void *data)
 {
     S390CPUClass *scc = S390_CPU_CLASS(oc);
@@ -360,6 +366,7 @@ static void s390_cpu_class_init(ObjectClass *oc, void *data)
 
     cc->gdb_num_core_regs = S390_NUM_CORE_REGS;
     cc->gdb_core_xml_file = "s390x-core64.xml";
+    cc->gdb_arch_name = s390_gdb_arch_name;
 
     /*
      * Reason: s390_cpu_initfn() calls cpu_exec_init(), which saves

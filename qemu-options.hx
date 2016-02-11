@@ -1472,6 +1472,10 @@ ACPI headers (possible overridden by other options).
 For data=, only data
 portion of the table is used, all header information is specified in the
 command line.
+If a SLIC table is supplied to QEMU, then the SLIC's oem_id and oem_table_id
+fields will override the same in the RSDT and the FADT (a.k.a. FACP), in order
+to ensure the field matches required by the Microsoft SLIC spec and the ACPI
+spec.
 ETEXI
 
 DEF("smbios", HAS_ARG, QEMU_OPTION_smbios,
@@ -2092,7 +2096,7 @@ DEF("chardev", HAS_ARG, QEMU_OPTION_chardev,
     "-chardev null,id=id[,mux=on|off][,logfile=PATH][,logappend=on|off]\n"
     "-chardev socket,id=id[,host=host],port=port[,to=to][,ipv4][,ipv6][,nodelay][,reconnect=seconds]\n"
     "         [,server][,nowait][,telnet][,reconnect=seconds][,mux=on|off]\n"
-    "         [,logfile=PATH][,logappend=on|off] (tcp)\n"
+    "         [,logfile=PATH][,logappend=on|off][,tls-creds=ID] (tcp)\n"
     "-chardev socket,id=id,path=path[,server][,nowait][,telnet][,reconnect=seconds]\n"
     "         [,mux=on|off][,logfile=PATH][,logappend=on|off] (unix)\n"
     "-chardev udp,id=id[,host=host],port=port[,localaddr=localaddr]\n"
@@ -2172,7 +2176,7 @@ Further options to each backend are described below.
 A void device. This device will not emit any data, and will drop any data it
 receives. The null backend does not take any options.
 
-@item -chardev socket ,id=@var{id} [@var{TCP options} or @var{unix options}] [,server] [,nowait] [,telnet] [,reconnect=@var{seconds}]
+@item -chardev socket ,id=@var{id} [@var{TCP options} or @var{unix options}] [,server] [,nowait] [,telnet] [,reconnect=@var{seconds}] [,tls-creds=@var{id}]
 
 Create a two-way stream socket, which can be either a TCP or a unix socket. A
 unix socket will be created if @option{path} is specified. Behaviour is
@@ -2189,6 +2193,11 @@ escape sequences.
 @option{reconnect} sets the timeout for reconnecting on non-server sockets when
 the remote end goes away.  qemu will delay this many seconds and then attempt
 to reconnect.  Zero disables reconnecting, and is the default.
+
+@option{tls-creds} requests enablement of the TLS protocol for encryption,
+and specifies the id of the TLS credentials to use for the handshake. The
+credentials must be previously created with the @option{-object tls-creds}
+argument.
 
 TCP and unix socket options are given below:
 
@@ -3539,7 +3548,7 @@ config files on @var{sysconfdir}, but won't make it skip the QEMU-provided confi
 files from @var{datadir}.
 ETEXI
 DEF("trace", HAS_ARG, QEMU_OPTION_trace,
-    "-trace [events=<file>][,file=<file>]\n"
+    "-trace [[enable=]<pattern>][,events=<file>][,file=<file>]\n"
     "                specify tracing options\n",
     QEMU_ARCH_ALL)
 STEXI
@@ -3551,15 +3560,25 @@ HXCOMM HX does not support conditional compilation of text.
 Specify tracing options.
 
 @table @option
+@item [enable=]@var{pattern}
+Immediately enable events matching @var{pattern}.
+The file must contain one event name (as listed in the @file{trace-events} file)
+per line; globbing patterns are accepted too.  This option is only
+available if QEMU has been compiled with the @var{simple}, @var{stderr}
+or @var{ftrace} tracing backend.  To specify multiple events or patterns,
+specify the @option{-trace} option multiple times.
+
+Use @code{-trace help} to print a list of names of trace points.
+
 @item events=@var{file}
 Immediately enable events listed in @var{file}.
-The file must contain one event name (as listed in the @var{trace-events} file)
-per line.
-This option is only available if QEMU has been compiled with
-either @var{simple} or @var{stderr} tracing backend.
+The file must contain one event name (as listed in the @file{trace-events} file)
+per line; globbing patterns are accepted too.  This option is only
+available if QEMU has been compiled with the @var{simple}, @var{stderr} or
+@var{ftrace} tracing backend.
+
 @item file=@var{file}
 Log output traces to @var{file}.
-
 This option is only available if QEMU has been compiled with
 the @var{simple} tracing backend.
 @end table
