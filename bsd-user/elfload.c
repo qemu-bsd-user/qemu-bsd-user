@@ -17,7 +17,11 @@
  */
 
 #include "qemu/osdep.h"
+#include <err.h>
+#include <libgen.h>
 #include <sys/mman.h>
+#include <sys/sysctl.h>
+#include <sys/resource.h>
 
 #include "qemu.h"
 #include "disas/disas.h"
