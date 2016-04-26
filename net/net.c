@@ -1010,7 +1010,7 @@ static NetClientInfo net_pcap_info = {
 int net_init_pcap(const NetClientOptions *opts,
     const char *name, NetClientState *peer, Error **errp)
 {
-    const NetdevPcapOptions *pcap_opts = opts->u.pcap;
+    const NetdevPcapOptions *pcap_opts = opts->u.pcap.data;
     NetClientState *nc;
     struct PCAPState *s;
     const char *ifname;
