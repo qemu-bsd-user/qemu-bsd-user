@@ -25,7 +25,6 @@ seq="$(basename $0)"
 echo "QA output created by $seq"
 
 here="$PWD"
-tmp=/tmp/$$
 status=1	# failure is the default!
 
 _cleanup()
@@ -53,7 +52,7 @@ _make_test_img $IMG_SIZE
 
 case "$QEMU_DEFAULT_MACHINE" in
   s390-ccw-virtio)
-      platform_parm="-no-shutdown -machine accel=kvm"
+      platform_parm="-no-shutdown"
       ;;
   *)
       platform_parm=""

@@ -20,7 +20,7 @@
 #ifndef __ARCH_SYSARCH_H_
 #define __ARCH_SYSARCH_H_
 
-#include "syscall.h"
+#include "target_syscall.h"
 #include "qemu-bsd.h"
 
 #ifndef TARGET_UT_MAX

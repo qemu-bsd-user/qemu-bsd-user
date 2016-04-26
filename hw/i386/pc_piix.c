@@ -274,6 +274,11 @@ static void pc_init1(MachineState *machine,
     if (pcmc->pci_enabled) {
         pc_pci_device_init(pci_bus);
     }
+
+    if (pcms->acpi_nvdimm_state.is_enabled) {
+        nvdimm_init_acpi_state(&pcms->acpi_nvdimm_state, system_io,
+                               pcms->fw_cfg, OBJECT(pcms));
+    }
 }
 
 /* Looking for a pc_compat_2_4() function? It doesn't exist.
@@ -429,6 +434,7 @@ static void pc_i440fx_2_5_machine_options(MachineClass *m)
     m->alias = NULL;
     m->is_default = 0;
     pcmc->save_tsc_khz = false;
+    m->legacy_fw_cfg_order = 1;
     SET_MACHINE_COMPAT(m, PC_COMPAT_2_5);
 }
 

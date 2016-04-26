@@ -22,6 +22,9 @@
  * THE SOFTWARE.
  */
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "hw/sysbus.h"
 #include "qemu/error-report.h"
 #include "qemu/timer.h"
@@ -43,6 +46,7 @@
 #include "elf.h"
 #include "sysemu/block-backend.h"
 #include "trace.h"
+#include "qemu/cutils.h"
 
 /*
  * Sun4m architecture was used in the following machines:
@@ -279,7 +283,7 @@ static unsigned long sun4m_load_kernel(const char *kernel_filename,
         bswap_needed = 0;
 #endif
         kernel_size = load_elf(kernel_filename, translate_kernel_address, NULL,
-                               NULL, NULL, NULL, 1, EM_SPARC, 0);
+                               NULL, NULL, NULL, 1, EM_SPARC, 0, 0);
         if (kernel_size < 0)
             kernel_size = load_aout(kernel_filename, KERNEL_LOAD_ADDR,
                                     RAM_size - KERNEL_LOAD_ADDR, bswap_needed,
@@ -723,7 +727,7 @@ static void prom_init(hwaddr addr, const char *bios_name)
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
     if (filename) {
         ret = load_elf(filename, translate_prom_address, &addr, NULL,
-                       NULL, NULL, 1, EM_SPARC, 0);
+                       NULL, NULL, 1, EM_SPARC, 0, 0);
         if (ret < 0 || ret > PROM_SIZE_MAX) {
             ret = load_image_targphys(filename, addr, PROM_SIZE_MAX);
         }
@@ -1553,10 +1557,7 @@ static void sun4m_register_types(void)
     type_register_static(&afx_info);
     type_register_static(&prom_info);
     type_register_static(&ram_info);
-}
 
-static void sun4m_machine_init(void)
-{
     type_register_static(&ss5_type);
     type_register_static(&ss10_type);
     type_register_static(&ss600mp_type);
@@ -1569,4 +1570,3 @@ static void sun4m_machine_init(void)
 }
 
 type_init(sun4m_register_types)
-machine_init(sun4m_machine_init)

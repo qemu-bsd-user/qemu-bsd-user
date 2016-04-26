@@ -1,12 +1,9 @@
 #ifndef QEMU_PCI_H
 #define QEMU_PCI_H
 
-#include "qemu-common.h"
-
 #include "hw/qdev.h"
 #include "exec/memory.h"
 #include "sysemu/dma.h"
-#include "qapi/error.h"
 
 /* PCI includes legacy ISA access.  */
 #include "hw/isa/isa.h"
@@ -97,6 +94,15 @@
 #define PCI_DEVICE_ID_REDHAT_QXL         0x0100
 
 #define FMT_PCIBUS                      PRIx64
+
+typedef uint64_t pcibus_t;
+
+struct PCIHostDeviceAddress {
+    unsigned int domain;
+    unsigned int bus;
+    unsigned int slot;
+    unsigned int function;
+};
 
 typedef void PCIConfigWriteFunc(PCIDevice *pci_dev,
                                 uint32_t address, uint32_t data, int len);

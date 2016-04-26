@@ -19,7 +19,7 @@
 #ifndef __ARCH_SYSARCH_H_
 #define __ARCH_SYSARCH_H_
 
-#include "syscall.h"
+#include "target_syscall.h"
 #include "target_arch.h"
 
 /* See sysarch() in sys/arm64/arm64/sys_machdep.c */

@@ -42,7 +42,7 @@ static inline void target_cpu_init(CPUARMState *env,
 {
     int i;
 
-    cpsr_write(env, regs->uregs[16], 0xffffffff);
+    cpsr_write(env, regs->uregs[16], 0xffffffff, CPSRWriteRaw);
     for (i = 0; i < 16; i++) {
         env->regs[i] = regs->uregs[i];
     }
@@ -308,10 +308,10 @@ static inline void target_cpu_loop(CPUARMState *env)
                      */
                     if ((unsigned int)ret >= (unsigned int)(-515)) {
                         ret = -ret;
-                        cpsr_write(env, CPSR_C, CPSR_C);
+                        cpsr_write(env, CPSR_C, CPSR_C, CPSRWriteByInstr);
                         env->regs[0] = ret;
                     } else {
-                        cpsr_write(env, 0, CPSR_C);
+                        cpsr_write(env, 0, CPSR_C, CPSRWriteByInstr);
                         env->regs[0] = ret; /* XXX need to handle lseek()? */
                         /* env->regs[1] = 0; */
                     }

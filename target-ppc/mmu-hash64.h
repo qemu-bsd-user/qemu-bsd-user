@@ -90,10 +90,13 @@ unsigned ppc_hash64_hpte_page_shift_noslb(PowerPCCPU *cpu,
 #define HPTE64_V_1TB_SEG        0x4000000000000000ULL
 #define HPTE64_V_VRMA_MASK      0x4001ffffff000000ULL
 
+void ppc_hash64_set_sdr1(PowerPCCPU *cpu, target_ulong value,
+                         Error **errp);
+void ppc_hash64_set_external_hpt(PowerPCCPU *cpu, void *hpt, int shift,
+                                 Error **errp);
 
-extern bool kvmppc_kern_htab;
 uint64_t ppc_hash64_start_access(PowerPCCPU *cpu, target_ulong pte_index);
-void ppc_hash64_stop_access(uint64_t token);
+void ppc_hash64_stop_access(PowerPCCPU *cpu, uint64_t token);
 
 static inline target_ulong ppc_hash64_load_hpte0(PowerPCCPU *cpu,
                                                  uint64_t token, int index)

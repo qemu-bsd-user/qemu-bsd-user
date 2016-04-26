@@ -19,7 +19,6 @@
 #ifndef CPU_I386_H
 #define CPU_I386_H
 
-#include "config.h"
 #include "qemu-common.h"
 #include "standard-headers/asm-x86/hyperv.h"
 
@@ -233,6 +232,7 @@
 #define CR4_OSXSAVE_MASK (1U << 18)
 #define CR4_SMEP_MASK   (1U << 20)
 #define CR4_SMAP_MASK   (1U << 21)
+#define CR4_PKE_MASK   (1U << 22)
 
 #define DR6_BD          (1 << 13)
 #define DR6_BS          (1 << 14)
@@ -261,6 +261,7 @@
 #define PG_PSE_BIT      7
 #define PG_GLOBAL_BIT   8
 #define PG_PSE_PAT_BIT  12
+#define PG_PKRU_BIT     59
 #define PG_NX_BIT       63
 
 #define PG_PRESENT_MASK  (1 << PG_PRESENT_BIT)
@@ -276,7 +277,8 @@
 #define PG_ADDRESS_MASK  0x000ffffffffff000LL
 #define PG_HI_RSVD_MASK  (PG_ADDRESS_MASK & ~PHYS_ADDR_MASK)
 #define PG_HI_USER_MASK  0x7ff0000000000000LL
-#define PG_NX_MASK       (1LL << PG_NX_BIT)
+#define PG_PKRU_MASK     (15ULL << PG_PKRU_BIT)
+#define PG_NX_MASK       (1ULL << PG_NX_BIT)
 
 #define PG_ERROR_W_BIT     1
 
@@ -285,6 +287,7 @@
 #define PG_ERROR_U_MASK    0x04
 #define PG_ERROR_RSVD_MASK 0x08
 #define PG_ERROR_I_D_MASK  0x10
+#define PG_ERROR_PK_MASK   0x20
 
 #define MCG_CTL_P       (1ULL<<8)   /* MCG_CAP register available */
 #define MCG_SER_P       (1ULL<<24) /* MCA recovery/new status bits */
@@ -405,16 +408,25 @@
 #define MSR_IA32_BNDCFGS                0x00000d90
 #define MSR_IA32_XSS                    0x00000da0
 
-#define XSTATE_FP                       (1ULL << 0)
-#define XSTATE_SSE                      (1ULL << 1)
-#define XSTATE_YMM                      (1ULL << 2)
-#define XSTATE_BNDREGS                  (1ULL << 3)
-#define XSTATE_BNDCSR                   (1ULL << 4)
-#define XSTATE_OPMASK                   (1ULL << 5)
-#define XSTATE_ZMM_Hi256                (1ULL << 6)
-#define XSTATE_Hi16_ZMM                 (1ULL << 7)
-#define XSTATE_PKRU                     (1ULL << 9)
+#define XSTATE_FP_BIT                   0
+#define XSTATE_SSE_BIT                  1
+#define XSTATE_YMM_BIT                  2
+#define XSTATE_BNDREGS_BIT              3
+#define XSTATE_BNDCSR_BIT               4
+#define XSTATE_OPMASK_BIT               5
+#define XSTATE_ZMM_Hi256_BIT            6
+#define XSTATE_Hi16_ZMM_BIT             7
+#define XSTATE_PKRU_BIT                 9
 
+#define XSTATE_FP_MASK                  (1ULL << XSTATE_FP_BIT)
+#define XSTATE_SSE_MASK                 (1ULL << XSTATE_SSE_BIT)
+#define XSTATE_YMM_MASK                 (1ULL << XSTATE_YMM_BIT)
+#define XSTATE_BNDREGS_MASK             (1ULL << XSTATE_BNDREGS_BIT)
+#define XSTATE_BNDCSR_MASK              (1ULL << XSTATE_BNDCSR_BIT)
+#define XSTATE_OPMASK_MASK              (1ULL << XSTATE_OPMASK_BIT)
+#define XSTATE_ZMM_Hi256_MASK           (1ULL << XSTATE_ZMM_Hi256_BIT)
+#define XSTATE_Hi16_ZMM_MASK            (1ULL << XSTATE_Hi16_ZMM_BIT)
+#define XSTATE_PKRU_MASK                (1ULL << XSTATE_PKRU_BIT)
 
 /* CPUID feature words */
 typedef enum FeatureWord {

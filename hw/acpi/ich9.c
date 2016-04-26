@@ -25,6 +25,7 @@
  */
 #include "qemu/osdep.h"
 #include "hw/hw.h"
+#include "qapi/error.h"
 #include "qapi/visitor.h"
 #include "hw/i386/pc.h"
 #include "hw/pci/pci.h"
@@ -240,7 +241,7 @@ static void pm_powerdown_req(Notifier *n, void *opaque)
 }
 
 void ich9_pm_init(PCIDevice *lpc_pci, ICH9LPCPMRegs *pm,
-                  bool smm_enabled, bool enable_tco,
+                  bool smm_enabled,
                   qemu_irq sci_irq)
 {
     memory_region_init(&pm->io, OBJECT(lpc_pci), "ich9-pm", ICH9_PMIO_SIZE);
@@ -264,10 +265,8 @@ void ich9_pm_init(PCIDevice *lpc_pci, ICH9LPCPMRegs *pm,
 
     pm->smm_enabled = smm_enabled;
 
-    pm->enable_tco = enable_tco;
-    if (pm->enable_tco) {
-        acpi_pm_tco_init(&pm->tco_regs, &pm->io);
-    }
+    pm->enable_tco = true;
+    acpi_pm_tco_init(&pm->tco_regs, &pm->io);
 
     pm->irq = sci_irq;
     qemu_register_reset(pm_reset, pm);

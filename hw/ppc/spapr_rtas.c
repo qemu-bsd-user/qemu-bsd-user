@@ -39,6 +39,7 @@
 
 #include <libfdt.h>
 #include "hw/ppc/spapr_drc.h"
+#include "qemu/cutils.h"
 
 /* #define DEBUG_SPAPR */
 
@@ -113,6 +114,7 @@ static void rtas_power_off(PowerPCCPU *cpu, sPAPRMachineState *spapr,
         return;
     }
     qemu_system_shutdown_request();
+    cpu_stop_current();
     rtas_st(rets, 0, RTAS_OUT_SUCCESS);
 }
 
@@ -682,6 +684,9 @@ int spapr_rtas_device_tree_setup(void *fdt, hwaddr rtas_addr,
     int i;
     uint32_t lrdr_capacity[5];
     MachineState *machine = MACHINE(qdev_get_machine());
+    sPAPRMachineState *spapr = SPAPR_MACHINE(machine);
+    uint64_t max_hotplug_addr = spapr->hotplug_memory.base +
+                                memory_region_size(&spapr->hotplug_memory.mr);
 
     ret = fdt_add_mem_rsv(fdt, rtas_addr, rtas_size);
     if (ret < 0) {
@@ -731,8 +736,8 @@ int spapr_rtas_device_tree_setup(void *fdt, hwaddr rtas_addr,
 
     }
 
-    lrdr_capacity[0] = cpu_to_be32(((uint64_t)machine->maxram_size) >> 32);
-    lrdr_capacity[1] = cpu_to_be32(machine->maxram_size & 0xffffffff);
+    lrdr_capacity[0] = cpu_to_be32(max_hotplug_addr >> 32);
+    lrdr_capacity[1] = cpu_to_be32(max_hotplug_addr & 0xffffffff);
     lrdr_capacity[2] = 0;
     lrdr_capacity[3] = cpu_to_be32(SPAPR_MEMORY_BLOCK_SIZE);
     lrdr_capacity[4] = cpu_to_be32(max_cpus/smp_threads);

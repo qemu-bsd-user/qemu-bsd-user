@@ -19,6 +19,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "qemu-common.h"
 #include "hw/pci/pci_bridge.h"
 #include "hw/pci/pcie.h"
@@ -608,7 +609,7 @@ void pcie_add_capability(PCIDevice *dev,
 
     assert(offset >= PCI_CONFIG_SPACE_SIZE);
     assert(offset < offset + size);
-    assert(offset + size < PCIE_CONFIG_SPACE_SIZE);
+    assert(offset + size <= PCIE_CONFIG_SPACE_SIZE);
     assert(size >= 8);
     assert(pci_is_express(dev));
 

@@ -17,6 +17,7 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "cpu.h"
 #include "exec/helper-proto.h"
 #include "exec/cpu_ldst.h"
@@ -35,7 +36,7 @@ void cpu_sync_bndcs_hflags(CPUX86State *env)
     }
 
     if ((env->cr[4] & CR4_OSXSAVE_MASK)
-        && (env->xcr0 & XSTATE_BNDCSR)
+        && (env->xcr0 & XSTATE_BNDCSR_MASK)
         && (bndcsr & BNDCFG_ENABLE)) {
         hflags |= HF_MPX_EN_MASK;
     } else {

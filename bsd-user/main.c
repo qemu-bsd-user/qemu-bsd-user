@@ -23,6 +23,9 @@
 
 #include "qemu.h"
 #include "qemu-common.h"
+#include "qemu/path.h"
+#include "qemu/help_option.h"
+/* For tb_lock */
 #include "cpu.h"
 #include "tcg.h"
 #include "qemu/timer.h"

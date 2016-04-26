@@ -2,7 +2,7 @@
 # QAPI types generator
 #
 # Copyright IBM, Corp. 2011
-# Copyright (c) 2013-2015 Red Hat Inc.
+# Copyright (c) 2013-2016 Red Hat Inc.
 #
 # Authors:
 #  Anthony Liguori <aliguori@us.ibm.com>
@@ -12,6 +12,11 @@
 # See the COPYING file in the top-level directory.
 
 from qapi import *
+
+
+# variants must be emitted before their container; track what has already
+# been output
+objects_seen = set()
 
 
 def gen_fwd_object_or_array(name):
@@ -26,17 +31,14 @@ def gen_array(name, element_type):
     return mcgen('''
 
 struct %(c_name)s {
-    union {
-        %(c_type)s value;
-        uint64_t padding;
-    };
     %(c_name)s *next;
+    %(c_type)s value;
 };
 ''',
                  c_name=c_name(name), c_type=element_type.c_type())
 
 
-def gen_struct_fields(members):
+def gen_struct_members(members):
     ret = ''
     for memb in members:
         if memb.optional:
@@ -52,33 +54,46 @@ def gen_struct_fields(members):
 
 
 def gen_object(name, base, members, variants):
-    ret = mcgen('''
+    if name in objects_seen:
+        return ''
+    objects_seen.add(name)
+
+    ret = ''
+    if variants:
+        for v in variants.variants:
+            if isinstance(v.type, QAPISchemaObjectType):
+                ret += gen_object(v.type.name, v.type.base,
+                                  v.type.local_members, v.type.variants)
+
+    ret += mcgen('''
 
 struct %(c_name)s {
 ''',
-                c_name=c_name(name))
+                 c_name=c_name(name))
 
     if base:
-        ret += mcgen('''
+        if not base.is_implicit():
+            ret += mcgen('''
     /* Members inherited from %(c_name)s: */
 ''',
-                     c_name=base.c_name())
-        ret += gen_struct_fields(base.members)
-        ret += mcgen('''
+                         c_name=base.c_name())
+        ret += gen_struct_members(base.members)
+        if not base.is_implicit():
+            ret += mcgen('''
     /* Own members: */
 ''')
-    ret += gen_struct_fields(members)
+    ret += gen_struct_members(members)
 
     if variants:
         ret += gen_variants(variants)
 
-    # Make sure that all structs have at least one field; this avoids
+    # Make sure that all structs have at least one member; this avoids
     # potential issues with attempting to malloc space for zero-length
     # structs in C, and also incompatibility with C++ (where an empty
     # struct is size 1).
     if not (base and base.members) and not members and not variants:
         ret += mcgen('''
-    char qapi_dummy_field_for_empty_struct;
+    char qapi_dummy_for_empty_struct;
 ''')
 
     ret += mcgen('''
@@ -102,27 +117,16 @@ static inline %(base)s *qapi_%(c_name)s_base(const %(c_name)s *obj)
 
 
 def gen_variants(variants):
-    # FIXME: What purpose does data serve, besides preventing a union that
-    # has a branch named 'data'? We use it in qapi-visit.py to decide
-    # whether to bypass the switch statement if visiting the discriminator
-    # failed; but since we 0-initialize structs, and cannot tell what
-    # branch of the union is in use if the discriminator is invalid, there
-    # should not be any data leaks even without a data pointer.  Or, if
-    # 'data' is merely added to guarantee we don't have an empty union,
-    # shouldn't we enforce that at .json parse time?
     ret = mcgen('''
     union { /* union tag is @%(c_name)s */
-        void *data;
 ''',
                 c_name=c_name(variants.tag_member.name))
 
     for var in variants.variants:
-        # Ugly special case for simple union TODO get rid of it
-        typ = var.simple_union_type() or var.type
         ret += mcgen('''
         %(c_type)s %(c_name)s;
 ''',
-                     c_type=typ.c_type(),
+                     c_type=var.type.c_unboxed_type(),
                      c_name=c_name(var.name))
 
     ret += mcgen('''
@@ -171,6 +175,8 @@ class QAPISchemaGenTypeVisitor(QAPISchemaVisitor):
         self._btin = None
 
     def visit_begin(self, schema):
+        # gen_object() is recursive, ensure it doesn't visit the empty type
+        objects_seen.add(schema.the_empty_object_type.name)
         self.decl = ''
         self.defn = ''
         self._fwdecl = ''
@@ -186,11 +192,6 @@ class QAPISchemaGenTypeVisitor(QAPISchemaVisitor):
         self._btin += guardend('QAPI_TYPES_BUILTIN')
         self.decl = self._btin + self.decl
         self._btin = None
-
-    def visit_needed(self, entity):
-        # Visit everything except implicit objects
-        return not (entity.is_implicit() and
-                    isinstance(entity, QAPISchemaObjectType))
 
     def _gen_type_cleanup(self, name):
         self.decl += gen_type_cleanup_decl(name)
@@ -220,11 +221,18 @@ class QAPISchemaGenTypeVisitor(QAPISchemaVisitor):
             self._gen_type_cleanup(name)
 
     def visit_object_type(self, name, info, base, members, variants):
+        # Nothing to do for the special empty builtin
+        if name == 'q_empty':
+            return
         self._fwdecl += gen_fwd_object_or_array(name)
         self.decl += gen_object(name, base, members, variants)
-        if base:
+        if base and not base.is_implicit():
             self.decl += gen_upcast(name, base)
-        self._gen_type_cleanup(name)
+        # TODO Worth changing the visitor signature, so we could
+        # directly use rather than repeat type.is_implicit()?
+        if not name.startswith('q_'):
+            # implicit types won't be directly allocated/freed
+            self._gen_type_cleanup(name)
 
     def visit_alternate_type(self, name, info, variants):
         self._fwdecl += gen_fwd_object_or_array(name)
@@ -279,18 +287,12 @@ h_comment = '''
                             c_comment, h_comment)
 
 fdef.write(mcgen('''
+#include "qemu/osdep.h"
 #include "qapi/dealloc-visitor.h"
 #include "%(prefix)sqapi-types.h"
 #include "%(prefix)sqapi-visit.h"
 ''',
                  prefix=prefix))
-
-# To avoid circular headers, use only typedefs.h here, not qobject.h
-fdecl.write(mcgen('''
-#include <stdbool.h>
-#include <stdint.h>
-#include "qemu/typedefs.h"
-'''))
 
 schema = QAPISchema(input_file)
 gen = QAPISchemaGenTypeVisitor()

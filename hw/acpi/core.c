@@ -26,7 +26,6 @@
 #include "hw/nvram/fw_cfg.h"
 #include "qemu/config-file.h"
 #include "qapi/opts-visitor.h"
-#include "qapi/dealloc-visitor.h"
 #include "qapi-visit.h"
 #include "qapi-event.h"
 
@@ -68,7 +67,7 @@ static void acpi_register_config(void)
     qemu_add_opts(&qemu_acpi_opts);
 }
 
-machine_init(acpi_register_config);
+opts_init(acpi_register_config);
 
 static int acpi_checksum(const uint8_t *data, int len)
 {
@@ -297,15 +296,7 @@ void acpi_table_add(const QemuOpts *opts, Error **errp)
 out:
     g_free(blob);
     g_strfreev(pathnames);
-
-    if (hdrs != NULL) {
-        QapiDeallocVisitor *dv;
-
-        dv = qapi_dealloc_visitor_new();
-        visit_type_AcpiTableOptions(qapi_dealloc_get_visitor(dv), NULL, &hdrs,
-                                    NULL);
-        qapi_dealloc_visitor_cleanup(dv);
-    }
+    qapi_free_AcpiTableOptions(hdrs);
 
     error_propagate(errp, err);
 }
@@ -398,7 +389,7 @@ uint16_t acpi_pm1_evt_get_sts(ACPIREGS *ar)
        acpi_pm_tmr_update function uses ns for setting the timer. */
     int64_t d = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     if (d >= muldiv64(ar->tmr.overflow_time,
-                      get_ticks_per_sec(), PM_TIMER_FREQUENCY)) {
+                      NANOSECONDS_PER_SECOND, PM_TIMER_FREQUENCY)) {
         ar->pm1.evt.sts |= ACPI_BITMASK_TIMER_STATUS;
     }
     return ar->pm1.evt.sts;
@@ -492,7 +483,7 @@ void acpi_pm_tmr_update(ACPIREGS *ar, bool enable)
 
     /* schedule a timer interruption if needed */
     if (enable) {
-        expire_time = muldiv64(ar->tmr.overflow_time, get_ticks_per_sec(),
+        expire_time = muldiv64(ar->tmr.overflow_time, NANOSECONDS_PER_SECOND,
                                PM_TIMER_FREQUENCY);
         timer_mod(ar->tmr.timer, expire_time);
     } else {

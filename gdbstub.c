@@ -17,9 +17,10 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "qemu/osdep.h"
-#include "qemu-common.h"
-#ifdef CONFIG_USER_ONLY
+#include "qapi/error.h"
+#include "qemu/cutils.h"
 
+#ifdef CONFIG_USER_ONLY
 #include "qemu.h"
 #else
 #include "monitor/monitor.h"
@@ -1752,7 +1753,7 @@ int gdbserver_start(const char *device)
             sigaction(SIGINT, &act, NULL);
         }
 #endif
-        chr = qemu_chr_new("gdb", device, NULL);
+        chr = qemu_chr_new_noreplay("gdb", device, NULL);
         if (!chr)
             return -1;
 

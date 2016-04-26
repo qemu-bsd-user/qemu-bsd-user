@@ -1,7 +1,7 @@
 /*
  * QMP Input Visitor unit-tests.
  *
- * Copyright (C) 2011, 2015 Red Hat Inc.
+ * Copyright (C) 2011-2016 Red Hat Inc.
  *
  * Authors:
  *  Luiz Capitulino <lcapitulino@redhat.com>
@@ -10,10 +10,11 @@
  * See the COPYING file in the top-level directory.
  */
 
+#include "qemu/osdep.h"
 #include <glib.h>
-#include <stdarg.h>
 
 #include "qemu-common.h"
+#include "qapi/error.h"
 #include "qapi/qmp-input-visitor.h"
 #include "test-qapi-types.h"
 #include "test-qapi-visit.h"
@@ -295,7 +296,7 @@ static void test_visitor_in_union_flat(TestInputVisitorData *data,
     g_assert_cmpint(tmp->enum1, ==, ENUM_ONE_VALUE1);
     g_assert_cmpstr(tmp->string, ==, "str");
     g_assert_cmpint(tmp->integer, ==, 41);
-    g_assert_cmpint(tmp->u.value1->boolean, ==, true);
+    g_assert_cmpint(tmp->u.value1.boolean, ==, true);
 
     base = qapi_UserDefFlatUnion_base(tmp);
     g_assert(&base->enum1 == &tmp->enum1);
@@ -309,6 +310,7 @@ static void test_visitor_in_alternate(TestInputVisitorData *data,
     Visitor *v;
     Error *err = NULL;
     UserDefAlternate *tmp;
+    WrapAlternate *wrap;
 
     v = visitor_input_test_init(data, "42");
     visit_type_UserDefAlternate(v, NULL, &tmp, &error_abort);
@@ -322,10 +324,44 @@ static void test_visitor_in_alternate(TestInputVisitorData *data,
     g_assert_cmpstr(tmp->u.s, ==, "string");
     qapi_free_UserDefAlternate(tmp);
 
+    v = visitor_input_test_init(data, "{'integer':1, 'string':'str', "
+                                "'enum1':'value1', 'boolean':true}");
+    visit_type_UserDefAlternate(v, NULL, &tmp, &error_abort);
+    g_assert_cmpint(tmp->type, ==, QTYPE_QDICT);
+    g_assert_cmpint(tmp->u.udfu.integer, ==, 1);
+    g_assert_cmpstr(tmp->u.udfu.string, ==, "str");
+    g_assert_cmpint(tmp->u.udfu.enum1, ==, ENUM_ONE_VALUE1);
+    g_assert_cmpint(tmp->u.udfu.u.value1.boolean, ==, true);
+    g_assert_cmpint(tmp->u.udfu.u.value1.has_a_b, ==, false);
+    qapi_free_UserDefAlternate(tmp);
+
     v = visitor_input_test_init(data, "false");
     visit_type_UserDefAlternate(v, NULL, &tmp, &err);
     error_free_or_abort(&err);
     qapi_free_UserDefAlternate(tmp);
+
+    v = visitor_input_test_init(data, "{ 'alt': 42 }");
+    visit_type_WrapAlternate(v, NULL, &wrap, &error_abort);
+    g_assert_cmpint(wrap->alt->type, ==, QTYPE_QINT);
+    g_assert_cmpint(wrap->alt->u.i, ==, 42);
+    qapi_free_WrapAlternate(wrap);
+
+    v = visitor_input_test_init(data, "{ 'alt': 'string' }");
+    visit_type_WrapAlternate(v, NULL, &wrap, &error_abort);
+    g_assert_cmpint(wrap->alt->type, ==, QTYPE_QSTRING);
+    g_assert_cmpstr(wrap->alt->u.s, ==, "string");
+    qapi_free_WrapAlternate(wrap);
+
+    v = visitor_input_test_init(data, "{ 'alt': {'integer':1, 'string':'str', "
+                                "'enum1':'value1', 'boolean':true} }");
+    visit_type_WrapAlternate(v, NULL, &wrap, &error_abort);
+    g_assert_cmpint(wrap->alt->type, ==, QTYPE_QDICT);
+    g_assert_cmpint(wrap->alt->u.udfu.integer, ==, 1);
+    g_assert_cmpstr(wrap->alt->u.udfu.string, ==, "str");
+    g_assert_cmpint(wrap->alt->u.udfu.enum1, ==, ENUM_ONE_VALUE1);
+    g_assert_cmpint(wrap->alt->u.udfu.u.value1.boolean, ==, true);
+    g_assert_cmpint(wrap->alt->u.udfu.u.value1.has_a_b, ==, false);
+    qapi_free_WrapAlternate(wrap);
 }
 
 static void test_visitor_in_alternate_number(TestInputVisitorData *data,
@@ -442,63 +478,64 @@ static void test_native_list_integer_helper(TestInputVisitorData *data,
     switch (kind) {
     case USER_DEF_NATIVE_LIST_UNION_KIND_INTEGER: {
         intList *elem = NULL;
-        for (i = 0, elem = cvalue->u.integer; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.integer.data;
+             elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_S8: {
         int8List *elem = NULL;
-        for (i = 0, elem = cvalue->u.s8; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.s8.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_S16: {
         int16List *elem = NULL;
-        for (i = 0, elem = cvalue->u.s16; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.s16.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_S32: {
         int32List *elem = NULL;
-        for (i = 0, elem = cvalue->u.s32; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.s32.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_S64: {
         int64List *elem = NULL;
-        for (i = 0, elem = cvalue->u.s64; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.s64.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_U8: {
         uint8List *elem = NULL;
-        for (i = 0, elem = cvalue->u.u8; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.u8.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_U16: {
         uint16List *elem = NULL;
-        for (i = 0, elem = cvalue->u.u16; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.u16.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_U32: {
         uint32List *elem = NULL;
-        for (i = 0, elem = cvalue->u.u32; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.u32.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
     }
     case USER_DEF_NATIVE_LIST_UNION_KIND_U64: {
         uint64List *elem = NULL;
-        for (i = 0, elem = cvalue->u.u64; elem; elem = elem->next, i++) {
+        for (i = 0, elem = cvalue->u.u64.data; elem; elem = elem->next, i++) {
             g_assert_cmpint(elem->value, ==, i);
         }
         break;
@@ -600,7 +637,7 @@ static void test_visitor_in_native_list_bool(TestInputVisitorData *data,
     g_assert(cvalue != NULL);
     g_assert_cmpint(cvalue->type, ==, USER_DEF_NATIVE_LIST_UNION_KIND_BOOLEAN);
 
-    for (i = 0, elem = cvalue->u.boolean; elem; elem = elem->next, i++) {
+    for (i = 0, elem = cvalue->u.boolean.data; elem; elem = elem->next, i++) {
         g_assert_cmpint(elem->value, ==, (i % 3 == 0) ? 1 : 0);
     }
 
@@ -633,7 +670,7 @@ static void test_visitor_in_native_list_string(TestInputVisitorData *data,
     g_assert(cvalue != NULL);
     g_assert_cmpint(cvalue->type, ==, USER_DEF_NATIVE_LIST_UNION_KIND_STRING);
 
-    for (i = 0, elem = cvalue->u.string; elem; elem = elem->next, i++) {
+    for (i = 0, elem = cvalue->u.string.data; elem; elem = elem->next, i++) {
         gchar str[8];
         sprintf(str, "%d", i);
         g_assert_cmpstr(elem->value, ==, str);
@@ -670,7 +707,7 @@ static void test_visitor_in_native_list_number(TestInputVisitorData *data,
     g_assert(cvalue != NULL);
     g_assert_cmpint(cvalue->type, ==, USER_DEF_NATIVE_LIST_UNION_KIND_NUMBER);
 
-    for (i = 0, elem = cvalue->u.number; elem; elem = elem->next, i++) {
+    for (i = 0, elem = cvalue->u.number.data; elem; elem = elem->next, i++) {
         GString *double_expected = g_string_new("");
         GString *double_actual = g_string_new("");
 

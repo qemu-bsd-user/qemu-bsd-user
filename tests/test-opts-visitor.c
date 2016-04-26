@@ -10,13 +10,14 @@
  * See the COPYING file in the top-level directory.
  */
 
+#include "qemu/osdep.h"
 #include <glib.h>
 
 #include "qemu/config-file.h"     /* qemu_add_opts() */
 #include "qemu/option.h"          /* qemu_opts_parse() */
+#include "qapi/error.h"
 #include "qapi/opts-visitor.h"    /* opts_visitor_new() */
 #include "test-qapi-visit.h"      /* visit_type_UserDefOptions() */
-#include "qapi/dealloc-visitor.h" /* qapi_dealloc_visitor_new() */
 
 static QemuOptsList userdef_opts = {
     .name = "userdef",
@@ -54,14 +55,7 @@ setup_fixture(OptsVisitorFixture *f, gconstpointer test_data)
 static void
 teardown_fixture(OptsVisitorFixture *f, gconstpointer test_data)
 {
-    if (f->userdef != NULL) {
-        QapiDeallocVisitor *dv;
-
-        dv = qapi_dealloc_visitor_new();
-        visit_type_UserDefOptions(qapi_dealloc_get_visitor(dv), NULL,
-                                  &f->userdef, NULL);
-        qapi_dealloc_visitor_cleanup(dv);
-    }
+    qapi_free_UserDefOptions(f->userdef);
     error_free(f->err);
 }
 

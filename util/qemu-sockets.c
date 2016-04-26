@@ -18,15 +18,18 @@
 #include "qemu/osdep.h"
 
 #include "monitor/monitor.h"
+#include "qapi/error.h"
 #include "qemu/sockets.h"
 #include "qemu/main-loop.h"
 #include "qapi/qmp-input-visitor.h"
 #include "qapi/qmp-output-visitor.h"
 #include "qapi-visit.h"
+#include "qemu/cutils.h"
 
 #ifndef AI_ADDRCONFIG
 # define AI_ADDRCONFIG 0
 #endif
+
 #ifndef AI_V4MAPPED
 # define AI_V4MAPPED 0
 #endif
@@ -268,7 +271,7 @@ static void wait_for_connect(void *opaque)
 
     do {
         rc = qemu_getsockopt(s->fd, SOL_SOCKET, SO_ERROR, &val, &valsize);
-    } while (rc == -1 && socket_error() == EINTR);
+    } while (rc == -1 && errno == EINTR);
 
     /* update rc to contain error */
     if (!rc && val) {
@@ -330,7 +333,7 @@ static int inet_connect_addr(struct addrinfo *addr, bool *in_progress,
     do {
         rc = 0;
         if (connect(sock, addr->ai_addr, addr->ai_addrlen) < 0) {
-            rc = -socket_error();
+            rc = -errno;
         }
     } while (rc == -EINTR);
 
@@ -352,10 +355,14 @@ static struct addrinfo *inet_parse_connect_saddr(InetSocketAddress *saddr,
     struct addrinfo ai, *res;
     int rc;
     Error *err = NULL;
+    static int useV4Mapped = 1;
 
     memset(&ai, 0, sizeof(ai));
 
-    ai.ai_flags = AI_CANONNAME | AI_V4MAPPED | AI_ADDRCONFIG;
+    ai.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
+    if (atomic_read(&useV4Mapped)) {
+        ai.ai_flags |= AI_V4MAPPED;
+    }
     ai.ai_family = inet_ai_family_from_address(saddr, &err);
     ai.ai_socktype = SOCK_STREAM;
 
@@ -371,6 +378,18 @@ static struct addrinfo *inet_parse_connect_saddr(InetSocketAddress *saddr,
 
     /* lookup */
     rc = getaddrinfo(saddr->host, saddr->port, &ai, &res);
+
+    /* At least FreeBSD and OS-X 10.6 declare AI_V4MAPPED but
+     * then don't implement it in their getaddrinfo(). Detect
+     * this and retry without the flag since that's preferrable
+     * to a fatal error
+     */
+    if (rc == EAI_BADFLAGS &&
+        (ai.ai_flags & AI_V4MAPPED)) {
+        atomic_set(&useV4Mapped, 0);
+        ai.ai_flags &= ~AI_V4MAPPED;
+        rc = getaddrinfo(saddr->host, saddr->port, &ai, &res);
+    }
     if (rc != 0) {
         error_setg(errp, "address resolution failed for %s:%s: %s",
                    saddr->host, saddr->port, gai_strerror(rc));
@@ -787,7 +806,7 @@ static int unix_connect_saddr(UnixSocketAddress *saddr, Error **errp,
     do {
         rc = 0;
         if (connect(sock, (struct sockaddr *) &un, sizeof(un)) < 0) {
-            rc = -socket_error();
+            rc = -errno;
         }
     } while (rc == -EINTR);
 
@@ -901,8 +920,8 @@ SocketAddress *socket_parse(const char *str, Error **errp)
             goto fail;
         } else {
             addr->type = SOCKET_ADDRESS_KIND_UNIX;
-            addr->u.q_unix = g_new(UnixSocketAddress, 1);
-            addr->u.q_unix->path = g_strdup(str + 5);
+            addr->u.q_unix.data = g_new(UnixSocketAddress, 1);
+            addr->u.q_unix.data->path = g_strdup(str + 5);
         }
     } else if (strstart(str, "fd:", NULL)) {
         if (str[3] == '\0') {
@@ -910,13 +929,13 @@ SocketAddress *socket_parse(const char *str, Error **errp)
             goto fail;
         } else {
             addr->type = SOCKET_ADDRESS_KIND_FD;
-            addr->u.fd = g_new(String, 1);
-            addr->u.fd->str = g_strdup(str + 3);
+            addr->u.fd.data = g_new(String, 1);
+            addr->u.fd.data->str = g_strdup(str + 3);
         }
     } else {
         addr->type = SOCKET_ADDRESS_KIND_INET;
-        addr->u.inet = inet_parse(str, errp);
-        if (addr->u.inet == NULL) {
+        addr->u.inet.data = inet_parse(str, errp);
+        if (addr->u.inet.data == NULL) {
             goto fail;
         }
     }
@@ -934,15 +953,15 @@ int socket_connect(SocketAddress *addr, Error **errp,
 
     switch (addr->type) {
     case SOCKET_ADDRESS_KIND_INET:
-        fd = inet_connect_saddr(addr->u.inet, errp, callback, opaque);
+        fd = inet_connect_saddr(addr->u.inet.data, errp, callback, opaque);
         break;
 
     case SOCKET_ADDRESS_KIND_UNIX:
-        fd = unix_connect_saddr(addr->u.q_unix, errp, callback, opaque);
+        fd = unix_connect_saddr(addr->u.q_unix.data, errp, callback, opaque);
         break;
 
     case SOCKET_ADDRESS_KIND_FD:
-        fd = monitor_get_fd(cur_mon, addr->u.fd->str, errp);
+        fd = monitor_get_fd(cur_mon, addr->u.fd.data->str, errp);
         if (fd >= 0 && callback) {
             qemu_set_nonblock(fd);
             callback(fd, NULL, opaque);
@@ -961,15 +980,15 @@ int socket_listen(SocketAddress *addr, Error **errp)
 
     switch (addr->type) {
     case SOCKET_ADDRESS_KIND_INET:
-        fd = inet_listen_saddr(addr->u.inet, 0, false, errp);
+        fd = inet_listen_saddr(addr->u.inet.data, 0, false, errp);
         break;
 
     case SOCKET_ADDRESS_KIND_UNIX:
-        fd = unix_listen_saddr(addr->u.q_unix, false, errp);
+        fd = unix_listen_saddr(addr->u.q_unix.data, false, errp);
         break;
 
     case SOCKET_ADDRESS_KIND_FD:
-        fd = monitor_get_fd(cur_mon, addr->u.fd->str, errp);
+        fd = monitor_get_fd(cur_mon, addr->u.fd.data->str, errp);
         break;
 
     default:
@@ -984,7 +1003,8 @@ int socket_dgram(SocketAddress *remote, SocketAddress *local, Error **errp)
 
     switch (remote->type) {
     case SOCKET_ADDRESS_KIND_INET:
-        fd = inet_dgram_saddr(remote->u.inet, local ? local->u.inet : NULL, errp);
+        fd = inet_dgram_saddr(remote->u.inet.data,
+                              local ? local->u.inet.data : NULL, errp);
         break;
 
     default:
@@ -1003,6 +1023,7 @@ socket_sockaddr_to_address_inet(struct sockaddr_storage *sa,
     char host[NI_MAXHOST];
     char serv[NI_MAXSERV];
     SocketAddress *addr;
+    InetSocketAddress *inet;
     int ret;
 
     ret = getnameinfo((struct sockaddr *)sa, salen,
@@ -1017,13 +1038,13 @@ socket_sockaddr_to_address_inet(struct sockaddr_storage *sa,
 
     addr = g_new0(SocketAddress, 1);
     addr->type = SOCKET_ADDRESS_KIND_INET;
-    addr->u.inet = g_new0(InetSocketAddress, 1);
-    addr->u.inet->host = g_strdup(host);
-    addr->u.inet->port = g_strdup(serv);
+    inet = addr->u.inet.data = g_new0(InetSocketAddress, 1);
+    inet->host = g_strdup(host);
+    inet->port = g_strdup(serv);
     if (sa->ss_family == AF_INET) {
-        addr->u.inet->has_ipv4 = addr->u.inet->ipv4 = true;
+        inet->has_ipv4 = inet->ipv4 = true;
     } else {
-        addr->u.inet->has_ipv6 = addr->u.inet->ipv6 = true;
+        inet->has_ipv6 = inet->ipv6 = true;
     }
 
     return addr;
@@ -1041,10 +1062,10 @@ socket_sockaddr_to_address_unix(struct sockaddr_storage *sa,
 
     addr = g_new0(SocketAddress, 1);
     addr->type = SOCKET_ADDRESS_KIND_UNIX;
-    addr->u.q_unix = g_new0(UnixSocketAddress, 1);
+    addr->u.q_unix.data = g_new0(UnixSocketAddress, 1);
     if (su->sun_path[0]) {
-        addr->u.q_unix->path = g_strndup(su->sun_path,
-                                         sizeof(su->sun_path));
+        addr->u.q_unix.data->path = g_strndup(su->sun_path,
+                                              sizeof(su->sun_path));
     }
 
     return addr;
@@ -1081,7 +1102,7 @@ SocketAddress *socket_local_address(int fd, Error **errp)
     socklen_t sslen = sizeof(ss);
 
     if (getsockname(fd, (struct sockaddr *)&ss, &sslen) < 0) {
-        error_setg_errno(errp, socket_error(), "%s",
+        error_setg_errno(errp, errno, "%s",
                          "Unable to query local socket address");
         return NULL;
     }
@@ -1096,7 +1117,7 @@ SocketAddress *socket_remote_address(int fd, Error **errp)
     socklen_t sslen = sizeof(ss);
 
     if (getpeername(fd, (struct sockaddr *)&ss, &sslen) < 0) {
-        error_setg_errno(errp, socket_error(), "%s",
+        error_setg_errno(errp, errno, "%s",
                          "Unable to query remote socket address");
         return NULL;
     }

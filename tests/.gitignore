@@ -12,8 +12,12 @@ test-base64
 test-bitops
 test-blockjob-txn
 test-coroutine
+test-crypto-afsplit
+test-crypto-block
 test-crypto-cipher
 test-crypto-hash
+test-crypto-ivgen
+test-crypto-pbkdf
 test-crypto-secret
 test-crypto-tlscredsx509
 test-crypto-tlscredsx509-work/
@@ -22,6 +26,7 @@ test-crypto-tlssession
 test-crypto-tlssession-work/
 test-crypto-tlssession-client/
 test-crypto-tlssession-server/
+test-crypto-xts
 test-cutils
 test-hbitmap
 test-int128
@@ -34,6 +39,7 @@ test-io-channel-file.txt
 test-io-channel-socket
 test-io-channel-tls
 test-io-task
+test-logging
 test-mul64
 test-opts-visitor
 test-qapi-event.[ch]
@@ -63,5 +69,7 @@ test-write-threshold
 test-x86-cpuid
 test-xbzrle
 test-netfilter
+test-filter-mirror
+test-filter-redirector
 *-test
 qapi-schema/*.test.*

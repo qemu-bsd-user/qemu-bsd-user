@@ -16,6 +16,7 @@
 #include "qga-qmp-commands.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/base64.h"
+#include "qemu/cutils.h"
 
 /* Maximum captured guest-exec out_data/err_data - 16MB */
 #define GUEST_EXEC_MAX_OUTPUT (16*1024*1024)
@@ -372,6 +373,7 @@ static gboolean guest_exec_output_watch(GIOChannel *ch,
     return true;
 
 close:
+    g_io_channel_shutdown(ch, true, NULL);
     g_io_channel_unref(ch);
     g_atomic_int_set(&p->closed, 1);
     return false;
@@ -446,6 +448,7 @@ GuestExec *qmp_guest_exec(const char *path,
         g_io_channel_set_encoding(in_ch, NULL, NULL);
         g_io_channel_set_buffered(in_ch, false);
         g_io_channel_set_flags(in_ch, G_IO_FLAG_NONBLOCK, NULL);
+        g_io_channel_set_close_on_unref(in_ch, true);
         g_io_add_watch(in_ch, G_IO_OUT, guest_exec_input_watch, &gei->in);
     }
 
@@ -461,6 +464,8 @@ GuestExec *qmp_guest_exec(const char *path,
         g_io_channel_set_encoding(err_ch, NULL, NULL);
         g_io_channel_set_buffered(out_ch, false);
         g_io_channel_set_buffered(err_ch, false);
+        g_io_channel_set_close_on_unref(out_ch, true);
+        g_io_channel_set_close_on_unref(err_ch, true);
         g_io_add_watch(out_ch, G_IO_IN | G_IO_HUP,
                 guest_exec_output_watch, &gei->out);
         g_io_add_watch(err_ch, G_IO_IN | G_IO_HUP,
@@ -472,4 +477,25 @@ done:
     g_free(envp);
 
     return ge;
+}
+
+/* Convert GuestFileWhence (either a raw integer or an enum value) into
+ * the guest's SEEK_ constants.  */
+int ga_parse_whence(GuestFileWhence *whence, Error **errp)
+{
+    /* Exploit the fact that we picked values to match QGA_SEEK_*. */
+    if (whence->type == QTYPE_QSTRING) {
+        whence->type = QTYPE_QINT;
+        whence->u.value = whence->u.name;
+    }
+    switch (whence->u.value) {
+    case QGA_SEEK_SET:
+        return SEEK_SET;
+    case QGA_SEEK_CUR:
+        return SEEK_CUR;
+    case QGA_SEEK_END:
+        return SEEK_END;
+    }
+    error_setg(errp, "invalid whence code %"PRId64, whence->u.value);
+    return -1;
 }

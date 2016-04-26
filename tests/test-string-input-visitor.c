@@ -10,10 +10,11 @@
  * See the COPYING file in the top-level directory.
  */
 
+#include "qemu/osdep.h"
 #include <glib.h>
-#include <stdarg.h>
 
 #include "qemu-common.h"
+#include "qapi/error.h"
 #include "qapi/string-input-visitor.h"
 #include "test-qapi-types.h"
 #include "test-qapi-visit.h"

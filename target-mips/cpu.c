@@ -19,6 +19,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "cpu.h"
 #include "kvm_mips.h"
 #include "qemu-common.h"
@@ -74,6 +75,15 @@ static bool mips_cpu_has_work(CPUState *cs)
         }
 
         if (!mips_vpe_active(env)) {
+            has_work = false;
+        }
+    }
+    /* MIPS Release 6 has the ability to halt the CPU.  */
+    if (env->CP0_Config5 & (1 << CP0C5_VP)) {
+        if (cs->interrupt_request & CPU_INTERRUPT_WAKE) {
+            has_work = true;
+        }
+        if (!mips_vp_active(env)) {
             has_work = false;
         }
     }

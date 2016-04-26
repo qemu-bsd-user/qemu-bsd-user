@@ -18,6 +18,7 @@
 
 #include <sys/types.h>
 
+#include "qemu/osdep.h"
 #include "cpu.h"
 #include "qemu.h"
 

@@ -22,7 +22,6 @@
 #define QIO_CHANNEL_H__
 
 #include "qemu-common.h"
-#include "qapi/error.h"
 #include "qom/object.h"
 
 #define TYPE_QIO_CHANNEL "qio-channel"
@@ -79,6 +78,9 @@ typedef gboolean (*QIOChannelFunc)(QIOChannel *ioc,
 struct QIOChannel {
     Object parent;
     unsigned int features; /* bitmask of QIOChannelFeatures */
+#ifdef _WIN32
+    HANDLE event; /* For use with GSource on Win32 */
+#endif
 };
 
 /**

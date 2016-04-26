@@ -16,6 +16,9 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "hw/arm/xlnx-zynqmp.h"
 #include "hw/intc/arm_gic_common.h"
 #include "exec/address-spaces.h"
@@ -327,6 +330,8 @@ static void xlnx_zynqmp_realize(DeviceState *dev, Error **errp)
     sysbus_connect_irq(SYS_BUS_DEVICE(&s->sata), 0, gic_spi[SATA_INTR]);
 
     for (i = 0; i < XLNX_ZYNQMP_NUM_SDHCI; i++) {
+        char *bus_name;
+
         object_property_set_bool(OBJECT(&s->sdhci[i]), true,
                                  "realized", &err);
         if (err) {
@@ -337,6 +342,12 @@ static void xlnx_zynqmp_realize(DeviceState *dev, Error **errp)
                         sdhci_addr[i]);
         sysbus_connect_irq(SYS_BUS_DEVICE(&s->sdhci[i]), 0,
                            gic_spi[sdhci_intr[i]]);
+        /* Alias controller SD bus to the SoC itself */
+        bus_name = g_strdup_printf("sd-bus%d", i);
+        object_property_add_alias(OBJECT(s), bus_name,
+                                  OBJECT(&s->sdhci[i]), "sd-bus",
+                                  &error_abort);
+        g_free(bus_name);
     }
 
     for (i = 0; i < XLNX_ZYNQMP_NUM_SPIS; i++) {

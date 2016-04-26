@@ -13,11 +13,13 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "qemu/timer.h"
 #include "trace.h"
 #include "qed.h"
 #include "qapi/qmp/qerror.h"
 #include "migration/migration.h"
+#include "sysemu/block-backend.h"
 
 static const AIOCBInfo qed_aiocb_info = {
     .aiocb_size         = sizeof(QEDAIOCB),
@@ -345,7 +347,7 @@ static void qed_start_need_check_timer(BDRVQEDState *s)
      * migration.
      */
     timer_mod(s->need_check_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-                   get_ticks_per_sec() * QED_NEED_CHECK_TIMEOUT);
+                   NANOSECONDS_PER_SECOND * QED_NEED_CHECK_TIMEOUT);
 }
 
 /* It's okay to call this multiple times or when no timer is started */
@@ -376,18 +378,6 @@ static void bdrv_qed_attach_aio_context(BlockDriverState *bs,
     }
 }
 
-static void bdrv_qed_drain(BlockDriverState *bs)
-{
-    BDRVQEDState *s = bs->opaque;
-
-    /* Cancel timer and start doing I/O that were meant to happen as if it
-     * fired, that way we get bdrv_drain() taking care of the ongoing requests
-     * correctly. */
-    qed_cancel_need_check_timer(s);
-    qed_plug_allocating_write_reqs(s);
-    bdrv_aio_flush(s->bs, qed_clear_need_check, s);
-}
-
 static int bdrv_qed_open(BlockDriverState *bs, QDict *options, int flags,
                          Error **errp)
 {
@@ -411,11 +401,8 @@ static int bdrv_qed_open(BlockDriverState *bs, QDict *options, int flags,
     }
     if (s->header.features & ~QED_FEATURE_MASK) {
         /* image uses unsupported feature bits */
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%" PRIx64,
-            s->header.features & ~QED_FEATURE_MASK);
-        error_setg(errp, QERR_UNKNOWN_BLOCK_FORMAT_FEATURE,
-                   bdrv_get_device_or_node_name(bs), "QED", buf);
+        error_setg(errp, "Unsupported QED features: %" PRIx64,
+                   s->header.features & ~QED_FEATURE_MASK);
         return -ENOTSUP;
     }
     if (!qed_is_cluster_size_valid(s->header.cluster_size)) {
@@ -580,7 +567,7 @@ static int qed_create(const char *filename, uint32_t cluster_size,
     size_t l1_size = header.cluster_size * header.table_size;
     Error *local_err = NULL;
     int ret = 0;
-    BlockDriverState *bs;
+    BlockBackend *blk;
 
     ret = bdrv_create_file(filename, opts, &local_err);
     if (ret < 0) {
@@ -588,17 +575,17 @@ static int qed_create(const char *filename, uint32_t cluster_size,
         return ret;
     }
 
-    bs = NULL;
-    ret = bdrv_open(&bs, filename, NULL, NULL,
-                    BDRV_O_RDWR | BDRV_O_CACHE_WB | BDRV_O_PROTOCOL,
-                    &local_err);
-    if (ret < 0) {
+    blk = blk_new_open(filename, NULL, NULL,
+                       BDRV_O_RDWR | BDRV_O_PROTOCOL, &local_err);
+    if (blk == NULL) {
         error_propagate(errp, local_err);
-        return ret;
+        return -EIO;
     }
 
+    blk_set_allow_write_beyond_eof(blk, true);
+
     /* File must start empty and grow, check truncate is supported */
-    ret = bdrv_truncate(bs, 0);
+    ret = blk_truncate(blk, 0);
     if (ret < 0) {
         goto out;
     }
@@ -614,18 +601,18 @@ static int qed_create(const char *filename, uint32_t cluster_size,
     }
 
     qed_header_cpu_to_le(&header, &le_header);
-    ret = bdrv_pwrite(bs, 0, &le_header, sizeof(le_header));
+    ret = blk_pwrite(blk, 0, &le_header, sizeof(le_header));
     if (ret < 0) {
         goto out;
     }
-    ret = bdrv_pwrite(bs, sizeof(le_header), backing_file,
-                      header.backing_filename_size);
+    ret = blk_pwrite(blk, sizeof(le_header), backing_file,
+                     header.backing_filename_size);
     if (ret < 0) {
         goto out;
     }
 
     l1_table = g_malloc0(l1_size);
-    ret = bdrv_pwrite(bs, header.l1_table_offset, l1_table, l1_size);
+    ret = blk_pwrite(blk, header.l1_table_offset, l1_table, l1_size);
     if (ret < 0) {
         goto out;
     }
@@ -633,7 +620,7 @@ static int qed_create(const char *filename, uint32_t cluster_size,
     ret = 0; /* success */
 out:
     g_free(l1_table);
-    bdrv_unref(bs);
+    blk_unref(blk);
     return ret;
 }
 
@@ -1692,7 +1679,6 @@ static BlockDriver bdrv_qed = {
     .bdrv_check               = bdrv_qed_check,
     .bdrv_detach_aio_context  = bdrv_qed_detach_aio_context,
     .bdrv_attach_aio_context  = bdrv_qed_attach_aio_context,
-    .bdrv_drain               = bdrv_qed_drain,
 };
 
 static void bdrv_qed_init(void)

@@ -8,6 +8,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "hw/arm/arm.h"
 #include "hw/arm/linux-boot-if.h"
@@ -67,7 +68,7 @@ static const ARMInsnFixup bootloader_aarch64[] = {
  */
 
 static const ARMInsnFixup bootloader[] = {
-    { 0xe28fe008 }, /* add     lr, pc, #8 */
+    { 0xe28fe004 }, /* add     lr, pc, #4 */
     { 0xe51ff004 }, /* ldr     pc, [pc, #-4] */
     { 0, FIXUP_BOARD_SETUP },
 #define BOOTLOADER_NO_BOARD_SETUP_OFFSET 3
@@ -437,8 +438,10 @@ static int load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
         return 0;
     }
 
-    acells = qemu_fdt_getprop_cell(fdt, "/", "#address-cells");
-    scells = qemu_fdt_getprop_cell(fdt, "/", "#size-cells");
+    acells = qemu_fdt_getprop_cell(fdt, "/", "#address-cells",
+                                   NULL, &error_fatal);
+    scells = qemu_fdt_getprop_cell(fdt, "/", "#size-cells",
+                                   NULL, &error_fatal);
     if (acells == 0 || scells == 0) {
         fprintf(stderr, "dtb file invalid (#address-cells or #size-cells 0)\n");
         goto fail;
@@ -516,8 +519,33 @@ static void do_cpu_reset(void *opaque)
     cpu_reset(cs);
     if (info) {
         if (!info->is_linux) {
+            int i;
             /* Jump to the entry point.  */
             uint64_t entry = info->entry;
+
+            switch (info->endianness) {
+            case ARM_ENDIANNESS_LE:
+                env->cp15.sctlr_el[1] &= ~SCTLR_E0E;
+                for (i = 1; i < 4; ++i) {
+                    env->cp15.sctlr_el[i] &= ~SCTLR_EE;
+                }
+                env->uncached_cpsr &= ~CPSR_E;
+                break;
+            case ARM_ENDIANNESS_BE8:
+                env->cp15.sctlr_el[1] |= SCTLR_E0E;
+                for (i = 1; i < 4; ++i) {
+                    env->cp15.sctlr_el[i] |= SCTLR_EE;
+                }
+                env->uncached_cpsr |= CPSR_E;
+                break;
+            case ARM_ENDIANNESS_BE32:
+                env->cp15.sctlr_el[1] |= SCTLR_B;
+                break;
+            case ARM_ENDIANNESS_UNKNOWN:
+                break; /* Board's decision */
+            default:
+                g_assert_not_reached();
+            }
 
             if (!env->aarch64) {
                 env->thumb = info->entry & 1;
@@ -636,6 +664,62 @@ static int do_arm_linux_init(Object *obj, void *opaque)
     return 0;
 }
 
+static uint64_t arm_load_elf(struct arm_boot_info *info, uint64_t *pentry,
+                             uint64_t *lowaddr, uint64_t *highaddr,
+                             int elf_machine)
+{
+    bool elf_is64;
+    union {
+        Elf32_Ehdr h32;
+        Elf64_Ehdr h64;
+    } elf_header;
+    int data_swab = 0;
+    bool big_endian;
+    uint64_t ret = -1;
+    Error *err = NULL;
+
+
+    load_elf_hdr(info->kernel_filename, &elf_header, &elf_is64, &err);
+    if (err) {
+        return ret;
+    }
+
+    if (elf_is64) {
+        big_endian = elf_header.h64.e_ident[EI_DATA] == ELFDATA2MSB;
+        info->endianness = big_endian ? ARM_ENDIANNESS_BE8
+                                      : ARM_ENDIANNESS_LE;
+    } else {
+        big_endian = elf_header.h32.e_ident[EI_DATA] == ELFDATA2MSB;
+        if (big_endian) {
+            if (bswap32(elf_header.h32.e_flags) & EF_ARM_BE8) {
+                info->endianness = ARM_ENDIANNESS_BE8;
+            } else {
+                info->endianness = ARM_ENDIANNESS_BE32;
+                /* In BE32, the CPU has a different view of the per-byte
+                 * address map than the rest of the system. BE32 ELF files
+                 * are organised such that they can be programmed through
+                 * the CPU's per-word byte-reversed view of the world. QEMU
+                 * however loads ELF files independently of the CPU. So
+                 * tell the ELF loader to byte reverse the data for us.
+                 */
+                data_swab = 2;
+            }
+        } else {
+            info->endianness = ARM_ENDIANNESS_LE;
+        }
+    }
+
+    ret = load_elf(info->kernel_filename, NULL, NULL,
+                   pentry, lowaddr, highaddr, big_endian, elf_machine,
+                   1, data_swab);
+    if (ret <= 0) {
+        /* The header loaded but the image didn't */
+        exit(1);
+    }
+
+    return ret;
+}
+
 static void arm_load_kernel_notify(Notifier *notifier, void *data)
 {
     CPUState *cs;
@@ -645,7 +729,6 @@ static void arm_load_kernel_notify(Notifier *notifier, void *data)
     uint64_t elf_entry, elf_low_addr, elf_high_addr;
     int elf_machine;
     hwaddr entry, kernel_load_offset;
-    int big_endian;
     static const ARMInsnFixup *primary_loader;
     ArmLoadKernelNotifier *n = DO_UPCAST(ArmLoadKernelNotifier,
                                          notifier, notifier);
@@ -731,12 +814,6 @@ static void arm_load_kernel_notify(Notifier *notifier, void *data)
     if (info->nb_cpus == 0)
         info->nb_cpus = 1;
 
-#ifdef TARGET_WORDS_BIGENDIAN
-    big_endian = 1;
-#else
-    big_endian = 0;
-#endif
-
     /* We want to put the initrd far enough into RAM that when the
      * kernel is uncompressed it will not clobber the initrd. However
      * on boards without much RAM we must ensure that we still leave
@@ -751,9 +828,8 @@ static void arm_load_kernel_notify(Notifier *notifier, void *data)
         MIN(info->ram_size / 2, 128 * 1024 * 1024);
 
     /* Assume that raw images are linux kernels, and ELF images are not.  */
-    kernel_size = load_elf(info->kernel_filename, NULL, NULL, &elf_entry,
-                           &elf_low_addr, &elf_high_addr, big_endian,
-                           elf_machine, 1);
+    kernel_size = arm_load_elf(info, &elf_entry, &elf_low_addr,
+                               &elf_high_addr, elf_machine);
     if (kernel_size > 0 && have_dtb(info)) {
         /* If there is still some room left at the base of RAM, try and put
          * the DTB there like we do for images loaded with -bios or -pflash.

@@ -30,6 +30,7 @@
 #include "qemu/osdep.h"
 #include "hw/hw.h"
 #include "hw/block/fdc.h"
+#include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/timer.h"
 #include "hw/isa/isa.h"
@@ -1938,8 +1939,8 @@ static void fdctrl_handle_readid(FDCtrl *fdctrl, int direction)
     FDrive *cur_drv = get_cur_drv(fdctrl);
 
     cur_drv->head = (fdctrl->fifo[1] >> 2) & 1;
-    timer_mod(fdctrl->result_timer,
-                   qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + (get_ticks_per_sec() / 50));
+    timer_mod(fdctrl->result_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+             (NANOSECONDS_PER_SECOND / 50));
 }
 
 static void fdctrl_handle_format_track(FDCtrl *fdctrl, int direction)
@@ -2555,6 +2556,29 @@ FloppyDriveType isa_fdc_get_drive_type(ISADevice *fdc, int i)
     FDCtrlISABus *isa = ISA_FDC(fdc);
 
     return isa->state.drives[i].drive;
+}
+
+void isa_fdc_get_drive_max_chs(FloppyDriveType type,
+                               uint8_t *maxc, uint8_t *maxh, uint8_t *maxs)
+{
+    const FDFormat *fdf;
+
+    *maxc = *maxh = *maxs = 0;
+    for (fdf = fd_formats; fdf->drive != FLOPPY_DRIVE_TYPE_NONE; fdf++) {
+        if (fdf->drive != type) {
+            continue;
+        }
+        if (*maxc < fdf->max_track) {
+            *maxc = fdf->max_track;
+        }
+        if (*maxh < fdf->max_head) {
+            *maxh = fdf->max_head;
+        }
+        if (*maxs < fdf->last_sect) {
+            *maxs = fdf->last_sect;
+        }
+    }
+    (*maxc)--;
 }
 
 static const VMStateDescription vmstate_isa_fdc ={

@@ -11,6 +11,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "qemu-common.h"
 #include "qapi/string-input-visitor.h"
 #include "qapi/visitor-impl.h"
@@ -139,7 +140,7 @@ start_list(Visitor *v, const char *name, Error **errp)
     }
 }
 
-static GenericList *next_list(Visitor *v, GenericList **list)
+static GenericList *next_list(Visitor *v, GenericList **list, size_t size)
 {
     StringInputVisitor *siv = to_siv(v);
     GenericList **link;
@@ -173,7 +174,7 @@ static GenericList *next_list(Visitor *v, GenericList **list)
         link = &(*list)->next;
     }
 
-    *link = g_malloc0(sizeof **link);
+    *link = g_malloc0(size);
     return *link;
 }
 

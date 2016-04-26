@@ -31,7 +31,6 @@
 #include "include/exec/cpu-common.h" /* for RAM_ADDR_FMT */
 #include "qapi-visit.h"
 #include "qapi/opts-visitor.h"
-#include "qapi/dealloc-visitor.h"
 #include "hw/boards.h"
 #include "sysemu/hostmem.h"
 #include "qmp-commands.h"
@@ -229,7 +228,7 @@ static int parse_numa(void *opaque, QemuOpts *opts, Error **errp)
 
     switch (object->type) {
     case NUMA_OPTIONS_KIND_NODE:
-        numa_node_parse(object->u.node, opts, &err);
+        numa_node_parse(object->u.node.data, opts, &err);
         if (err) {
             goto error;
         }
@@ -243,13 +242,7 @@ static int parse_numa(void *opaque, QemuOpts *opts, Error **errp)
 
 error:
     error_report_err(err);
-
-    if (object) {
-        QapiDeallocVisitor *dv = qapi_dealloc_visitor_new();
-        visit_type_NumaOptions(qapi_dealloc_get_visitor(dv), NULL, &object,
-                               NULL);
-        qapi_dealloc_visitor_cleanup(dv);
-    }
+    qapi_free_NumaOptions(object);
 
     return -1;
 }
@@ -489,7 +482,7 @@ static void numa_stat_memory_devices(uint64_t node_mem[])
         if (value) {
             switch (value->type) {
             case MEMORY_DEVICE_INFO_KIND_DIMM:
-                node_mem[value->u.dimm->node] += value->u.dimm->size;
+                node_mem[value->u.dimm.data->node] += value->u.dimm.data->size;
                 break;
             default:
                 break;

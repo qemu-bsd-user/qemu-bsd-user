@@ -26,6 +26,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/hw.h"
 #include "ui/console.h"
 #include "hw/arm/omap.h"
@@ -252,4 +253,4 @@ static void sx1_machine_init(void)
     type_register_static(&sx1_machine_v2_type);
 }
 
-machine_init(sx1_machine_init)
+type_init(sx1_machine_init)

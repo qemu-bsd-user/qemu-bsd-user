@@ -757,6 +757,31 @@ static void console_clear_xy(QemuConsole *s, int x, int y)
     update_xy(s, x, y);
 }
 
+static void console_put_one(QemuConsole *s, int ch)
+{
+    TextCell *c;
+    int y1;
+    if (s->x >= s->width) {
+        /* line wrap */
+        s->x = 0;
+        console_put_lf(s);
+    }
+    y1 = (s->y_base + s->y) % s->total_height;
+    c = &s->cells[y1 * s->width + s->x];
+    c->ch = ch;
+    c->t_attrib = s->t_attrib;
+    update_xy(s, s->x, s->y);
+    s->x++;
+}
+
+static void console_respond_str(QemuConsole *s, const char *buf)
+{
+    while (*buf) {
+        console_put_one(s, *buf);
+        buf++;
+    }
+}
+
 /* set cursor, checking bounds */
 static void set_cursor(QemuConsole *s, int x, int y)
 {
@@ -779,9 +804,9 @@ static void set_cursor(QemuConsole *s, int x, int y)
 
 static void console_putchar(QemuConsole *s, int ch)
 {
-    TextCell *c;
-    int y1, i;
+    int i;
     int x, y;
+    char response[40];
 
     switch(s->state) {
     case TTY_STATE_NORM:
@@ -817,17 +842,7 @@ static void console_putchar(QemuConsole *s, int ch)
             s->state = TTY_STATE_ESC;
             break;
         default:
-            if (s->x >= s->width) {
-                /* line wrap */
-                s->x = 0;
-                console_put_lf(s);
-            }
-            y1 = (s->y_base + s->y) % s->total_height;
-            c = &s->cells[y1 * s->width + s->x];
-            c->ch = ch;
-            c->t_attrib = s->t_attrib;
-            update_xy(s, s->x, s->y);
-            s->x++;
+            console_put_one(s, ch);
             break;
         }
         break;
@@ -956,8 +971,19 @@ static void console_putchar(QemuConsole *s, int ch)
                 console_handle_escape(s);
                 break;
             case 'n':
-                /* report cursor position */
-                /* TODO: send ESC[row;colR */
+                switch (s->esc_params[0]) {
+                case 5:
+                    /* report console status (always succeed)*/
+                    console_respond_str(s, "\033[0n");
+                    break;
+                case 6:
+                    /* report cursor position */
+                    sprintf(response, "\033[%d;%dR",
+                           (s->y_base + s->y) % s->total_height + 1,
+                            s->x + 1);
+                    console_respond_str(s, response);
+                    break;
+                }
                 break;
             case 's':
                 /* save cursor position */
@@ -1262,6 +1288,17 @@ DisplaySurface *qemu_create_displaysurface_from(int width, int height,
                                               width, height,
                                               (void *)data, linesize);
     assert(surface->image != NULL);
+
+    return surface;
+}
+
+DisplaySurface *qemu_create_displaysurface_pixman(pixman_image_t *image)
+{
+    DisplaySurface *surface = g_new0(DisplaySurface, 1);
+
+    trace_displaysurface_create_pixman(surface);
+    surface->format = pixman_image_get_format(image);
+    surface->image = pixman_image_ref(image);
 
     return surface;
 }
@@ -1790,6 +1827,29 @@ QemuConsole *qemu_console_lookup_by_device(DeviceState *dev, uint32_t head)
     return NULL;
 }
 
+QemuConsole *qemu_console_lookup_by_device_name(const char *device_id,
+                                                uint32_t head, Error **errp)
+{
+    DeviceState *dev;
+    QemuConsole *con;
+
+    dev = qdev_find_recursive(sysbus_get_default(), device_id);
+    if (dev == NULL) {
+        error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,
+                  "Device '%s' not found", device_id);
+        return NULL;
+    }
+
+    con = qemu_console_lookup_by_device(dev, head);
+    if (con == NULL) {
+        error_setg(errp, "Device %s (head %d) is not bound to a QemuConsole",
+                   device_id, head);
+        return NULL;
+    }
+
+    return con;
+}
+
 bool qemu_console_is_visible(QemuConsole *con)
 {
     return (con == active_console) || (con->dcls > 0);
@@ -2020,7 +2080,7 @@ static VcHandler *vc_handler = text_console_init;
 static CharDriverState *vc_init(const char *id, ChardevBackend *backend,
                                 ChardevReturn *ret, Error **errp)
 {
-    return vc_handler(backend->u.vc, errp);
+    return vc_handler(backend->u.vc.data, errp);
 }
 
 void register_vc_handler(VcHandler *handler)
@@ -2060,31 +2120,33 @@ static void qemu_chr_parse_vc(QemuOpts *opts, ChardevBackend *backend,
                               Error **errp)
 {
     int val;
+    ChardevVC *vc;
 
-    backend->u.vc = g_new0(ChardevVC, 1);
+    vc = backend->u.vc.data = g_new0(ChardevVC, 1);
+    qemu_chr_parse_common(opts, qapi_ChardevVC_base(vc));
 
     val = qemu_opt_get_number(opts, "width", 0);
     if (val != 0) {
-        backend->u.vc->has_width = true;
-        backend->u.vc->width = val;
+        vc->has_width = true;
+        vc->width = val;
     }
 
     val = qemu_opt_get_number(opts, "height", 0);
     if (val != 0) {
-        backend->u.vc->has_height = true;
-        backend->u.vc->height = val;
+        vc->has_height = true;
+        vc->height = val;
     }
 
     val = qemu_opt_get_number(opts, "cols", 0);
     if (val != 0) {
-        backend->u.vc->has_cols = true;
-        backend->u.vc->cols = val;
+        vc->has_cols = true;
+        vc->cols = val;
     }
 
     val = qemu_opt_get_number(opts, "rows", 0);
     if (val != 0) {
-        backend->u.vc->has_rows = true;
-        backend->u.vc->rows = val;
+        vc->has_rows = true;
+        vc->rows = val;
     }
 }
 

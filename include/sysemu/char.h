@@ -41,6 +41,11 @@ typedef struct {
 #define CHR_IOCTL_PP_EPP_WRITE       11
 #define CHR_IOCTL_PP_DATA_DIR        12
 
+struct ParallelIOArg {
+    void *buffer;
+    int count;
+};
+
 #define CHR_IOCTL_SERIAL_SET_TIOCM   13
 #define CHR_IOCTL_SERIAL_GET_TIOCM   14
 
@@ -86,6 +91,7 @@ struct CharDriverState {
     int is_mux;
     guint fd_in_tag;
     QemuOpts *opts;
+    bool replay;
     QTAILQ_ENTRY(CharDriverState) next;
 };
 
@@ -115,6 +121,16 @@ CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
                                     Error **errp);
 
 /**
+ * @qemu_chr_parse_common:
+ *
+ * Parse the common options available to all character backends.
+ *
+ * @opts the options that still need parsing
+ * @backend a new backend
+ */
+void qemu_chr_parse_common(QemuOpts *opts, ChardevCommon *backend);
+
+/**
  * @qemu_chr_new:
  *
  * Create a new character backend from a URI.
@@ -127,6 +143,22 @@ CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
  */
 CharDriverState *qemu_chr_new(const char *label, const char *filename,
                               void (*init)(struct CharDriverState *s));
+
+/**
+ * @qemu_chr_new_noreplay:
+ *
+ * Create a new character backend from a URI.
+ * Character device communications are not written
+ * into the replay log.
+ *
+ * @label the name of the backend
+ * @filename the URI
+ * @init not sure..
+ *
+ * Returns: a new character backend
+ */
+CharDriverState *qemu_chr_new_noreplay(const char *label, const char *filename,
+                                       void (*init)(struct CharDriverState *s));
 
 /**
  * @qemu_chr_delete:
@@ -331,6 +363,15 @@ int qemu_chr_be_can_write(CharDriverState *s);
  */
 void qemu_chr_be_write(CharDriverState *s, uint8_t *buf, int len);
 
+/**
+ * @qemu_chr_be_write_impl:
+ *
+ * Implementation of back end writing. Used by replay module.
+ *
+ * @buf a buffer to receive data from the front end
+ * @len the number of bytes to receive from the front end
+ */
+void qemu_chr_be_write_impl(CharDriverState *s, uint8_t *buf, int len);
 
 /**
  * @qemu_chr_be_event:

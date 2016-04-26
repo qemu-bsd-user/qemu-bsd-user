@@ -25,6 +25,7 @@
 
 #include "qemu.h"
 #include "disas/disas.h"
+#include "qemu/path.h"
 
 static abi_ulong target_auxents;   /* Where the AUX entries are in target */
 static size_t target_auxents_sz;   /* Size of AUX entries including AT_NULL */

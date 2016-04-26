@@ -20,7 +20,7 @@
 #ifndef __ARCH_SYSARCH_H_
 #define __ARCH_SYSARCH_H_
 
-#include "syscall.h"
+#include "target_syscall.h"
 #include "target_arch.h"
 
 static inline abi_long do_freebsd_arch_sysarch(CPUARMState *env, int op,

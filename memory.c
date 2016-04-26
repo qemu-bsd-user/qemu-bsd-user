@@ -14,6 +14,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "exec/memory.h"
 #include "exec/address-spaces.h"
 #include "exec/ioport.h"
@@ -372,6 +373,28 @@ static void adjust_endianness(MemoryRegion *mr, uint64_t *data, unsigned size)
     }
 }
 
+static hwaddr memory_region_to_absolute_addr(MemoryRegion *mr, hwaddr offset)
+{
+    MemoryRegion *root;
+    hwaddr abs_addr = offset;
+
+    abs_addr += mr->addr;
+    for (root = mr; root->container; ) {
+        root = root->container;
+        abs_addr += root->addr;
+    }
+
+    return abs_addr;
+}
+
+static int get_cpu_index(void)
+{
+    if (current_cpu) {
+        return current_cpu->cpu_index;
+    }
+    return -1;
+}
+
 static MemTxResult memory_region_oldmmio_read_accessor(MemoryRegion *mr,
                                                        hwaddr addr,
                                                        uint64_t *value,
@@ -383,7 +406,17 @@ static MemTxResult memory_region_oldmmio_read_accessor(MemoryRegion *mr,
     uint64_t tmp;
 
     tmp = mr->ops->old_mmio.read[ctz32(size)](mr->opaque, addr);
-    trace_memory_region_ops_read(mr, addr, tmp, size);
+    if (mr->subpage) {
+        trace_memory_region_subpage_read(get_cpu_index(), mr, addr, tmp, size);
+    } else if (mr == &io_mem_notdirty) {
+        /* Accesses to code which has previously been translated into a TB show
+         * up in the MMIO path, as accesses to the io_mem_notdirty
+         * MemoryRegion. */
+        trace_memory_region_tb_read(get_cpu_index(), addr, tmp, size);
+    } else if (TRACE_MEMORY_REGION_OPS_READ_ENABLED) {
+        hwaddr abs_addr = memory_region_to_absolute_addr(mr, addr);
+        trace_memory_region_ops_read(get_cpu_index(), mr, abs_addr, tmp, size);
+    }
     *value |= (tmp & mask) << shift;
     return MEMTX_OK;
 }
@@ -399,7 +432,17 @@ static MemTxResult  memory_region_read_accessor(MemoryRegion *mr,
     uint64_t tmp;
 
     tmp = mr->ops->read(mr->opaque, addr, size);
-    trace_memory_region_ops_read(mr, addr, tmp, size);
+    if (mr->subpage) {
+        trace_memory_region_subpage_read(get_cpu_index(), mr, addr, tmp, size);
+    } else if (mr == &io_mem_notdirty) {
+        /* Accesses to code which has previously been translated into a TB show
+         * up in the MMIO path, as accesses to the io_mem_notdirty
+         * MemoryRegion. */
+        trace_memory_region_tb_read(get_cpu_index(), addr, tmp, size);
+    } else if (TRACE_MEMORY_REGION_OPS_READ_ENABLED) {
+        hwaddr abs_addr = memory_region_to_absolute_addr(mr, addr);
+        trace_memory_region_ops_read(get_cpu_index(), mr, abs_addr, tmp, size);
+    }
     *value |= (tmp & mask) << shift;
     return MEMTX_OK;
 }
@@ -416,7 +459,17 @@ static MemTxResult memory_region_read_with_attrs_accessor(MemoryRegion *mr,
     MemTxResult r;
 
     r = mr->ops->read_with_attrs(mr->opaque, addr, &tmp, size, attrs);
-    trace_memory_region_ops_read(mr, addr, tmp, size);
+    if (mr->subpage) {
+        trace_memory_region_subpage_read(get_cpu_index(), mr, addr, tmp, size);
+    } else if (mr == &io_mem_notdirty) {
+        /* Accesses to code which has previously been translated into a TB show
+         * up in the MMIO path, as accesses to the io_mem_notdirty
+         * MemoryRegion. */
+        trace_memory_region_tb_read(get_cpu_index(), addr, tmp, size);
+    } else if (TRACE_MEMORY_REGION_OPS_READ_ENABLED) {
+        hwaddr abs_addr = memory_region_to_absolute_addr(mr, addr);
+        trace_memory_region_ops_read(get_cpu_index(), mr, abs_addr, tmp, size);
+    }
     *value |= (tmp & mask) << shift;
     return r;
 }
@@ -432,7 +485,17 @@ static MemTxResult memory_region_oldmmio_write_accessor(MemoryRegion *mr,
     uint64_t tmp;
 
     tmp = (*value >> shift) & mask;
-    trace_memory_region_ops_write(mr, addr, tmp, size);
+    if (mr->subpage) {
+        trace_memory_region_subpage_write(get_cpu_index(), mr, addr, tmp, size);
+    } else if (mr == &io_mem_notdirty) {
+        /* Accesses to code which has previously been translated into a TB show
+         * up in the MMIO path, as accesses to the io_mem_notdirty
+         * MemoryRegion. */
+        trace_memory_region_tb_write(get_cpu_index(), addr, tmp, size);
+    } else if (TRACE_MEMORY_REGION_OPS_WRITE_ENABLED) {
+        hwaddr abs_addr = memory_region_to_absolute_addr(mr, addr);
+        trace_memory_region_ops_write(get_cpu_index(), mr, abs_addr, tmp, size);
+    }
     mr->ops->old_mmio.write[ctz32(size)](mr->opaque, addr, tmp);
     return MEMTX_OK;
 }
@@ -448,7 +511,17 @@ static MemTxResult memory_region_write_accessor(MemoryRegion *mr,
     uint64_t tmp;
 
     tmp = (*value >> shift) & mask;
-    trace_memory_region_ops_write(mr, addr, tmp, size);
+    if (mr->subpage) {
+        trace_memory_region_subpage_write(get_cpu_index(), mr, addr, tmp, size);
+    } else if (mr == &io_mem_notdirty) {
+        /* Accesses to code which has previously been translated into a TB show
+         * up in the MMIO path, as accesses to the io_mem_notdirty
+         * MemoryRegion. */
+        trace_memory_region_tb_write(get_cpu_index(), addr, tmp, size);
+    } else if (TRACE_MEMORY_REGION_OPS_WRITE_ENABLED) {
+        hwaddr abs_addr = memory_region_to_absolute_addr(mr, addr);
+        trace_memory_region_ops_write(get_cpu_index(), mr, abs_addr, tmp, size);
+    }
     mr->ops->write(mr->opaque, addr, tmp, size);
     return MEMTX_OK;
 }
@@ -464,7 +537,17 @@ static MemTxResult memory_region_write_with_attrs_accessor(MemoryRegion *mr,
     uint64_t tmp;
 
     tmp = (*value >> shift) & mask;
-    trace_memory_region_ops_write(mr, addr, tmp, size);
+    if (mr->subpage) {
+        trace_memory_region_subpage_write(get_cpu_index(), mr, addr, tmp, size);
+    } else if (mr == &io_mem_notdirty) {
+        /* Accesses to code which has previously been translated into a TB show
+         * up in the MMIO path, as accesses to the io_mem_notdirty
+         * MemoryRegion. */
+        trace_memory_region_tb_write(get_cpu_index(), addr, tmp, size);
+    } else if (TRACE_MEMORY_REGION_OPS_WRITE_ENABLED) {
+        hwaddr abs_addr = memory_region_to_absolute_addr(mr, addr);
+        trace_memory_region_ops_write(get_cpu_index(), mr, abs_addr, tmp, size);
+    }
     return mr->ops->write_with_attrs(mr->opaque, addr, tmp, size, attrs);
 }
 
@@ -858,12 +941,12 @@ static void memory_region_destructor_none(MemoryRegion *mr)
 
 static void memory_region_destructor_ram(MemoryRegion *mr)
 {
-    qemu_ram_free(mr->ram_addr);
+    qemu_ram_free(mr->ram_block);
 }
 
 static void memory_region_destructor_rom_device(MemoryRegion *mr)
 {
-    qemu_ram_free(mr->ram_addr & TARGET_PAGE_MASK);
+    qemu_ram_free(mr->ram_block);
 }
 
 static bool memory_region_need_escape(char c)
@@ -912,6 +995,7 @@ void memory_region_init(MemoryRegion *mr,
     }
     mr->name = g_strdup(name);
     mr->owner = owner;
+    mr->ram_block = NULL;
 
     if (name) {
         char *escaped_name = memory_region_escape_name(name);
@@ -993,7 +1077,6 @@ static void memory_region_initfn(Object *obj)
     ObjectProperty *op;
 
     mr->ops = &unassigned_mem_ops;
-    mr->ram_addr = RAM_ADDR_INVALID;
     mr->enabled = true;
     mr->romd_mode = true;
     mr->global_locking = true;
@@ -1229,7 +1312,7 @@ void memory_region_init_ram(MemoryRegion *mr,
     mr->ram = true;
     mr->terminates = true;
     mr->destructor = memory_region_destructor_ram;
-    mr->ram_addr = qemu_ram_alloc(size, mr, errp);
+    mr->ram_block = qemu_ram_alloc(size, mr, errp);
     mr->dirty_log_mask = tcg_enabled() ? (1 << DIRTY_MEMORY_CODE) : 0;
 }
 
@@ -1247,7 +1330,8 @@ void memory_region_init_resizeable_ram(MemoryRegion *mr,
     mr->ram = true;
     mr->terminates = true;
     mr->destructor = memory_region_destructor_ram;
-    mr->ram_addr = qemu_ram_alloc_resizeable(size, max_size, resized, mr, errp);
+    mr->ram_block = qemu_ram_alloc_resizeable(size, max_size, resized,
+                                              mr, errp);
     mr->dirty_log_mask = tcg_enabled() ? (1 << DIRTY_MEMORY_CODE) : 0;
 }
 
@@ -1264,7 +1348,7 @@ void memory_region_init_ram_from_file(MemoryRegion *mr,
     mr->ram = true;
     mr->terminates = true;
     mr->destructor = memory_region_destructor_ram;
-    mr->ram_addr = qemu_ram_alloc_from_file(size, mr, share, path, errp);
+    mr->ram_block = qemu_ram_alloc_from_file(size, mr, share, path, errp);
     mr->dirty_log_mask = tcg_enabled() ? (1 << DIRTY_MEMORY_CODE) : 0;
 }
 #endif
@@ -1283,7 +1367,7 @@ void memory_region_init_ram_ptr(MemoryRegion *mr,
 
     /* qemu_ram_alloc_from_ptr cannot fail with ptr != NULL.  */
     assert(ptr != NULL);
-    mr->ram_addr = qemu_ram_alloc_from_ptr(size, ptr, mr, &error_fatal);
+    mr->ram_block = qemu_ram_alloc_from_ptr(size, ptr, mr, &error_fatal);
 }
 
 void memory_region_set_skip_dump(MemoryRegion *mr)
@@ -1317,7 +1401,7 @@ void memory_region_init_rom_device(MemoryRegion *mr,
     mr->terminates = true;
     mr->rom_device = true;
     mr->destructor = memory_region_destructor_rom_device;
-    mr->ram_addr = qemu_ram_alloc(size, mr, errp);
+    mr->ram_block = qemu_ram_alloc(size, mr, errp);
 }
 
 void memory_region_init_iommu(MemoryRegion *mr,
@@ -1482,24 +1566,26 @@ void memory_region_set_log(MemoryRegion *mr, bool log, unsigned client)
 bool memory_region_get_dirty(MemoryRegion *mr, hwaddr addr,
                              hwaddr size, unsigned client)
 {
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
-    return cpu_physical_memory_get_dirty(mr->ram_addr + addr, size, client);
+    assert(mr->ram_block);
+    return cpu_physical_memory_get_dirty(memory_region_get_ram_addr(mr) + addr,
+                                         size, client);
 }
 
 void memory_region_set_dirty(MemoryRegion *mr, hwaddr addr,
                              hwaddr size)
 {
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
-    cpu_physical_memory_set_dirty_range(mr->ram_addr + addr, size,
+    assert(mr->ram_block);
+    cpu_physical_memory_set_dirty_range(memory_region_get_ram_addr(mr) + addr,
+                                        size,
                                         memory_region_get_dirty_log_mask(mr));
 }
 
 bool memory_region_test_and_clear_dirty(MemoryRegion *mr, hwaddr addr,
                                         hwaddr size, unsigned client)
 {
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
-    return cpu_physical_memory_test_and_clear_dirty(mr->ram_addr + addr,
-                                                    size, client);
+    assert(mr->ram_block);
+    return cpu_physical_memory_test_and_clear_dirty(
+                memory_region_get_ram_addr(mr) + addr, size, client);
 }
 
 
@@ -1542,9 +1628,9 @@ void memory_region_rom_device_set_romd(MemoryRegion *mr, bool romd_mode)
 void memory_region_reset_dirty(MemoryRegion *mr, hwaddr addr,
                                hwaddr size, unsigned client)
 {
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
-    cpu_physical_memory_test_and_clear_dirty(mr->ram_addr + addr, size,
-                                             client);
+    assert(mr->ram_block);
+    cpu_physical_memory_test_and_clear_dirty(
+        memory_region_get_ram_addr(mr) + addr, size, client);
 }
 
 int memory_region_get_fd(MemoryRegion *mr)
@@ -1553,9 +1639,9 @@ int memory_region_get_fd(MemoryRegion *mr)
         return memory_region_get_fd(mr->alias);
     }
 
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
+    assert(mr->ram_block);
 
-    return qemu_get_ram_fd(mr->ram_addr & TARGET_PAGE_MASK);
+    return qemu_get_ram_fd(memory_region_get_ram_addr(mr) & TARGET_PAGE_MASK);
 }
 
 void *memory_region_get_ram_ptr(MemoryRegion *mr)
@@ -1568,18 +1654,24 @@ void *memory_region_get_ram_ptr(MemoryRegion *mr)
         offset += mr->alias_offset;
         mr = mr->alias;
     }
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
-    ptr = qemu_get_ram_ptr(mr->ram_addr & TARGET_PAGE_MASK);
+    assert(mr->ram_block);
+    ptr = qemu_get_ram_ptr(mr->ram_block,
+                           memory_region_get_ram_addr(mr) & TARGET_PAGE_MASK);
     rcu_read_unlock();
 
     return ptr + offset;
 }
 
+ram_addr_t memory_region_get_ram_addr(MemoryRegion *mr)
+{
+    return mr->ram_block ? mr->ram_block->offset : RAM_ADDR_INVALID;
+}
+
 void memory_region_ram_resize(MemoryRegion *mr, ram_addr_t newsize, Error **errp)
 {
-    assert(mr->ram_addr != RAM_ADDR_INVALID);
+    assert(mr->ram_block);
 
-    qemu_ram_resize(mr->ram_addr, newsize, errp);
+    qemu_ram_resize(memory_region_get_ram_addr(mr), newsize, errp);
 }
 
 static void memory_region_update_coalesced_range_as(MemoryRegion *mr, AddressSpace *as)

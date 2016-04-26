@@ -19,7 +19,8 @@
  */
 
 #include "qemu/osdep.h"
-#include "qemu-common.h"
+#include "qapi/error.h"
+#include "qemu/cutils.h"
 #include "sysemu/sysemu.h"
 #include "hw/arm/omap.h"
 #include "hw/arm/arm.h"
@@ -1450,4 +1451,4 @@ static void nseries_machine_init(void)
     type_register_static(&n810_type);
 }
 
-machine_init(nseries_machine_init)
+type_init(nseries_machine_init)

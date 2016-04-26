@@ -49,7 +49,7 @@
 /* Code translation helpers                                                  */
 
 /* global register indexes */
-static TCGv_ptr cpu_env;
+static TCGv_env cpu_env;
 static char cpu_reg_names[10*3 + 22*4 /* GPR */
     + 10*4 + 22*5 /* SPE GPRh */
     + 10*4 + 22*5 /* FPR */
@@ -3227,10 +3227,8 @@ static void gen_lswi(DisasContext *ctx)
 
     if (nb == 0)
         nb = 32;
-    nr = nb / 4;
-    if (unlikely(((start + nr) > 32  &&
-                  start <= ra && (start + nr - 32) > ra) ||
-                 ((start + nr) <= 32 && start <= ra && (start + nr) > ra))) {
+    nr = (nb + 3) / 4;
+    if (unlikely(lsw_reg_in_range(start, nr, ra))) {
         gen_inval_exception(ctx, POWERPC_EXCP_INVAL_LSWX);
         return;
     }
@@ -4282,14 +4280,17 @@ static inline void gen_op_mfspr(DisasContext *ctx)
     void (*read_cb)(DisasContext *ctx, int gprn, int sprn);
     uint32_t sprn = SPR(ctx->opcode);
 
-#if !defined(CONFIG_USER_ONLY)
-    if (ctx->hv)
-        read_cb = ctx->spr_cb[sprn].hea_read;
-    else if (!ctx->pr)
-        read_cb = ctx->spr_cb[sprn].oea_read;
-    else
-#endif
+#if defined(CONFIG_USER_ONLY)
+    read_cb = ctx->spr_cb[sprn].uea_read;
+#else
+    if (ctx->pr) {
         read_cb = ctx->spr_cb[sprn].uea_read;
+    } else if (ctx->hv) {
+        read_cb = ctx->spr_cb[sprn].hea_read;
+    } else {
+        read_cb = ctx->spr_cb[sprn].oea_read;
+    }
+#endif
     if (likely(read_cb != NULL)) {
         if (likely(read_cb != SPR_NOACCESS)) {
             (*read_cb)(ctx, rD(ctx->opcode), sprn);
@@ -4437,14 +4438,17 @@ static void gen_mtspr(DisasContext *ctx)
     void (*write_cb)(DisasContext *ctx, int sprn, int gprn);
     uint32_t sprn = SPR(ctx->opcode);
 
-#if !defined(CONFIG_USER_ONLY)
-    if (ctx->hv)
-        write_cb = ctx->spr_cb[sprn].hea_write;
-    else if (!ctx->pr)
-        write_cb = ctx->spr_cb[sprn].oea_write;
-    else
-#endif
+#if defined(CONFIG_USER_ONLY)
+    write_cb = ctx->spr_cb[sprn].uea_write;
+#else
+    if (ctx->pr) {
         write_cb = ctx->spr_cb[sprn].uea_write;
+    } else if (ctx->hv) {
+        write_cb = ctx->spr_cb[sprn].hea_write;
+    } else {
+        write_cb = ctx->spr_cb[sprn].oea_write;
+    }
+#endif
     if (likely(write_cb != NULL)) {
         if (likely(write_cb != SPR_NOACCESS)) {
             (*write_cb)(ctx, sprn, rS(ctx->opcode));
@@ -11352,7 +11356,9 @@ void ppc_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
     case POWERPC_MMU_64B:
     case POWERPC_MMU_2_03:
     case POWERPC_MMU_2_06:
+    case POWERPC_MMU_2_06a:
     case POWERPC_MMU_2_07:
+    case POWERPC_MMU_2_07a:
 #endif
         cpu_fprintf(f, " SDR1 " TARGET_FMT_lx "   DAR " TARGET_FMT_lx
                        "  DSISR " TARGET_FMT_lx "\n", env->spr[SPR_SDR1],

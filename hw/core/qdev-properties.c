@@ -1,6 +1,8 @@
 #include "qemu/osdep.h"
 #include "net/net.h"
 #include "hw/qdev.h"
+#include "qapi/error.h"
+#include "hw/pci/pci.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/error-report.h"
 #include "sysemu/block-backend.h"
@@ -514,6 +516,16 @@ PropertyInfo qdev_prop_macaddr = {
     .description = "Ethernet 6-byte MAC Address, example: 52:54:00:12:34:56",
     .get   = get_mac,
     .set   = set_mac,
+};
+
+/* --- on/off/auto --- */
+
+PropertyInfo qdev_prop_on_off_auto = {
+    .name = "OnOffAuto",
+    .description = "on/off/auto",
+    .enum_table = OnOffAuto_lookup,
+    .get = get_enum,
+    .set = set_enum,
 };
 
 /* --- lost tick policy --- */

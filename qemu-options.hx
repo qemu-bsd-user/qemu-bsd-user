@@ -43,7 +43,8 @@ DEF("machine", HAS_ARG, QEMU_OPTION_machine, \
     "                aes-key-wrap=on|off controls support for AES key wrapping (default=on)\n"
     "                dea-key-wrap=on|off controls support for DEA key wrapping (default=on)\n"
     "                suppress-vmdesc=on|off disables self-describing migration (default=off)\n"
-    "                nvdimm=on|off controls NVDIMM support (default=off)\n",
+    "                nvdimm=on|off controls NVDIMM support (default=off)\n"
+    "                enforce-config-section=on|off enforce configuration section migration (default=off)\n",
     QEMU_ARCH_ALL)
 STEXI
 @item -machine [type=]@var{name}[,prop=@var{value}[,...]]
@@ -1051,6 +1052,7 @@ DEF("spice", HAS_ARG, QEMU_OPTION_spice,
     "       [,streaming-video=[off|all|filter]][,disable-copy-paste]\n"
     "       [,disable-agent-file-xfer][,agent-mouse=[on|off]]\n"
     "       [,playback-compression=[on|off]][,seamless-migration=[on|off]]\n"
+    "       [,gl=[on|off]]\n"
     "   enable spice\n"
     "   at least one of {port, tls-port} is mandatory\n",
     QEMU_ARCH_ALL)
@@ -1141,6 +1143,9 @@ Enable/disable audio stream compression (using celt 0.5.1).  Default is on.
 
 @item seamless-migration=[on|off]
 Enable/disable spice seamless migration. Default is off.
+
+@item gl=[on|off]
+Enable/disable OpenGL context. Default is off.
 
 @end table
 ETEXI
@@ -1546,8 +1551,10 @@ DEF("smb", HAS_ARG, QEMU_OPTION_smb, "", QEMU_ARCH_ALL)
 
 DEF("netdev", HAS_ARG, QEMU_OPTION_netdev,
 #ifdef CONFIG_SLIRP
-    "-netdev user,id=str[,net=addr[/mask]][,host=addr][,restrict=on|off]\n"
-    "         [,hostname=host][,dhcpstart=addr][,dns=addr][,dnssearch=domain][,tftp=dir]\n"
+    "-netdev user,id=str[,ipv4[=on|off]][,net=addr[/mask]][,host=addr]\n"
+    "         [,ipv6[=on|off]][,ipv6-net=addr[/int]][,ipv6-host=addr]\n"
+    "         [,restrict=on|off][,hostname=host][,dhcpstart=addr]\n"
+    "         [,dns=addr][,ipv6-dns=addr][,dnssearch=domain][,tftp=dir]\n"
     "         [,bootfile=f][,hostfwd=rule][,guestfwd=rule]"
 #ifndef _WIN32
                                              "[,smb=dir[,smbserver=addr]]\n"
@@ -1695,6 +1702,9 @@ Connect user mode stack to VLAN @var{n} (@var{n} = 0 is the default).
 @itemx name=@var{name}
 Assign symbolic name for use in monitor commands.
 
+@option{ipv4} and @option{ipv6} specify that either IPv4 or IPv6 must
+be enabled.  If neither is specified both protocols are enabled.
+
 @item net=@var{addr}[/@var{mask}]
 Set IP network address the guest will see. Optionally specify the netmask,
 either in the form a.b.c.d or as number of valid top-most bits. Default is
@@ -1703,6 +1713,16 @@ either in the form a.b.c.d or as number of valid top-most bits. Default is
 @item host=@var{addr}
 Specify the guest-visible address of the host. Default is the 2nd IP in the
 guest network, i.e. x.x.x.2.
+
+@item ipv6-net=@var{addr}[/@var{int}]
+Set IPv6 network address the guest will see (default is fec0::/64). The
+network prefix is given in the usual hexadecimal IPv6 address
+notation. The prefix size is optional, and is given as the number of
+valid top-most bits (default is 64).
+
+@item ipv6-host=@var{addr}
+Specify the guest-visible IPv6 address of the host. Default is the 2nd IPv6 in
+the guest network, i.e. xxxx::2.
 
 @item restrict=on|off
 If this option is enabled, the guest will be isolated, i.e. it will not be
@@ -1720,6 +1740,11 @@ is the 15th to 31st IP in the guest network, i.e. x.x.x.15 to x.x.x.31.
 Specify the guest-visible address of the virtual nameserver. The address must
 be different from the host address. Default is the 3rd IP in the guest network,
 i.e. x.x.x.3.
+
+@item ipv6-dns=@var{addr}
+Specify the guest-visible address of the IPv6 virtual nameserver. The address
+must be different from the host address. Default is the 3rd IP in the guest
+network, i.e. xxxx::3.
 
 @item dnssearch=@var{domain}
 Provides an entry for the domain-search list sent by the built-in
@@ -2162,8 +2187,49 @@ All devices must have an id, which can be any string up to 127 characters long.
 It is used to uniquely identify this device in other command line directives.
 
 A character device may be used in multiplexing mode by multiple front-ends.
-The key sequence of @key{Control-a} and @key{c} will rotate the input focus
-between attached front-ends. Specify @option{mux=on} to enable this mode.
+Specify @option{mux=on} to enable this mode.
+A multiplexer is a "1:N" device, and here the "1" end is your specified chardev
+backend, and the "N" end is the various parts of QEMU that can talk to a chardev.
+If you create a chardev with @option{id=myid} and @option{mux=on}, QEMU will
+create a multiplexer with your specified ID, and you can then configure multiple
+front ends to use that chardev ID for their input/output. Up to four different
+front ends can be connected to a single multiplexed chardev. (Without
+multiplexing enabled, a chardev can only be used by a single front end.)
+For instance you could use this to allow a single stdio chardev to be used by
+two serial ports and the QEMU monitor:
+
+@example
+-chardev stdio,mux=on,id=char0 \
+-mon chardev=char0,mode=readline,default \
+-serial chardev:char0 \
+-serial chardev:char0
+@end example
+
+You can have more than one multiplexer in a system configuration; for instance
+you could have a TCP port multiplexed between UART 0 and UART 1, and stdio
+multiplexed between the QEMU monitor and a parallel port:
+
+@example
+-chardev stdio,mux=on,id=char0 \
+-mon chardev=char0,mode=readline,default \
+-parallel chardev:char0 \
+-chardev tcp,...,mux=on,id=char1 \
+-serial chardev:char1 \
+-serial chardev:char1
+@end example
+
+When you're using a multiplexed character device, some escape sequences are
+interpreted in the input. @xref{mux_keys, Keys in the character backend
+multiplexer}.
+
+Note that some other command line options may implicitly create multiplexed
+character backends; for instance @option{-serial mon:stdio} creates a
+multiplexed stdio backend connected to the serial port and the QEMU monitor,
+and @option{-nographic} also multiplexes the console and the monitor to
+stdio.
+
+There is currently no support for multiplexing in the other direction
+(where a single QEMU front end takes input and output from multiple chardevs).
 
 Every backend supports the @option{logfile} option, which supplies the path
 to a file to record all data transmitted via the backend. The @option{logappend}
@@ -2798,18 +2864,32 @@ ETEXI
 
 DEF("fw_cfg", HAS_ARG, QEMU_OPTION_fwcfg,
     "-fw_cfg [name=]<name>,file=<file>\n"
-    "                add named fw_cfg entry from file\n"
+    "                add named fw_cfg entry with contents from file\n"
     "-fw_cfg [name=]<name>,string=<str>\n"
-    "                add named fw_cfg entry from string\n",
+    "                add named fw_cfg entry with contents from string\n",
     QEMU_ARCH_ALL)
 STEXI
+
 @item -fw_cfg [name=]@var{name},file=@var{file}
 @findex -fw_cfg
-Add named fw_cfg entry from file. @var{name} determines the name of
-the entry in the fw_cfg file directory exposed to the guest.
+Add named fw_cfg entry with contents from file @var{file}.
 
 @item -fw_cfg [name=]@var{name},string=@var{str}
-Add named fw_cfg entry from string.
+Add named fw_cfg entry with contents from string @var{str}.
+
+The terminating NUL character of the contents of @var{str} will not be
+included as part of the fw_cfg item data. To insert contents with
+embedded NUL characters, you have to use the @var{file} parameter.
+
+The fw_cfg entries are passed by QEMU through to the guest.
+
+Example:
+@example
+    -fw_cfg name=opt/com.mycompany/blob,file=./my_blob.bin
+@end example
+creates an fw_cfg entry named opt/com.mycompany/blob with contents
+from ./my_blob.bin.
+
 ETEXI
 
 DEF("serial", HAS_ARG, QEMU_OPTION_serial, \
@@ -3094,6 +3174,24 @@ STEXI
 Output log in @var{logfile} instead of to stderr
 ETEXI
 
+DEF("dfilter", HAS_ARG, QEMU_OPTION_DFILTER, \
+    "-dfilter range,..  filter debug output to range of addresses (useful for -d cpu,exec,etc..)\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -dfilter @var{range1}[,...]
+@findex -dfilter
+Filter debug output to that relevant to a range of target addresses. The filter
+spec can be either @var{start}+@var{size}, @var{start}-@var{size} or
+@var{start}..@var{end} where @var{start} @var{end} and @var{size} are the
+addresses and sizes required. For example:
+@example
+    -dfilter 0x8000..0x8fff,0xffffffc000080000+0x200,0xffffffc000060000-0x1000
+@end example
+Will dump output for any code in the 0x1000 sized block starting at 0x8000 and
+the 0x200 sized block starting at 0xffffffc000080000 and another 0x1000 sized
+block starting at 0xffffffc00005f000.
+ETEXI
+
 DEF("L", HAS_ARG, QEMU_OPTION_L, \
     "-L path         set the directory for the BIOS, VGA BIOS and keymaps\n",
     QEMU_ARCH_ALL)
@@ -3230,7 +3328,7 @@ re-inject them.
 ETEXI
 
 DEF("icount", HAS_ARG, QEMU_OPTION_icount, \
-    "-icount [shift=N|auto][,align=on|off][,sleep=no,rr=record|replay,rrfile=<filename>]\n" \
+    "-icount [shift=N|auto][,align=on|off][,sleep=on|off,rr=record|replay,rrfile=<filename>]\n" \
     "                enable virtual instruction counter with 2^N clock ticks per\n" \
     "                instruction, enable aligning the host and virtual clocks\n" \
     "                or disable real time cpu sleeping\n", QEMU_ARCH_ALL)
@@ -3243,8 +3341,8 @@ then the virtual cpu speed will be automatically adjusted to keep virtual
 time within a few seconds of real time.
 
 When the virtual cpu is sleeping, the virtual time will advance at default
-speed unless @option{sleep=no} is specified.
-With @option{sleep=no}, the virtual time will jump to the next timer deadline
+speed unless @option{sleep=on|off} is specified.
+With @option{sleep=on|off}, the virtual time will jump to the next timer deadline
 instantly whenever the virtual cpu goes to sleep mode and will not advance
 if no timer is enabled. This behavior give deterministic execution times from
 the guest point of view.
@@ -3742,11 +3840,13 @@ version by providing the @var{passwordid} parameter. This provides
 the ID of a previously created @code{secret} object containing the
 password for decryption.
 
-@item -object filter-buffer,id=@var{id},netdev=@var{netdevid},interval=@var{t}[,queue=@var{all|rx|tx}]
+@item -object filter-buffer,id=@var{id},netdev=@var{netdevid},interval=@var{t}[,queue=@var{all|rx|tx}][,status=@var{on|off}]
 
 Interval @var{t} can't be 0, this filter batches the packet delivery: all
 packets arriving in a given interval on netdev @var{netdevid} are delayed
 until the end of the interval. Interval is in microseconds.
+@option{status} is optional that indicate whether the netfilter is
+on (enabled) or off (disabled), the default status for netfilter will be 'on'.
 
 queue @var{all|rx|tx} is an option that can be applied to any netfilter.
 
@@ -3758,6 +3858,20 @@ queue @var{all|rx|tx} is an option that can be applied to any netfilter.
 
 @option{tx}: the filter is attached to the transmit queue of the netdev,
              where it will receive packets sent by the netdev.
+
+@item -object filter-mirror,id=@var{id},netdev=@var{netdevid},outdev=@var{chardevid}[,queue=@var{all|rx|tx}]
+
+filter-mirror on netdev @var{netdevid},mirror net packet to chardev
+@var{chardevid}
+
+@item -object filter-redirector,id=@var{id},netdev=@var{netdevid},indev=@var{chardevid},
+outdev=@var{chardevid}[,queue=@var{all|rx|tx}]
+
+filter-redirector on netdev @var{netdevid},redirect filter's net packet to chardev
+@var{chardevid},and redirect indev's packet to filter.
+Create a filter-redirector we need to differ outdev id from indev id, id can not
+be the same. we can just use indev or outdev, but at least one of indev or outdev
+need to be specified.
 
 @item -object filter-dump,id=@var{id},netdev=@var{dev},file=@var{filename}][,maxlen=@var{len}]
 
@@ -3788,7 +3902,7 @@ parameter provides the ID of a previously defined secret that contains
 the AES-256 decryption key. This key should be 32-bytes long and be
 base64 encoded. The @var{iv} parameter provides the random initialization
 vector used for encryption of this particular secret and should be a
-base64 encrypted string of the 32-byte IV.
+base64 encrypted string of the 16-byte IV.
 
 The simplest (insecure) usage is to provide the secret inline
 

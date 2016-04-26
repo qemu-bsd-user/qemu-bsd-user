@@ -16,10 +16,8 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <inttypes.h>
+#include "qemu/osdep.h"
+#include "qemu/cutils.h"
 
 #include "cpu.h"
 #include "sysemu/kvm.h"
@@ -363,7 +361,7 @@ static const char *cpuid_6_feature_name[] = {
           CPUID_7_0_EBX_HLE, CPUID_7_0_EBX_AVX2,
           CPUID_7_0_EBX_ERMS, CPUID_7_0_EBX_INVPCID, CPUID_7_0_EBX_RTM,
           CPUID_7_0_EBX_RDSEED */
-#define TCG_7_0_ECX_FEATURES 0
+#define TCG_7_0_ECX_FEATURES (CPUID_7_0_ECX_PKU | CPUID_7_0_ECX_OSPKE)
 #define TCG_APM_FEATURES 0
 #define TCG_6_EAX_FEATURES CPUID_6_EAX_ARAT
 #define TCG_XSAVE_FEATURES (CPUID_XSAVE_XSAVEOPT | CPUID_XSAVE_XGETBV1)
@@ -473,19 +471,26 @@ static const X86RegisterInfo32 x86_reg_info_32[CPU_NB_REGS32] = {
 #undef REGISTER
 
 const ExtSaveArea x86_ext_save_areas[] = {
-    [2] = { .feature = FEAT_1_ECX, .bits = CPUID_EXT_AVX,
+    [XSTATE_YMM_BIT] =
+          { .feature = FEAT_1_ECX, .bits = CPUID_EXT_AVX,
             .offset = 0x240, .size = 0x100 },
-    [3] = { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_MPX,
+    [XSTATE_BNDREGS_BIT] =
+          { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_MPX,
             .offset = 0x3c0, .size = 0x40  },
-    [4] = { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_MPX,
+    [XSTATE_BNDCSR_BIT] =
+          { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_MPX,
             .offset = 0x400, .size = 0x40  },
-    [5] = { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_AVX512F,
+    [XSTATE_OPMASK_BIT] =
+          { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_AVX512F,
             .offset = 0x440, .size = 0x40 },
-    [6] = { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_AVX512F,
+    [XSTATE_ZMM_Hi256_BIT] =
+          { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_AVX512F,
             .offset = 0x480, .size = 0x200 },
-    [7] = { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_AVX512F,
+    [XSTATE_Hi16_ZMM_BIT] =
+          { .feature = FEAT_7_0_EBX, .bits = CPUID_7_0_EBX_AVX512F,
             .offset = 0x680, .size = 0x400 },
-    [9] = { .feature = FEAT_7_0_ECX, .bits = CPUID_7_0_ECX_PKU,
+    [XSTATE_PKRU_BIT] =
+          { .feature = FEAT_7_0_ECX, .bits = CPUID_7_0_ECX_PKU,
             .offset = 0xA80, .size = 0x8 },
 };
 
@@ -2128,6 +2133,10 @@ static void x86_cpu_load_def(X86CPU *cpu, X86CPUDefinition *def, Error **errp)
 
     /* Special cases not set in the X86CPUDefinition structs: */
     if (kvm_enabled()) {
+        if (!kvm_irqchip_in_kernel()) {
+            x86_cpu_change_kvm_default("x2apic", "off");
+        }
+
         x86_cpu_apply_props(cpu, kvm_default_props);
     }
 
@@ -2417,6 +2426,9 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
             *eax = 0; /* Maximum ECX value for sub-leaves */
             *ebx = env->features[FEAT_7_0_EBX]; /* Feature flags */
             *ecx = env->features[FEAT_7_0_ECX]; /* Feature flags */
+            if ((*ecx & CPUID_7_0_ECX_PKU) && env->cr[4] & CR4_PKE_MASK) {
+                *ecx |= CPUID_7_0_ECX_OSPKE;
+            }
             *edx = 0; /* Reserved */
         } else {
             *eax = 0;
@@ -2483,7 +2495,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
                     *ecx = MAX(*ecx, esa->offset + esa->size);
                 }
             }
-            *eax |= ena_mask & (XSTATE_FP | XSTATE_SSE);
+            *eax |= ena_mask & (XSTATE_FP_MASK | XSTATE_SSE_MASK);
             *ebx = *ecx;
         } else if (count == 1) {
             *eax = env->features[FEAT_XSAVE];
@@ -2717,16 +2729,20 @@ static void x86_cpu_reset(CPUState *s)
     cpu_watchpoint_remove_all(s, BP_CPU);
 
     cr4 = 0;
-    xcr0 = XSTATE_FP;
+    xcr0 = XSTATE_FP_MASK;
 
 #ifdef CONFIG_USER_ONLY
     /* Enable all the features for user-mode.  */
     if (env->features[FEAT_1_EDX] & CPUID_SSE) {
-        xcr0 |= XSTATE_SSE;
+        xcr0 |= XSTATE_SSE_MASK;
     }
-    if (env->features[FEAT_7_0_EBX] & CPUID_7_0_EBX_MPX) {
-        xcr0 |= XSTATE_BNDREGS | XSTATE_BNDCSR;
+    for (i = 2; i < ARRAY_SIZE(x86_ext_save_areas); i++) {
+        const ExtSaveArea *esa = &x86_ext_save_areas[i];
+        if ((env->features[esa->feature] & esa->bits) == esa->bits) {
+            xcr0 |= 1ull << i;
+        }
     }
+
     if (env->features[FEAT_1_ECX] & CPUID_EXT_XSAVE) {
         cr4 |= CR4_OSFXSR_MASK | CR4_OSXSAVE_MASK;
     }
@@ -2881,6 +2897,14 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
         env->cpuid_level = 7;
     }
 
+    if (x86_cpu_filter_features(cpu) && cpu->enforce_cpuid) {
+        error_setg(&local_err,
+                   kvm_enabled() ?
+                       "Host doesn't support requested features" :
+                       "TCG doesn't support requested features");
+        goto out;
+    }
+
     /* On AMD CPUs, some CPUID[8000_0001].EDX bits must match the bits on
      * CPUID[1].EDX.
      */
@@ -2890,14 +2914,6 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
            & CPUID_EXT2_AMD_ALIASES);
     }
 
-
-    if (x86_cpu_filter_features(cpu) && cpu->enforce_cpuid) {
-        error_setg(&local_err,
-                   kvm_enabled() ?
-                       "Host doesn't support requested features" :
-                       "TCG doesn't support requested features");
-        goto out;
-    }
 
 #ifndef CONFIG_USER_ONLY
     qemu_register_reset(x86_cpu_machine_reset_cb, cpu);

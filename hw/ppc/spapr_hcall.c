@@ -1,4 +1,5 @@
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "sysemu/sysemu.h"
 #include "cpu.h"
 #include "helper_regs.h"
@@ -36,6 +37,12 @@ static void set_spr(CPUState *cs, int spr, target_ulong value,
         .mask = mask
     };
     run_on_cpu(cs, do_spr_sync, &s);
+}
+
+static bool has_spr(PowerPCCPU *cpu, int spr)
+{
+    /* We can test whether the SPR is defined by checking for a valid name */
+    return cpu->env.spr_cb[spr].name != NULL;
 }
 
 static inline bool valid_pte_index(CPUPPCState *env, target_ulong pte_index)
@@ -116,17 +123,17 @@ static target_ulong h_enter(PowerPCCPU *cpu, sPAPRMachineState *spapr,
                 break;
             }
         }
-        ppc_hash64_stop_access(token);
+        ppc_hash64_stop_access(cpu, token);
         if (index == 8) {
             return H_PTEG_FULL;
         }
     } else {
         token = ppc_hash64_start_access(cpu, pte_index);
         if (ppc_hash64_load_hpte0(cpu, token, 0) & HPTE64_V_VALID) {
-            ppc_hash64_stop_access(token);
+            ppc_hash64_stop_access(cpu, token);
             return H_PTEG_FULL;
         }
-        ppc_hash64_stop_access(token);
+        ppc_hash64_stop_access(cpu, token);
     }
 
     ppc_hash64_store_hpte(cpu, pte_index + index,
@@ -159,7 +166,7 @@ static RemoveResult remove_hpte(PowerPCCPU *cpu, target_ulong ptex,
     token = ppc_hash64_start_access(cpu, ptex);
     v = ppc_hash64_load_hpte0(cpu, token, 0);
     r = ppc_hash64_load_hpte1(cpu, token, 0);
-    ppc_hash64_stop_access(token);
+    ppc_hash64_stop_access(cpu, token);
 
     if ((v & HPTE64_V_VALID) == 0 ||
         ((flags & H_AVPN) && (v & ~0x7fULL) != avpn) ||
@@ -282,7 +289,7 @@ static target_ulong h_protect(PowerPCCPU *cpu, sPAPRMachineState *spapr,
     token = ppc_hash64_start_access(cpu, pte_index);
     v = ppc_hash64_load_hpte0(cpu, token, 0);
     r = ppc_hash64_load_hpte1(cpu, token, 0);
-    ppc_hash64_stop_access(token);
+    ppc_hash64_stop_access(cpu, token);
 
     if ((v & HPTE64_V_VALID) == 0 ||
         ((flags & H_AVPN) && (v & ~0x7fULL) != avpn)) {
@@ -332,11 +339,111 @@ static target_ulong h_read(PowerPCCPU *cpu, sPAPRMachineState *spapr,
     return H_SUCCESS;
 }
 
+static target_ulong h_set_sprg0(PowerPCCPU *cpu, sPAPRMachineState *spapr,
+                                target_ulong opcode, target_ulong *args)
+{
+    cpu_synchronize_state(CPU(cpu));
+    cpu->env.spr[SPR_SPRG0] = args[0];
+
+    return H_SUCCESS;
+}
+
 static target_ulong h_set_dabr(PowerPCCPU *cpu, sPAPRMachineState *spapr,
                                target_ulong opcode, target_ulong *args)
 {
-    /* FIXME: actually implement this */
-    return H_HARDWARE;
+    if (!has_spr(cpu, SPR_DABR)) {
+        return H_HARDWARE;              /* DABR register not available */
+    }
+    cpu_synchronize_state(CPU(cpu));
+
+    if (has_spr(cpu, SPR_DABRX)) {
+        cpu->env.spr[SPR_DABRX] = 0x3;  /* Use Problem and Privileged state */
+    } else if (!(args[0] & 0x4)) {      /* Breakpoint Translation set? */
+        return H_RESERVED_DABR;
+    }
+
+    cpu->env.spr[SPR_DABR] = args[0];
+    return H_SUCCESS;
+}
+
+static target_ulong h_set_xdabr(PowerPCCPU *cpu, sPAPRMachineState *spapr,
+                                target_ulong opcode, target_ulong *args)
+{
+    target_ulong dabrx = args[1];
+
+    if (!has_spr(cpu, SPR_DABR) || !has_spr(cpu, SPR_DABRX)) {
+        return H_HARDWARE;
+    }
+
+    if ((dabrx & ~0xfULL) != 0 || (dabrx & H_DABRX_HYPERVISOR) != 0
+        || (dabrx & (H_DABRX_KERNEL | H_DABRX_USER)) == 0) {
+        return H_PARAMETER;
+    }
+
+    cpu_synchronize_state(CPU(cpu));
+    cpu->env.spr[SPR_DABRX] = dabrx;
+    cpu->env.spr[SPR_DABR] = args[0];
+
+    return H_SUCCESS;
+}
+
+static target_ulong h_page_init(PowerPCCPU *cpu, sPAPRMachineState *spapr,
+                                target_ulong opcode, target_ulong *args)
+{
+    target_ulong flags = args[0];
+    hwaddr dst = args[1];
+    hwaddr src = args[2];
+    hwaddr len = TARGET_PAGE_SIZE;
+    uint8_t *pdst, *psrc;
+    target_long ret = H_SUCCESS;
+
+    if (flags & ~(H_ICACHE_SYNCHRONIZE | H_ICACHE_INVALIDATE
+                  | H_COPY_PAGE | H_ZERO_PAGE)) {
+        qemu_log_mask(LOG_UNIMP, "h_page_init: Bad flags (" TARGET_FMT_lx "\n",
+                      flags);
+        return H_PARAMETER;
+    }
+
+    /* Map-in destination */
+    if (!is_ram_address(spapr, dst) || (dst & ~TARGET_PAGE_MASK) != 0) {
+        return H_PARAMETER;
+    }
+    pdst = cpu_physical_memory_map(dst, &len, 1);
+    if (!pdst || len != TARGET_PAGE_SIZE) {
+        return H_PARAMETER;
+    }
+
+    if (flags & H_COPY_PAGE) {
+        /* Map-in source, copy to destination, and unmap source again */
+        if (!is_ram_address(spapr, src) || (src & ~TARGET_PAGE_MASK) != 0) {
+            ret = H_PARAMETER;
+            goto unmap_out;
+        }
+        psrc = cpu_physical_memory_map(src, &len, 0);
+        if (!psrc || len != TARGET_PAGE_SIZE) {
+            ret = H_PARAMETER;
+            goto unmap_out;
+        }
+        memcpy(pdst, psrc, len);
+        cpu_physical_memory_unmap(psrc, len, 0, len);
+    } else if (flags & H_ZERO_PAGE) {
+        memset(pdst, 0, len);          /* Just clear the destination page */
+    }
+
+    if (kvm_enabled() && (flags & H_ICACHE_SYNCHRONIZE) != 0) {
+        kvmppc_dcbst_range(cpu, pdst, len);
+    }
+    if (flags & (H_ICACHE_SYNCHRONIZE | H_ICACHE_INVALIDATE)) {
+        if (kvm_enabled()) {
+            kvmppc_icbi_range(cpu, pdst, len);
+        } else {
+            tb_flush(CPU(cpu));
+        }
+    }
+
+unmap_out:
+    cpu_physical_memory_unmap(pdst, TARGET_PAGE_SIZE, 1, len);
+    return ret;
 }
 
 #define FLAGS_REGISTER_VPA         0x0000200000000000ULL
@@ -717,7 +824,6 @@ static target_ulong h_set_mode_resource_addr_trans_mode(PowerPCCPU *cpu,
 {
     CPUState *cs;
     PowerPCCPUClass *pcc = POWERPC_CPU_GET_CLASS(cpu);
-    target_ulong prefix;
 
     if (!(pcc->insns_flags2 & PPC2_ISA207S)) {
         return H_P2;
@@ -729,25 +835,12 @@ static target_ulong h_set_mode_resource_addr_trans_mode(PowerPCCPU *cpu,
         return H_P4;
     }
 
-    switch (mflags) {
-    case H_SET_MODE_ADDR_TRANS_NONE:
-        prefix = 0;
-        break;
-    case H_SET_MODE_ADDR_TRANS_0001_8000:
-        prefix = 0x18000;
-        break;
-    case H_SET_MODE_ADDR_TRANS_C000_0000_0000_4000:
-        prefix = 0xC000000000004000ULL;
-        break;
-    default:
+    if (mflags == AIL_RESERVED) {
         return H_UNSUPPORTED_FLAG;
     }
 
     CPU_FOREACH(cs) {
-        CPUPPCState *env = &POWERPC_CPU(cpu)->env;
-
         set_spr(cs, SPR_LPCR, mflags << LPCR_AIL_SHIFT, LPCR_AIL);
-        env->excp_prefix = prefix;
     }
 
     return H_SUCCESS;
@@ -990,12 +1083,16 @@ static void hypercall_register_types(void)
     /* hcall-bulk */
     spapr_register_hypercall(H_BULK_REMOVE, h_bulk_remove);
 
-    /* hcall-dabr */
-    spapr_register_hypercall(H_SET_DABR, h_set_dabr);
-
     /* hcall-splpar */
     spapr_register_hypercall(H_REGISTER_VPA, h_register_vpa);
     spapr_register_hypercall(H_CEDE, h_cede);
+
+    /* processor register resource access h-calls */
+    spapr_register_hypercall(H_SET_SPRG0, h_set_sprg0);
+    spapr_register_hypercall(H_SET_DABR, h_set_dabr);
+    spapr_register_hypercall(H_SET_XDABR, h_set_xdabr);
+    spapr_register_hypercall(H_PAGE_INIT, h_page_init);
+    spapr_register_hypercall(H_SET_MODE, h_set_mode);
 
     /* "debugger" hcalls (also used by SLOF). Note: We do -not- differenciate
      * here between the "CI" and the "CACHE" variants, they will use whatever
@@ -1012,8 +1109,6 @@ static void hypercall_register_types(void)
 
     /* qemu/KVM-PPC specific hcalls */
     spapr_register_hypercall(KVMPPC_H_RTAS, h_rtas);
-
-    spapr_register_hypercall(H_SET_MODE, h_set_mode);
 
     /* ibm,client-architecture-support support */
     spapr_register_hypercall(KVMPPC_H_CAS, h_client_architecture_support);

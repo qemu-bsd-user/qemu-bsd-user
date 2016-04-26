@@ -7,6 +7,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "hw/hw.h"
 #include "elf.h"
 #include "hw/loader.h"
@@ -18,6 +20,7 @@
 #include "hw/ide.h"
 #include "hw/timer/i8254.h"
 #include "hw/char/serial.h"
+#include "qemu/cutils.h"
 
 #define MAX_IDE_BUS 2
 
@@ -111,7 +114,7 @@ static void clipper_init(MachineState *machine)
     }
     size = load_elf(palcode_filename, cpu_alpha_superpage_to_phys,
                     NULL, &palcode_entry, &palcode_low, &palcode_high,
-                    0, EM_ALPHA, 0);
+                    0, EM_ALPHA, 0, 0);
     if (size < 0) {
         error_report("could not load palcode '%s'", palcode_filename);
         exit(1);
@@ -131,7 +134,7 @@ static void clipper_init(MachineState *machine)
 
         size = load_elf(kernel_filename, cpu_alpha_superpage_to_phys,
                         NULL, &kernel_entry, &kernel_low, &kernel_high,
-                        0, EM_ALPHA, 0);
+                        0, EM_ALPHA, 0, 0);
         if (size < 0) {
             error_report("could not load kernel '%s'", kernel_filename);
             exit(1);

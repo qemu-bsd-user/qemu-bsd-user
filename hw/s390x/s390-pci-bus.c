@@ -12,6 +12,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "s390-pci-bus.h"
 #include <hw/pci/pci_bus.h>
 #include <hw/pci/msi.h>
@@ -524,7 +526,7 @@ static int s390_pcihost_setup_msix(S390PCIBusDevice *pbdev)
         return 0;
     }
 
-    ctrl = pci_host_config_read_common(pbdev->pdev, pos + PCI_CAP_FLAGS,
+    ctrl = pci_host_config_read_common(pbdev->pdev, pos + PCI_MSIX_FLAGS,
              pci_config_size(pbdev->pdev), sizeof(ctrl));
     table = pci_host_config_read_common(pbdev->pdev, pos + PCI_MSIX_TABLE,
              pci_config_size(pbdev->pdev), sizeof(table));
@@ -597,7 +599,7 @@ static void s390_pcihost_class_init(ObjectClass *klass, void *data)
     k->init = s390_pcihost_init;
     hc->plug = s390_pcihost_hot_plug;
     hc->unplug = s390_pcihost_hot_unplug;
-    msi_supported = true;
+    msi_nonbroken = true;
 }
 
 static const TypeInfo s390_pcihost_info = {

@@ -28,6 +28,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/usb/ehci-regs.h"
 #include "hw/usb/hcd-ehci.h"
 #include "trace.h"
@@ -895,6 +896,11 @@ static uint64_t ehci_caps_read(void *ptr, hwaddr addr,
     return s->caps[addr];
 }
 
+static void ehci_caps_write(void *ptr, hwaddr addr,
+                             uint64_t val, unsigned size)
+{
+}
+
 static uint64_t ehci_opreg_read(void *ptr, hwaddr addr,
                                 unsigned size)
 {
@@ -1391,7 +1397,7 @@ static int ehci_process_itd(EHCIState *ehci,
 {
     USBDevice *dev;
     USBEndpoint *ep;
-    uint32_t i, len, pid, dir, devaddr, endp, xfers = 0;
+    uint32_t i, len, pid, dir, devaddr, endp;
     uint32_t pg, off, ptr1, ptr2, max, mult;
 
     ehci->periodic_sched_active = PERIODIC_ACTIVE;
@@ -1483,10 +1489,9 @@ static int ehci_process_itd(EHCIState *ehci,
                 ehci_raise_irq(ehci, USBSTS_INT);
             }
             itd->transact[i] &= ~ITD_XACT_ACTIVE;
-            xfers++;
         }
     }
-    return xfers ? 0 : -1;
+    return 0;
 }
 
 
@@ -2005,6 +2010,7 @@ static int ehci_state_writeback(EHCIQueue *q)
 static void ehci_advance_state(EHCIState *ehci, int async)
 {
     EHCIQueue *q = NULL;
+    int itd_count = 0;
     int again;
 
     do {
@@ -2029,10 +2035,12 @@ static void ehci_advance_state(EHCIState *ehci, int async)
 
         case EST_FETCHITD:
             again = ehci_state_fetchitd(ehci, async);
+            itd_count++;
             break;
 
         case EST_FETCHSITD:
             again = ehci_state_fetchsitd(ehci, async);
+            itd_count++;
             break;
 
         case EST_ADVANCEQUEUE:
@@ -2081,7 +2089,8 @@ static void ehci_advance_state(EHCIState *ehci, int async)
             break;
         }
 
-        if (again < 0) {
+        if (again < 0 || itd_count > 16) {
+            /* TODO: notify guest (raise HSE irq?) */
             fprintf(stderr, "processing error - resetting ehci HC\n");
             ehci_reset(ehci);
             again = 0;
@@ -2303,10 +2312,11 @@ static void ehci_frame_timer(void *opaque)
         /* If we've raised int, we speed up the timer, so that we quickly
          * notice any new packets queued up in response */
         if (ehci->int_req_by_async && (ehci->usbsts & USBSTS_INT)) {
-            expire_time = t_now + get_ticks_per_sec() / (FRAME_TIMER_FREQ * 4);
+            expire_time = t_now +
+                NANOSECONDS_PER_SECOND / (FRAME_TIMER_FREQ * 4);
             ehci->int_req_by_async = false;
         } else {
-            expire_time = t_now + (get_ticks_per_sec()
+            expire_time = t_now + (NANOSECONDS_PER_SECOND
                                * (ehci->async_stepdown+1) / FRAME_TIMER_FREQ);
         }
         timer_mod(ehci->frame_timer, expire_time);
@@ -2315,6 +2325,7 @@ static void ehci_frame_timer(void *opaque)
 
 static const MemoryRegionOps ehci_mmio_caps_ops = {
     .read = ehci_caps_read,
+    .write = ehci_caps_write,
     .valid.min_access_size = 1,
     .valid.max_access_size = 4,
     .impl.min_access_size = 1,

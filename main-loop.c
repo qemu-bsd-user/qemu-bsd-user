@@ -23,7 +23,8 @@
  */
 
 #include "qemu/osdep.h"
-#include "qemu-common.h"
+#include "qapi/error.h"
+#include "qemu/cutils.h"
 #include "qemu/timer.h"
 #include "qemu/sockets.h"	// struct in_addr needed for libslirp.h
 #include "sysemu/qtest.h"
@@ -509,7 +510,7 @@ int main_loop_wait(int nonblocking)
 
     /* CPU thread can infinitely wait for event after
        missing the warp */
-    qemu_clock_warp(QEMU_CLOCK_VIRTUAL);
+    qemu_start_warp_timer();
     qemu_clock_run_all_timers();
 
     return ret;

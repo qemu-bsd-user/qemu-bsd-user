@@ -10,6 +10,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "qemu-common.h"
 #include "sysemu/replay.h"
 #include "replay-internal.h"
@@ -20,7 +21,7 @@
 
 /* Current version of the replay mechanism.
    Increase it when file format changes. */
-#define REPLAY_VERSION              0xe02002
+#define REPLAY_VERSION              0xe02004
 /* Size of replay log header */
 #define HEADER_SIZE                 (sizeof(uint32_t) + sizeof(uint64_t))
 
@@ -262,6 +263,14 @@ void replay_configure(QemuOpts *opts)
     const char *fname;
     const char *rr;
     ReplayMode mode = REPLAY_MODE_NONE;
+    Location loc;
+
+    if (!opts) {
+        return;
+    }
+
+    loc_push_none(&loc);
+    qemu_opts_loc_restore(opts);
 
     rr = qemu_opt_get(opts, "rr");
     if (!rr) {
@@ -283,6 +292,8 @@ void replay_configure(QemuOpts *opts)
     }
 
     replay_enable(fname, mode);
+
+    loc_pop(&loc);
 }
 
 void replay_start(void)

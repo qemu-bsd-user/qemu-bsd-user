@@ -3,11 +3,11 @@
 #ifndef HW_BOARDS_H
 #define HW_BOARDS_H
 
-#include "qemu/typedefs.h"
 #include "sysemu/blockdev.h"
 #include "sysemu/accel.h"
 #include "hw/qdev.h"
 #include "qom/object.h"
+#include "qom/cpu.h"
 
 void memory_region_allocate_system_memory(MemoryRegion *mr, Object *owner,
                                           const char *name,
@@ -42,6 +42,26 @@ bool machine_dump_guest_core(MachineState *machine);
 bool machine_mem_merge(MachineState *machine);
 
 /**
+ * CPUArchId:
+ * @arch_id - architecture-dependent CPU ID of present or possible CPU
+ * @cpu - pointer to corresponding CPU object if it's present on NULL otherwise
+ */
+typedef struct {
+    uint64_t arch_id;
+    struct CPUState *cpu;
+} CPUArchId;
+
+/**
+ * CPUArchIdList:
+ * @len - number of @CPUArchId items in @cpus array
+ * @cpus - array of present or possible CPUs for current machine configuration
+ */
+typedef struct {
+    int len;
+    CPUArchId cpus[0];
+} CPUArchIdList;
+
+/**
  * MachineClass:
  * @get_hotplug_handler: this function is called during bus-less
  *    device hotplug. If defined it returns pointer to an instance
@@ -57,6 +77,10 @@ bool machine_mem_merge(MachineState *machine);
  *    Set only by old machines because they need to keep
  *    compatibility on code that exposed QEMU_VERSION to guests in
  *    the past (and now use qemu_hw_version()).
+ * @possible_cpu_arch_ids:
+ *    Returns an array of @CPUArchId architecture-dependent CPU IDs
+ *    which includes CPU IDs for present and possible to hotplug CPUs.
+ *    Caller is responsible for freeing returned list.
  */
 struct MachineClass {
     /*< private >*/
@@ -84,8 +108,8 @@ struct MachineClass {
         no_cdrom:1,
         no_sdcard:1,
         has_dynamic_sysbus:1,
-        no_tco:1,
-        pci_allow_0_address:1;
+        pci_allow_0_address:1,
+        legacy_fw_cfg_order:1;
     int is_default;
     const char *default_machine_opts;
     const char *default_boot_order;
@@ -99,6 +123,7 @@ struct MachineClass {
     HotplugHandler *(*get_hotplug_handler)(MachineState *machine,
                                            DeviceState *dev);
     unsigned (*cpu_index_to_socket_id)(unsigned cpu_index);
+    CPUArchIdList *(*possible_cpu_arch_ids)(MachineState *machine);
 };
 
 /**
@@ -128,6 +153,7 @@ struct MachineState {
     char *firmware;
     bool iommu;
     bool suppress_vmdesc;
+    bool enforce_config_section;
 
     ram_addr_t ram_size;
     ram_addr_t maxram_size;
@@ -155,7 +181,7 @@ struct MachineState {
     { \
         type_register_static(&machine_initfn##_typeinfo); \
     } \
-    machine_init(machine_initfn##_register_types)
+    type_init(machine_initfn##_register_types)
 
 #define SET_MACHINE_COMPAT(m, COMPAT) \
     do {                              \

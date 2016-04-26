@@ -72,7 +72,6 @@ struct sPAPRMachineState {
     int htab_save_index;
     bool htab_first_pass;
     int htab_fd;
-    bool htab_fd_stale;
 
     /* RTAS state */
     QTAILQ_HEAD(, sPAPRConfigureConnectorState) ccs_list;
@@ -204,11 +203,6 @@ struct sPAPRMachineState {
 /* Flags for H_SET_MODE_RESOURCE_LE */
 #define H_SET_MODE_ENDIAN_BIG    0
 #define H_SET_MODE_ENDIAN_LITTLE 1
-
-/* Flags for H_SET_MODE_RESOURCE_ADDR_TRANS_MODE */
-#define H_SET_MODE_ADDR_TRANS_NONE                  0
-#define H_SET_MODE_ADDR_TRANS_0001_8000             2
-#define H_SET_MODE_ADDR_TRANS_C000_0000_0000_4000   3
 
 /* VASI States */
 #define H_VASI_INVALID    0

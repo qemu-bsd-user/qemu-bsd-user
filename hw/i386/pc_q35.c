@@ -39,6 +39,7 @@
 #include "hw/kvm/clock.h"
 #include "hw/pci-host/q35.h"
 #include "exec/address-spaces.h"
+#include "hw/i386/pc.h"
 #include "hw/i386/ich9.h"
 #include "hw/smbios/smbios.h"
 #include "hw/ide/pci.h"
@@ -61,6 +62,7 @@ static void pc_q35_init(MachineState *machine)
     PCIDevice *lpc;
     BusState *idebus[MAX_SATA_PORTS];
     ISADevice *rtc_state;
+    MemoryRegion *system_io = get_system_io();
     MemoryRegion *pci_memory;
     MemoryRegion *rom_memory;
     MemoryRegion *ram_memory;
@@ -81,11 +83,9 @@ static void pc_q35_init(MachineState *machine)
      * If it doesn't, we need to split it in chunks below and above 4G.
      * In any case, try to make sure that guest addresses aligned at
      * 1G boundaries get mapped to host addresses aligned at 1G boundaries.
-     * For old machine types, use whatever split we used historically to avoid
-     * breaking migration.
      */
     if (machine->ram_size >= 0xb0000000) {
-        lowmem = pcmc->gigabyte_align ? 0x80000000 : 0xb0000000;
+        lowmem = 0x80000000;
     } else {
         lowmem = 0xb0000000;
     }
@@ -116,10 +116,6 @@ static void pc_q35_init(MachineState *machine)
     }
 
     pc_cpus_init(pcms);
-    if (!pcmc->has_acpi_build) {
-        /* only machine types 1.7 & older need this */
-        pc_acpi_init("q35-acpi-dsdt.aml");
-    }
 
     kvmclock_create();
 
@@ -151,7 +147,7 @@ static void pc_q35_init(MachineState *machine)
 
     /* irq lines */
     gsi_state = g_malloc0(sizeof(*gsi_state));
-    if (kvm_irqchip_in_kernel()) {
+    if (kvm_ioapic_in_kernel()) {
         kvm_pc_setup_irq_routing(pcmc->pci_enabled);
         gsi = qemu_allocate_irqs(kvm_pc_gsi_handler, gsi_state,
                                  GSI_NUM_PINS);
@@ -166,7 +162,7 @@ static void pc_q35_init(MachineState *machine)
     q35_host->mch.ram_memory = ram_memory;
     q35_host->mch.pci_address_space = pci_memory;
     q35_host->mch.system_memory = get_system_memory();
-    q35_host->mch.address_space_io = get_system_io();
+    q35_host->mch.address_space_io = system_io;
     q35_host->mch.below_4g_mem_size = pcms->below_4g_mem_size;
     q35_host->mch.above_4g_mem_size = pcms->above_4g_mem_size;
     /* pci */
@@ -198,7 +194,7 @@ static void pc_q35_init(MachineState *machine)
     /*end early*/
     isa_bus_irqs(isa_bus, gsi);
 
-    if (kvm_irqchip_in_kernel()) {
+    if (kvm_pic_in_kernel()) {
         i8259 = kvm_i8259_init(isa_bus);
     } else if (xen_enabled()) {
         i8259 = xen_interrupt_controller_init();
@@ -225,7 +221,7 @@ static void pc_q35_init(MachineState *machine)
                          (pcms->vmport != ON_OFF_AUTO_ON), 0xff0104);
 
     /* connect pm stuff to lpc */
-    ich9_lpc_pm_init(lpc, pc_machine_is_smm_enabled(pcms), !mc->no_tco);
+    ich9_lpc_pm_init(lpc, pc_machine_is_smm_enabled(pcms));
 
     /* ahci and SATA device, for q35 1 ahci controller is built-in */
     ahci = pci_create_simple_multifunction(host_bus,
@@ -257,62 +253,11 @@ static void pc_q35_init(MachineState *machine)
     if (pcmc->pci_enabled) {
         pc_pci_device_init(host_bus);
     }
-}
 
-/* Looking for a pc_compat_2_4() function? It doesn't exist.
- * pc_compat_*() functions that run on machine-init time and
- * change global QEMU state are deprecated. Please don't create
- * one, and implement any pc-*-2.4 (and newer) compat code in
- * HW_COMPAT_*, PC_COMPAT_*, or * pc_*_machine_options().
- */
-
-static void pc_compat_2_3(MachineState *machine)
-{
-    PCMachineState *pcms = PC_MACHINE(machine);
-    savevm_skip_section_footers();
-    if (kvm_enabled()) {
-        pcms->smm = ON_OFF_AUTO_OFF;
+    if (pcms->acpi_nvdimm_state.is_enabled) {
+        nvdimm_init_acpi_state(&pcms->acpi_nvdimm_state, system_io,
+                               pcms->fw_cfg, OBJECT(pcms));
     }
-    global_state_set_optional();
-    savevm_skip_configuration();
-}
-
-static void pc_compat_2_2(MachineState *machine)
-{
-    pc_compat_2_3(machine);
-    machine->suppress_vmdesc = true;
-}
-
-static void pc_compat_2_1(MachineState *machine)
-{
-    pc_compat_2_2(machine);
-    x86_cpu_change_kvm_default("svm", NULL);
-}
-
-static void pc_compat_2_0(MachineState *machine)
-{
-    pc_compat_2_1(machine);
-}
-
-static void pc_compat_1_7(MachineState *machine)
-{
-    pc_compat_2_0(machine);
-    x86_cpu_change_kvm_default("x2apic", NULL);
-}
-
-static void pc_compat_1_6(MachineState *machine)
-{
-    pc_compat_1_7(machine);
-}
-
-static void pc_compat_1_5(MachineState *machine)
-{
-    pc_compat_1_6(machine);
-}
-
-static void pc_compat_1_4(MachineState *machine)
-{
-    pc_compat_1_5(machine);
 }
 
 #define DEFINE_Q35_MACHINE(suffix, name, compatfn, optionfn) \
@@ -336,7 +281,6 @@ static void pc_q35_machine_options(MachineClass *m)
     m->default_machine_opts = "firmware=bios-256k.bin";
     m->default_display = "std";
     m->no_floppy = 1;
-    m->no_tco = 0;
 }
 
 static void pc_q35_2_6_machine_options(MachineClass *m)
@@ -354,6 +298,7 @@ static void pc_q35_2_5_machine_options(MachineClass *m)
     pc_q35_2_6_machine_options(m);
     m->alias = NULL;
     pcmc->save_tsc_khz = false;
+    m->legacy_fw_cfg_order = 1;
     SET_MACHINE_COMPAT(m, PC_COMPAT_2_5);
 }
 
@@ -371,112 +316,3 @@ static void pc_q35_2_4_machine_options(MachineClass *m)
 
 DEFINE_Q35_MACHINE(v2_4, "pc-q35-2.4", NULL,
                    pc_q35_2_4_machine_options);
-
-
-static void pc_q35_2_3_machine_options(MachineClass *m)
-{
-    pc_q35_2_4_machine_options(m);
-    m->hw_version = "2.3.0";
-    m->no_floppy = 0;
-    m->no_tco = 1;
-    SET_MACHINE_COMPAT(m, PC_COMPAT_2_3);
-}
-
-DEFINE_Q35_MACHINE(v2_3, "pc-q35-2.3", pc_compat_2_3,
-                   pc_q35_2_3_machine_options);
-
-
-static void pc_q35_2_2_machine_options(MachineClass *m)
-{
-    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
-    pc_q35_2_3_machine_options(m);
-    m->hw_version = "2.2.0";
-    SET_MACHINE_COMPAT(m, PC_COMPAT_2_2);
-    pcmc->rsdp_in_ram = false;
-}
-
-DEFINE_Q35_MACHINE(v2_2, "pc-q35-2.2", pc_compat_2_2,
-                   pc_q35_2_2_machine_options);
-
-
-static void pc_q35_2_1_machine_options(MachineClass *m)
-{
-    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
-    pc_q35_2_2_machine_options(m);
-    m->hw_version = "2.1.0";
-    m->default_display = NULL;
-    SET_MACHINE_COMPAT(m, PC_COMPAT_2_1);
-    pcmc->smbios_uuid_encoded = false;
-    pcmc->enforce_aligned_dimm = false;
-}
-
-DEFINE_Q35_MACHINE(v2_1, "pc-q35-2.1", pc_compat_2_1,
-                   pc_q35_2_1_machine_options);
-
-
-static void pc_q35_2_0_machine_options(MachineClass *m)
-{
-    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
-    pc_q35_2_1_machine_options(m);
-    m->hw_version = "2.0.0";
-    SET_MACHINE_COMPAT(m, PC_COMPAT_2_0);
-    pcmc->has_reserved_memory = false;
-    pcmc->smbios_legacy_mode = true;
-    pcmc->acpi_data_size = 0x10000;
-}
-
-DEFINE_Q35_MACHINE(v2_0, "pc-q35-2.0", pc_compat_2_0,
-                   pc_q35_2_0_machine_options);
-
-
-static void pc_q35_1_7_machine_options(MachineClass *m)
-{
-    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
-    pc_q35_2_0_machine_options(m);
-    m->hw_version = "1.7.0";
-    m->default_machine_opts = NULL;
-    m->option_rom_has_mr = true;
-    SET_MACHINE_COMPAT(m, PC_COMPAT_1_7);
-    pcmc->smbios_defaults = false;
-    pcmc->gigabyte_align = false;
-}
-
-DEFINE_Q35_MACHINE(v1_7, "pc-q35-1.7", pc_compat_1_7,
-                   pc_q35_1_7_machine_options);
-
-
-static void pc_q35_1_6_machine_options(MachineClass *m)
-{
-    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
-    pc_q35_machine_options(m);
-    m->hw_version = "1.6.0";
-    m->rom_file_has_mr = false;
-    SET_MACHINE_COMPAT(m, PC_COMPAT_1_6);
-    pcmc->has_acpi_build = false;
-}
-
-DEFINE_Q35_MACHINE(v1_6, "pc-q35-1.6", pc_compat_1_6,
-                   pc_q35_1_6_machine_options);
-
-
-static void pc_q35_1_5_machine_options(MachineClass *m)
-{
-    pc_q35_1_6_machine_options(m);
-    m->hw_version = "1.5.0";
-    SET_MACHINE_COMPAT(m, PC_COMPAT_1_5);
-}
-
-DEFINE_Q35_MACHINE(v1_5, "pc-q35-1.5", pc_compat_1_5,
-                   pc_q35_1_5_machine_options);
-
-
-static void pc_q35_1_4_machine_options(MachineClass *m)
-{
-    pc_q35_1_5_machine_options(m);
-    m->hw_version = "1.4.0";
-    m->hot_add_cpu = NULL;
-    SET_MACHINE_COMPAT(m, PC_COMPAT_1_4);
-}
-
-DEFINE_Q35_MACHINE(v1_4, "pc-q35-1.4", pc_compat_1_4,
-                   pc_q35_1_4_machine_options);

@@ -23,6 +23,9 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "hw/arm/fsl-imx25.h"
 #include "sysemu/sysemu.h"
 #include "exec/address-spaces.h"
@@ -291,6 +294,7 @@ static void fsl_imx25_class_init(ObjectClass *oc, void *data)
      * arm_cpu_class_init()
      */
     dc->cannot_destroy_with_object_finalize_yet = true;
+    dc->desc = "i.MX25 SOC";
 }
 
 static const TypeInfo fsl_imx25_type_info = {

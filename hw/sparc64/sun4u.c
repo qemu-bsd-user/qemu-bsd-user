@@ -22,6 +22,9 @@
  * THE SOFTWARE.
  */
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "hw/hw.h"
 #include "hw/pci/pci.h"
 #include "hw/pci-host/apb.h"
@@ -41,6 +44,7 @@
 #include "elf.h"
 #include "sysemu/block-backend.h"
 #include "exec/address-spaces.h"
+#include "qemu/cutils.h"
 
 //#define DEBUG_IRQ
 //#define DEBUG_EBUS
@@ -187,7 +191,7 @@ static uint64_t sun4u_load_kernel(const char *kernel_filename,
         bswap_needed = 0;
 #endif
         kernel_size = load_elf(kernel_filename, NULL, NULL, kernel_entry,
-                               kernel_addr, &kernel_top, 1, EM_SPARCV9, 0);
+                               kernel_addr, &kernel_top, 1, EM_SPARCV9, 0, 0);
         if (kernel_size < 0) {
             *kernel_addr = KERNEL_LOAD_ADDR;
             *kernel_entry = KERNEL_LOAD_ADDR;
@@ -445,12 +449,12 @@ static void hstick_irq(void *opaque)
 
 static int64_t cpu_to_timer_ticks(int64_t cpu_ticks, uint32_t frequency)
 {
-    return muldiv64(cpu_ticks, get_ticks_per_sec(), frequency);
+    return muldiv64(cpu_ticks, NANOSECONDS_PER_SECOND, frequency);
 }
 
 static uint64_t timer_to_cpu_ticks(int64_t timer_ticks, uint32_t frequency)
 {
-    return muldiv64(timer_ticks, frequency, get_ticks_per_sec());
+    return muldiv64(timer_ticks, frequency, NANOSECONDS_PER_SECOND);
 }
 
 void cpu_tick_set_count(CPUTimer *timer, uint64_t count)
@@ -633,7 +637,7 @@ static void prom_init(hwaddr addr, const char *bios_name)
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
     if (filename) {
         ret = load_elf(filename, translate_prom_address, &addr,
-                       NULL, NULL, NULL, 1, EM_SPARCV9, 0);
+                       NULL, NULL, NULL, 1, EM_SPARCV9, 0, 0);
         if (ret < 0 || ret > PROM_SIZE_MAX) {
             ret = load_image_targphys(filename, addr, PROM_SIZE_MAX);
         }
@@ -997,14 +1001,10 @@ static void sun4u_register_types(void)
     type_register_static(&ebus_info);
     type_register_static(&prom_info);
     type_register_static(&ram_info);
-}
 
-static void sun4u_machine_init(void)
-{
     type_register_static(&sun4u_type);
     type_register_static(&sun4v_type);
     type_register_static(&niagara_type);
 }
 
 type_init(sun4u_register_types)
-machine_init(sun4u_machine_init)

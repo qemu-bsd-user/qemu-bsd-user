@@ -18,6 +18,9 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include "qemu/error-report.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/device_tree.h"
@@ -77,13 +80,13 @@ static target_ulong h_random(PowerPCCPU *cpu, sPAPRMachineState *spapr,
     hrdata.val.v64 = 0;
     hrdata.received = 0;
 
-    qemu_mutex_unlock_iothread();
     while (hrdata.received < 8) {
         rng_backend_request_entropy(rngstate->backend, 8 - hrdata.received,
                                     random_recv, &hrdata);
+        qemu_mutex_unlock_iothread();
         qemu_sem_wait(&hrdata.sem);
+        qemu_mutex_lock_iothread();
     }
-    qemu_mutex_lock_iothread();
 
     qemu_sem_destroy(&hrdata.sem);
     args[0] = hrdata.val.v64;
@@ -170,6 +173,7 @@ static void spapr_rng_class_init(ObjectClass *oc, void *data)
     dc->realize = spapr_rng_realize;
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
     dc->props = spapr_rng_properties;
+    dc->hotpluggable = false;
 }
 
 static const TypeInfo spapr_rng_info = {

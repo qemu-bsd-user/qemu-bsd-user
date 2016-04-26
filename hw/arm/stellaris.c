@@ -8,6 +8,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/sysbus.h"
 #include "hw/ssi/ssi.h"
 #include "hw/arm/arm.h"
@@ -100,7 +101,7 @@ static void gptm_reload(gptm_state *s, int n, int reset)
         tick += (int64_t)count * system_clock_scale;
     } else if (s->config == 1) {
         /* 32-bit RTC.  1Hz tick.  */
-        tick += get_ticks_per_sec();
+        tick += NANOSECONDS_PER_SECOND;
     } else if (s->mode[n] == 0xa) {
         /* PWM mode.  Not implemented.  */
     } else {
@@ -1420,7 +1421,7 @@ static void stellaris_machine_init(void)
     type_register_static(&lm3s6965evb_type);
 }
 
-machine_init(stellaris_machine_init)
+type_init(stellaris_machine_init)
 
 static void stellaris_i2c_class_init(ObjectClass *klass, void *data)
 {

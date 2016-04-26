@@ -6,11 +6,9 @@
  *   must not depend on any xen headers being present in
  *   /usr/include/xen, so it can be included unconditionally.
  */
-#include <inttypes.h>
 
 #include "hw/irq.h"
 #include "qemu-common.h"
-#include "qemu/typedefs.h"
 
 /* xen-machine.c */
 enum xen_mode {

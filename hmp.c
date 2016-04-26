@@ -30,9 +30,11 @@
 #include "qapi/string-output-visitor.h"
 #include "qapi/util.h"
 #include "qapi-visit.h"
+#include "qom/object_interfaces.h"
 #include "ui/console.h"
 #include "block/qapi.h"
 #include "qemu-io.h"
+#include "qemu/cutils.h"
 
 #ifdef CONFIG_SPICE
 #include <spice/enums.h>
@@ -313,22 +315,22 @@ void hmp_info_cpus(Monitor *mon, const QDict *qdict)
 
         switch (cpu->value->arch) {
         case CPU_INFO_ARCH_X86:
-            monitor_printf(mon, " pc=0x%016" PRIx64, cpu->value->u.x86->pc);
+            monitor_printf(mon, " pc=0x%016" PRIx64, cpu->value->u.x86.pc);
             break;
         case CPU_INFO_ARCH_PPC:
-            monitor_printf(mon, " nip=0x%016" PRIx64, cpu->value->u.ppc->nip);
+            monitor_printf(mon, " nip=0x%016" PRIx64, cpu->value->u.ppc.nip);
             break;
         case CPU_INFO_ARCH_SPARC:
             monitor_printf(mon, " pc=0x%016" PRIx64,
-                           cpu->value->u.q_sparc->pc);
+                           cpu->value->u.q_sparc.pc);
             monitor_printf(mon, " npc=0x%016" PRIx64,
-                           cpu->value->u.q_sparc->npc);
+                           cpu->value->u.q_sparc.npc);
             break;
         case CPU_INFO_ARCH_MIPS:
-            monitor_printf(mon, " PC=0x%016" PRIx64, cpu->value->u.q_mips->PC);
+            monitor_printf(mon, " PC=0x%016" PRIx64, cpu->value->u.q_mips.PC);
             break;
         case CPU_INFO_ARCH_TRICORE:
-            monitor_printf(mon, " PC=0x%016" PRIx64, cpu->value->u.tricore->PC);
+            monitor_printf(mon, " PC=0x%016" PRIx64, cpu->value->u.tricore.PC);
             break;
         default:
             break;
@@ -856,7 +858,7 @@ void hmp_info_tpm(Monitor *mon, const QDict *qdict)
 
         switch (ti->options->type) {
         case TPM_TYPE_OPTIONS_KIND_PASSTHROUGH:
-            tpo = ti->options->u.passthrough;
+            tpo = ti->options->u.passthrough.data;
             monitor_printf(mon, "%s%s%s%s",
                            tpo->has_path ? ",path=" : "",
                            tpo->has_path ? tpo->path : "",
@@ -1413,6 +1415,18 @@ void hmp_block_set_io_throttle(Monitor *mon, const QDict *qdict)
                               0,
                               false,
                               0,
+                              false, /* no burst length via HMP */
+                              0,
+                              false,
+                              0,
+                              false,
+                              0,
+                              false,
+                              0,
+                              false,
+                              0,
+                              false,
+                              0,
                               false, /* No default I/O size */
                               0,
                               false,
@@ -1586,8 +1600,10 @@ void hmp_dump_guest_memory(Monitor *mon, const QDict *qdict)
     const char *file = qdict_get_str(qdict, "filename");
     bool has_begin = qdict_haskey(qdict, "begin");
     bool has_length = qdict_haskey(qdict, "length");
+    bool has_detach = qdict_haskey(qdict, "detach");
     int64_t begin = 0;
     int64_t length = 0;
+    bool detach = false;
     enum DumpGuestMemoryFormat dump_format = DUMP_GUEST_MEMORY_FORMAT_ELF;
     char *prot;
 
@@ -1615,11 +1631,14 @@ void hmp_dump_guest_memory(Monitor *mon, const QDict *qdict)
     if (has_length) {
         length = qdict_get_int(qdict, "length");
     }
+    if (has_detach) {
+        detach = qdict_get_bool(qdict, "detach");
+    }
 
     prot = g_strconcat("file:", file, NULL);
 
-    qmp_dump_guest_memory(paging, prot, has_begin, begin, has_length, length,
-                          true, dump_format, &err);
+    qmp_dump_guest_memory(paging, prot, true, detach, has_begin, begin,
+                          has_length, length, true, dump_format, &err);
     hmp_handle_error(mon, &err);
     g_free(prot);
 }
@@ -1655,58 +1674,27 @@ void hmp_netdev_del(Monitor *mon, const QDict *qdict)
 void hmp_object_add(Monitor *mon, const QDict *qdict)
 {
     Error *err = NULL;
-    Error *err_end = NULL;
     QemuOpts *opts;
-    char *type = NULL;
-    char *id = NULL;
     OptsVisitor *ov;
-    QDict *pdict;
-    Visitor *v;
+    Object *obj = NULL;
 
     opts = qemu_opts_from_qdict(qemu_find_opts("object"), qdict, &err);
     if (err) {
-        goto out;
+        hmp_handle_error(mon, &err);
+        return;
     }
 
     ov = opts_visitor_new(opts);
-    pdict = qdict_clone_shallow(qdict);
-    v = opts_get_visitor(ov);
-
-    visit_start_struct(v, NULL, NULL, 0, &err);
-    if (err) {
-        goto out_clean;
-    }
-
-    qdict_del(pdict, "qom-type");
-    visit_type_str(v, "qom-type", &type, &err);
-    if (err) {
-        goto out_end;
-    }
-
-    qdict_del(pdict, "id");
-    visit_type_str(v, "id", &id, &err);
-    if (err) {
-        goto out_end;
-    }
-
-    object_add(type, id, pdict, v, &err);
-
-out_end:
-    visit_end_struct(v, &err_end);
-    if (!err && err_end) {
-        qmp_object_del(id, NULL);
-    }
-    error_propagate(&err, err_end);
-out_clean:
+    obj = user_creatable_add(qdict, opts_get_visitor(ov), &err);
     opts_visitor_cleanup(ov);
-
-    QDECREF(pdict);
     qemu_opts_del(opts);
-    g_free(id);
-    g_free(type);
 
-out:
-    hmp_handle_error(mon, &err);
+    if (err) {
+        hmp_handle_error(mon, &err);
+    }
+    if (obj) {
+        object_unref(obj);
+    }
 }
 
 void hmp_getfd(Monitor *mon, const QDict *qdict)
@@ -1766,14 +1754,14 @@ void hmp_sendkey(Monitor *mon, const QDict *qdict)
                 goto err_out;
             }
             keylist->value->type = KEY_VALUE_KIND_NUMBER;
-            keylist->value->u.number = value;
+            keylist->value->u.number.data = value;
         } else {
             int idx = index_from_key(keys, keyname_len);
             if (idx == Q_KEY_CODE__MAX) {
                 goto err_out;
             }
             keylist->value->type = KEY_VALUE_KIND_QCODE;
-            keylist->value->u.qcode = idx;
+            keylist->value->u.qcode.data = idx;
         }
 
         if (!separator) {
@@ -1823,7 +1811,7 @@ void hmp_nbd_server_start(Monitor *mon, const QDict *qdict)
         goto exit;
     }
 
-    qmp_nbd_server_start(addr, &local_err);
+    qmp_nbd_server_start(addr, false, NULL, &local_err);
     qapi_free_SocketAddress(addr);
     if (local_err != NULL) {
         goto exit;
@@ -1934,7 +1922,7 @@ void hmp_object_del(Monitor *mon, const QDict *qdict)
     const char *id = qdict_get_str(qdict, "id");
     Error *err = NULL;
 
-    qmp_object_del(id, &err);
+    user_creatable_del(id, &err);
     hmp_handle_error(mon, &err);
 }
 
@@ -1990,7 +1978,7 @@ void hmp_info_memory_devices(Monitor *mon, const QDict *qdict)
         if (value) {
             switch (value->type) {
             case MEMORY_DEVICE_INFO_KIND_DIMM:
-                di = value->u.dimm;
+                di = value->u.dimm.data;
 
                 monitor_printf(mon, "Memory device [%s]: \"%s\"\n",
                                MemoryDeviceInfoKind_lookup[value->type],
@@ -2375,4 +2363,21 @@ void hmp_rocker_of_dpa_groups(Monitor *mon, const QDict *qdict)
     }
 
     qapi_free_RockerOfDpaGroupList(list);
+}
+
+void hmp_info_dump(Monitor *mon, const QDict *qdict)
+{
+    DumpQueryResult *result = qmp_query_dump(NULL);
+
+    assert(result && result->status < DUMP_STATUS__MAX);
+    monitor_printf(mon, "Status: %s\n", DumpStatus_lookup[result->status]);
+
+    if (result->status == DUMP_STATUS_ACTIVE) {
+        float percent = 0;
+        assert(result->total != 0);
+        percent = 100.0 * result->completed / result->total;
+        monitor_printf(mon, "Finished: %.2f %%\n", percent);
+    }
+
+    qapi_free_DumpQueryResult(result);
 }

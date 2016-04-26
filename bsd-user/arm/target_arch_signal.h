@@ -230,7 +230,7 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
     regs->regs[14] = tswap32(gr[TARGET_REG_LR]);
     regs->regs[15] = tswap32(gr[TARGET_REG_PC]);
     cpsr = tswap32(gr[TARGET_REG_CPSR]);
-    cpsr_write(regs, cpsr, CPSR_USER | CPSR_EXEC);
+    cpsr_write(regs, cpsr, CPSR_USER | CPSR_EXEC, CPSRWriteByInstr);
 
     return err;
 }

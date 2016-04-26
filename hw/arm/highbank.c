@@ -18,6 +18,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/sysbus.h"
 #include "hw/arm/arm.h"
 #include "hw/devices.h"
@@ -437,4 +438,4 @@ static void calxeda_machines_init(void)
     type_register_static(&midway_type);
 }
 
-machine_init(calxeda_machines_init)
+type_init(calxeda_machines_init)

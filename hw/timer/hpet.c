@@ -28,6 +28,7 @@
 #include "hw/hw.h"
 #include "hw/i386/pc.h"
 #include "ui/console.h"
+#include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/timer.h"
 #include "hw/timer/hpet.h"
@@ -200,12 +201,7 @@ static void update_irq(struct HPETTimer *timer, int set)
     if (!set || !timer_enabled(timer) || !hpet_enabled(timer->state)) {
         s->isr &= ~mask;
         if (!timer_fsb_route(timer)) {
-            /* fold the ICH PIRQ# pin's internal inversion logic into hpet */
-            if (route >= ISA_NUM_IRQS) {
-                qemu_irq_raise(s->irqs[route]);
-            } else {
-                qemu_irq_lower(s->irqs[route]);
-            }
+            qemu_irq_lower(s->irqs[route]);
         }
     } else if (timer_fsb_route(timer)) {
         address_space_stl_le(&address_space_memory, timer->fsb >> 32,
@@ -213,12 +209,7 @@ static void update_irq(struct HPETTimer *timer, int set)
                              NULL);
     } else if (timer->config & HPET_TN_TYPE_LEVEL) {
         s->isr |= mask;
-        /* fold the ICH PIRQ# pin's internal inversion logic into hpet */
-        if (route >= ISA_NUM_IRQS) {
-            qemu_irq_lower(s->irqs[route]);
-        } else {
-            qemu_irq_raise(s->irqs[route]);
-        }
+        qemu_irq_raise(s->irqs[route]);
     } else {
         s->isr &= ~mask;
         qemu_irq_pulse(s->irqs[route]);

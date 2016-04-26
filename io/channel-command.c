@@ -21,6 +21,7 @@
 #include "qemu/osdep.h"
 #include "io/channel-command.h"
 #include "io/channel-watch.h"
+#include "qapi/error.h"
 #include "qemu/sockets.h"
 #include "trace.h"
 
@@ -236,8 +237,7 @@ static ssize_t qio_channel_command_readv(QIOChannel *ioc,
  retry:
     ret = readv(cioc->readfd, iov, niov);
     if (ret < 0) {
-        if (errno == EAGAIN ||
-            errno == EWOULDBLOCK) {
+        if (errno == EAGAIN) {
             return QIO_CHANNEL_ERR_BLOCK;
         }
         if (errno == EINTR) {
@@ -265,8 +265,7 @@ static ssize_t qio_channel_command_writev(QIOChannel *ioc,
  retry:
     ret = writev(cioc->writefd, iov, niov);
     if (ret <= 0) {
-        if (errno == EAGAIN ||
-            errno == EWOULDBLOCK) {
+        if (errno == EAGAIN) {
             return QIO_CHANNEL_ERR_BLOCK;
         }
         if (errno == EINTR) {

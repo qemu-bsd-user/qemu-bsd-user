@@ -305,9 +305,10 @@ static CharDriverState *qemu_chr_open_spice_vmc(const char *id,
                                                 ChardevReturn *ret,
                                                 Error **errp)
 {
-    const char *type = backend->u.spicevmc->type;
+    ChardevSpiceChannel *spicevmc = backend->u.spicevmc.data;
+    const char *type = spicevmc->type;
     const char **psubtype = spice_server_char_device_recognized_subtypes();
-    ChardevCommon *common = qapi_ChardevSpiceChannel_base(backend->u.spicevmc);
+    ChardevCommon *common = qapi_ChardevSpiceChannel_base(spicevmc);
 
     for (; *psubtype != NULL; ++psubtype) {
         if (strcmp(type, *psubtype) == 0) {
@@ -329,8 +330,9 @@ static CharDriverState *qemu_chr_open_spice_port(const char *id,
                                                  ChardevReturn *ret,
                                                  Error **errp)
 {
-    const char *name = backend->u.spiceport->fqdn;
-    ChardevCommon *common = qapi_ChardevSpicePort_base(backend->u.spiceport);
+    ChardevSpicePort *spiceport = backend->u.spiceport.data;
+    const char *name = spiceport->fqdn;
+    ChardevCommon *common = qapi_ChardevSpicePort_base(spiceport);
     CharDriverState *chr;
     SpiceCharDriver *s;
 
@@ -366,26 +368,30 @@ static void qemu_chr_parse_spice_vmc(QemuOpts *opts, ChardevBackend *backend,
                                      Error **errp)
 {
     const char *name = qemu_opt_get(opts, "name");
+    ChardevSpiceChannel *spicevmc;
 
     if (name == NULL) {
         error_setg(errp, "chardev: spice channel: no name given");
         return;
     }
-    backend->u.spicevmc = g_new0(ChardevSpiceChannel, 1);
-    backend->u.spicevmc->type = g_strdup(name);
+    spicevmc = backend->u.spicevmc.data = g_new0(ChardevSpiceChannel, 1);
+    qemu_chr_parse_common(opts, qapi_ChardevSpiceChannel_base(spicevmc));
+    spicevmc->type = g_strdup(name);
 }
 
 static void qemu_chr_parse_spice_port(QemuOpts *opts, ChardevBackend *backend,
                                       Error **errp)
 {
     const char *name = qemu_opt_get(opts, "name");
+    ChardevSpicePort *spiceport;
 
     if (name == NULL) {
         error_setg(errp, "chardev: spice port: no name given");
         return;
     }
-    backend->u.spiceport = g_new0(ChardevSpicePort, 1);
-    backend->u.spiceport->fqdn = g_strdup(name);
+    spiceport = backend->u.spiceport.data = g_new0(ChardevSpicePort, 1);
+    qemu_chr_parse_common(opts, qapi_ChardevSpicePort_base(spiceport));
+    spiceport->fqdn = g_strdup(name);
 }
 
 static void register_types(void)

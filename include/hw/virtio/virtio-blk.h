@@ -53,9 +53,8 @@ typedef struct VirtIOBlock {
     unsigned short sector_mask;
     bool original_wce;
     VMChangeStateEntry *change;
-    /* Function to push to vq and notify guest */
-    void (*complete_request)(struct VirtIOBlockReq *req, unsigned char status);
-    Notifier migration_state_notifier;
+    bool dataplane_disabled;
+    bool dataplane_started;
     struct VirtIOBlockDataPlane *dataplane;
 } VirtIOBlock;
 
@@ -86,5 +85,7 @@ void virtio_blk_free_request(VirtIOBlockReq *req);
 void virtio_blk_handle_request(VirtIOBlockReq *req, MultiReqBuffer *mrb);
 
 void virtio_blk_submit_multireq(BlockBackend *blk, MultiReqBuffer *mrb);
+
+void virtio_blk_handle_vq(VirtIOBlock *s, VirtQueue *vq);
 
 #endif

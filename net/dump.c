@@ -24,6 +24,7 @@
 
 #include "qemu/osdep.h"
 #include "clients.h"
+#include "qapi/error.h"
 #include "qemu-common.h"
 #include "qemu/error-report.h"
 #include "qemu/iov.h"
@@ -189,7 +190,7 @@ int net_init_dump(const NetClientOptions *opts, const char *name,
     DumpNetClient *dnc;
 
     assert(opts->type == NET_CLIENT_OPTIONS_KIND_DUMP);
-    dump = opts->u.dump;
+    dump = opts->u.dump.data;
 
     assert(peer);
 

@@ -29,6 +29,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
 #include "hw/sysbus.h"
 #include "hw/arm/arm.h"
 #include "hw/arm/primecell.h"
@@ -73,6 +74,7 @@ typedef struct VirtBoardInfo {
     uint32_t clock_phandle;
     uint32_t gic_phandle;
     uint32_t v2m_phandle;
+    bool using_psci;
 } VirtBoardInfo;
 
 typedef struct {
@@ -94,6 +96,23 @@ typedef struct {
     OBJECT_GET_CLASS(VirtMachineClass, obj, TYPE_VIRT_MACHINE)
 #define VIRT_MACHINE_CLASS(klass) \
     OBJECT_CLASS_CHECK(VirtMachineClass, klass, TYPE_VIRT_MACHINE)
+
+/* RAM limit in GB. Since VIRT_MEM starts at the 1GB mark, this means
+ * RAM can go up to the 256GB mark, leaving 256GB of the physical
+ * address space unallocated and free for future use between 256G and 512G.
+ * If we need to provide more RAM to VMs in the future then we need to:
+ *  * allocate a second bank of RAM starting at 2TB and working up
+ *  * fix the DT and ACPI table generation code in QEMU to correctly
+ *    report two split lumps of RAM to the guest
+ *  * fix KVM in the host kernel to allow guests with >40 bit address spaces
+ * (We don't want to fill all the way up to 512GB with RAM because
+ * we might want it for non-RAM purposes later. Conversely it seems
+ * reasonable to assume that anybody configuring a VM with a quarter
+ * of a terabyte of RAM will be doing it on a host with more than a
+ * terabyte of physical address space.)
+ */
+#define RAMLIMIT_GB 255
+#define RAMLIMIT_BYTES (RAMLIMIT_GB * 1024ULL * 1024 * 1024)
 
 /* Addresses and sizes of our components.
  * 0..128MB is space for a flash device so we can run bootrom code such as UEFI.
@@ -127,10 +146,11 @@ static const MemMapEntry a15memmap[] = {
     [VIRT_MMIO] =               { 0x0a000000, 0x00000200 },
     /* ...repeating for a total of NUM_VIRTIO_TRANSPORTS, each of that size */
     [VIRT_PLATFORM_BUS] =       { 0x0c000000, 0x02000000 },
+    [VIRT_SECURE_MEM] =         { 0x0e000000, 0x01000000 },
     [VIRT_PCIE_MMIO] =          { 0x10000000, 0x2eff0000 },
     [VIRT_PCIE_PIO] =           { 0x3eff0000, 0x00010000 },
     [VIRT_PCIE_ECAM] =          { 0x3f000000, 0x01000000 },
-    [VIRT_MEM] =                { 0x40000000, 30ULL * 1024 * 1024 * 1024 },
+    [VIRT_MEM] =                { 0x40000000, RAMLIMIT_BYTES },
     /* Second PCIe window, 512GB wide at the 512GB boundary */
     [VIRT_PCIE_MMIO_HIGH] =   { 0x8000000000ULL, 0x8000000000ULL },
 };
@@ -229,6 +249,10 @@ static void fdt_add_psci_node(const VirtBoardInfo *vbi)
     uint32_t migrate_fn;
     void *fdt = vbi->fdt;
     ARMCPU *armcpu = ARM_CPU(qemu_get_cpu(0));
+
+    if (!vbi->using_psci) {
+        return;
+    }
 
     qemu_fdt_add_subnode(fdt, "/psci");
     if (armcpu->psci_version == 2) {
@@ -341,7 +365,7 @@ static void fdt_add_cpu_nodes(const VirtBoardInfo *vbi)
         qemu_fdt_setprop_string(vbi->fdt, nodename, "compatible",
                                     armcpu->dtb_compatible);
 
-        if (vbi->smp_cpus > 1) {
+        if (vbi->using_psci && vbi->smp_cpus > 1) {
             qemu_fdt_setprop_string(vbi->fdt, nodename,
                                         "enable-method", "psci");
         }
@@ -558,11 +582,11 @@ static void create_rtc(const VirtBoardInfo *vbi, qemu_irq *pic)
     g_free(nodename);
 }
 
-static DeviceState *pl061_dev;
+static DeviceState *gpio_key_dev;
 static void virt_powerdown_req(Notifier *n, void *opaque)
 {
     /* use gpio Pin 3 for power button event */
-    qemu_set_irq(qdev_get_gpio_in(pl061_dev, 3), 1);
+    qemu_set_irq(qdev_get_gpio_in(gpio_key_dev, 0), 1);
 }
 
 static Notifier virt_system_powerdown_notifier = {
@@ -572,6 +596,7 @@ static Notifier virt_system_powerdown_notifier = {
 static void create_gpio(const VirtBoardInfo *vbi, qemu_irq *pic)
 {
     char *nodename;
+    DeviceState *pl061_dev;
     hwaddr base = vbi->memmap[VIRT_GPIO].base;
     hwaddr size = vbi->memmap[VIRT_GPIO].size;
     int irq = vbi->irqmap[VIRT_GPIO];
@@ -594,6 +619,8 @@ static void create_gpio(const VirtBoardInfo *vbi, qemu_irq *pic)
     qemu_fdt_setprop_string(vbi->fdt, nodename, "clock-names", "apb_pclk");
     qemu_fdt_setprop_cell(vbi->fdt, nodename, "phandle", phandle);
 
+    gpio_key_dev = sysbus_create_simple("gpio-key", -1,
+                                        qdev_get_gpio_in(pl061_dev, 3));
     qemu_fdt_add_subnode(vbi->fdt, "/gpio-keys");
     qemu_fdt_setprop_string(vbi->fdt, "/gpio-keys", "compatible", "gpio-keys");
     qemu_fdt_setprop_cell(vbi->fdt, "/gpio-keys", "#size-cells", 0);
@@ -678,13 +705,15 @@ static void create_virtio_devices(const VirtBoardInfo *vbi, qemu_irq *pic)
 }
 
 static void create_one_flash(const char *name, hwaddr flashbase,
-                             hwaddr flashsize)
+                             hwaddr flashsize, const char *file,
+                             MemoryRegion *sysmem)
 {
     /* Create and map a single flash device. We use the same
      * parameters as the flash devices on the Versatile Express board.
      */
     DriveInfo *dinfo = drive_get_next(IF_PFLASH);
     DeviceState *dev = qdev_create(NULL, "cfi.pflash01");
+    SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
     const uint64_t sectorlength = 256 * 1024;
 
     if (dinfo) {
@@ -704,19 +733,10 @@ static void create_one_flash(const char *name, hwaddr flashbase,
     qdev_prop_set_string(dev, "name", name);
     qdev_init_nofail(dev);
 
-    sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, flashbase);
-}
+    memory_region_add_subregion(sysmem, flashbase,
+                                sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0));
 
-static void create_flash(const VirtBoardInfo *vbi)
-{
-    /* Create two flash devices to fill the VIRT_FLASH space in the memmap.
-     * Any file passed via -bios goes in the first of these.
-     */
-    hwaddr flashsize = vbi->memmap[VIRT_FLASH].size / 2;
-    hwaddr flashbase = vbi->memmap[VIRT_FLASH].base;
-    char *nodename;
-
-    if (bios_name) {
+    if (file) {
         char *fn;
         int image_size;
 
@@ -726,30 +746,73 @@ static void create_flash(const VirtBoardInfo *vbi)
                          "but you cannot use both options at once");
             exit(1);
         }
-        fn = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+        fn = qemu_find_file(QEMU_FILE_TYPE_BIOS, file);
         if (!fn) {
-            error_report("Could not find ROM image '%s'", bios_name);
+            error_report("Could not find ROM image '%s'", file);
             exit(1);
         }
-        image_size = load_image_targphys(fn, flashbase, flashsize);
+        image_size = load_image_mr(fn, sysbus_mmio_get_region(sbd, 0));
         g_free(fn);
         if (image_size < 0) {
-            error_report("Could not load ROM image '%s'", bios_name);
+            error_report("Could not load ROM image '%s'", file);
             exit(1);
         }
     }
+}
 
-    create_one_flash("virt.flash0", flashbase, flashsize);
-    create_one_flash("virt.flash1", flashbase + flashsize, flashsize);
+static void create_flash(const VirtBoardInfo *vbi,
+                         MemoryRegion *sysmem,
+                         MemoryRegion *secure_sysmem)
+{
+    /* Create two flash devices to fill the VIRT_FLASH space in the memmap.
+     * Any file passed via -bios goes in the first of these.
+     * sysmem is the system memory space. secure_sysmem is the secure view
+     * of the system, and the first flash device should be made visible only
+     * there. The second flash device is visible to both secure and nonsecure.
+     * If sysmem == secure_sysmem this means there is no separate Secure
+     * address space and both flash devices are generally visible.
+     */
+    hwaddr flashsize = vbi->memmap[VIRT_FLASH].size / 2;
+    hwaddr flashbase = vbi->memmap[VIRT_FLASH].base;
+    char *nodename;
 
-    nodename = g_strdup_printf("/flash@%" PRIx64, flashbase);
-    qemu_fdt_add_subnode(vbi->fdt, nodename);
-    qemu_fdt_setprop_string(vbi->fdt, nodename, "compatible", "cfi-flash");
-    qemu_fdt_setprop_sized_cells(vbi->fdt, nodename, "reg",
-                                 2, flashbase, 2, flashsize,
-                                 2, flashbase + flashsize, 2, flashsize);
-    qemu_fdt_setprop_cell(vbi->fdt, nodename, "bank-width", 4);
-    g_free(nodename);
+    create_one_flash("virt.flash0", flashbase, flashsize,
+                     bios_name, secure_sysmem);
+    create_one_flash("virt.flash1", flashbase + flashsize, flashsize,
+                     NULL, sysmem);
+
+    if (sysmem == secure_sysmem) {
+        /* Report both flash devices as a single node in the DT */
+        nodename = g_strdup_printf("/flash@%" PRIx64, flashbase);
+        qemu_fdt_add_subnode(vbi->fdt, nodename);
+        qemu_fdt_setprop_string(vbi->fdt, nodename, "compatible", "cfi-flash");
+        qemu_fdt_setprop_sized_cells(vbi->fdt, nodename, "reg",
+                                     2, flashbase, 2, flashsize,
+                                     2, flashbase + flashsize, 2, flashsize);
+        qemu_fdt_setprop_cell(vbi->fdt, nodename, "bank-width", 4);
+        g_free(nodename);
+    } else {
+        /* Report the devices as separate nodes so we can mark one as
+         * only visible to the secure world.
+         */
+        nodename = g_strdup_printf("/secflash@%" PRIx64, flashbase);
+        qemu_fdt_add_subnode(vbi->fdt, nodename);
+        qemu_fdt_setprop_string(vbi->fdt, nodename, "compatible", "cfi-flash");
+        qemu_fdt_setprop_sized_cells(vbi->fdt, nodename, "reg",
+                                     2, flashbase, 2, flashsize);
+        qemu_fdt_setprop_cell(vbi->fdt, nodename, "bank-width", 4);
+        qemu_fdt_setprop_string(vbi->fdt, nodename, "status", "disabled");
+        qemu_fdt_setprop_string(vbi->fdt, nodename, "secure-status", "okay");
+        g_free(nodename);
+
+        nodename = g_strdup_printf("/flash@%" PRIx64, flashbase);
+        qemu_fdt_add_subnode(vbi->fdt, nodename);
+        qemu_fdt_setprop_string(vbi->fdt, nodename, "compatible", "cfi-flash");
+        qemu_fdt_setprop_sized_cells(vbi->fdt, nodename, "reg",
+                                     2, flashbase + flashsize, 2, flashsize);
+        qemu_fdt_setprop_cell(vbi->fdt, nodename, "bank-width", 4);
+        g_free(nodename);
+    }
 }
 
 static void create_fw_cfg(const VirtBoardInfo *vbi, AddressSpace *as)
@@ -960,6 +1023,27 @@ static void create_platform_bus(VirtBoardInfo *vbi, qemu_irq *pic)
                                 sysbus_mmio_get_region(s, 0));
 }
 
+static void create_secure_ram(VirtBoardInfo *vbi, MemoryRegion *secure_sysmem)
+{
+    MemoryRegion *secram = g_new(MemoryRegion, 1);
+    char *nodename;
+    hwaddr base = vbi->memmap[VIRT_SECURE_MEM].base;
+    hwaddr size = vbi->memmap[VIRT_SECURE_MEM].size;
+
+    memory_region_init_ram(secram, NULL, "virt.secure-ram", size, &error_fatal);
+    vmstate_register_ram_global(secram);
+    memory_region_add_subregion(secure_sysmem, base, secram);
+
+    nodename = g_strdup_printf("/secram@%" PRIx64, base);
+    qemu_fdt_add_subnode(vbi->fdt, nodename);
+    qemu_fdt_setprop_string(vbi->fdt, nodename, "device_type", "memory");
+    qemu_fdt_setprop_sized_cells(vbi->fdt, nodename, "reg", 2, base, 2, size);
+    qemu_fdt_setprop_string(vbi->fdt, nodename, "status", "disabled");
+    qemu_fdt_setprop_string(vbi->fdt, nodename, "secure-status", "okay");
+
+    g_free(nodename);
+}
+
 static void *machvirt_dtb(const struct arm_boot_info *binfo, int *fdt_size)
 {
     const VirtBoardInfo *board = (const VirtBoardInfo *)binfo;
@@ -1020,6 +1104,7 @@ static void machvirt_init(MachineState *machine)
     VirtGuestInfoState *guest_info_state = g_malloc0(sizeof *guest_info_state);
     VirtGuestInfo *guest_info = &guest_info_state->info;
     char **cpustr;
+    bool firmware_loaded = bios_name || drive_get(IF_PFLASH, 0, 0);
 
     if (!cpu_model) {
         cpu_model = "cortex-a15";
@@ -1047,6 +1132,15 @@ static void machvirt_init(MachineState *machine)
         exit(1);
     }
 
+    /* If we have an EL3 boot ROM then the assumption is that it will
+     * implement PSCI itself, so disable QEMU's internal implementation
+     * so it doesn't get in the way. Instead of starting secondary
+     * CPUs in PSCI powerdown state we will start them all running and
+     * let the boot ROM sort them out.
+     * The usual case is that we do use QEMU's PSCI implementation.
+     */
+    vbi->using_psci = !(vms->secure && firmware_loaded);
+
     /* The maximum number of CPUs depends on the GIC version, or on how
      * many redistributors we can fit into the memory map.
      */
@@ -1066,7 +1160,7 @@ static void machvirt_init(MachineState *machine)
     vbi->smp_cpus = smp_cpus;
 
     if (machine->ram_size > vbi->memmap[VIRT_MEM].size) {
-        error_report("mach-virt: cannot model more than 30GB RAM");
+        error_report("mach-virt: cannot model more than %dGB RAM", RAMLIMIT_GB);
         exit(1);
     }
 
@@ -1114,12 +1208,15 @@ static void machvirt_init(MachineState *machine)
             object_property_set_bool(cpuobj, false, "has_el3", NULL);
         }
 
-        object_property_set_int(cpuobj, QEMU_PSCI_CONDUIT_HVC, "psci-conduit",
-                                NULL);
+        if (vbi->using_psci) {
+            object_property_set_int(cpuobj, QEMU_PSCI_CONDUIT_HVC,
+                                    "psci-conduit", NULL);
 
-        /* Secondary CPUs start in PSCI powered-down state */
-        if (n > 0) {
-            object_property_set_bool(cpuobj, true, "start-powered-off", NULL);
+            /* Secondary CPUs start in PSCI powered-down state */
+            if (n > 0) {
+                object_property_set_bool(cpuobj, true,
+                                         "start-powered-off", NULL);
+            }
         }
 
         if (object_property_find(cpuobj, "reset-cbar", NULL)) {
@@ -1145,13 +1242,14 @@ static void machvirt_init(MachineState *machine)
                                          machine->ram_size);
     memory_region_add_subregion(sysmem, vbi->memmap[VIRT_MEM].base, ram);
 
-    create_flash(vbi);
+    create_flash(vbi, sysmem, secure_sysmem ? secure_sysmem : sysmem);
 
     create_gic(vbi, pic, gic_version, vms->secure);
 
     create_uart(vbi, pic, VIRT_UART, sysmem);
 
     if (vms->secure) {
+        create_secure_ram(vbi, secure_sysmem);
         create_uart(vbi, pic, VIRT_SECURE_UART, secure_sysmem);
     }
 
@@ -1187,7 +1285,7 @@ static void machvirt_init(MachineState *machine)
     vbi->bootinfo.board_id = -1;
     vbi->bootinfo.loader_start = vbi->memmap[VIRT_MEM].base;
     vbi->bootinfo.get_dtb = machvirt_dtb;
-    vbi->bootinfo.firmware_loaded = bios_name || drive_get(IF_PFLASH, 0, 0);
+    vbi->bootinfo.firmware_loaded = firmware_loaded;
     arm_load_kernel(ARM_CPU(first_cpu), &vbi->bootinfo);
 
     /*
@@ -1251,7 +1349,32 @@ static void virt_set_gic_version(Object *obj, const char *value, Error **errp)
     }
 }
 
-static void virt_instance_init(Object *obj)
+static void virt_machine_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+
+    mc->init = machvirt_init;
+    /* Start max_cpus at the maximum QEMU supports. We'll further restrict
+     * it later in machvirt_init, where we have more information about the
+     * configuration of the particular instance.
+     */
+    mc->max_cpus = MAX_CPUMASK_BITS;
+    mc->has_dynamic_sysbus = true;
+    mc->block_default_type = IF_VIRTIO;
+    mc->no_cdrom = 1;
+    mc->pci_allow_0_address = true;
+}
+
+static const TypeInfo virt_machine_info = {
+    .name          = TYPE_VIRT_MACHINE,
+    .parent        = TYPE_MACHINE,
+    .abstract      = true,
+    .instance_size = sizeof(VirtMachineState),
+    .class_size    = sizeof(VirtMachineClass),
+    .class_init    = virt_machine_class_init,
+};
+
+static void virt_2_6_instance_init(Object *obj)
 {
     VirtMachineState *vms = VIRT_MACHINE(obj);
 
@@ -1284,35 +1407,29 @@ static void virt_instance_init(Object *obj)
                                     "Valid values are 2, 3 and host", NULL);
 }
 
-static void virt_class_init(ObjectClass *oc, void *data)
+static void virt_2_6_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
+    static GlobalProperty compat_props[] = {
+        { /* end of list */ }
+    };
 
-    mc->desc = "ARM Virtual Machine",
-    mc->init = machvirt_init;
-    /* Start max_cpus at the maximum QEMU supports. We'll further restrict
-     * it later in machvirt_init, where we have more information about the
-     * configuration of the particular instance.
-     */
-    mc->max_cpus = MAX_CPUMASK_BITS;
-    mc->has_dynamic_sysbus = true;
-    mc->block_default_type = IF_VIRTIO;
-    mc->no_cdrom = 1;
-    mc->pci_allow_0_address = true;
+    mc->desc = "QEMU 2.6 ARM Virtual Machine";
+    mc->alias = "virt";
+    mc->compat_props = compat_props;
 }
 
 static const TypeInfo machvirt_info = {
-    .name = TYPE_VIRT_MACHINE,
-    .parent = TYPE_MACHINE,
-    .instance_size = sizeof(VirtMachineState),
-    .instance_init = virt_instance_init,
-    .class_size = sizeof(VirtMachineClass),
-    .class_init = virt_class_init,
+    .name = MACHINE_TYPE_NAME("virt-2.6"),
+    .parent = TYPE_VIRT_MACHINE,
+    .instance_init = virt_2_6_instance_init,
+    .class_init = virt_2_6_class_init,
 };
 
 static void machvirt_machine_init(void)
 {
+    type_register_static(&virt_machine_info);
     type_register_static(&machvirt_info);
 }
 
-machine_init(machvirt_machine_init);
+type_init(machvirt_machine_init);
