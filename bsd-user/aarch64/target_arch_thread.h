@@ -27,7 +27,7 @@ static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
 
     /*
      * Make sure the stack is properly aligned.
-     * arm/include/param.h (STACKLIGN() macro)
+     * arm64/include/param.h (STACKLIGN() macro)
      */
     sp = (abi_ulong)((stack_base + stack_size) -
         sizeof(struct target_trapframe)) & ~(16 - 1);
@@ -47,9 +47,15 @@ static inline void target_thread_init(struct target_pt_regs *regs,
 {
     abi_long stack = infop->start_stack;
 
+    /*
+     * Make sure the stack is properly aligned.
+     * arm64/include/param.h (STACKLIGN() macro)
+     */
+
     memset(regs, 0, sizeof(*regs));
+    regs->regs[0] = infop->start_stack;
     regs->pc = infop->entry &  ~0x3ULL;
-    regs->sp = stack;
+    regs->sp = stack & ~(16 - 1);
 
 #if 0
     if (bsd_type == target_freebsd) {
