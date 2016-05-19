@@ -20,6 +20,7 @@
 #include "cpu.h"
 #include "qemu/host-utils.h"
 #include "exec/helper-proto.h"
+#include "exec/exec-all.h"
 #include "exec/cpu_ldst.h"
 #include "sysemu/kvm.h"
 
@@ -581,7 +582,7 @@ static bool mips_vp_is_wfi(MIPSCPU *c)
 
 static inline void mips_vpe_wake(MIPSCPU *c)
 {
-    /* Dont set ->halted = 0 directly, let it be done via cpu_has_work
+    /* Don't set ->halted = 0 directly, let it be done via cpu_has_work
        because there might be other conditions that state that c should
        be sleeping.  */
     cpu_interrupt(CPU(c), CPU_INTERRUPT_WAKE);

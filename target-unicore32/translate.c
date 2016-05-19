@@ -12,6 +12,7 @@
 
 #include "cpu.h"
 #include "disas/disas.h"
+#include "exec/exec-all.h"
 #include "tcg-op.h"
 #include "qemu/log.h"
 #include "exec/cpu_ldst.h"
@@ -1089,15 +1090,21 @@ static void disas_ucf64_insn(CPUUniCore32State *env, DisasContext *s, uint32_t i
     }
 }
 
+static inline bool use_goto_tb(DisasContext *s, uint32_t dest)
+{
+#ifndef CONFIG_USER_ONLY
+    return (s->tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK);
+#else
+    return true;
+#endif
+}
+
 static inline void gen_goto_tb(DisasContext *s, int n, uint32_t dest)
 {
-    TranslationBlock *tb;
-
-    tb = s->tb;
-    if ((tb->pc & TARGET_PAGE_MASK) == (dest & TARGET_PAGE_MASK)) {
+    if (use_goto_tb(s, dest)) {
         tcg_gen_goto_tb(n);
         gen_set_pc_im(dest);
-        tcg_gen_exit_tb((uintptr_t)tb + n);
+        tcg_gen_exit_tb((uintptr_t)s->tb + n);
     } else {
         gen_set_pc_im(dest);
         tcg_gen_exit_tb(0);

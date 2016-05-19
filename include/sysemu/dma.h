@@ -15,7 +15,6 @@
 #include "hw/hw.h"
 #include "block/block.h"
 #include "block/accounting.h"
-#include "sysemu/kvm.h"
 
 typedef struct ScatterGatherEntry ScatterGatherEntry;
 
@@ -67,9 +66,7 @@ static inline void dma_barrier(AddressSpace *as, DMADirection dir)
      * use lighter barriers based on the direction of the
      * transfer, the DMA context, etc...
      */
-    if (kvm_enabled()) {
-        smp_mb();
-    }
+    smp_mb();
 }
 
 /* Checks that the given range of addresses is valid for DMA.  This is
@@ -197,8 +194,8 @@ void qemu_sglist_add(QEMUSGList *qsg, dma_addr_t base, dma_addr_t len);
 void qemu_sglist_destroy(QEMUSGList *qsg);
 #endif
 
-typedef BlockAIOCB *DMAIOFunc(BlockBackend *blk, int64_t sector_num,
-                              QEMUIOVector *iov, int nb_sectors,
+typedef BlockAIOCB *DMAIOFunc(BlockBackend *blk, int64_t offset,
+                              QEMUIOVector *iov, BdrvRequestFlags flags,
                               BlockCompletionFunc *cb, void *opaque);
 
 BlockAIOCB *dma_blk_io(BlockBackend *blk,

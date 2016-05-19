@@ -20,6 +20,7 @@
 #include "qemu/cutils.h"
 
 #include "cpu.h"
+#include "exec/exec-all.h"
 #include "sysemu/kvm.h"
 #include "sysemu/cpus.h"
 #include "kvm_i386.h"
@@ -34,7 +35,6 @@
 #include "qapi/visitor.h"
 #include "sysemu/arch_init.h"
 
-#include "hw/hw.h"
 #if defined(CONFIG_KVM)
 #include <linux/kvm_para.h>
 #endif
@@ -43,6 +43,7 @@
 #include "hw/qdev-properties.h"
 #ifndef CONFIG_USER_ONLY
 #include "exec/address-spaces.h"
+#include "hw/hw.h"
 #include "hw/xen/xen.h"
 #include "hw/i386/apic_internal.h"
 #endif
@@ -2523,7 +2524,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
 
         /* The Linux kernel checks for the CMPLegacy bit and
          * discards multiple thread information if it is set.
-         * So dont set it here for Intel to make Linux guests happy.
+         * So don't set it here for Intel to make Linux guests happy.
          */
         if (cs->nr_cores * cs->nr_threads > 1) {
             if (env->cpuid_vendor1 != CPUID_VENDOR_INTEL_1 ||
