@@ -23,6 +23,8 @@
 #include "gic_internal.h"
 #include "qapi/error.h"
 #include "qom/cpu.h"
+#include "qemu/log.h"
+#include "trace.h"
 
 //#define DEBUG_GIC
 
@@ -93,6 +95,11 @@ void gic_update(GICState *s)
             }
         }
 
+        if (best_irq != 1023) {
+            trace_gic_update_bestirq(cpu, best_irq, best_prio,
+                s->priority_mask[cpu], s->running_priority[cpu]);
+        }
+
         irq_level = fiq_level = 0;
 
         if (best_prio < s->priority_mask[cpu]) {
@@ -106,10 +113,12 @@ void gic_update(GICState *s)
                         DPRINTF("Raised pending FIQ %d (cpu %d)\n",
                                 best_irq, cpu);
                         fiq_level = 1;
+                        trace_gic_update_set_irq(cpu, "fiq", fiq_level);
                     } else {
                         DPRINTF("Raised pending IRQ %d (cpu %d)\n",
                                 best_irq, cpu);
                         irq_level = 1;
+                        trace_gic_update_set_irq(cpu, "irq", irq_level);
                     }
                 }
             }
@@ -197,6 +206,7 @@ static void gic_set_irq(void *opaque, int irq, int level)
     } else {
         gic_set_irq_generic(s, irq, level, cm, target);
     }
+    trace_gic_set_irq(irq, level, cm, target);
 
     gic_update(s);
 }
@@ -332,6 +342,7 @@ uint32_t gic_acknowledge_irq(GICState *s, int cpu, MemTxAttrs attrs)
      * is in the wrong group.
      */
     irq = gic_get_current_pending_irq(s, cpu, attrs);
+    trace_gic_acknowledge_irq(cpu, irq);
 
     if (irq >= GIC_MAXIRQ) {
         DPRINTF("ACK, no pending interrupt or it is hidden: %d\n", irq);
@@ -853,6 +864,7 @@ static void gic_dist_writeb(void *opaque, hwaddr offset,
 
                 if (!GIC_TEST_ENABLED(irq + i, cm)) {
                     DPRINTF("Enabled IRQ %d\n", irq + i);
+                    trace_gic_enable_irq(irq + i);
                 }
                 GIC_SET_ENABLED(irq + i, cm);
                 /* If a raised level triggered IRQ enabled then mark
@@ -879,6 +891,7 @@ static void gic_dist_writeb(void *opaque, hwaddr offset,
 
                 if (GIC_TEST_ENABLED(irq + i, cm)) {
                     DPRINTF("Disabled IRQ %d\n", irq + i);
+                    trace_gic_disable_irq(irq + i);
                 }
                 GIC_CLEAR_ENABLED(irq + i, cm);
             }

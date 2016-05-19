@@ -26,6 +26,7 @@
 #include "qemu/main-loop.h"
 #include "qemu/error-report.h"
 #include "qemu/config-file.h"
+#include "qemu/bswap.h"
 #include "block/snapshot.h"
 #include "qapi/util.h"
 #include "qapi/qmp/qstring.h"
@@ -45,6 +46,8 @@
 #define QEMU_NBD_OPT_OBJECT        260
 #define QEMU_NBD_OPT_TLSCREDS      261
 #define QEMU_NBD_OPT_IMAGE_OPTS    262
+
+#define MBR_SIZE 512
 
 static NBDExport *exp;
 static bool newproto;
@@ -159,12 +162,13 @@ static int find_partition(BlockBackend *blk, int partition,
                           off_t *offset, off_t *size)
 {
     struct partition_record mbr[4];
-    uint8_t data[512];
+    uint8_t data[MBR_SIZE];
     int i;
     int ext_partnum = 4;
     int ret;
 
-    if ((ret = blk_read(blk, 0, data, 1)) < 0) {
+    ret = blk_pread(blk, 0, data, sizeof(data));
+    if (ret < 0) {
         error_report("error while reading: %s", strerror(-ret));
         exit(EXIT_FAILURE);
     }
@@ -182,10 +186,12 @@ static int find_partition(BlockBackend *blk, int partition,
 
         if (mbr[i].system == 0xF || mbr[i].system == 0x5) {
             struct partition_record ext[4];
-            uint8_t data1[512];
+            uint8_t data1[MBR_SIZE];
             int j;
 
-            if ((ret = blk_read(blk, mbr[i].start_sector_abs, data1, 1)) < 0) {
+            ret = blk_pread(blk, mbr[i].start_sector_abs * MBR_SIZE,
+                            data1, sizeof(data1));
+            if (ret < 0) {
                 error_report("error while reading: %s", strerror(-ret));
                 exit(EXIT_FAILURE);
             }

@@ -24,24 +24,26 @@
 
 #include "qemu/cutils.h"
 #include "cpu.h"
+#include "exec/exec-all.h"
 #include "tcg.h"
-#include "hw/hw.h"
+#include "hw/qdev-core.h"
 #if !defined(CONFIG_USER_ONLY)
 #include "hw/boards.h"
+#include "hw/xen/xen.h"
 #endif
-#include "hw/qdev.h"
 #include "sysemu/kvm.h"
 #include "sysemu/sysemu.h"
-#include "hw/xen/xen.h"
 #include "qemu/timer.h"
 #include "qemu/config-file.h"
 #include "qemu/error-report.h"
-#include "exec/memory.h"
-#include "sysemu/dma.h"
-#include "exec/address-spaces.h"
 #if defined(CONFIG_USER_ONLY)
 #include <qemu.h>
 #else /* !CONFIG_USER_ONLY */
+#include "hw/hw.h"
+#include "exec/memory.h"
+#include "exec/ioport.h"
+#include "sysemu/dma.h"
+#include "exec/address-spaces.h"
 #include "sysemu/xen-mapcache.h"
 #include "trace.h"
 #endif
@@ -641,7 +643,6 @@ void cpu_exec_exit(CPUState *cpu)
 void cpu_exec_init(CPUState *cpu, Error **errp)
 {
     CPUClass *cc = CPU_GET_CLASS(cpu);
-    int cpu_index;
     Error *local_err = NULL;
 
     cpu->as = NULL;
@@ -668,7 +669,7 @@ void cpu_exec_init(CPUState *cpu, Error **errp)
 #if defined(CONFIG_USER_ONLY)
     cpu_list_lock();
 #endif
-    cpu_index = cpu->cpu_index = cpu_get_free_index(&local_err);
+    cpu->cpu_index = cpu_get_free_index(&local_err);
     if (local_err) {
         error_propagate(errp, local_err);
 #if defined(CONFIG_USER_ONLY)
@@ -678,14 +679,16 @@ void cpu_exec_init(CPUState *cpu, Error **errp)
     }
     QTAILQ_INSERT_TAIL(&cpus, cpu, node);
 #if defined(CONFIG_USER_ONLY)
+    (void) cc;
     cpu_list_unlock();
-#endif
+#else
     if (qdev_get_vmsd(DEVICE(cpu)) == NULL) {
-        vmstate_register(NULL, cpu_index, &vmstate_cpu_common, cpu);
+        vmstate_register(NULL, cpu->cpu_index, &vmstate_cpu_common, cpu);
     }
     if (cc->vmsd != NULL) {
-        vmstate_register(NULL, cpu_index, cc->vmsd, cpu);
+        vmstate_register(NULL, cpu->cpu_index, cc->vmsd, cpu);
     }
+#endif
 }
 
 #if defined(CONFIG_USER_ONLY)
@@ -2087,7 +2090,7 @@ static void check_watchpoint(int offset, int len, MemTxAttrs attrs, int flags)
     target_ulong pc, cs_base;
     target_ulong vaddr;
     CPUWatchpoint *wp;
-    int cpu_flags;
+    uint32_t cpu_flags;
 
     if (cpu->watchpoint_hit) {
         /* We re-entered the check after replacing the TB. Now raise

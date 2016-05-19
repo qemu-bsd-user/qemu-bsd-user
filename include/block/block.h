@@ -17,6 +17,7 @@ typedef struct BlockJob BlockJob;
 typedef struct BdrvChild BdrvChild;
 typedef struct BdrvChildRole BdrvChildRole;
 typedef struct BlockJobTxn BlockJobTxn;
+typedef struct BdrvNextIterator BdrvNextIterator;
 
 typedef struct BlockDriverInfo {
     /* in bytes, 0 if irrelevant */
@@ -187,10 +188,6 @@ void bdrv_stats_print(Monitor *mon, const QObject *data);
 void bdrv_info_stats(Monitor *mon, QObject **ret_data);
 
 /* disk I/O throttling */
-void bdrv_io_limits_enable(BlockDriverState *bs, const char *group);
-void bdrv_io_limits_disable(BlockDriverState *bs);
-void bdrv_io_limits_update_group(BlockDriverState *bs, const char *group);
-
 void bdrv_init(void);
 void bdrv_init_with_whitelist(void);
 bool bdrv_uses_whitelist(void);
@@ -333,7 +330,7 @@ void bdrv_aio_cancel(BlockAIOCB *acb);
 void bdrv_aio_cancel_async(BlockAIOCB *acb);
 
 typedef struct BlockRequest {
-    /* Fields to be filled by multiwrite caller */
+    /* Fields to be filled by caller */
     union {
         struct {
             int64_t sector;
@@ -349,12 +346,9 @@ typedef struct BlockRequest {
     BlockCompletionFunc *cb;
     void *opaque;
 
-    /* Filled by multiwrite implementation */
+    /* Filled by block layer */
     int error;
 } BlockRequest;
-
-int bdrv_aio_multiwrite(BlockDriverState *bs, BlockRequest *reqs,
-    int num_reqs);
 
 /* sg packet commands */
 int bdrv_ioctl(BlockDriverState *bs, unsigned long int req, void *buf);
@@ -408,7 +402,7 @@ BlockDriverState *bdrv_lookup_bs(const char *device,
                                  Error **errp);
 bool bdrv_chain_contains(BlockDriverState *top, BlockDriverState *base);
 BlockDriverState *bdrv_next_node(BlockDriverState *bs);
-BlockDriverState *bdrv_next(BlockDriverState *bs);
+BdrvNextIterator *bdrv_next(BdrvNextIterator *it, BlockDriverState **bs);
 BlockDriverState *bdrv_next_monitor_owned(BlockDriverState *bs);
 int bdrv_is_encrypted(BlockDriverState *bs);
 int bdrv_key_required(BlockDriverState *bs);
@@ -476,6 +470,10 @@ void bdrv_disable_copy_on_read(BlockDriverState *bs);
 void bdrv_ref(BlockDriverState *bs);
 void bdrv_unref(BlockDriverState *bs);
 void bdrv_unref_child(BlockDriverState *parent, BdrvChild *child);
+BdrvChild *bdrv_attach_child(BlockDriverState *parent_bs,
+                             BlockDriverState *child_bs,
+                             const char *child_name,
+                             const BdrvChildRole *child_role);
 
 bool bdrv_op_is_blocked(BlockDriverState *bs, BlockOpType op, Error **errp);
 void bdrv_op_block(BlockDriverState *bs, BlockOpType op, Error *reason);
@@ -520,7 +518,8 @@ int bdrv_probe_geometry(BlockDriverState *bs, HDGeometry *geo);
 
 void bdrv_io_plug(BlockDriverState *bs);
 void bdrv_io_unplug(BlockDriverState *bs);
-void bdrv_flush_io_queue(BlockDriverState *bs);
+void bdrv_io_unplugged_begin(BlockDriverState *bs);
+void bdrv_io_unplugged_end(BlockDriverState *bs);
 
 /**
  * bdrv_drained_begin:
@@ -540,5 +539,9 @@ void bdrv_drained_begin(BlockDriverState *bs);
  * End a quiescent section started by bdrv_drained_begin().
  */
 void bdrv_drained_end(BlockDriverState *bs);
+
+void bdrv_add_child(BlockDriverState *parent, BlockDriverState *child,
+                    Error **errp);
+void bdrv_del_child(BlockDriverState *parent, BdrvChild *child, Error **errp);
 
 #endif
