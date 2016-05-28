@@ -263,6 +263,19 @@ void qemu_anon_ram_free(void *ptr, size_t size);
 
 #endif
 
+#if defined(__linux__) && \
+    (defined(__x86_64__) || defined(__arm__) || defined(__aarch64__))
+   /* Use 2 MiB alignment so transparent hugepages can be used by KVM.
+      Valgrind does not support alignments larger than 1 MiB,
+      therefore we need special code which handles running on Valgrind. */
+#  define QEMU_VMALLOC_ALIGN (512 * 4096)
+#elif defined(__linux__) && defined(__s390x__)
+   /* Use 1 MiB (segment size) alignment so gmap can be used by KVM. */
+#  define QEMU_VMALLOC_ALIGN (256 * 4096)
+#else
+#  define QEMU_VMALLOC_ALIGN getpagesize()
+#endif
+
 int qemu_madvise(void *addr, size_t len, int advice);
 
 int qemu_open(const char *name, int flags, ...);
@@ -313,6 +326,15 @@ static inline void qemu_timersub(const struct timeval *val1,
 #endif
 
 void qemu_set_cloexec(int fd);
+
+/* Starting on QEMU 2.5, qemu_hw_version() returns "2.5+" by default
+ * instead of QEMU_VERSION, so setting hw_version on MachineClass
+ * is no longer mandatory.
+ *
+ * Do NOT change this string, or it will break compatibility on all
+ * machine classes that don't set hw_version.
+ */
+#define QEMU_HW_VERSION "2.5+"
 
 /* QEMU "hardware version" setting. Used to replace code that exposed
  * QEMU_VERSION to guests in the past and need to keep compatibility.
