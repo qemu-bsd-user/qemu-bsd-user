@@ -8008,6 +8008,11 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
             }
             /* fallthru */
         case 0xf9 ... 0xff: /* sfence */
+            if (!(s->cpuid_features & CPUID_SSE)
+                || (prefixes & PREFIX_LOCK)) {
+                goto illegal_op;
+            }
+            break;
         case 0xe8 ... 0xef: /* lfence */
         case 0xf0 ... 0xf7: /* mfence */
             if (!(s->cpuid_features & CPUID_SSE2)
@@ -8139,6 +8144,12 @@ void tcg_x86_init(void)
         "bnd0_ub", "bnd1_ub", "bnd2_ub", "bnd3_ub"
     };
     int i;
+    static bool initialized;
+
+    if (initialized) {
+        return;
+    }
+    initialized = true;
 
     cpu_env = tcg_global_reg_new_ptr(TCG_AREG0, "env");
     cpu_cc_op = tcg_global_mem_new_i32(cpu_env,
