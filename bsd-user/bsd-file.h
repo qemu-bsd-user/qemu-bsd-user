@@ -648,7 +648,7 @@ static inline abi_long do_bsd_readlink(CPUArchState *env, abi_long arg1,
     } else
 #endif
     ret = get_errno(readlink(path(p1), p2, arg3));
-    unlock_user(p2, arg2, arg3);
+    unlock_user(p2, arg2, ret);
     UNLOCK_PATH(p1, arg1);
 
     return ret;
@@ -668,7 +668,7 @@ static inline abi_long do_bsd_readlinkat(abi_long arg1, abi_long arg2,
         return -TARGET_EFAULT;
     }
     ret = get_errno(readlinkat(arg1, p1, p2, arg4));
-    unlock_user(p2, arg3, arg4);
+    unlock_user(p2, arg3, ret);
     UNLOCK_PATH(p1, arg2);
 
     return ret;
