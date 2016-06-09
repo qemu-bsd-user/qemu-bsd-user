@@ -49,7 +49,7 @@ do {                                        \
     }                                       \
     (p2) = lock_user_string(arg2);          \
     if ((p2) == NULL) {                     \
-        unlock_user(p1, arg1, 0)            \
+        unlock_user(p1, arg1, 0);           \
         return -TARGET_EFAULT;              \
     }                                       \
 } while (0)
