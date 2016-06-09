@@ -657,20 +657,20 @@ static inline abi_long do_bsd_readlink(CPUArchState *env, abi_long arg1,
 
     LOCK_PATH(p1, arg1);
     p2 = lock_user(VERIFY_WRITE, arg2, arg3, 0);
-    if (!p1 || !p2) {
-        ret = -TARGET_EFAULT;
-    } else {
-#ifdef __FreeBSD__
-        if (strcmp(p1, "/proc/curproc/file") == 0) {
-            CPUState *cpu = ENV_GET_CPU(env);
-            TaskState *ts = (TaskState *)cpu->opaque;
-            strncpy(p2, ts->bprm->fullpath, arg3);
-            ret = MIN((abi_long)strlen(ts->bprm->fullpath), arg3);
-        } else
-#endif
-        ret = get_errno(readlink(path(p1), p2, arg3));
+    if (p2 == NULL) {
+        UNLOCK_PATH(p1, arg1);
+        return -TARGET_EFAULT;
     }
-    unlock_user(p2, arg2, ret);
+#ifdef __FreeBSD__
+    if (strcmp(p1, "/proc/curproc/file") == 0) {
+        CPUState *cpu = ENV_GET_CPU(env);
+        TaskState *ts = (TaskState *)cpu->opaque;
+        strncpy(p2, ts->bprm->fullpath, arg3);
+        ret = MIN((abi_long)strlen(ts->bprm->fullpath), arg3);
+    } else
+#endif
+    ret = get_errno(readlink(path(p1), p2, arg3));
+    unlock_user(p2, arg2, arg3);
     UNLOCK_PATH(p1, arg1);
 
     return ret;
@@ -685,12 +685,12 @@ static inline abi_long do_bsd_readlinkat(abi_long arg1, abi_long arg2,
 
     LOCK_PATH(p1, arg2);
     p2 = lock_user(VERIFY_WRITE, arg3, arg4, 0);
-    if (!p1 || !p2) {
-        ret = -TARGET_EFAULT;
-    } else {
-        ret = get_errno(readlinkat(arg1, p1, p2, arg4));
+    if (p2 == NULL) {
+        UNLOCK_PATH(p1, arg2);
+        return -TARGET_EFAULT;
     }
-    unlock_user(p2, arg3, ret);
+    ret = get_errno(readlinkat(arg1, p1, p2, arg4));
+    unlock_user(p2, arg3, arg4);
     UNLOCK_PATH(p1, arg2);
 
     return ret;
