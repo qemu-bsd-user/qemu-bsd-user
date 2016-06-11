@@ -28,8 +28,6 @@
 #define TARGET_LONG_BITS 64
 #define TARGET_PAGE_BITS 12
 
-#define TARGET_IS_BIENDIAN 1
-
 /* Note that the official physical address space bits is 62-M where M
    is implementation dependent.  I've not looked up M for the set of
    cpus we emulate at the system level.  */
@@ -359,6 +357,8 @@ struct ppc_slb_t {
 #define MSR_EP   6  /* Exception prefix on 601                               */
 #define MSR_IR   5  /* Instruction relocate                                  */
 #define MSR_DR   4  /* Data relocate                                         */
+#define MSR_IS   5  /* Instruction address space (BookE)                     */
+#define MSR_DS   4  /* Data address space (BookE)                            */
 #define MSR_PE   3  /* Protection enable on 403                              */
 #define MSR_PX   2  /* Protection exclusive on 403                  x        */
 #define MSR_PMM  2  /* Performance monitor mark on POWER            x        */
@@ -410,6 +410,8 @@ struct ppc_slb_t {
 #define msr_ep   ((env->msr >> MSR_EP)   & 1)
 #define msr_ir   ((env->msr >> MSR_IR)   & 1)
 #define msr_dr   ((env->msr >> MSR_DR)   & 1)
+#define msr_is   ((env->msr >> MSR_IS)   & 1)
+#define msr_ds   ((env->msr >> MSR_DS)   & 1)
 #define msr_pe   ((env->msr >> MSR_PE)   & 1)
 #define msr_px   ((env->msr >> MSR_PX)   & 1)
 #define msr_pmm  ((env->msr >> MSR_PMM)  & 1)
@@ -889,7 +891,7 @@ struct ppc_segment_page_sizes {
 
 /*****************************************************************************/
 /* The whole PowerPC CPU context */
-#define NB_MMU_MODES 3
+#define NB_MMU_MODES    8
 
 #define PPC_CPU_OPCODES_LEN          0x40
 #define PPC_CPU_INDIRECT_OPCODES_LEN 0x20
@@ -954,6 +956,7 @@ struct CPUPPCState {
     /* PowerPC 64 SLB area */
     ppc_slb_t slb[MAX_SLB_ENTRIES];
     int32_t slb_nr;
+    /* tcg TLB needs flush (deferred slb inval instruction typically) */
 #endif
     /* segment registers */
     hwaddr htab_base;
@@ -979,6 +982,7 @@ struct CPUPPCState {
     target_ulong pb[4];
     bool tlb_dirty;   /* Set to non-zero when modifying TLB                  */
     bool kvm_sw_tlb;  /* non-zero if KVM SW TLB API is active                */
+    uint32_t tlb_need_flush; /* Delayed flush needed */
 #endif
 
     /* Other registers */
@@ -1044,6 +1048,10 @@ struct CPUPPCState {
     hwaddr mpic_iack;
     /* true when the external proxy facility mode is enabled */
     bool mpic_proxy;
+    /* set when the processor has an HV mode, thus HV priv
+     * instructions and SPRs are diallowed if MSR:HV is 0
+     */
+    bool has_hv_mode;
 #endif
 
     /* Those resources are used only during code translation */
@@ -1053,7 +1061,8 @@ struct CPUPPCState {
     /* Those resources are used only in QEMU core */
     target_ulong hflags;      /* hflags is a MSR & HFLAGS_MASK         */
     target_ulong hflags_nmsr; /* specific hflags, not coming from MSR */
-    int mmu_idx;         /* precomputed MMU index to speed up mem accesses */
+    int immu_idx;         /* precomputed MMU index to speed up insn access */
+    int dmmu_idx;         /* precomputed MMU index to speed up data accesses */
 
     /* Power management */
     int (*check_pow)(CPUPPCState *env);
@@ -1242,13 +1251,10 @@ int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, uint32_t val);
 #define cpu_list ppc_cpu_list
 
 /* MMU modes definitions */
-#define MMU_MODE0_SUFFIX _user
-#define MMU_MODE1_SUFFIX _kernel
-#define MMU_MODE2_SUFFIX _hypv
 #define MMU_USER_IDX 0
 static inline int cpu_mmu_index (CPUPPCState *env, bool ifetch)
 {
-    return env->mmu_idx;
+    return ifetch ? env->immu_idx : env->dmmu_idx;
 }
 
 #include "exec/cpu-all.h"

@@ -99,10 +99,8 @@ void dump_slb(FILE *f, fprintf_function cpu_fprintf, PowerPCCPU *cpu)
 
 void helper_slbia(CPUPPCState *env)
 {
-    PowerPCCPU *cpu = ppc_env_get_cpu(env);
-    int n, do_invalidate;
+    int n;
 
-    do_invalidate = 0;
     /* XXX: Warning: slbia never invalidates the first segment */
     for (n = 1; n < env->slb_nr; n++) {
         ppc_slb_t *slb = &env->slb[n];
@@ -113,11 +111,8 @@ void helper_slbia(CPUPPCState *env)
              *      and we still don't have a tlb_flush_mask(env, n, mask)
              *      in QEMU, we just invalidate all TLBs
              */
-            do_invalidate = 1;
+            env->tlb_need_flush = 1;
         }
-    }
-    if (do_invalidate) {
-        tlb_flush(CPU(cpu), 1);
     }
 }
 
@@ -138,7 +133,7 @@ void helper_slbie(CPUPPCState *env, target_ulong addr)
          *      and we still don't have a tlb_flush_mask(env, n, mask)
          *      in QEMU, we just invalidate all TLBs
          */
-        tlb_flush(CPU(cpu), 1);
+        env->tlb_need_flush = 1;
     }
 }
 
@@ -224,6 +219,24 @@ static int ppc_load_slb_vsid(PowerPCCPU *cpu, target_ulong rb,
     return 0;
 }
 
+static int ppc_find_slb_vsid(PowerPCCPU *cpu, target_ulong rb,
+                             target_ulong *rt)
+{
+    CPUPPCState *env = &cpu->env;
+    ppc_slb_t *slb;
+
+    if (!msr_is_64bit(env, env->msr)) {
+        rb &= 0xffffffff;
+    }
+    slb = slb_lookup(cpu, rb);
+    if (slb == NULL) {
+        *rt = (target_ulong)-1ul;
+    } else {
+        *rt = slb->vsid;
+    }
+    return 0;
+}
+
 void helper_store_slb(CPUPPCState *env, target_ulong rb, target_ulong rs)
 {
     PowerPCCPU *cpu = ppc_env_get_cpu(env);
@@ -240,6 +253,18 @@ target_ulong helper_load_slb_esid(CPUPPCState *env, target_ulong rb)
     target_ulong rt = 0;
 
     if (ppc_load_slb_esid(cpu, rb, &rt) < 0) {
+        helper_raise_exception_err(env, POWERPC_EXCP_PROGRAM,
+                                   POWERPC_EXCP_INVAL);
+    }
+    return rt;
+}
+
+target_ulong helper_find_slb_vsid(CPUPPCState *env, target_ulong rb)
+{
+    PowerPCCPU *cpu = ppc_env_get_cpu(env);
+    target_ulong rt = 0;
+
+    if (ppc_find_slb_vsid(cpu, rb, &rt) < 0) {
         helper_raise_exception_err(env, POWERPC_EXCP_PROGRAM,
                                    POWERPC_EXCP_INVAL);
     }

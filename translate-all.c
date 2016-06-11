@@ -1395,7 +1395,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
            modifying the memory. It will ensure that it cannot modify
            itself */
         tb_gen_code(cpu, current_pc, current_cs_base, current_flags, 1);
-        cpu_resume_from_signal(cpu, NULL);
+        cpu_loop_exit_noexc(cpu);
     }
 #endif
 }
@@ -1439,10 +1439,13 @@ void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
     }
 }
 #else
-/* Called with mmap_lock held.  */
-static void tb_invalidate_phys_page(tb_page_addr_t addr,
-                                    uintptr_t pc, void *puc,
-                                    bool locked)
+/* Called with mmap_lock held. If pc is not 0 then it indicates the
+ * host PC of the faulting store instruction that caused this invalidate.
+ * Returns true if the caller needs to abort execution of the current
+ * TB (because it was modified by this store and the guest CPU has
+ * precise-SMC semantics).
+ */
+static bool tb_invalidate_phys_page(tb_page_addr_t addr, uintptr_t pc)
 {
     TranslationBlock *tb;
     PageDesc *p;
@@ -1460,7 +1463,7 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
     addr &= TARGET_PAGE_MASK;
     p = page_find(addr >> TARGET_PAGE_BITS);
     if (!p) {
-        return;
+        return false;
     }
     tb = p->first_tb;
 #ifdef TARGET_HAS_PRECISE_SMC
@@ -1499,12 +1502,10 @@ static void tb_invalidate_phys_page(tb_page_addr_t addr,
            modifying the memory. It will ensure that it cannot modify
            itself */
         tb_gen_code(cpu, current_pc, current_cs_base, current_flags, 1);
-        if (locked) {
-            mmap_unlock();
-        }
-        cpu_resume_from_signal(cpu, puc);
+        return true;
     }
 #endif
+    return false;
 }
 #endif
 
@@ -1653,7 +1654,7 @@ void cpu_io_recompile(CPUState *cpu, uintptr_t retaddr)
        repeating the fault, which is horribly inefficient.
        Better would be to execute just this insn uncached, or generate a
        second new TB.  */
-    cpu_resume_from_signal(cpu, NULL);
+    cpu_loop_exit_noexc(cpu);
 }
 
 void tb_flush_jmp_cache(CPUState *cpu, target_ulong addr)
@@ -1902,7 +1903,7 @@ void page_set_flags(target_ulong start, target_ulong end, int flags)
         if (!(p->flags & PAGE_WRITE) &&
             (flags & PAGE_WRITE) &&
             p->first_tb) {
-            tb_invalidate_phys_page(addr, 0, NULL, false);
+            tb_invalidate_phys_page(addr, 0);
         }
         p->flags = flags;
     }
@@ -1954,7 +1955,7 @@ int page_check_range(target_ulong start, target_ulong len, int flags)
             /* unprotect the page if it was put read-only because it
                contains translated code */
             if (!(p->flags & PAGE_WRITE)) {
-                if (!page_unprotect(addr, 0, NULL)) {
+                if (!page_unprotect(addr, 0)) {
                     return -1;
                 }
             }
@@ -1964,8 +1965,12 @@ int page_check_range(target_ulong start, target_ulong len, int flags)
 }
 
 /* called from signal handler: invalidate the code and unprotect the
-   page. Return TRUE if the fault was successfully handled. */
-int page_unprotect(target_ulong address, uintptr_t pc, void *puc)
+ * page. Return 0 if the fault was not handled, 1 if it was handled,
+ * and 2 if it was handled but the caller must cause the TB to be
+ * immediately exited. (We can only return 2 if the 'pc' argument is
+ * non-zero.)
+ */
+int page_unprotect(target_ulong address, uintptr_t pc)
 {
     unsigned int prot;
     PageDesc *p;
@@ -1996,7 +2001,10 @@ int page_unprotect(target_ulong address, uintptr_t pc, void *puc)
 
             /* and since the content will be modified, we must invalidate
                the corresponding translated code. */
-            tb_invalidate_phys_page(addr, pc, puc, true);
+            if (tb_invalidate_phys_page(addr, pc)) {
+                mmap_unlock();
+                return 2;
+            }
 #ifdef DEBUG_TB_CHECK
             tb_invalidate_check(addr);
 #endif
