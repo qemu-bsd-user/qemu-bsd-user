@@ -29,8 +29,6 @@
 #  define TARGET_LONG_BITS 32
 #endif
 
-#define TARGET_IS_BIENDIAN 1
-
 #define CPUArchState struct CPUARMState
 
 #include "qemu-common.h"
@@ -93,7 +91,19 @@
 #define ARM_CPU_VFIQ 3
 
 #define NB_MMU_MODES 7
-#define TARGET_INSN_START_EXTRA_WORDS 1
+/* ARM-specific extra insn start words:
+ * 1: Conditional execution bits
+ * 2: Partial exception syndrome for data aborts
+ */
+#define TARGET_INSN_START_EXTRA_WORDS 2
+
+/* The 2nd extra word holding syndrome info for data aborts does not use
+ * the upper 6 bits nor the lower 14 bits. We mask and shift it down to
+ * help the sleb128 encoder do a better job.
+ * When restoring the CPU state, we shift it back up.
+ */
+#define ARM_INSN_START_WORD2_MASK ((1 << 26) - 1)
+#define ARM_INSN_START_WORD2_SHIFT 14
 
 /* We currently assume float and double are IEEE single and double
    precision respectively.
@@ -278,6 +288,7 @@ typedef struct CPUARMState {
             uint64_t far_el[4];
         };
         uint64_t hpfar_el2;
+        uint64_t hstr_el2;
         union { /* Translation result. */
             struct {
                 uint64_t _unused_par_0;

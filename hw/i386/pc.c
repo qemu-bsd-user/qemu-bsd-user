@@ -765,8 +765,6 @@ static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
                      acpi_tables, acpi_tables_len);
     fw_cfg_add_i32(fw_cfg, FW_CFG_IRQ0_OVERRIDE, kvm_allows_irq0_override());
 
-    pc_build_smbios(fw_cfg);
-
     fw_cfg_add_bytes(fw_cfg, FW_CFG_E820_TABLE,
                      &e820_reserve, sizeof(e820_reserve));
     fw_cfg_add_file(fw_cfg, "etc/e820", e820_table,
@@ -1149,14 +1147,6 @@ void pc_cpus_init(PCMachineState *pcms)
     smbios_set_cpuid(cpu->env.cpuid_version, cpu->env.features[FEAT_1_EDX]);
 }
 
-/* pci-info ROM file. Little endian format */
-typedef struct PcRomPciInfo {
-    uint64_t w32_min;
-    uint64_t w32_max;
-    uint64_t w64_min;
-    uint64_t w64_max;
-} PcRomPciInfo;
-
 static
 void pc_machine_done(Notifier *notifier, void *data)
 {
@@ -1182,6 +1172,9 @@ void pc_machine_done(Notifier *notifier, void *data)
     }
 
     acpi_setup();
+    if (pcms->fw_cfg) {
+        pc_build_smbios(pcms->fw_cfg);
+    }
 }
 
 void pc_guest_info_init(PCMachineState *pcms)
@@ -1893,7 +1886,7 @@ static void pc_machine_initfn(Object *obj)
                         pc_machine_get_hotplug_memory_region_size,
                         NULL, NULL, NULL, &error_abort);
 
-    pcms->max_ram_below_4g = 1ULL << 32; /* 4G */
+    pcms->max_ram_below_4g = 0xe0000000; /* 3.5G */
     object_property_add(obj, PC_MACHINE_MAX_RAM_BELOW_4G, "size",
                         pc_machine_get_max_ram_below_4g,
                         pc_machine_set_max_ram_below_4g,

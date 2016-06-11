@@ -1765,8 +1765,7 @@ static int expand_zero_clusters_in_l1(BlockDriverState *bs, uint64_t *l1_table,
                 goto fail;
             }
 
-            ret = bdrv_write_zeroes(bs->file->bs, offset / BDRV_SECTOR_SIZE,
-                                    s->cluster_sectors, 0);
+            ret = bdrv_pwrite_zeroes(bs->file->bs, offset, s->cluster_size, 0);
             if (ret < 0) {
                 if (!preallocated) {
                     qcow2_free_clusters(bs, offset, s->cluster_size,
@@ -1868,8 +1867,8 @@ int qcow2_expand_zero_clusters(BlockDriverState *bs,
     }
 
     for (i = 0; i < s->nb_snapshots; i++) {
-        int l1_sectors = (s->snapshots[i].l1_size * sizeof(uint64_t) +
-                BDRV_SECTOR_SIZE - 1) / BDRV_SECTOR_SIZE;
+        int l1_sectors = DIV_ROUND_UP(s->snapshots[i].l1_size *
+                                      sizeof(uint64_t), BDRV_SECTOR_SIZE);
 
         l1_table = g_realloc(l1_table, l1_sectors * BDRV_SECTOR_SIZE);
 

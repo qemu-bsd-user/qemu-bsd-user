@@ -646,9 +646,6 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
 
     if (env->spr[SPR_LPCR] & LPCR_AIL) {
         new_msr |= (1 << MSR_IR) | (1 << MSR_DR);
-    } else if (msr & ((1 << MSR_IR) | (1 << MSR_DR))) {
-        /* If we disactivated any translation, flush TLBs */
-        tlb_flush(cs, 1);
     }
 
 #ifdef TARGET_PPC64
@@ -712,8 +709,12 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
         }
     }
 #endif
-    /* XXX: we don't use hreg_store_msr here as already have treated
-     *      any special case that could occur. Just store MSR and update hflags
+    /* We don't use hreg_store_msr here as already have treated
+     * any special case that could occur. Just store MSR and update hflags
+     *
+     * Note: We *MUST* not use hreg_store_msr() as-is anyway because it
+     * will prevent setting of the HV bit which some exceptions might need
+     * to do.
      */
     env->msr = new_msr & env->msr_mask;
     hreg_compute_hflags(env);
@@ -722,13 +723,10 @@ static inline void powerpc_excp(PowerPCCPU *cpu, int excp_model, int excp)
     cs->exception_index = POWERPC_EXCP_NONE;
     env->error_code = 0;
 
-    if ((env->mmu_model == POWERPC_MMU_BOOKE) ||
-        (env->mmu_model == POWERPC_MMU_BOOKE206)) {
-        /* XXX: The BookE changes address space when switching modes,
-                we should probably implement that as different MMU indexes,
-                but for the moment we do it the slow way and flush all.  */
-        tlb_flush(cs, 1);
-    }
+    /* Any interrupt is context synchronizing, check if TCG TLB
+     * needs a delayed flush on ppc64
+     */
+    check_tlb_flush(env);
 }
 
 void ppc_cpu_do_interrupt(CPUState *cs)
@@ -954,6 +952,9 @@ static inline void do_rfi(CPUPPCState *env, target_ulong nip, target_ulong msr,
      * as rfi is always the last insn of a TB
      */
     cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
+
+    /* Context synchronizing: check if TCG TLB needs flush */
+    check_tlb_flush(env);
 }
 
 void helper_rfi(CPUPPCState *env)
