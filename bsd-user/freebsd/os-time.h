@@ -764,7 +764,7 @@ static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1 __unused,
 }
 #endif /* ! __FreeBSD_version >= 902503 */
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100056
+#if defined(__FreeBSD_version) && ((__FreeBSD__ == 10 && __FreeBSD_version >= 1003000) || __FreeBSD_version >= 1100056)
 
 static inline abi_long do_freebsd_futimens(abi_ulong arg1,
         abi_ulong arg2)
