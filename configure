@@ -305,8 +305,8 @@ archipelago="no"
 gtk=""
 gtkabi=""
 gtk_gl="no"
+tls_priority="NORMAL"
 gnutls=""
-gnutls_hash=""
 gnutls_rnd=""
 nettle=""
 nettle_kdf="no"
@@ -1097,6 +1097,8 @@ for opt do
   ;;
   --enable-gtk) gtk="yes"
   ;;
+  --tls-priority=*) tls_priority="$optarg"
+  ;;
   --disable-gnutls) gnutls="no"
   ;;
   --enable-gnutls) gnutls="yes"
@@ -1216,6 +1218,13 @@ esac
 QEMU_CFLAGS="$CPU_CFLAGS $QEMU_CFLAGS"
 EXTRA_CFLAGS="$CPU_CFLAGS $EXTRA_CFLAGS"
 
+# For user-mode emulation the host arch has to be one we explicitly
+# support, even if we're using TCI.
+if [ "$ARCH" = "unknown" ]; then
+  bsd_user="no"
+  linux_user="no"
+fi
+
 default_target_list=""
 
 mak_wilds=""
@@ -1301,6 +1310,7 @@ Advanced options (experts only):
   --disable-blobs          disable installing provided firmware blobs
   --with-vss-sdk=SDK-path  enable Windows VSS support in QEMU Guest Agent
   --with-win-sdk=SDK-path  path to Windows Platform SDK (to build VSS .tlb)
+  --tls-priority           default TLS protocol/cipher priority string
 
 Optional features, enabled with --enable-FEATURE and
 disabled with --disable-FEATURE, default is enabled if available:
@@ -1380,7 +1390,6 @@ fi
 if test "$ARCH" = "unknown"; then
     if test "$tcg_interpreter" = "yes" ; then
         echo "Unsupported CPU = $cpu, will use TCG with TCI (experimental)"
-        ARCH=tci
     else
         error_exit "Unsupported CPU = $cpu, try --enable-tcg-interpreter"
     fi
@@ -1792,8 +1801,10 @@ int foo(void *a) __attribute__((ifunc("bar_ifunc")));
 int main(int argc, char *argv[]) { return foo(argv[0]);}
 EOF
 if compile_object "" ; then
-    if readelf --syms $TMPO |grep "IFUNC.*foo" >/dev/null 2>&1; then
-        avx2_opt="yes"
+    if has readelf; then
+        if readelf --syms $TMPO 2>/dev/null |grep -q "IFUNC.*foo"; then
+            avx2_opt="yes"
+        fi
     fi
 fi
 
@@ -1883,6 +1894,9 @@ if test "$seccomp" != "no" ; then
         ;;
     arm|aarch64)
         libseccomp_minver="2.2.3"
+        ;;
+    ppc|ppc64)
+        libseccomp_minver="2.3.0"
         ;;
     *)
         libseccomp_minver=""
@@ -2207,13 +2221,6 @@ if test "$gnutls" != "no"; then
 	QEMU_CFLAGS="$QEMU_CFLAGS $gnutls_cflags"
         gnutls="yes"
 
-	# gnutls_hash_init requires >= 2.9.10
-	if $pkg_config --exists "gnutls >= 2.9.10"; then
-            gnutls_hash="yes"
-	else
-	    gnutls_hash="no"
-	fi
-
 	# gnutls_rnd requires >= 2.11.0
 	if $pkg_config --exists "gnutls >= 2.11.0"; then
 	    gnutls_rnd="yes"
@@ -2247,11 +2254,9 @@ if test "$gnutls" != "no"; then
 	feature_not_found "gnutls" "Install gnutls devel"
     else
         gnutls="no"
-        gnutls_hash="no"
         gnutls_rnd="no"
     fi
 else
-    gnutls_hash="no"
     gnutls_rnd="no"
 fi
 
@@ -4700,7 +4705,7 @@ if test "$cpu" = "s390x" ; then
 fi
 
 # Probe for the need for relocating the user-only binary.
-if test "$pie" = "no" ; then
+if ( [ "$linux_user" = yes ] || [ "$bsd_user" = yes ] ) && [ "$pie" = no ]; then
   textseg_addr=
   case "$cpu" in
     arm | i386 | ppc* | s390* | sparc* | x86_64 | x32)
@@ -4722,6 +4727,16 @@ EOF
       # In case ld does not support -Ttext-segment, edit the default linker
       # script via sed to set the .text start addr.  This is needed on FreeBSD
       # at least.
+      if ! $ld --verbose >/dev/null 2>&1; then
+        error_exit \
+            "We need to link the QEMU user mode binaries at a" \
+            "specific text address. Unfortunately your linker" \
+            "doesn't support either the -Ttext-segment option or" \
+            "printing the default linker script with --verbose." \
+            "If you don't want the user mode binaries, pass the" \
+            "--disable-user option to configure."
+      fi
+
       $ld --verbose | sed \
         -e '1,/==================================================/d' \
         -e '/==================================================/,$d' \
@@ -4791,8 +4806,8 @@ echo "SDL support       $sdl $(echo_version $sdl $sdlversion)"
 echo "GTK support       $gtk $(echo_version $gtk $gtk_version)"
 echo "GTK GL support    $gtk_gl"
 echo "VTE support       $vte $(echo_version $vte $vteversion)"
+echo "TLS priority      $tls_priority"
 echo "GNUTLS support    $gnutls"
-echo "GNUTLS hash       $gnutls_hash"
 echo "GNUTLS rnd        $gnutls_rnd"
 echo "libgcrypt         $gcrypt"
 echo "libgcrypt kdf     $gcrypt_kdf"
@@ -5155,11 +5170,9 @@ if test "$gtk" = "yes" ; then
     echo "CONFIG_GTK_GL=y" >> $config_host_mak
   fi
 fi
+echo "CONFIG_TLS_PRIORITY=\"$tls_priority\"" >> $config_host_mak
 if test "$gnutls" = "yes" ; then
   echo "CONFIG_GNUTLS=y" >> $config_host_mak
-fi
-if test "$gnutls_hash" = "yes" ; then
-  echo "CONFIG_GNUTLS_HASH=y" >> $config_host_mak
 fi
 if test "$gnutls_rnd" = "yes" ; then
   echo "CONFIG_GNUTLS_RND=y" >> $config_host_mak

@@ -21,6 +21,7 @@
 #include <sys/syscall.h>
 #include <sys/resource.h>
 
+#include "qapi/error.h"
 #include "qemu.h"
 #include "qemu/path.h"
 #include "qemu/cutils.h"
@@ -156,7 +157,7 @@ static inline void exclusive_idle(void)
 }
 
 /* Start an exclusive operation.
-   Must only be called from outside cpu_arm_exec.   */
+   Must only be called from outside cpu_exec.   */
 static inline void start_exclusive(void)
 {
     CPUState *other_cpu;
@@ -290,7 +291,7 @@ void cpu_loop(CPUX86State *env)
 
     for(;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_x86_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch(trapnr) {
         case 0x80:
@@ -731,7 +732,7 @@ void cpu_loop(CPUARMState *env)
 
     for(;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_arm_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch(trapnr) {
         case EXCP_UDEF:
@@ -1067,7 +1068,7 @@ void cpu_loop(CPUARMState *env)
 
     for (;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_arm_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
 
         switch (trapnr) {
@@ -1155,7 +1156,7 @@ void cpu_loop(CPUUniCore32State *env)
 
     for (;;) {
         cpu_exec_start(cs);
-        trapnr = uc32_cpu_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch (trapnr) {
         case UC32_EXCP_PRIV:
@@ -1360,7 +1361,7 @@ void cpu_loop (CPUSPARCState *env)
 
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_sparc_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
 
         /* Compute PSR before exposing state.  */
@@ -1632,7 +1633,7 @@ void cpu_loop(CPUPPCState *env)
 
     for(;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_ppc_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch(trapnr) {
         case POWERPC_EXCP_NONE:
@@ -1720,6 +1721,7 @@ void cpu_loop(CPUPPCState *env)
             queue_signal(env, info.si_signo, &info);
             break;
         case POWERPC_EXCP_PROGRAM:  /* Program exception                     */
+        case POWERPC_EXCP_HV_EMU:   /* HV emulation                          */
             /* XXX: check this */
             switch (env->error_code & ~0xF) {
             case POWERPC_EXCP_FP:
@@ -2488,7 +2490,7 @@ void cpu_loop(CPUMIPSState *env)
 
     for(;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_mips_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch(trapnr) {
         case EXCP_SYSCALL:
@@ -2728,7 +2730,7 @@ void cpu_loop(CPUOpenRISCState *env)
 
     for (;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_openrisc_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         gdbsig = 0;
 
@@ -2822,7 +2824,7 @@ void cpu_loop(CPUSH4State *env)
 
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_sh4_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
 
         switch (trapnr) {
@@ -2888,7 +2890,7 @@ void cpu_loop(CPUCRISState *env)
     
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_cris_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch (trapnr) {
         case 0xaa:
@@ -2953,7 +2955,7 @@ void cpu_loop(CPUMBState *env)
     
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_mb_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch (trapnr) {
         case 0xaa:
@@ -3070,7 +3072,7 @@ void cpu_loop(CPUM68KState *env)
 
     for(;;) {
         cpu_exec_start(cs);
-        trapnr = cpu_m68k_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch(trapnr) {
         case EXCP_ILLEGAL:
@@ -3213,7 +3215,7 @@ void cpu_loop(CPUAlphaState *env)
 
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_alpha_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
 
         /* All of the traps imply a transition through PALcode, which
@@ -3405,7 +3407,7 @@ void cpu_loop(CPUS390XState *env)
 
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_s390x_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch (trapnr) {
         case EXCP_INTERRUPT:
@@ -3714,7 +3716,7 @@ void cpu_loop(CPUTLGState *env)
 
     while (1) {
         cpu_exec_start(cs);
-        trapnr = cpu_tilegx_exec(cs);
+        trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
         switch (trapnr) {
         case TILEGX_EXCP_SYSCALL:
@@ -3845,7 +3847,7 @@ static void handle_arg_log(const char *arg)
 
 static void handle_arg_log_filename(const char *arg)
 {
-    qemu_set_log_filename(arg);
+    qemu_set_log_filename(arg, &error_fatal);
 }
 
 static void handle_arg_set_env(const char *arg)
@@ -4684,6 +4686,20 @@ int main(int argc, char **argv, char **envp)
         env->active_tc.PC = regs->cp0_epc & ~(target_ulong)1;
         if (regs->cp0_epc & 1) {
             env->hflags |= MIPS_HFLAG_M16;
+        }
+        if (((info->elf_flags & EF_MIPS_NAN2008) != 0) !=
+            ((env->active_fpu.fcr31 & (1 << FCR31_NAN2008)) != 0)) {
+            if ((env->active_fpu.fcr31_rw_bitmask &
+                  (1 << FCR31_NAN2008)) == 0) {
+                fprintf(stderr, "ELF binary's NaN mode not supported by CPU\n");
+                exit(1);
+            }
+            if ((info->elf_flags & EF_MIPS_NAN2008) != 0) {
+                env->active_fpu.fcr31 |= (1 << FCR31_NAN2008);
+            } else {
+                env->active_fpu.fcr31 &= ~(1 << FCR31_NAN2008);
+            }
+            restore_snan_bit_mode(env);
         }
     }
 #elif defined(TARGET_OPENRISC)

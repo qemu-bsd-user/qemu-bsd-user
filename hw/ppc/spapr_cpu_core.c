@@ -42,7 +42,7 @@ static void spapr_cpu_destroy(PowerPCCPU *cpu)
 {
     sPAPRMachineState *spapr = SPAPR_MACHINE(qdev_get_machine());
 
-    xics_cpu_destroy(spapr->icp, cpu);
+    xics_cpu_destroy(spapr->xics, cpu);
     qemu_unregister_reset(spapr_cpu_reset, cpu);
 }
 
@@ -76,7 +76,7 @@ void spapr_cpu_init(sPAPRMachineState *spapr, PowerPCCPU *cpu, Error **errp)
         }
     }
 
-    xics_cpu_setup(spapr->icp, cpu);
+    xics_cpu_setup(spapr->xics, cpu);
 
     qemu_register_reset(spapr_cpu_reset, cpu);
     spapr_cpu_reset(cpu);
@@ -102,7 +102,6 @@ static void spapr_core_release(DeviceState *dev, void *opaque)
     const char *typename = object_class_get_name(sc->cpu_class);
     size_t size = object_type_get_instance_size(typename);
     sPAPRMachineState *spapr = SPAPR_MACHINE(qdev_get_machine());
-    sPAPRCPUCore *core = SPAPR_CPU_CORE(OBJECT(dev));
     CPUCore *cc = CPU_CORE(dev);
     int smt = kvmppc_smt_threads();
     int i;
@@ -120,7 +119,7 @@ static void spapr_core_release(DeviceState *dev, void *opaque)
 
     spapr->cores[cc->core_id / smt] = NULL;
 
-    g_free(core->threads);
+    g_free(sc->threads);
     object_unparent(OBJECT(dev));
 }
 
@@ -260,23 +259,24 @@ out:
     error_propagate(errp, local_err);
 }
 
-static int spapr_cpu_core_realize_child(Object *child, void *opaque)
+static void spapr_cpu_core_realize_child(Object *child, Error **errp)
 {
-    Error **errp = opaque;
+    Error *local_err = NULL;
     sPAPRMachineState *spapr = SPAPR_MACHINE(qdev_get_machine());
     CPUState *cs = CPU(child);
     PowerPCCPU *cpu = POWERPC_CPU(cs);
 
-    object_property_set_bool(child, true, "realized", errp);
-    if (*errp) {
-        return 1;
+    object_property_set_bool(child, true, "realized", &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return;
     }
 
-    spapr_cpu_init(spapr, cpu, errp);
-    if (*errp) {
-        return 1;
+    spapr_cpu_init(spapr, cpu, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return;
     }
-    return 0;
 }
 
 static void spapr_cpu_core_realize(DeviceState *dev, Error **errp)
@@ -286,13 +286,13 @@ static void spapr_cpu_core_realize(DeviceState *dev, Error **errp)
     const char *typename = object_class_get_name(sc->cpu_class);
     size_t size = object_type_get_instance_size(typename);
     Error *local_err = NULL;
-    Object *obj;
-    int i;
+    void *obj;
+    int i, j;
 
     sc->threads = g_malloc0(size * cc->nr_threads);
     for (i = 0; i < cc->nr_threads; i++) {
         char id[32];
-        void *obj = sc->threads + i * size;
+        obj = sc->threads + i * size;
 
         object_initialize(obj, size, typename);
         snprintf(id, sizeof(id), "thread[%d]", i);
@@ -300,19 +300,23 @@ static void spapr_cpu_core_realize(DeviceState *dev, Error **errp)
         if (local_err) {
             goto err;
         }
-    }
-    object_child_foreach(OBJECT(dev), spapr_cpu_core_realize_child, &local_err);
-    if (local_err) {
-        goto err;
-    } else {
-        return;
+        object_unref(obj);
     }
 
+    for (j = 0; j < cc->nr_threads; j++) {
+        obj = sc->threads + j * size;
+
+        spapr_cpu_core_realize_child(obj, &local_err);
+        if (local_err) {
+            goto err;
+        }
+    }
+    return;
+
 err:
-    while (i >= 0) {
+    while (--i >= 0) {
         obj = sc->threads + i * size;
         object_unparent(obj);
-        i--;
     }
     g_free(sc->threads);
     error_propagate(errp, local_err);
@@ -326,7 +330,6 @@ static void spapr_cpu_core_class_init(ObjectClass *oc, void *data)
 
 /*
  * instance_init routines from different flavours of sPAPR CPU cores.
- * TODO: Add support for 'host' core type.
  */
 #define SPAPR_CPU_CORE_INITFN(_type, _fname) \
 static void glue(glue(spapr_cpu_core_, _fname), _initfn(Object *obj)) \
@@ -339,10 +342,15 @@ static void glue(glue(spapr_cpu_core_, _fname), _initfn(Object *obj)) \
     core->cpu_class = oc; \
 }
 
+SPAPR_CPU_CORE_INITFN(970mp_v1.0, 970MP_v10);
+SPAPR_CPU_CORE_INITFN(970mp_v1.1, 970MP_v11);
+SPAPR_CPU_CORE_INITFN(970_v2.2, 970);
+SPAPR_CPU_CORE_INITFN(POWER5+_v2.1, POWER5plus);
 SPAPR_CPU_CORE_INITFN(POWER7_v2.3, POWER7);
 SPAPR_CPU_CORE_INITFN(POWER7+_v2.1, POWER7plus);
 SPAPR_CPU_CORE_INITFN(POWER8_v2.0, POWER8);
 SPAPR_CPU_CORE_INITFN(POWER8E_v2.1, POWER8E);
+SPAPR_CPU_CORE_INITFN(POWER8NVL_v1.0, POWER8NVL);
 
 typedef struct SPAPRCoreInfo {
     const char *name;
@@ -350,6 +358,21 @@ typedef struct SPAPRCoreInfo {
 } SPAPRCoreInfo;
 
 static const SPAPRCoreInfo spapr_cores[] = {
+    /* 970 and aliaes */
+    { .name = "970_v2.2", .initfn = spapr_cpu_core_970_initfn },
+    { .name = "970", .initfn = spapr_cpu_core_970_initfn },
+
+    /* 970MP variants and aliases */
+    { .name = "970MP_v1.0", .initfn = spapr_cpu_core_970MP_v10_initfn },
+    { .name = "970mp_v1.0", .initfn = spapr_cpu_core_970MP_v10_initfn },
+    { .name = "970MP_v1.1", .initfn = spapr_cpu_core_970MP_v11_initfn },
+    { .name = "970mp_v1.1", .initfn = spapr_cpu_core_970MP_v11_initfn },
+    { .name = "970mp", .initfn = spapr_cpu_core_970MP_v11_initfn },
+
+    /* POWER5 and aliases */
+    { .name = "POWER5+_v2.1", .initfn = spapr_cpu_core_POWER5plus_initfn },
+    { .name = "POWER5+", .initfn = spapr_cpu_core_POWER5plus_initfn },
+
     /* POWER7 and aliases */
     { .name = "POWER7_v2.3", .initfn = spapr_cpu_core_POWER7_initfn },
     { .name = "POWER7", .initfn = spapr_cpu_core_POWER7_initfn },
@@ -366,6 +389,10 @@ static const SPAPRCoreInfo spapr_cores[] = {
     /* POWER8E and aliases */
     { .name = "POWER8E_v2.1", .initfn = spapr_cpu_core_POWER8E_initfn },
     { .name = "POWER8E", .initfn = spapr_cpu_core_POWER8E_initfn },
+
+    /* POWER8NVL and aliases */
+    { .name = "POWER8NVL_v1.0", .initfn = spapr_cpu_core_POWER8NVL_initfn },
+    { .name = "POWER8NVL", .initfn = spapr_cpu_core_POWER8NVL_initfn },
 
     { .name = NULL }
 };

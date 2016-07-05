@@ -116,15 +116,16 @@ static XICSState *try_create_xics(const char *type, int nr_servers,
 static XICSState *xics_system_init(MachineState *machine,
                                    int nr_servers, int nr_irqs, Error **errp)
 {
-    XICSState *icp = NULL;
+    XICSState *xics = NULL;
 
     if (kvm_enabled()) {
         Error *err = NULL;
 
         if (machine_kernel_irqchip_allowed(machine)) {
-            icp = try_create_xics(TYPE_KVM_XICS, nr_servers, nr_irqs, &err);
+            xics = try_create_xics(TYPE_XICS_SPAPR_KVM, nr_servers, nr_irqs,
+                                   &err);
         }
-        if (machine_kernel_irqchip_required(machine) && !icp) {
+        if (machine_kernel_irqchip_required(machine) && !xics) {
             error_reportf_err(err,
                               "kernel_irqchip requested but unavailable: ");
         } else {
@@ -132,11 +133,11 @@ static XICSState *xics_system_init(MachineState *machine,
         }
     }
 
-    if (!icp) {
-        icp = try_create_xics(TYPE_XICS, nr_servers, nr_irqs, errp);
+    if (!xics) {
+        xics = try_create_xics(TYPE_XICS_SPAPR, nr_servers, nr_irqs, errp);
     }
 
-    return icp;
+    return xics;
 }
 
 static int spapr_fixup_cpu_smt_dt(void *fdt, int offset, PowerPCCPU *cpu,
@@ -339,6 +340,9 @@ static void *spapr_create_fdt_skel(hwaddr initrd_base,
     add_str(hypertas, "hcall-splpar");
     add_str(hypertas, "hcall-bulk");
     add_str(hypertas, "hcall-set-mode");
+    add_str(hypertas, "hcall-sprg0");
+    add_str(hypertas, "hcall-copy");
+    add_str(hypertas, "hcall-debug");
     add_str(qemu_hypertas, "hcall-memop1");
 
     fdt = g_malloc0(FDT_MAX_SIZE);
@@ -1767,6 +1771,13 @@ static void ppc_spapr_init(MachineState *machine)
             spapr->vrma_adjust = 1;
             spapr->rma_size = MIN(spapr->rma_size, 0x10000000);
         }
+
+        /* Actually we don't support unbounded RMA anymore since we
+         * added proper emulation of HV mode. The max we can get is
+         * 16G which also happens to be what we configure for PAPR
+         * mode so make sure we don't do anything bigger than that
+         */
+        spapr->rma_size = MIN(spapr->rma_size, 0x400000000ull);
     }
 
     if (spapr->rma_size > node0_size) {
@@ -1779,9 +1790,9 @@ static void ppc_spapr_init(MachineState *machine)
     load_limit = MIN(spapr->rma_size, RTAS_MAX_ADDR) - FW_OVERHEAD;
 
     /* Set up Interrupt Controller before we create the VCPUs */
-    spapr->icp = xics_system_init(machine,
-                                  DIV_ROUND_UP(max_cpus * smt, smp_threads),
-                                  XICS_IRQS, &error_fatal);
+    spapr->xics = xics_system_init(machine,
+                                   DIV_ROUND_UP(max_cpus * smt, smp_threads),
+                                   XICS_IRQS_SPAPR, &error_fatal);
 
     if (smc->dr_lmb_enabled) {
         spapr_validate_node_memory(machine, &error_fatal);
@@ -2367,8 +2378,8 @@ static HotpluggableCPUList *spapr_query_hotpluggable_cpus(MachineState *machine)
 
         cpu_item->type = spapr_get_cpu_core_type(machine->cpu_model);
         cpu_item->vcpus_count = smp_threads;
-        cpu_props->has_core = true;
-        cpu_props->core = i * smt;
+        cpu_props->has_core_id = true;
+        cpu_props->core_id = i * smt;
         /* TODO: add 'has_node/node' here to describe
            to which node core belongs */
 
@@ -2485,7 +2496,12 @@ DEFINE_SPAPR_MACHINE(2_7, "2.7", true);
  * pseries-2.6
  */
 #define SPAPR_COMPAT_2_6 \
-    HW_COMPAT_2_6
+    HW_COMPAT_2_6 \
+    { \
+        .driver   = TYPE_SPAPR_PCI_HOST_BRIDGE,\
+        .property = "ddw",\
+        .value    = stringify(off),\
+    },
 
 static void spapr_machine_2_6_instance_options(MachineState *machine)
 {

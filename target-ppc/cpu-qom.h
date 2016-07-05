@@ -70,18 +70,21 @@ enum powerpc_mmu_t {
 #define POWERPC_MMU_64       0x00010000
 #define POWERPC_MMU_1TSEG    0x00020000
 #define POWERPC_MMU_AMR      0x00040000
+#define POWERPC_MMU_64K      0x00080000
     /* 64 bits PowerPC MMU                                     */
     POWERPC_MMU_64B        = POWERPC_MMU_64 | 0x00000001,
     /* Architecture 2.03 and later (has LPCR) */
     POWERPC_MMU_2_03       = POWERPC_MMU_64 | 0x00000002,
     /* Architecture 2.06 variant                               */
     POWERPC_MMU_2_06       = POWERPC_MMU_64 | POWERPC_MMU_1TSEG
+                             | POWERPC_MMU_64K
                              | POWERPC_MMU_AMR | 0x00000003,
     /* Architecture 2.06 "degraded" (no 1T segments)           */
     POWERPC_MMU_2_06a      = POWERPC_MMU_64 | POWERPC_MMU_AMR
                              | 0x00000003,
     /* Architecture 2.07 variant                               */
     POWERPC_MMU_2_07       = POWERPC_MMU_64 | POWERPC_MMU_1TSEG
+                             | POWERPC_MMU_64K
                              | POWERPC_MMU_AMR | 0x00000004,
     /* Architecture 2.07 "degraded" (no 1T segments)           */
     POWERPC_MMU_2_07a      = POWERPC_MMU_64 | POWERPC_MMU_AMR
@@ -124,6 +127,15 @@ enum powerpc_excp_t {
     /* POWER8 exception model           */
     POWERPC_EXCP_POWER8,
 };
+
+/*****************************************************************************/
+/* PM instructions */
+typedef enum {
+    PPC_PM_DOZE,
+    PPC_PM_NAP,
+    PPC_PM_SLEEP,
+    PPC_PM_RVWINKLE,
+} powerpc_pm_insn_t;
 
 /*****************************************************************************/
 /* Input pins model                                                          */

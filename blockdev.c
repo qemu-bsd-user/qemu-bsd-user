@@ -3644,9 +3644,7 @@ void qmp_drive_mirror(const char *device, const char *target,
                            has_unmap, unmap,
                            &local_err);
     bdrv_unref(target_bs);
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
 out:
     aio_context_release(aio_context);
 }
@@ -3701,9 +3699,7 @@ void qmp_blockdev_mirror(const char *device, const char *target,
                            has_on_target_error, on_target_error,
                            true, true,
                            &local_err);
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
 
     aio_context_release(aio_context);
 }
@@ -3811,6 +3807,7 @@ void qmp_block_job_resume(const char *device, Error **errp)
 
     job->user_paused = false;
     trace_qmp_block_job_resume(job);
+    block_job_iostatus_reset(job);
     block_job_resume(job);
     aio_context_release(aio_context);
 }
@@ -3913,9 +3910,7 @@ void qmp_change_backing_file(const char *device,
 
     if (ro) {
         bdrv_reopen(image_bs, open_flags, &local_err);
-        if (local_err) {
-            error_propagate(errp, local_err); /* will preserve prior errp */
-        }
+        error_propagate(errp, local_err);
     }
 
 out:

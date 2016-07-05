@@ -69,92 +69,58 @@ VirtIODevice *virtio_ccw_get_vdev(SubchDev *sch)
     return vdev;
 }
 
-static int virtio_ccw_set_guest2host_notifier(VirtioCcwDevice *dev, int n,
-                                              bool assign, bool set_handler)
-{
-    VirtIODevice *vdev = virtio_bus_get_device(&dev->bus);
-    VirtQueue *vq = virtio_get_queue(vdev, n);
-    EventNotifier *notifier = virtio_queue_get_host_notifier(vq);
-    int r = 0;
-    SubchDev *sch = dev->sch;
-    uint32_t sch_id = (css_build_subchannel_id(sch) << 16) | sch->schid;
-
-    if (assign) {
-        r = event_notifier_init(notifier, 1);
-        if (r < 0) {
-            error_report("%s: unable to init event notifier: %d", __func__, r);
-            return r;
-        }
-        virtio_queue_set_host_notifier_fd_handler(vq, true, set_handler);
-        r = s390_assign_subch_ioeventfd(notifier, sch_id, n, assign);
-        if (r < 0) {
-            error_report("%s: unable to assign ioeventfd: %d", __func__, r);
-            virtio_queue_set_host_notifier_fd_handler(vq, false, false);
-            event_notifier_cleanup(notifier);
-            return r;
-        }
-    } else {
-        virtio_queue_set_host_notifier_fd_handler(vq, false, false);
-        s390_assign_subch_ioeventfd(notifier, sch_id, n, assign);
-        event_notifier_cleanup(notifier);
-    }
-    return r;
-}
-
 static void virtio_ccw_start_ioeventfd(VirtioCcwDevice *dev)
 {
-    VirtIODevice *vdev;
-    int n, r;
-
-    if (!(dev->flags & VIRTIO_CCW_FLAG_USE_IOEVENTFD) ||
-        dev->ioeventfd_disabled ||
-        dev->ioeventfd_started) {
-        return;
-    }
-    vdev = virtio_bus_get_device(&dev->bus);
-    for (n = 0; n < VIRTIO_CCW_QUEUE_MAX; n++) {
-        if (!virtio_queue_get_num(vdev, n)) {
-            continue;
-        }
-        r = virtio_ccw_set_guest2host_notifier(dev, n, true, true);
-        if (r < 0) {
-            goto assign_error;
-        }
-    }
-    dev->ioeventfd_started = true;
-    return;
-
-  assign_error:
-    while (--n >= 0) {
-        if (!virtio_queue_get_num(vdev, n)) {
-            continue;
-        }
-        r = virtio_ccw_set_guest2host_notifier(dev, n, false, false);
-        assert(r >= 0);
-    }
-    dev->ioeventfd_started = false;
-    /* Disable ioeventfd for this device. */
-    dev->flags &= ~VIRTIO_CCW_FLAG_USE_IOEVENTFD;
-    error_report("%s: failed. Fallback to userspace (slower).", __func__);
+    virtio_bus_start_ioeventfd(&dev->bus);
 }
 
 static void virtio_ccw_stop_ioeventfd(VirtioCcwDevice *dev)
 {
-    VirtIODevice *vdev;
-    int n, r;
+    virtio_bus_stop_ioeventfd(&dev->bus);
+}
 
-    if (!dev->ioeventfd_started) {
-        return;
+static bool virtio_ccw_ioeventfd_started(DeviceState *d)
+{
+    VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
+
+    return dev->ioeventfd_started;
+}
+
+static void virtio_ccw_ioeventfd_set_started(DeviceState *d, bool started,
+                                             bool err)
+{
+    VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
+
+    dev->ioeventfd_started = started;
+    if (err) {
+        /* Disable ioeventfd for this device. */
+        dev->flags &= ~VIRTIO_CCW_FLAG_USE_IOEVENTFD;
     }
-    vdev = virtio_bus_get_device(&dev->bus);
-    for (n = 0; n < VIRTIO_CCW_QUEUE_MAX; n++) {
-        if (!virtio_queue_get_num(vdev, n)) {
-            continue;
-        }
-        r = virtio_ccw_set_guest2host_notifier(dev, n, false, false);
-        assert(r >= 0);
-    }
-    dev->ioeventfd_started = false;
+}
+
+static bool virtio_ccw_ioeventfd_disabled(DeviceState *d)
+{
+    VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
+
+    return dev->ioeventfd_disabled ||
+        !(dev->flags & VIRTIO_CCW_FLAG_USE_IOEVENTFD);
+}
+
+static void virtio_ccw_ioeventfd_set_disabled(DeviceState *d, bool disabled)
+{
+    VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
+
+    dev->ioeventfd_disabled = disabled;
+}
+
+static int virtio_ccw_ioeventfd_assign(DeviceState *d, EventNotifier *notifier,
+                                       int n, bool assign)
+{
+    VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
+    SubchDev *sch = dev->sch;
+    uint32_t sch_id = (css_build_subchannel_id(sch) << 16) | sch->schid;
+
+    return s390_assign_subch_ioeventfd(notifier, sch_id, n, assign);
 }
 
 VirtualCssBus *virtual_css_bus_init(void)
@@ -884,15 +850,11 @@ static void virtio_ccw_net_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     DeviceState *qdev = DEVICE(ccw_dev);
     VirtIONetCcw *dev = VIRTIO_NET_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
-    Error *err = NULL;
 
     virtio_net_set_netclient_name(&dev->vdev, qdev->id,
                                   object_get_typename(OBJECT(qdev)));
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 static void virtio_ccw_net_instance_init(Object *obj)
@@ -909,13 +871,9 @@ static void virtio_ccw_blk_realize(VirtioCcwDevice *ccw_dev, Error **errp)
 {
     VirtIOBlkCcw *dev = VIRTIO_BLK_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
-    Error *err = NULL;
 
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 static void virtio_ccw_blk_instance_init(Object *obj)
@@ -935,7 +893,6 @@ static void virtio_ccw_serial_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     VirtioSerialCcw *dev = VIRTIO_SERIAL_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
     DeviceState *proxy = DEVICE(ccw_dev);
-    Error *err = NULL;
     char *bus_name;
 
     /*
@@ -949,10 +906,7 @@ static void virtio_ccw_serial_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     }
 
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 
@@ -968,13 +922,9 @@ static void virtio_ccw_balloon_realize(VirtioCcwDevice *ccw_dev, Error **errp)
 {
     VirtIOBalloonCcw *dev = VIRTIO_BALLOON_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
-    Error *err = NULL;
 
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 static void virtio_ccw_balloon_instance_init(Object *obj)
@@ -995,7 +945,6 @@ static void virtio_ccw_scsi_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     VirtIOSCSICcw *dev = VIRTIO_SCSI_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
     DeviceState *qdev = DEVICE(ccw_dev);
-    Error *err = NULL;
     char *bus_name;
 
     /*
@@ -1009,10 +958,7 @@ static void virtio_ccw_scsi_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     }
 
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 static void virtio_ccw_scsi_instance_init(Object *obj)
@@ -1030,13 +976,9 @@ static void vhost_ccw_scsi_realize(VirtioCcwDevice *ccw_dev, Error **errp)
 {
     VHostSCSICcw *dev = VHOST_SCSI_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
-    Error *err = NULL;
 
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 static void vhost_ccw_scsi_instance_init(Object *obj)
@@ -1179,19 +1121,6 @@ static bool virtio_ccw_query_guest_notifiers(DeviceState *d)
     VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
 
     return !!(dev->sch->curr_status.pmcw.flags & PMCW_FLAGS_MASK_ENA);
-}
-
-static int virtio_ccw_set_host_notifier(DeviceState *d, int n, bool assign)
-{
-    VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
-
-    /* Stop using the generic ioeventfd, we are doing eventfd handling
-     * ourselves below */
-    dev->ioeventfd_disabled = assign;
-    if (assign) {
-        virtio_ccw_stop_ioeventfd(dev);
-    }
-    return virtio_ccw_set_guest2host_notifier(dev, n, assign, false);
 }
 
 static int virtio_ccw_get_mappings(VirtioCcwDevice *dev)
@@ -1822,7 +1751,6 @@ static void virtio_ccw_bus_class_init(ObjectClass *klass, void *data)
     k->notify = virtio_ccw_notify;
     k->vmstate_change = virtio_ccw_vmstate_change;
     k->query_guest_notifiers = virtio_ccw_query_guest_notifiers;
-    k->set_host_notifier = virtio_ccw_set_host_notifier;
     k->set_guest_notifiers = virtio_ccw_set_guest_notifiers;
     k->save_queue = virtio_ccw_save_queue;
     k->load_queue = virtio_ccw_load_queue;
@@ -1831,6 +1759,11 @@ static void virtio_ccw_bus_class_init(ObjectClass *klass, void *data)
     k->device_plugged = virtio_ccw_device_plugged;
     k->post_plugged = virtio_ccw_post_plugged;
     k->device_unplugged = virtio_ccw_device_unplugged;
+    k->ioeventfd_started = virtio_ccw_ioeventfd_started;
+    k->ioeventfd_set_started = virtio_ccw_ioeventfd_set_started;
+    k->ioeventfd_disabled = virtio_ccw_ioeventfd_disabled;
+    k->ioeventfd_set_disabled = virtio_ccw_ioeventfd_set_disabled;
+    k->ioeventfd_assign = virtio_ccw_ioeventfd_assign;
 }
 
 static const TypeInfo virtio_ccw_bus_info = {
@@ -1854,13 +1787,9 @@ static void virtio_ccw_9p_realize(VirtioCcwDevice *ccw_dev, Error **errp)
 {
     V9fsCCWState *dev = VIRTIO_9P_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
-    Error *err = NULL;
 
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
-    object_property_set_bool(OBJECT(vdev), true, "realized", &err);
-    if (err) {
-        error_propagate(errp, err);
-    }
+    object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
 static void virtio_ccw_9p_class_init(ObjectClass *klass, void *data)

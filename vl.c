@@ -262,26 +262,6 @@ static QemuOptsList qemu_sandbox_opts = {
     },
 };
 
-static QemuOptsList qemu_trace_opts = {
-    .name = "trace",
-    .implied_opt_name = "enable",
-    .head = QTAILQ_HEAD_INITIALIZER(qemu_trace_opts.head),
-    .desc = {
-        {
-            .name = "enable",
-            .type = QEMU_OPT_STRING,
-        },
-        {
-            .name = "events",
-            .type = QEMU_OPT_STRING,
-        },{
-            .name = "file",
-            .type = QEMU_OPT_STRING,
-        },
-        { /* end of list */ }
-    },
-};
-
 static QemuOptsList qemu_option_rom_opts = {
     .name = "option-rom",
     .implied_opt_name = "romfile",
@@ -1234,8 +1214,10 @@ static void smp_parse(QemuOpts *opts)
         } else if (cores == 0) {
             threads = threads > 0 ? threads : 1;
             cores = cpus / (sockets * threads);
+            cores = cores > 0 ? cores : 1;
         } else if (threads == 0) {
             threads = cpus / (cores * sockets);
+            threads = threads > 0 ? threads : 1;
         } else if (sockets * cores * threads < cpus) {
             error_report("cpu topology: "
                          "sockets (%u) * cores (%u) * threads (%u) < "
@@ -1524,6 +1506,7 @@ MachineInfoList *qmp_query_machines(Error **errp)
 
         info->name = g_strdup(mc->name);
         info->cpu_max = !mc->max_cpus ? 1 : mc->max_cpus;
+        info->hotpluggable_cpus = !!mc->query_hotpluggable_cpus;
 
         entry = g_malloc0(sizeof(*entry));
         entry->value = info;
@@ -2352,10 +2335,7 @@ static int chardev_init_func(void *opaque, QemuOpts *opts, Error **errp)
 #ifdef CONFIG_VIRTFS
 static int fsdev_init_func(void *opaque, QemuOpts *opts, Error **errp)
 {
-    int ret;
-    ret = qemu_fsdev_add(opts);
-
-    return ret;
+    return qemu_fsdev_add(opts);
 }
 #endif
 
@@ -2950,7 +2930,6 @@ int main(int argc, char **argv, char **envp)
     const char *qtest_log = NULL;
     const char *pid_file = NULL;
     const char *incoming = NULL;
-    int show_vnc_port = 0;
     bool defconfig = true;
     bool userconfig = true;
     bool nographic = false;
@@ -3068,7 +3047,7 @@ int main(int argc, char **argv, char **envp)
 
             popt = lookup_opt(argc, argv, &optarg, &optind);
             if (!(popt->arch_mask & arch_type)) {
-                printf("Option %s not supported for this target\n", popt->name);
+                error_report("Option not supported for this target");
                 exit(1);
             }
             switch(popt->index) {
@@ -3342,7 +3321,7 @@ int main(int argc, char **argv, char **envp)
                 log_file = optarg;
                 break;
             case QEMU_OPTION_DFILTER:
-                qemu_set_dfilter_ranges(optarg);
+                qemu_set_dfilter_ranges(optarg, &error_fatal);
                 break;
             case QEMU_OPTION_s:
                 add_device_config(DEV_GDB, "tcp::" DEFAULT_GDBSTUB_PORT);
@@ -3846,43 +3825,29 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_xen_domid:
                 if (!(xen_available())) {
-                    printf("Option %s not supported for this target\n", popt->name);
+                    error_report("Option not supported for this target");
                     exit(1);
                 }
                 xen_domid = atoi(optarg);
                 break;
             case QEMU_OPTION_xen_create:
                 if (!(xen_available())) {
-                    printf("Option %s not supported for this target\n", popt->name);
+                    error_report("Option not supported for this target");
                     exit(1);
                 }
                 xen_mode = XEN_CREATE;
                 break;
             case QEMU_OPTION_xen_attach:
                 if (!(xen_available())) {
-                    printf("Option %s not supported for this target\n", popt->name);
+                    error_report("Option not supported for this target");
                     exit(1);
                 }
                 xen_mode = XEN_ATTACH;
                 break;
             case QEMU_OPTION_trace:
-            {
-                opts = qemu_opts_parse_noisily(qemu_find_opts("trace"),
-                                               optarg, true);
-                if (!opts) {
-                    exit(1);
-                }
-                if (qemu_opt_get(opts, "enable")) {
-                    trace_enable_events(qemu_opt_get(opts, "enable"));
-                }
-                trace_init_events(qemu_opt_get(opts, "events"));
-                if (trace_file) {
-                    g_free(trace_file);
-                }
-                trace_file = g_strdup(qemu_opt_get(opts, "file"));
-                qemu_opts_del(opts);
+                g_free(trace_file);
+                trace_file = trace_opt_parse(optarg);
                 break;
-            }
             case QEMU_OPTION_readconfig:
                 {
                     int ret = qemu_read_config_file(optarg);
@@ -4057,7 +4022,7 @@ int main(int argc, char **argv, char **envp)
     /* Open the logfile at this point and set the log mask if necessary.
      */
     if (log_file) {
-        qemu_set_log_filename(log_file);
+        qemu_set_log_filename(log_file, &error_fatal);
     }
 
     if (log_mask) {
@@ -4219,7 +4184,6 @@ int main(int argc, char **argv, char **envp)
         display_type = DT_COCOA;
 #elif defined(CONFIG_VNC)
         vnc_parse("localhost:0,to=99,id=default", &error_abort);
-        show_vnc_port = 1;
 #else
         display_type = DT_NONE;
 #endif
@@ -4568,11 +4532,6 @@ int main(int argc, char **argv, char **envp)
     qemu_opts_foreach(qemu_find_opts("vnc"),
                       vnc_init_func, NULL, NULL);
 #endif
-    if (show_vnc_port) {
-        char *ret = vnc_display_local_addr("default");
-        printf("VNC server running on '%s'\n", ret);
-        g_free(ret);
-    }
 
     if (using_spice) {
         qemu_spice_display_init();
