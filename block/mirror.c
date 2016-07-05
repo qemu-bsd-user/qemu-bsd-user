@@ -44,6 +44,7 @@ typedef struct MirrorBlockJob {
     /* Used to block operations on the drive-mirror-replace target */
     Error *replace_blocker;
     bool is_none_mode;
+    BlockMirrorBackingMode backing_mode;
     BlockdevOnError on_source_error, on_target_error;
     bool synced;
     bool should_complete;
@@ -157,8 +158,7 @@ static void mirror_read_complete(void *opaque, int ret)
         return;
     }
     blk_aio_pwritev(s->target, op->sector_num * BDRV_SECTOR_SIZE, &op->qiov,
-                    op->nb_sectors * BDRV_SECTOR_SIZE,
-                    mirror_write_complete, op);
+                    0, mirror_write_complete, op);
 }
 
 static inline void mirror_clip_sectors(MirrorBlockJob *s,
@@ -186,8 +186,9 @@ static int mirror_cow_align(MirrorBlockJob *s,
     need_cow |= !test_bit((*sector_num + *nb_sectors - 1) / chunk_sectors,
                           s->cow_bitmap);
     if (need_cow) {
-        bdrv_round_to_clusters(blk_bs(s->target), *sector_num, *nb_sectors,
-                               &align_sector_num, &align_nb_sectors);
+        bdrv_round_sectors_to_clusters(blk_bs(s->target), *sector_num,
+                                       *nb_sectors, &align_sector_num,
+                                       &align_nb_sectors);
     }
 
     if (align_nb_sectors > max_sectors) {
@@ -217,7 +218,9 @@ static inline void mirror_wait_for_io(MirrorBlockJob *s)
 }
 
 /* Submit async read while handling COW.
- * Returns: nb_sectors if no alignment is necessary, or
+ * Returns: The number of sectors copied after and including sector_num,
+ *          excluding any sectors copied prior to sector_num due to alignment.
+ *          This will be nb_sectors if no alignment is necessary, or
  *          (new_end - sector_num) if tail is rounded up or down due to
  *          alignment or buffer limit.
  */
@@ -226,14 +229,18 @@ static int mirror_do_read(MirrorBlockJob *s, int64_t sector_num,
 {
     BlockBackend *source = s->common.blk;
     int sectors_per_chunk, nb_chunks;
-    int ret = nb_sectors;
+    int ret;
     MirrorOp *op;
+    int max_sectors;
 
     sectors_per_chunk = s->granularity >> BDRV_SECTOR_BITS;
+    max_sectors = sectors_per_chunk * s->max_iov;
 
     /* We can only handle as much as buf_size at a time. */
     nb_sectors = MIN(s->buf_size >> BDRV_SECTOR_BITS, nb_sectors);
+    nb_sectors = MIN(max_sectors, nb_sectors);
     assert(nb_sectors);
+    ret = nb_sectors;
 
     if (s->cow_bitmap) {
         ret += mirror_cow_align(s, &sector_num, &nb_sectors);
@@ -274,8 +281,7 @@ static int mirror_do_read(MirrorBlockJob *s, int64_t sector_num,
     s->sectors_in_flight += nb_sectors;
     trace_mirror_one_iteration(s, sector_num, nb_sectors);
 
-    blk_aio_preadv(source, sector_num * BDRV_SECTOR_SIZE, &op->qiov,
-                   nb_sectors * BDRV_SECTOR_SIZE,
+    blk_aio_preadv(source, sector_num * BDRV_SECTOR_SIZE, &op->qiov, 0,
                    mirror_read_complete, op);
     return ret;
 }
@@ -327,9 +333,11 @@ static uint64_t coroutine_fn mirror_iteration(MirrorBlockJob *s)
 
     first_chunk = sector_num / sectors_per_chunk;
     while (test_bit(first_chunk, s->in_flight_bitmap)) {
-        trace_mirror_yield_in_flight(s, first_chunk, s->in_flight);
+        trace_mirror_yield_in_flight(s, sector_num, s->in_flight);
         mirror_wait_for_io(s);
     }
+
+    block_job_pause_point(&s->common);
 
     /* Find the number of consective dirty chunks following the first dirty
      * one, and wait for in flight requests in them. */
@@ -386,8 +394,9 @@ static uint64_t coroutine_fn mirror_iteration(MirrorBlockJob *s)
         } else if (ret >= 0 && !(ret & BDRV_BLOCK_DATA)) {
             int64_t target_sector_num;
             int target_nb_sectors;
-            bdrv_round_to_clusters(blk_bs(s->target), sector_num, io_sectors,
-                                   &target_sector_num, &target_nb_sectors);
+            bdrv_round_sectors_to_clusters(blk_bs(s->target), sector_num,
+                                           io_sectors,  &target_sector_num,
+                                           &target_nb_sectors);
             if (target_sector_num == sector_num &&
                 target_nb_sectors == io_sectors) {
                 mirror_method = ret & BDRV_BLOCK_ZERO ?
@@ -581,6 +590,8 @@ static void coroutine_fn mirror_run(void *opaque)
             if (now - last_pause_ns > SLICE_TIME) {
                 last_pause_ns = now;
                 block_job_sleep_ns(&s->common, QEMU_CLOCK_REALTIME, 0);
+            } else {
+                block_job_pause_point(&s->common);
             }
 
             if (block_job_is_cancelled(&s->common)) {
@@ -611,6 +622,8 @@ static void coroutine_fn mirror_run(void *opaque)
             ret = s->ret;
             goto immediate_exit;
         }
+
+        block_job_pause_point(&s->common);
 
         cnt = bdrv_get_dirty_count(s->dirty_bitmap);
         /* s->common.offset contains the number of bytes already processed so
@@ -742,21 +755,27 @@ static void mirror_set_speed(BlockJob *job, int64_t speed, Error **errp)
 static void mirror_complete(BlockJob *job, Error **errp)
 {
     MirrorBlockJob *s = container_of(job, MirrorBlockJob, common);
-    Error *local_err = NULL;
-    int ret;
+    BlockDriverState *src, *target;
 
-    ret = bdrv_open_backing_file(blk_bs(s->target), NULL, "backing",
-                                 &local_err);
-    if (ret < 0) {
-        error_propagate(errp, local_err);
-        return;
-    }
+    src = blk_bs(job->blk);
+    target = blk_bs(s->target);
+
     if (!s->synced) {
         error_setg(errp, QERR_BLOCK_JOB_NOT_READY, job->id);
         return;
     }
 
-    /* check the target bs is not blocked and block all operations on it */
+    if (s->backing_mode == MIRROR_OPEN_BACKING_CHAIN) {
+        int ret;
+
+        assert(!target->backing);
+        ret = bdrv_open_backing_file(target, NULL, "backing", errp);
+        if (ret < 0) {
+            return;
+        }
+    }
+
+    /* block all operations on to_replace bs */
     if (s->replaces) {
         AioContext *replace_aio_context;
 
@@ -777,28 +796,57 @@ static void mirror_complete(BlockJob *job, Error **errp)
         aio_context_release(replace_aio_context);
     }
 
+    if (s->backing_mode == MIRROR_SOURCE_BACKING_CHAIN) {
+        BlockDriverState *backing = s->is_none_mode ? src : s->base;
+        if (backing_bs(target) != backing) {
+            bdrv_set_backing_hd(target, backing);
+        }
+    }
+
     s->should_complete = true;
     block_job_enter(&s->common);
 }
 
+/* There is no matching mirror_resume() because mirror_run() will begin
+ * iterating again when the job is resumed.
+ */
+static void coroutine_fn mirror_pause(BlockJob *job)
+{
+    MirrorBlockJob *s = container_of(job, MirrorBlockJob, common);
+
+    mirror_drain(s);
+}
+
+static void mirror_attached_aio_context(BlockJob *job, AioContext *new_context)
+{
+    MirrorBlockJob *s = container_of(job, MirrorBlockJob, common);
+
+    blk_set_aio_context(s->target, new_context);
+}
+
 static const BlockJobDriver mirror_job_driver = {
-    .instance_size = sizeof(MirrorBlockJob),
-    .job_type      = BLOCK_JOB_TYPE_MIRROR,
-    .set_speed     = mirror_set_speed,
-    .complete      = mirror_complete,
+    .instance_size          = sizeof(MirrorBlockJob),
+    .job_type               = BLOCK_JOB_TYPE_MIRROR,
+    .set_speed              = mirror_set_speed,
+    .complete               = mirror_complete,
+    .pause                  = mirror_pause,
+    .attached_aio_context   = mirror_attached_aio_context,
 };
 
 static const BlockJobDriver commit_active_job_driver = {
-    .instance_size = sizeof(MirrorBlockJob),
-    .job_type      = BLOCK_JOB_TYPE_COMMIT,
-    .set_speed     = mirror_set_speed,
-    .complete      = mirror_complete,
+    .instance_size          = sizeof(MirrorBlockJob),
+    .job_type               = BLOCK_JOB_TYPE_COMMIT,
+    .set_speed              = mirror_set_speed,
+    .complete               = mirror_complete,
+    .pause                  = mirror_pause,
+    .attached_aio_context   = mirror_attached_aio_context,
 };
 
 static void mirror_start_job(BlockDriverState *bs, BlockDriverState *target,
                              const char *replaces,
                              int64_t speed, uint32_t granularity,
                              int64_t buf_size,
+                             BlockMirrorBackingMode backing_mode,
                              BlockdevOnError on_source_error,
                              BlockdevOnError on_target_error,
                              bool unmap,
@@ -836,6 +884,7 @@ static void mirror_start_job(BlockDriverState *bs, BlockDriverState *target,
     s->on_source_error = on_source_error;
     s->on_target_error = on_target_error;
     s->is_none_mode = is_none_mode;
+    s->backing_mode = backing_mode;
     s->base = base;
     s->granularity = granularity;
     s->buf_size = ROUND_UP(buf_size, granularity);
@@ -859,7 +908,8 @@ static void mirror_start_job(BlockDriverState *bs, BlockDriverState *target,
 void mirror_start(BlockDriverState *bs, BlockDriverState *target,
                   const char *replaces,
                   int64_t speed, uint32_t granularity, int64_t buf_size,
-                  MirrorSyncMode mode, BlockdevOnError on_source_error,
+                  MirrorSyncMode mode, BlockMirrorBackingMode backing_mode,
+                  BlockdevOnError on_source_error,
                   BlockdevOnError on_target_error,
                   bool unmap,
                   BlockCompletionFunc *cb,
@@ -875,7 +925,7 @@ void mirror_start(BlockDriverState *bs, BlockDriverState *target,
     is_none_mode = mode == MIRROR_SYNC_MODE_NONE;
     base = mode == MIRROR_SYNC_MODE_TOP ? backing_bs(bs) : NULL;
     mirror_start_job(bs, target, replaces,
-                     speed, granularity, buf_size,
+                     speed, granularity, buf_size, backing_mode,
                      on_source_error, on_target_error, unmap, cb, opaque, errp,
                      &mirror_job_driver, is_none_mode, base);
 }
@@ -922,7 +972,7 @@ void commit_active_start(BlockDriverState *bs, BlockDriverState *base,
         }
     }
 
-    mirror_start_job(bs, base, NULL, speed, 0, 0,
+    mirror_start_job(bs, base, NULL, speed, 0, 0, MIRROR_LEAVE_BACKING_CHAIN,
                      on_error, on_error, false, cb, opaque, &local_err,
                      &commit_active_job_driver, false, base);
     if (local_err) {

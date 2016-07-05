@@ -15,7 +15,6 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/utsname.h>
 
 #include <linux/kvm.h>
@@ -106,6 +105,8 @@ static uint32_t num_architectural_pmu_counters;
 static int has_xsave;
 static int has_xcrs;
 static int has_pit_state2;
+
+static struct kvm_cpuid2 *cpuid_cache;
 
 int kvm_has_pit_state2(void)
 {
@@ -200,9 +201,14 @@ static struct kvm_cpuid2 *get_supported_cpuid(KVMState *s)
 {
     struct kvm_cpuid2 *cpuid;
     int max = 1;
+
+    if (cpuid_cache != NULL) {
+        return cpuid_cache;
+    }
     while ((cpuid = try_get_cpuid(s, max)) == NULL) {
         max *= 2;
     }
+    cpuid_cache = cpuid;
     return cpuid;
 }
 
@@ -320,8 +326,6 @@ uint32_t kvm_arch_get_supported_cpuid(KVMState *s, uint32_t function,
         ret |= cpuid_1_edx & CPUID_EXT2_AMD_ALIASES;
     }
 
-    g_free(cpuid);
-
     /* fallback for older kernels */
     if ((function == KVM_CPUID_FEATURES) && !found) {
         ret = get_para_features(s);
@@ -411,7 +415,8 @@ int kvm_arch_on_sigbus_vcpu(CPUState *c, int code, void *addr)
 
     if ((env->mcg_cap & MCG_SER_P) && addr
         && (code == BUS_MCEERR_AR || code == BUS_MCEERR_AO)) {
-        if (qemu_ram_addr_from_host(addr, &ram_addr) == NULL ||
+        ram_addr = qemu_ram_addr_from_host(addr);
+        if (ram_addr == RAM_ADDR_INVALID ||
             !kvm_physical_memory_addr_from_host(c->kvm_state, addr, &paddr)) {
             fprintf(stderr, "Hardware memory error for memory used by "
                     "QEMU itself instead of guest system!\n");
@@ -445,7 +450,8 @@ int kvm_arch_on_sigbus(int code, void *addr)
         hwaddr paddr;
 
         /* Hope we are lucky for AO MCE */
-        if (qemu_ram_addr_from_host(addr, &ram_addr) == NULL ||
+        ram_addr = qemu_ram_addr_from_host(addr);
+        if (ram_addr == RAM_ADDR_INVALID ||
             !kvm_physical_memory_addr_from_host(first_cpu->kvm_state,
                                                 addr, &paddr)) {
             fprintf(stderr, "Hardware memory error for memory used by "
@@ -1340,7 +1346,7 @@ static int kvm_put_xsave(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     X86XSaveArea *xsave = env->kvm_xsave_buf;
     uint16_t cwd, swd, twd;
-    int i, r;
+    int i;
 
     if (!has_xsave) {
         return kvm_put_fpu(cpu);
@@ -1389,8 +1395,7 @@ static int kvm_put_xsave(X86CPU *cpu)
             16 * sizeof env->xmm_regs[16]);
     memcpy(&xsave->pkru_state, &env->pkru, sizeof env->pkru);
 #endif
-    r = kvm_vcpu_ioctl(CPU(cpu), KVM_SET_XSAVE, xsave);
-    return r;
+    return kvm_vcpu_ioctl(CPU(cpu), KVM_SET_XSAVE, xsave);
 }
 
 static int kvm_put_xcrs(X86CPU *cpu)

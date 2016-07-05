@@ -216,6 +216,7 @@ int kvm_has_intx_set_mask(void);
 
 int kvm_init_vcpu(CPUState *cpu);
 int kvm_cpu_exec(CPUState *cpu);
+int kvm_destroy_vcpu(CPUState *cpu);
 
 #ifdef NEED_CPU_H
 #include "cpu.h"
@@ -526,4 +527,5 @@ int kvm_set_one_reg(CPUState *cs, uint64_t id, void *source);
  * Returns: 0 on success, or a negative errno on failure.
  */
 int kvm_get_one_reg(CPUState *cs, uint64_t id, void *target);
+int kvm_get_max_memslots(void);
 #endif

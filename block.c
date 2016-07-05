@@ -301,9 +301,7 @@ static void coroutine_fn bdrv_create_co_entry(void *opaque)
     assert(cco->drv);
 
     ret = cco->drv->bdrv_create(cco->filename, cco->opts, &local_err);
-    if (local_err) {
-        error_propagate(&cco->err, local_err);
-    }
+    error_propagate(&cco->err, local_err);
     cco->ret = ret;
 }
 
@@ -364,9 +362,7 @@ int bdrv_create_file(const char *filename, QemuOpts *opts, Error **errp)
     }
 
     ret = bdrv_create(drv, filename, opts, &local_err);
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
     return ret;
 }
 
@@ -684,6 +680,10 @@ static void bdrv_temp_snapshot_options(int *child_flags, QDict *child_options,
     /* For temporary files, unconditional cache=unsafe is fine */
     qdict_set_default_str(child_options, BDRV_OPT_CACHE_DIRECT, "off");
     qdict_set_default_str(child_options, BDRV_OPT_CACHE_NO_FLUSH, "on");
+
+    /* aio=native doesn't work for cache.direct=off, so disable it for the
+     * temporary snapshot */
+    *child_flags &= ~BDRV_O_NATIVE_AIO;
 }
 
 /*
@@ -937,8 +937,7 @@ static int bdrv_open_common(BlockDriverState *bs, BdrvChild *file,
         goto fail_opts;
     }
 
-    bs->request_alignment = 512;
-    bs->zero_beyond_eof = true;
+    bs->request_alignment = drv->bdrv_co_preadv ? 1 : 512;
     bs->read_only = !(bs->open_flags & BDRV_O_RDWR);
 
     if (use_bdrv_whitelist && !bdrv_is_whitelisted(drv, bs->read_only)) {
@@ -1018,7 +1017,7 @@ static int bdrv_open_common(BlockDriverState *bs, BdrvChild *file,
 
     assert(bdrv_opt_mem_align(bs) != 0);
     assert(bdrv_min_mem_align(bs) != 0);
-    assert((bs->request_alignment != 0) || bdrv_is_sg(bs));
+    assert(is_power_of_2(bs->request_alignment) || bdrv_is_sg(bs));
 
     qemu_opts_del(opts);
     return 0;
@@ -1760,18 +1759,14 @@ fail:
     QDECREF(options);
     bs->options = NULL;
     bdrv_unref(bs);
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
     return NULL;
 
 close_and_fail:
     bdrv_unref(bs);
     QDECREF(snapshot_options);
     QDECREF(options);
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
     return NULL;
 }
 
@@ -2192,7 +2187,6 @@ static void bdrv_close(BlockDriverState *bs)
         bs->encrypted = 0;
         bs->valid_key = 0;
         bs->sg = 0;
-        bs->zero_beyond_eof = false;
         QDECREF(bs->options);
         QDECREF(bs->explicit_options);
         bs->options = NULL;
@@ -2224,9 +2218,23 @@ void bdrv_close_all(void)
 static void change_parent_backing_link(BlockDriverState *from,
                                        BlockDriverState *to)
 {
-    BdrvChild *c, *next;
+    BdrvChild *c, *next, *to_c;
 
     QLIST_FOREACH_SAFE(c, &from->parents, next_parent, next) {
+        if (c->role == &child_backing) {
+            /* @from is generally not allowed to be a backing file, except for
+             * when @to is the overlay. In that case, @from may not be replaced
+             * by @to as @to's backing node. */
+            QLIST_FOREACH(to_c, &to->children, next) {
+                if (to_c == c) {
+                    break;
+                }
+            }
+            if (to_c) {
+                continue;
+            }
+        }
+
         assert(c->role != &child_backing);
         bdrv_ref(to);
         bdrv_replace_child(c, to);
@@ -2274,14 +2282,6 @@ void bdrv_replace_in_backing_chain(BlockDriverState *old, BlockDriverState *new)
     bdrv_ref(old);
 
     change_parent_backing_link(old, new);
-
-    /* Change backing files if a previously independent node is added to the
-     * chain. For active commit, we replace top by its own (indirect) backing
-     * file and don't do anything here so we don't build a loop. */
-    if (new->backing == NULL && !bdrv_chain_contains(backing_bs(old), new)) {
-        bdrv_set_backing_hd(new, backing_bs(old));
-        bdrv_set_backing_hd(old, NULL);
-    }
 
     bdrv_unref(old);
 }
@@ -3591,9 +3591,7 @@ void bdrv_img_create(const char *filename, const char *fmt,
 out:
     qemu_opts_del(opts);
     qemu_opts_free(create_opts);
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
 }
 
 AioContext *bdrv_get_aio_context(BlockDriverState *bs)
@@ -3601,18 +3599,34 @@ AioContext *bdrv_get_aio_context(BlockDriverState *bs)
     return bs->aio_context;
 }
 
+static void bdrv_do_remove_aio_context_notifier(BdrvAioNotifier *ban)
+{
+    QLIST_REMOVE(ban, list);
+    g_free(ban);
+}
+
 void bdrv_detach_aio_context(BlockDriverState *bs)
 {
-    BdrvAioNotifier *baf;
+    BdrvAioNotifier *baf, *baf_tmp;
     BdrvChild *child;
 
     if (!bs->drv) {
         return;
     }
 
-    QLIST_FOREACH(baf, &bs->aio_notifiers, list) {
-        baf->detach_aio_context(baf->opaque);
+    assert(!bs->walking_aio_notifiers);
+    bs->walking_aio_notifiers = true;
+    QLIST_FOREACH_SAFE(baf, &bs->aio_notifiers, list, baf_tmp) {
+        if (baf->deleted) {
+            bdrv_do_remove_aio_context_notifier(baf);
+        } else {
+            baf->detach_aio_context(baf->opaque);
+        }
     }
+    /* Never mind iterating again to check for ->deleted.  bdrv_close() will
+     * remove remaining aio notifiers if we aren't called again.
+     */
+    bs->walking_aio_notifiers = false;
 
     if (bs->drv->bdrv_detach_aio_context) {
         bs->drv->bdrv_detach_aio_context(bs);
@@ -3627,7 +3641,7 @@ void bdrv_detach_aio_context(BlockDriverState *bs)
 void bdrv_attach_aio_context(BlockDriverState *bs,
                              AioContext *new_context)
 {
-    BdrvAioNotifier *ban;
+    BdrvAioNotifier *ban, *ban_tmp;
     BdrvChild *child;
 
     if (!bs->drv) {
@@ -3643,9 +3657,16 @@ void bdrv_attach_aio_context(BlockDriverState *bs,
         bs->drv->bdrv_attach_aio_context(bs, new_context);
     }
 
-    QLIST_FOREACH(ban, &bs->aio_notifiers, list) {
-        ban->attached_aio_context(new_context, ban->opaque);
+    assert(!bs->walking_aio_notifiers);
+    bs->walking_aio_notifiers = true;
+    QLIST_FOREACH_SAFE(ban, &bs->aio_notifiers, list, ban_tmp) {
+        if (ban->deleted) {
+            bdrv_do_remove_aio_context_notifier(ban);
+        } else {
+            ban->attached_aio_context(new_context, ban->opaque);
+        }
     }
+    bs->walking_aio_notifiers = false;
 }
 
 void bdrv_set_aio_context(BlockDriverState *bs, AioContext *new_context)
@@ -3687,11 +3708,14 @@ void bdrv_remove_aio_context_notifier(BlockDriverState *bs,
     QLIST_FOREACH_SAFE(ban, &bs->aio_notifiers, list, ban_next) {
         if (ban->attached_aio_context == attached_aio_context &&
             ban->detach_aio_context   == detach_aio_context   &&
-            ban->opaque               == opaque)
+            ban->opaque               == opaque               &&
+            ban->deleted              == false)
         {
-            QLIST_REMOVE(ban, list);
-            g_free(ban);
-
+            if (bs->walking_aio_notifiers) {
+                ban->deleted = true;
+            } else {
+                bdrv_do_remove_aio_context_notifier(ban);
+            }
             return;
         }
     }

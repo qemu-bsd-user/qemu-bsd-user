@@ -120,7 +120,7 @@ static inline void target_cpu_loop(CPUX86State *env)
     /* target_siginfo_t info; */
 
     for (;;) {
-        trapnr = cpu_x86_exec(cs);
+        trapnr = cpu_exec(cs);
         switch (trapnr) {
         case 0x80:
             /* syscall from int $0x80 */

@@ -217,6 +217,10 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
             monitor_printf(mon, "dirty pages rate: %" PRIu64 " pages\n",
                            info->ram->dirty_pages_rate);
         }
+        if (info->ram->postcopy_requests) {
+            monitor_printf(mon, "postcopy request count: %" PRIu64 "\n",
+                           info->ram->postcopy_requests);
+        }
     }
 
     if (info->has_disk) {
@@ -1951,7 +1955,12 @@ void hmp_qemu_io(Monitor *mon, const QDict *qdict)
 
     blk = blk_by_name(device);
     if (blk) {
+        AioContext *aio_context = blk_get_aio_context(blk);
+        aio_context_acquire(aio_context);
+
         qemuio_command(blk, command);
+
+        aio_context_release(aio_context);
     } else {
         error_set(&err, ERROR_CLASS_DEVICE_NOT_FOUND,
                   "Device '%s' not found", device);
@@ -2423,4 +2432,46 @@ void hmp_info_dump(Monitor *mon, const QDict *qdict)
     }
 
     qapi_free_DumpQueryResult(result);
+}
+
+void hmp_hotpluggable_cpus(Monitor *mon, const QDict *qdict)
+{
+    Error *err = NULL;
+    HotpluggableCPUList *l = qmp_query_hotpluggable_cpus(&err);
+    HotpluggableCPUList *saved = l;
+    CpuInstanceProperties *c;
+
+    if (err != NULL) {
+        hmp_handle_error(mon, &err);
+        return;
+    }
+
+    monitor_printf(mon, "Hotpluggable CPUs:\n");
+    while (l) {
+        monitor_printf(mon, "  type: \"%s\"\n", l->value->type);
+        monitor_printf(mon, "  vcpus_count: \"%" PRIu64 "\"\n",
+                       l->value->vcpus_count);
+        if (l->value->has_qom_path) {
+            monitor_printf(mon, "  qom_path: \"%s\"\n", l->value->qom_path);
+        }
+
+        c = l->value->props;
+        monitor_printf(mon, "  CPUInstance Properties:\n");
+        if (c->has_node_id) {
+            monitor_printf(mon, "    node-id: \"%" PRIu64 "\"\n", c->node_id);
+        }
+        if (c->has_socket_id) {
+            monitor_printf(mon, "    socket-id: \"%" PRIu64 "\"\n", c->socket_id);
+        }
+        if (c->has_core_id) {
+            monitor_printf(mon, "    core-id: \"%" PRIu64 "\"\n", c->core_id);
+        }
+        if (c->has_thread_id) {
+            monitor_printf(mon, "    thread-id: \"%" PRIu64 "\"\n", c->thread_id);
+        }
+
+        l = l->next;
+    }
+
+    qapi_free_HotpluggableCPUList(saved);
 }

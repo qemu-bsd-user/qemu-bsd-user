@@ -218,13 +218,10 @@ static int load_refcount_block(BlockDriverState *bs,
                                void **refcount_block)
 {
     BDRVQcow2State *s = bs->opaque;
-    int ret;
 
     BLKDBG_EVENT(bs->file, BLKDBG_REFBLOCK_LOAD);
-    ret = qcow2_cache_get(bs, s->refcount_block_cache, refcount_block_offset,
-        refcount_block);
-
-    return ret;
+    return qcow2_cache_get(bs, s->refcount_block_cache, refcount_block_offset,
+                           refcount_block);
 }
 
 /*
@@ -490,14 +487,12 @@ static int alloc_refcount_block(BlockDriverState *bs,
         uint64_t table_clusters =
             size_to_clusters(s, table_size * sizeof(uint64_t));
         blocks_clusters = 1 +
-            ((table_clusters + s->refcount_block_size - 1)
-            / s->refcount_block_size);
+            DIV_ROUND_UP(table_clusters, s->refcount_block_size);
         uint64_t meta_clusters = table_clusters + blocks_clusters;
 
         last_table_size = table_size;
         table_size = next_refcount_table_size(s, blocks_used +
-            ((meta_clusters + s->refcount_block_size - 1)
-            / s->refcount_block_size));
+            DIV_ROUND_UP(meta_clusters, s->refcount_block_size));
 
     } while (last_table_size != table_size);
 

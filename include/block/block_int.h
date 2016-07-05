@@ -163,8 +163,8 @@ struct BlockDriver {
      * function pointer may be NULL or return -ENOSUP and .bdrv_co_writev()
      * will be called instead.
      */
-    int coroutine_fn (*bdrv_co_write_zeroes)(BlockDriverState *bs,
-        int64_t sector_num, int nb_sectors, BdrvRequestFlags flags);
+    int coroutine_fn (*bdrv_co_pwrite_zeroes)(BlockDriverState *bs,
+        int64_t offset, int count, BdrvRequestFlags flags);
     int coroutine_fn (*bdrv_co_discard)(BlockDriverState *bs,
         int64_t sector_num, int nb_sectors);
     int64_t coroutine_fn (*bdrv_co_get_block_status)(BlockDriverState *bs,
@@ -224,10 +224,12 @@ struct BlockDriver {
     int (*bdrv_get_info)(BlockDriverState *bs, BlockDriverInfo *bdi);
     ImageInfoSpecific *(*bdrv_get_specific_info)(BlockDriverState *bs);
 
-    int (*bdrv_save_vmstate)(BlockDriverState *bs, QEMUIOVector *qiov,
-                             int64_t pos);
-    int (*bdrv_load_vmstate)(BlockDriverState *bs, uint8_t *buf,
-                             int64_t pos, int size);
+    int coroutine_fn (*bdrv_save_vmstate)(BlockDriverState *bs,
+                                          QEMUIOVector *qiov,
+                                          int64_t pos);
+    int coroutine_fn (*bdrv_load_vmstate)(BlockDriverState *bs,
+                                          QEMUIOVector *qiov,
+                                          int64_t pos);
 
     int (*bdrv_change_backing_file)(BlockDriverState *bs,
         const char *backing_file, const char *backing_fmt);
@@ -328,11 +330,13 @@ typedef struct BlockLimits {
     /* optimal alignment for discard requests in sectors */
     int64_t discard_alignment;
 
-    /* maximum number of sectors that can zeroized at once */
-    int max_write_zeroes;
+    /* maximum number of bytes that can zeroized at once (since it is
+     * signed, it must be < 2G, if set) */
+    int32_t max_pwrite_zeroes;
 
-    /* optimal alignment for write zeroes requests in sectors */
-    int64_t write_zeroes_alignment;
+    /* optimal alignment for write zeroes requests in bytes, must be
+     * power of 2, and less than max_pwrite_zeroes if that is set */
+    uint32_t pwrite_zeroes_alignment;
 
     /* optimal transfer length in sectors */
     int opt_transfer_length;
@@ -357,6 +361,7 @@ typedef struct BdrvAioNotifier {
     void (*detach_aio_context)(void *opaque);
 
     void *opaque;
+    bool deleted;
 
     QLIST_ENTRY(BdrvAioNotifier) list;
 } BdrvAioNotifier;
@@ -423,6 +428,7 @@ struct BlockDriverState {
      * BDS may register themselves in this list to be notified of changes
      * regarding this BDS's context */
     QLIST_HEAD(, BdrvAioNotifier) aio_notifiers;
+    bool walking_aio_notifiers; /* to make removal during iteration safe */
 
     char filename[PATH_MAX];
     char backing_file[PATH_MAX]; /* if non zero, the image is a diff of
@@ -447,14 +453,11 @@ struct BlockDriverState {
     /* I/O Limits */
     BlockLimits bl;
 
-    /* Whether produces zeros when read beyond eof */
-    bool zero_beyond_eof;
-
     /* Alignment requirement for offset/length of I/O requests */
     unsigned int request_alignment;
     /* Flags honored during pwrite (so far: BDRV_REQ_FUA) */
     unsigned int supported_write_flags;
-    /* Flags honored during write_zeroes (so far: BDRV_REQ_FUA,
+    /* Flags honored during pwrite_zeroes (so far: BDRV_REQ_FUA,
      * BDRV_REQ_MAY_UNMAP) */
     unsigned int supported_zero_flags;
 
@@ -507,6 +510,20 @@ struct BlockBackendRootState {
     bool read_only;
     BlockdevDetectZeroesOptions detect_zeroes;
 };
+
+typedef enum BlockMirrorBackingMode {
+    /* Reuse the existing backing chain from the source for the target.
+     * - sync=full: Set backing BDS to NULL.
+     * - sync=top:  Use source's backing BDS.
+     * - sync=none: Use source as the backing BDS. */
+    MIRROR_SOURCE_BACKING_CHAIN,
+
+    /* Open the target's backing chain completely anew */
+    MIRROR_OPEN_BACKING_CHAIN,
+
+    /* Do not change the target's backing BDS after job completion */
+    MIRROR_LEAVE_BACKING_CHAIN,
+} BlockMirrorBackingMode;
 
 static inline BlockDriverState *backing_bs(BlockDriverState *bs)
 {
@@ -670,6 +687,7 @@ void commit_active_start(BlockDriverState *bs, BlockDriverState *base,
  * @granularity: The chosen granularity for the dirty bitmap.
  * @buf_size: The amount of data that can be in flight at one time.
  * @mode: Whether to collapse all images in the chain to the target.
+ * @backing_mode: How to establish the target's backing chain after completion.
  * @on_source_error: The action to take upon error reading from the source.
  * @on_target_error: The action to take upon error writing to the target.
  * @unmap: Whether to unmap target where source sectors only contain zeroes.
@@ -685,7 +703,8 @@ void commit_active_start(BlockDriverState *bs, BlockDriverState *base,
 void mirror_start(BlockDriverState *bs, BlockDriverState *target,
                   const char *replaces,
                   int64_t speed, uint32_t granularity, int64_t buf_size,
-                  MirrorSyncMode mode, BlockdevOnError on_source_error,
+                  MirrorSyncMode mode, BlockMirrorBackingMode backing_mode,
+                  BlockdevOnError on_source_error,
                   BlockdevOnError on_target_error,
                   bool unmap,
                   BlockCompletionFunc *cb,

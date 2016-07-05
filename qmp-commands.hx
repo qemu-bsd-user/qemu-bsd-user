@@ -587,6 +587,33 @@ Example:
 EQMP
 
     {
+        .name       = "xen-load-devices-state",
+        .args_type  = "filename:F",
+        .mhandler.cmd_new = qmp_marshal_xen_load_devices_state,
+    },
+
+SQMP
+xen-load-devices-state
+----------------------
+
+Load the state of all devices from file. The RAM and the block devices
+of the VM are not loaded by this command.
+
+Arguments:
+
+- "filename": the file to load the state of the devices from as binary
+data. See xen-save-devices-state.txt for a description of the binary
+format.
+
+Example:
+
+-> { "execute": "xen-load-devices-state",
+     "arguments": { "filename": "/tmp/resume" } }
+<- { "return": {} }
+
+EQMP
+
+    {
         .name       = "xen-set-global-dirty-log",
         .args_type  = "enable:b",
         .mhandler.cmd_new = qmp_marshal_xen_set_global_dirty_log,
@@ -4933,3 +4960,26 @@ Example:
                 { "version": 3, "emulated": false, "kernel": true } ] }
 
 EQMP
+
+    {
+        .name       = "query-hotpluggable-cpus",
+        .args_type  = "",
+        .mhandler.cmd_new = qmp_marshal_query_hotpluggable_cpus,
+    },
+
+SQMP
+Show existing/possible CPUs
+---------------------------
+
+Arguments: None.
+
+Example for pseries machine type started with
+-smp 2,cores=2,maxcpus=4 -cpu POWER8:
+
+-> { "execute": "query-hotpluggable-cpus" }
+<- {"return": [
+     { "props": { "core-id": 8 }, "type": "POWER8-spapr-cpu-core",
+       "vcpus-count": 1 },
+     { "props": { "core-id": 0 }, "type": "POWER8-spapr-cpu-core",
+       "vcpus-count": 1, "qom-path": "/machine/unattached/device[0]"}
+   ]}'

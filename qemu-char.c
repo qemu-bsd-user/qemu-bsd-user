@@ -47,7 +47,6 @@
 #include <sys/times.h>
 #include <sys/wait.h>
 #include <termios.h>
-#include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -3970,19 +3969,19 @@ void qemu_chr_fe_event(struct CharDriverState *chr, int event)
     }
 }
 
-int qemu_chr_fe_add_watch(CharDriverState *s, GIOCondition cond,
-                          GIOFunc func, void *user_data)
+guint qemu_chr_fe_add_watch(CharDriverState *s, GIOCondition cond,
+                            GIOFunc func, void *user_data)
 {
     GSource *src;
     guint tag;
 
     if (s->chr_add_watch == NULL) {
-        return -ENOSYS;
+        return 0;
     }
 
     src = s->chr_add_watch(s, cond);
     if (!src) {
-        return -EINVAL;
+        return 0;
     }
 
     g_source_set_callback(src, (GSourceFunc)func, user_data, NULL);
@@ -4013,6 +4012,13 @@ void qemu_chr_fe_claim_no_fail(CharDriverState *s)
 void qemu_chr_fe_release(CharDriverState *s)
 {
     s->avail_connections++;
+}
+
+void qemu_chr_disconnect(CharDriverState *chr)
+{
+    if (chr->chr_disconnect) {
+        chr->chr_disconnect(chr);
+    }
 }
 
 static void qemu_chr_free_common(CharDriverState *chr)
@@ -4086,22 +4092,6 @@ CharDriverState *qemu_chr_find(const char *name)
     QTAILQ_FOREACH(chr, &chardevs, next) {
         if (strcmp(chr->label, name) != 0)
             continue;
-        return chr;
-    }
-    return NULL;
-}
-
-/* Get a character (serial) device interface.  */
-CharDriverState *qemu_char_get_next_serial(void)
-{
-    static int next_serial;
-    CharDriverState *chr;
-
-    /* FIXME: This function needs to go away: use chardev properties!  */
-
-    while (next_serial < MAX_SERIAL_PORTS && serial_hds[next_serial]) {
-        chr = serial_hds[next_serial++];
-        qemu_chr_fe_claim_no_fail(chr);
         return chr;
     }
     return NULL;
@@ -4408,6 +4398,7 @@ static CharDriverState *qmp_chardev_open_socket(const char *id,
     chr->chr_write = tcp_chr_write;
     chr->chr_sync_read = tcp_chr_sync_read;
     chr->chr_close = tcp_chr_close;
+    chr->chr_disconnect = tcp_chr_disconnect;
     chr->get_msgfds = tcp_get_msgfds;
     chr->set_msgfds = tcp_set_msgfds;
     chr->chr_add_client = tcp_chr_add_client;
@@ -4561,6 +4552,15 @@ void qmp_chardev_remove(const char *id, Error **errp)
     qemu_chr_delete(chr);
 }
 
+static void qemu_chr_cleanup(void)
+{
+    CharDriverState *chr, *tmp;
+
+    QTAILQ_FOREACH_SAFE(chr, &chardevs, next, tmp) {
+        qemu_chr_delete(chr);
+    }
+}
+
 static void register_types(void)
 {
     register_char_driver("null", CHARDEV_BACKEND_KIND_NULL, NULL,
@@ -4607,6 +4607,8 @@ static void register_types(void)
      * is specified
      */
     qemu_add_machine_init_done_notifier(&muxes_realize_notify);
+
+    atexit(qemu_chr_cleanup);
 }
 
 type_init(register_types);

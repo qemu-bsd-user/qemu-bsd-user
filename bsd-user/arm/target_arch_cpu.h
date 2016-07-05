@@ -142,7 +142,7 @@ static inline void target_cpu_loop(CPUARMState *env)
         DEBUG_PRINTF("CPU_LOOPING\n");
         cpu_exec_start(cs);
         DEBUG_PRINTF("EXECUTING...\n");
-        trapnr = cpu_arm_exec(cs);
+        trapnr = cpu_exec(cs);
         DEBUG_PRINTF("trapnr %d\n", trapnr);
         cpu_exec_end(cs);
         switch (trapnr) {

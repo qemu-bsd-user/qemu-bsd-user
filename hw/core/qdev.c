@@ -35,6 +35,7 @@
 #include "qemu/error-report.h"
 #include "hw/hotplug.h"
 #include "hw/boards.h"
+#include "hw/sysbus.h"
 #include "qapi-event.h"
 
 int qdev_hotplug = 0;
@@ -57,9 +58,6 @@ const char *qdev_fw_name(DeviceState *dev)
 
     return object_get_typename(OBJECT(dev));
 }
-
-static void qdev_property_add_legacy(DeviceState *dev, Property *prop,
-                                     Error **errp);
 
 static void bus_remove_child(BusState *bus, DeviceState *child)
 {
@@ -143,6 +141,12 @@ DeviceState *qdev_try_create(BusState *bus, const char *type)
     }
 
     if (!bus) {
+        /* Assert that the device really is a SysBusDevice before
+         * we put it onto the sysbus. Non-sysbus devices which aren't
+         * being put onto a bus should be created with object_new(TYPE_FOO),
+         * not qdev_create(NULL, TYPE_FOO).
+         */
+        g_assert(object_dynamic_cast(OBJECT(dev), TYPE_SYS_BUS_DEVICE));
         bus = sysbus_get_default();
     }
 
@@ -733,13 +737,20 @@ static void qdev_get_legacy_property(Object *obj, Visitor *v,
 }
 
 /**
- * @qdev_add_legacy_property - adds a legacy property
+ * qdev_property_add_legacy:
+ * @dev: Device to add the property to.
+ * @prop: The qdev property definition.
+ * @errp: location to store error information.
  *
- * Do not use this is new code!  Properties added through this interface will
- * be given names and types in the "legacy" namespace.
+ * Add a legacy QOM property to @dev for qdev property @prop.
+ * On error, store error in @errp.
  *
- * Legacy properties are string versions of other OOM properties.  The format
- * of the string depends on the property type.
+ * Legacy properties are string versions of QOM properties.  The format of
+ * the string depends on the property type.  Legacy properties are only
+ * needed for "info qtree".
+ *
+ * Do not use this is new code!  QOM Properties added through this interface
+ * will be given names in the "legacy" namespace.
  */
 static void qdev_property_add_legacy(DeviceState *dev, Property *prop,
                                      Error **errp)
@@ -762,10 +773,14 @@ static void qdev_property_add_legacy(DeviceState *dev, Property *prop,
 }
 
 /**
- * @qdev_property_add_static - add a @Property to a device.
+ * qdev_property_add_static:
+ * @dev: Device to add the property to.
+ * @prop: The qdev property definition.
+ * @errp: location to store error information.
  *
- * Static properties access data in a struct.  The actual type of the
- * property and the field depends on the property type.
+ * Add a static QOM property to @dev for qdev property @prop.
+ * On error, store error in @errp.  Static properties access data in a struct.
+ * The type of the QOM property is derived from prop->info.
  */
 void qdev_property_add_static(DeviceState *dev, Property *prop,
                               Error **errp)
@@ -887,6 +902,14 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
             g_free(name);
         }
 
+        hotplug_ctrl = qdev_get_hotplug_handler(dev);
+        if (hotplug_ctrl) {
+            hotplug_handler_pre_plug(hotplug_ctrl, dev, &local_err);
+            if (local_err != NULL) {
+                goto fail;
+            }
+        }
+
         if (dc->realize) {
             dc->realize(dev, &local_err);
         }
@@ -897,7 +920,6 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
 
         DEVICE_LISTENER_CALL(realize, Forward, dev);
 
-        hotplug_ctrl = qdev_get_hotplug_handler(dev);
         if (hotplug_ctrl) {
             hotplug_handler_plug(hotplug_ctrl, dev, &local_err);
         }

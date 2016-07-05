@@ -34,13 +34,8 @@
 
 /* some important defines:
  *
- * WORDS_ALIGNED : if defined, the host cpu can only make word aligned
- * memory accesses.
- *
  * HOST_WORDS_BIGENDIAN : if defined, the host cpu is big endian and
  * otherwise little endian.
- *
- * (TARGET_WORDS_ALIGNED : same for target cpu (not supported yet))
  *
  * TARGET_WORDS_BIGENDIAN : same for target cpu
  */
@@ -308,5 +303,7 @@ void dump_opcount_info(FILE *f, fprintf_function cpu_fprintf);
 
 int cpu_memory_rw_debug(CPUState *cpu, target_ulong addr,
                         uint8_t *buf, int len, int is_write);
+
+int cpu_exec(CPUState *cpu);
 
 #endif /* CPU_ALL_H */

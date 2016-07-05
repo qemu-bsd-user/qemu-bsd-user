@@ -14,7 +14,6 @@
 #ifndef QEMU_OBJECT_H
 #define QEMU_OBJECT_H
 
-#include <glib.h>
 #include "qapi-types.h"
 #include "qemu/queue.h"
 
@@ -1608,5 +1607,11 @@ int object_child_foreach_recursive(Object *obj,
  */
 Object *container_get(Object *root, const char *path);
 
-
+/**
+ * object_type_get_instance_size:
+ * @typename: Name of the Type whose instance_size is required
+ *
+ * Returns the instance_size of the given @typename.
+ */
+size_t object_type_get_instance_size(const char *typename);
 #endif

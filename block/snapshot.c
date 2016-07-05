@@ -358,9 +358,7 @@ int bdrv_snapshot_load_tmp_by_id_or_name(BlockDriverState *bs,
         ret = bdrv_snapshot_load_tmp(bs, NULL, id_or_name, &local_err);
     }
 
-    if (local_err) {
-        error_propagate(errp, local_err);
-    }
+    error_propagate(errp, local_err);
 
     return ret;
 }
@@ -409,9 +407,6 @@ int bdrv_all_delete_snapshot(const char *name, BlockDriverState **first_bad_bs,
         if (bdrv_can_snapshot(bs) &&
                 bdrv_snapshot_find(bs, snapshot, name) >= 0) {
             ret = bdrv_snapshot_delete_by_id_or_name(bs, name, err);
-            if (ret < 0) {
-                goto fail;
-            }
         }
         aio_context_release(ctx);
         if (ret < 0) {
