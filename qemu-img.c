@@ -490,18 +490,17 @@ fail:
 
 static void dump_json_image_check(ImageCheck *check, bool quiet)
 {
-    Error *local_err = NULL;
     QString *str;
-    QmpOutputVisitor *ov = qmp_output_visitor_new();
     QObject *obj;
-    visit_type_ImageCheck(qmp_output_get_visitor(ov), NULL, &check,
-                          &local_err);
-    obj = qmp_output_get_qobject(ov);
+    Visitor *v = qmp_output_visitor_new(&obj);
+
+    visit_type_ImageCheck(v, NULL, &check, &error_abort);
+    visit_complete(v, &obj);
     str = qobject_to_json_pretty(obj);
     assert(str != NULL);
     qprintf(quiet, "%s\n", qstring_get_str(str));
     qobject_decref(obj);
-    qmp_output_visitor_cleanup(ov);
+    visit_free(v);
     QDECREF(str);
 }
 
@@ -1648,7 +1647,7 @@ static int convert_do_copy(ImgConvertState *s)
     if (!s->has_zero_init && !s->target_has_backing &&
         bdrv_can_write_zeroes_with_unmap(blk_bs(s->target)))
     {
-        ret = bdrv_make_zero(blk_bs(s->target), BDRV_REQ_MAY_UNMAP);
+        ret = blk_make_zero(s->target, BDRV_REQ_MAY_UNMAP);
         if (ret == 0) {
             s->has_zero_init = true;
         }
@@ -2085,13 +2084,14 @@ static int img_convert(int argc, char **argv)
     }
     out_bs = blk_bs(out_blk);
 
-    /* increase bufsectors from the default 4096 (2M) if opt_transfer_length
+    /* increase bufsectors from the default 4096 (2M) if opt_transfer
      * or discard_alignment of the out_bs is greater. Limit to 32768 (16MB)
      * as maximum. */
     bufsectors = MIN(32768,
-                     MAX(bufsectors, MAX(out_bs->bl.opt_transfer_length,
-                                         out_bs->bl.discard_alignment))
-                    );
+                     MAX(bufsectors,
+                         MAX(out_bs->bl.opt_transfer >> BDRV_SECTOR_BITS,
+                             out_bs->bl.pdiscard_alignment >>
+                             BDRV_SECTOR_BITS)));
 
     if (skip_create) {
         int64_t output_sectors = blk_nb_sectors(out_blk);
@@ -2181,34 +2181,33 @@ static void dump_snapshots(BlockDriverState *bs)
 
 static void dump_json_image_info_list(ImageInfoList *list)
 {
-    Error *local_err = NULL;
     QString *str;
-    QmpOutputVisitor *ov = qmp_output_visitor_new();
     QObject *obj;
-    visit_type_ImageInfoList(qmp_output_get_visitor(ov), NULL, &list,
-                             &local_err);
-    obj = qmp_output_get_qobject(ov);
+    Visitor *v = qmp_output_visitor_new(&obj);
+
+    visit_type_ImageInfoList(v, NULL, &list, &error_abort);
+    visit_complete(v, &obj);
     str = qobject_to_json_pretty(obj);
     assert(str != NULL);
     printf("%s\n", qstring_get_str(str));
     qobject_decref(obj);
-    qmp_output_visitor_cleanup(ov);
+    visit_free(v);
     QDECREF(str);
 }
 
 static void dump_json_image_info(ImageInfo *info)
 {
-    Error *local_err = NULL;
     QString *str;
-    QmpOutputVisitor *ov = qmp_output_visitor_new();
     QObject *obj;
-    visit_type_ImageInfo(qmp_output_get_visitor(ov), NULL, &info, &local_err);
-    obj = qmp_output_get_qobject(ov);
+    Visitor *v = qmp_output_visitor_new(&obj);
+
+    visit_type_ImageInfo(v, NULL, &info, &error_abort);
+    visit_complete(v, &obj);
     str = qobject_to_json_pretty(obj);
     assert(str != NULL);
     printf("%s\n", qstring_get_str(str));
     qobject_decref(obj);
-    qmp_output_visitor_cleanup(ov);
+    visit_free(v);
     QDECREF(str);
 }
 
@@ -3866,7 +3865,7 @@ int main(int argc, char **argv)
         return 0;
     }
     argv += optind;
-    optind = 1;
+    optind = 0;
 
     if (!trace_init_backends()) {
         exit(1);
