@@ -34,4 +34,4 @@ struct target_pt_regs {
 #define TARGET_SPARC_UTRAP_INSTALL      1
 #define TARGET_SPARC_SIGTRAMP_INSTALL   2
 
-#endif  /* TARGET_SYSCALL_H */
+#endif /* TARGET_SYSCALL_H */

@@ -181,4 +181,4 @@ struct target_vm86plus_struct {
 #define TARGET_HW_MACHINE UNAME_MACHINE
 #define TARGET_HW_MACHINE_ARCH UNAME_MACHINE
 
-#endif  /* TARGET_SYSCALL_H */
+#endif /* TARGET_SYSCALL_H */

@@ -1609,10 +1609,10 @@ static void scsi_unmap_complete_noio(UnmapCBData *data, int ret)
             goto done;
         }
 
-        r->req.aiocb = blk_aio_discard(s->qdev.conf.blk,
-                                       sector_num * (s->qdev.blocksize / 512),
-                                       nb_sectors * (s->qdev.blocksize / 512),
-                                       scsi_unmap_complete, data);
+        r->req.aiocb = blk_aio_pdiscard(s->qdev.conf.blk,
+                                        sector_num * s->qdev.blocksize,
+                                        nb_sectors * s->qdev.blocksize,
+                                        scsi_unmap_complete, data);
         data->count--;
         data->inbuf += 16;
         return;
@@ -2309,6 +2309,7 @@ static void scsi_realize(SCSIDevice *dev, Error **errp)
             return;
         }
     }
+    blkconf_apply_backend_options(&dev->conf);
 
     if (s->qdev.conf.discard_granularity == -1) {
         s->qdev.conf.discard_granularity =
@@ -2848,6 +2849,7 @@ static const TypeInfo scsi_disk_base_info = {
 
 #define DEFINE_SCSI_DISK_PROPERTIES()                                \
     DEFINE_BLOCK_PROPERTIES(SCSIDiskState, qdev.conf),               \
+    DEFINE_BLOCK_ERROR_PROPERTIES(SCSIDiskState, qdev.conf),         \
     DEFINE_PROP_STRING("ver", SCSIDiskState, version),               \
     DEFINE_PROP_STRING("serial", SCSIDiskState, serial),             \
     DEFINE_PROP_STRING("vendor", SCSIDiskState, vendor),             \

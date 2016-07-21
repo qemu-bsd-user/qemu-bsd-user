@@ -32,7 +32,7 @@
 #include "trace.h"
 #include "block/thread-pool.h"
 #include "qemu/iov.h"
-#include "raw-aio.h"
+#include "block/raw-aio.h"
 #include "qapi/util.h"
 #include "qapi/qmp/qstring.h"
 
@@ -137,10 +137,6 @@ typedef struct BDRVRawState {
     int open_flags;
     size_t buf_align;
 
-#ifdef CONFIG_LINUX_AIO
-    int use_aio;
-    LinuxAioState *aio_ctx;
-#endif
 #ifdef CONFIG_XFS
     bool is_xfs:1;
 #endif
@@ -154,9 +150,6 @@ typedef struct BDRVRawState {
 typedef struct BDRVRawReopenState {
     int fd;
     int open_flags;
-#ifdef CONFIG_LINUX_AIO
-    int use_aio;
-#endif
 } BDRVRawReopenState;
 
 static int fd_open(BlockDriverState *bs);
@@ -374,58 +367,15 @@ static void raw_parse_flags(int bdrv_flags, int *open_flags)
     }
 }
 
-static void raw_detach_aio_context(BlockDriverState *bs)
-{
 #ifdef CONFIG_LINUX_AIO
-    BDRVRawState *s = bs->opaque;
-
-    if (s->use_aio) {
-        laio_detach_aio_context(s->aio_ctx, bdrv_get_aio_context(bs));
-    }
-#endif
-}
-
-static void raw_attach_aio_context(BlockDriverState *bs,
-                                   AioContext *new_context)
+static bool raw_use_aio(int bdrv_flags)
 {
-#ifdef CONFIG_LINUX_AIO
-    BDRVRawState *s = bs->opaque;
-
-    if (s->use_aio) {
-        laio_attach_aio_context(s->aio_ctx, new_context);
-    }
-#endif
-}
-
-#ifdef CONFIG_LINUX_AIO
-static int raw_set_aio(LinuxAioState **aio_ctx, int *use_aio, int bdrv_flags)
-{
-    int ret = -1;
-    assert(aio_ctx != NULL);
-    assert(use_aio != NULL);
     /*
      * Currently Linux do AIO only for files opened with O_DIRECT
      * specified so check NOCACHE flag too
      */
-    if ((bdrv_flags & (BDRV_O_NOCACHE|BDRV_O_NATIVE_AIO)) ==
-                      (BDRV_O_NOCACHE|BDRV_O_NATIVE_AIO)) {
-
-        /* if non-NULL, laio_init() has already been run */
-        if (*aio_ctx == NULL) {
-            *aio_ctx = laio_init();
-            if (!*aio_ctx) {
-                goto error;
-            }
-        }
-        *use_aio = 1;
-    } else {
-        *use_aio = 0;
-    }
-
-    ret = 0;
-
-error:
-    return ret;
+    return (bdrv_flags & (BDRV_O_NOCACHE|BDRV_O_NATIVE_AIO)) ==
+                         (BDRV_O_NOCACHE|BDRV_O_NATIVE_AIO);
 }
 #endif
 
@@ -494,13 +444,7 @@ static int raw_open_common(BlockDriverState *bs, QDict *options,
     s->fd = fd;
 
 #ifdef CONFIG_LINUX_AIO
-    if (raw_set_aio(&s->aio_ctx, &s->use_aio, bdrv_flags)) {
-        qemu_close(fd);
-        ret = -errno;
-        error_setg_errno(errp, -ret, "Could not set AIO state");
-        goto fail;
-    }
-    if (!s->use_aio && (bdrv_flags & BDRV_O_NATIVE_AIO)) {
+    if (!raw_use_aio(bdrv_flags) && (bdrv_flags & BDRV_O_NATIVE_AIO)) {
         error_setg(errp, "aio=native was specified, but it requires "
                          "cache.direct=on, which was not specified.");
         ret = -EINVAL;
@@ -567,8 +511,6 @@ static int raw_open_common(BlockDriverState *bs, QDict *options,
     }
 #endif
 
-    raw_attach_aio_context(bs, bdrv_get_aio_context(bs));
-
     ret = 0;
 fail:
     if (filename && (bdrv_flags & BDRV_O_TEMPORARY)) {
@@ -603,18 +545,6 @@ static int raw_reopen_prepare(BDRVReopenState *state,
     state->opaque = g_new0(BDRVRawReopenState, 1);
     raw_s = state->opaque;
 
-#ifdef CONFIG_LINUX_AIO
-    raw_s->use_aio = s->use_aio;
-
-    /* we can use s->aio_ctx instead of a copy, because the use_aio flag is
-     * valid in the 'false' condition even if aio_ctx is set, and raw_set_aio()
-     * won't override aio_ctx if aio_ctx is non-NULL */
-    if (raw_set_aio(&s->aio_ctx, &raw_s->use_aio, state->flags)) {
-        error_setg(errp, "Could not set AIO state");
-        return -1;
-    }
-#endif
-
     if (s->type == FTYPE_CD) {
         raw_s->open_flags |= O_NONBLOCK;
     }
@@ -639,15 +569,7 @@ static int raw_reopen_prepare(BDRVReopenState *state,
 
     if ((raw_s->open_flags & ~fcntl_flags) == (s->open_flags & ~fcntl_flags)) {
         /* dup the original fd */
-        /* TODO: use qemu fcntl wrapper */
-#ifdef F_DUPFD_CLOEXEC
-        raw_s->fd = fcntl(s->fd, F_DUPFD_CLOEXEC, 0);
-#else
-        raw_s->fd = dup(s->fd);
-        if (raw_s->fd != -1) {
-            qemu_set_cloexec(raw_s->fd);
-        }
-#endif
+        raw_s->fd = qemu_dup(s->fd);
         if (raw_s->fd >= 0) {
             ret = fcntl_setfl(raw_s->fd, raw_s->open_flags);
             if (ret) {
@@ -697,9 +619,6 @@ static void raw_reopen_commit(BDRVReopenState *state)
 
     qemu_close(s->fd);
     s->fd = raw_s->fd;
-#ifdef CONFIG_LINUX_AIO
-    s->use_aio = raw_s->use_aio;
-#endif
 
     g_free(state->opaque);
     state->opaque = NULL;
@@ -1295,7 +1214,7 @@ static int paio_submit_co(BlockDriverState *bs, int fd,
 }
 
 static BlockAIOCB *paio_submit(BlockDriverState *bs, int fd,
-        int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
+        int64_t offset, QEMUIOVector *qiov, int count,
         BlockCompletionFunc *cb, void *opaque, int type)
 {
     RawPosixAIOData *acb = g_new(RawPosixAIOData, 1);
@@ -1305,8 +1224,8 @@ static BlockAIOCB *paio_submit(BlockDriverState *bs, int fd,
     acb->aio_type = type;
     acb->aio_fildes = fd;
 
-    acb->aio_nbytes = nb_sectors * BDRV_SECTOR_SIZE;
-    acb->aio_offset = sector_num * BDRV_SECTOR_SIZE;
+    acb->aio_nbytes = count;
+    acb->aio_offset = offset;
 
     if (qiov) {
         acb->aio_iov = qiov->iov;
@@ -1314,7 +1233,7 @@ static BlockAIOCB *paio_submit(BlockDriverState *bs, int fd,
         assert(qiov->size == acb->aio_nbytes);
     }
 
-    trace_paio_submit(acb, opaque, sector_num, nb_sectors, type);
+    trace_paio_submit(acb, opaque, offset, count, type);
     pool = aio_get_thread_pool(bdrv_get_aio_context(bs));
     return thread_pool_submit_aio(pool, aio_worker, acb, cb, opaque);
 }
@@ -1337,9 +1256,10 @@ static int coroutine_fn raw_co_prw(BlockDriverState *bs, uint64_t offset,
         if (!bdrv_qiov_is_aligned(bs, qiov)) {
             type |= QEMU_AIO_MISALIGNED;
 #ifdef CONFIG_LINUX_AIO
-        } else if (s->use_aio) {
+        } else if (bs->open_flags & BDRV_O_NATIVE_AIO) {
+            LinuxAioState *aio = aio_get_linux_aio(bdrv_get_aio_context(bs));
             assert(qiov->size == bytes);
-            return laio_co_submit(bs, s->aio_ctx, s->fd, offset, qiov, type);
+            return laio_co_submit(bs, aio, s->fd, offset, qiov, type);
 #endif
         }
     }
@@ -1365,9 +1285,9 @@ static int coroutine_fn raw_co_pwritev(BlockDriverState *bs, uint64_t offset,
 static void raw_aio_plug(BlockDriverState *bs)
 {
 #ifdef CONFIG_LINUX_AIO
-    BDRVRawState *s = bs->opaque;
-    if (s->use_aio) {
-        laio_io_plug(bs, s->aio_ctx);
+    if (bs->open_flags & BDRV_O_NATIVE_AIO) {
+        LinuxAioState *aio = aio_get_linux_aio(bdrv_get_aio_context(bs));
+        laio_io_plug(bs, aio);
     }
 #endif
 }
@@ -1375,9 +1295,9 @@ static void raw_aio_plug(BlockDriverState *bs)
 static void raw_aio_unplug(BlockDriverState *bs)
 {
 #ifdef CONFIG_LINUX_AIO
-    BDRVRawState *s = bs->opaque;
-    if (s->use_aio) {
-        laio_io_unplug(bs, s->aio_ctx);
+    if (bs->open_flags & BDRV_O_NATIVE_AIO) {
+        LinuxAioState *aio = aio_get_linux_aio(bdrv_get_aio_context(bs));
+        laio_io_unplug(bs, aio);
     }
 #endif
 }
@@ -1397,13 +1317,6 @@ static void raw_close(BlockDriverState *bs)
 {
     BDRVRawState *s = bs->opaque;
 
-    raw_detach_aio_context(bs);
-
-#ifdef CONFIG_LINUX_AIO
-    if (s->use_aio) {
-        laio_cleanup(s->aio_ctx);
-    }
-#endif
     if (s->fd >= 0) {
         qemu_close(s->fd);
         s->fd = -1;
@@ -1873,13 +1786,13 @@ static int64_t coroutine_fn raw_co_get_block_status(BlockDriverState *bs,
     return ret | BDRV_BLOCK_OFFSET_VALID | start;
 }
 
-static coroutine_fn BlockAIOCB *raw_aio_discard(BlockDriverState *bs,
-    int64_t sector_num, int nb_sectors,
+static coroutine_fn BlockAIOCB *raw_aio_pdiscard(BlockDriverState *bs,
+    int64_t offset, int count,
     BlockCompletionFunc *cb, void *opaque)
 {
     BDRVRawState *s = bs->opaque;
 
-    return paio_submit(bs, s->fd, sector_num, NULL, nb_sectors,
+    return paio_submit(bs, s->fd, offset, NULL, count,
                        cb, opaque, QEMU_AIO_DISCARD);
 }
 
@@ -1951,7 +1864,7 @@ BlockDriver bdrv_file = {
     .bdrv_co_preadv         = raw_co_preadv,
     .bdrv_co_pwritev        = raw_co_pwritev,
     .bdrv_aio_flush = raw_aio_flush,
-    .bdrv_aio_discard = raw_aio_discard,
+    .bdrv_aio_pdiscard = raw_aio_pdiscard,
     .bdrv_refresh_limits = raw_refresh_limits,
     .bdrv_io_plug = raw_aio_plug,
     .bdrv_io_unplug = raw_aio_unplug,
@@ -1961,9 +1874,6 @@ BlockDriver bdrv_file = {
     .bdrv_get_info = raw_get_info,
     .bdrv_get_allocated_file_size
                         = raw_get_allocated_file_size,
-
-    .bdrv_detach_aio_context = raw_detach_aio_context,
-    .bdrv_attach_aio_context = raw_attach_aio_context,
 
     .create_opts = &raw_create_opts,
 };
@@ -2293,8 +2203,8 @@ static int fd_open(BlockDriverState *bs)
     return -EIO;
 }
 
-static coroutine_fn BlockAIOCB *hdev_aio_discard(BlockDriverState *bs,
-    int64_t sector_num, int nb_sectors,
+static coroutine_fn BlockAIOCB *hdev_aio_pdiscard(BlockDriverState *bs,
+    int64_t offset, int count,
     BlockCompletionFunc *cb, void *opaque)
 {
     BDRVRawState *s = bs->opaque;
@@ -2302,7 +2212,7 @@ static coroutine_fn BlockAIOCB *hdev_aio_discard(BlockDriverState *bs,
     if (fd_open(bs) < 0) {
         return NULL;
     }
-    return paio_submit(bs, s->fd, sector_num, NULL, nb_sectors,
+    return paio_submit(bs, s->fd, offset, NULL, count,
                        cb, opaque, QEMU_AIO_DISCARD|QEMU_AIO_BLKDEV);
 }
 
@@ -2397,7 +2307,7 @@ static BlockDriver bdrv_host_device = {
     .bdrv_co_preadv         = raw_co_preadv,
     .bdrv_co_pwritev        = raw_co_pwritev,
     .bdrv_aio_flush	= raw_aio_flush,
-    .bdrv_aio_discard   = hdev_aio_discard,
+    .bdrv_aio_pdiscard   = hdev_aio_pdiscard,
     .bdrv_refresh_limits = raw_refresh_limits,
     .bdrv_io_plug = raw_aio_plug,
     .bdrv_io_unplug = raw_aio_unplug,
@@ -2409,9 +2319,6 @@ static BlockDriver bdrv_host_device = {
                         = raw_get_allocated_file_size,
     .bdrv_probe_blocksizes = hdev_probe_blocksizes,
     .bdrv_probe_geometry = hdev_probe_geometry,
-
-    .bdrv_detach_aio_context = raw_detach_aio_context,
-    .bdrv_attach_aio_context = raw_attach_aio_context,
 
     /* generic scsi device */
 #ifdef __linux__
@@ -2531,9 +2438,6 @@ static BlockDriver bdrv_host_cdrom = {
     .has_variable_length = true,
     .bdrv_get_allocated_file_size
                         = raw_get_allocated_file_size,
-
-    .bdrv_detach_aio_context = raw_detach_aio_context,
-    .bdrv_attach_aio_context = raw_attach_aio_context,
 
     /* removable device support */
     .bdrv_is_inserted   = cdrom_is_inserted,
@@ -2664,9 +2568,6 @@ static BlockDriver bdrv_host_cdrom = {
     .has_variable_length = true,
     .bdrv_get_allocated_file_size
                         = raw_get_allocated_file_size,
-
-    .bdrv_detach_aio_context = raw_detach_aio_context,
-    .bdrv_attach_aio_context = raw_attach_aio_context,
 
     /* removable device support */
     .bdrv_is_inserted   = cdrom_is_inserted,
