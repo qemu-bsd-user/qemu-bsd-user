@@ -5,8 +5,7 @@
    necessary */
 
 #ifndef SYSCALL_DEFS_H
-#define SYSCALL_DEFS_H 1
-
+#define SYSCALL_DEFS_H
 
 #include "syscall_nr.h"
 
@@ -986,6 +985,17 @@ struct target_pollfd {
 #define TARGET_BLKGETSIZE64 TARGET_IOR(0x12,114,abi_ulong)
                                              /* return device size in bytes
                                                 (u64 *arg) */
+
+#define TARGET_BLKDISCARD TARGET_IO(0x12, 119)
+#define TARGET_BLKIOMIN TARGET_IO(0x12, 120)
+#define TARGET_BLKIOOPT TARGET_IO(0x12, 121)
+#define TARGET_BLKALIGNOFF TARGET_IO(0x12, 122)
+#define TARGET_BLKPBSZGET TARGET_IO(0x12, 123)
+#define TARGET_BLKDISCARDZEROES TARGET_IO(0x12, 124)
+#define TARGET_BLKSECDISCARD TARGET_IO(0x12, 125)
+#define TARGET_BLKROTATIONAL TARGET_IO(0x12, 126)
+#define TARGET_BLKZEROOUT TARGET_IO(0x12, 127)
+
 #define TARGET_FIBMAP     TARGET_IO(0x00,1)  /* bmap access */
 #define TARGET_FIGETBSZ   TARGET_IO(0x00,2)  /* get the block size used for bmap */
 #define TARGET_FS_IOC_FIEMAP TARGET_IOWR('f',11,struct fiemap)
@@ -1117,6 +1127,10 @@ struct target_pollfd {
 #define TARGET_LOOP_SET_STATUS64      0x4C04
 #define TARGET_LOOP_GET_STATUS64      0x4C05
 #define TARGET_LOOP_CHANGE_FD         0x4C06
+
+#define TARGET_LOOP_CTL_ADD           0x4C80
+#define TARGET_LOOP_CTL_REMOVE        0x4C81
+#define TARGET_LOOP_CTL_GET_FREE      0x4C82
 
 /* fb ioctls */
 #define TARGET_FBIOGET_VSCREENINFO    0x4600
@@ -2577,8 +2591,6 @@ struct target_ucred {
     uint32_t gid;
 };
 
-#endif
-
 typedef int32_t target_timer_t;
 
 #define TARGET_SIGEV_MAX_SIZE 64
@@ -2620,3 +2632,5 @@ struct target_user_cap_data {
     uint32_t permitted;
     uint32_t inheritable;
 };
+
+#endif

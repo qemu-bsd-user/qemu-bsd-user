@@ -495,7 +495,7 @@ static inline void free_aio_req(BDRVSheepdogState *s, AIOReq *aio_req)
 
 static void coroutine_fn sd_finish_aiocb(SheepdogAIOCB *acb)
 {
-    qemu_coroutine_enter(acb->coroutine, NULL);
+    qemu_coroutine_enter(acb->coroutine);
     qemu_aio_unref(acb);
 }
 
@@ -636,7 +636,7 @@ static void restart_co_req(void *opaque)
 {
     Coroutine *co = opaque;
 
-    qemu_coroutine_enter(co, NULL);
+    qemu_coroutine_enter(co);
 }
 
 typedef struct SheepdogReqCo {
@@ -726,8 +726,8 @@ static int do_req(int sockfd, AioContext *aio_context, SheepdogReq *hdr,
     if (qemu_in_coroutine()) {
         do_co_req(&srco);
     } else {
-        co = qemu_coroutine_create(do_co_req);
-        qemu_coroutine_enter(co, &srco);
+        co = qemu_coroutine_create(do_co_req, &srco);
+        qemu_coroutine_enter(co);
         while (!srco.finished) {
             aio_poll(aio_context, true);
         }
@@ -925,17 +925,17 @@ static void co_read_response(void *opaque)
     BDRVSheepdogState *s = opaque;
 
     if (!s->co_recv) {
-        s->co_recv = qemu_coroutine_create(aio_read_response);
+        s->co_recv = qemu_coroutine_create(aio_read_response, opaque);
     }
 
-    qemu_coroutine_enter(s->co_recv, opaque);
+    qemu_coroutine_enter(s->co_recv);
 }
 
 static void co_write_request(void *opaque)
 {
     BDRVSheepdogState *s = opaque;
 
-    qemu_coroutine_enter(s->co_send, NULL);
+    qemu_coroutine_enter(s->co_send);
 }
 
 /*
@@ -2800,8 +2800,8 @@ static int sd_load_vmstate(BlockDriverState *bs, QEMUIOVector *qiov,
 }
 
 
-static coroutine_fn int sd_co_discard(BlockDriverState *bs, int64_t sector_num,
-                                      int nb_sectors)
+static coroutine_fn int sd_co_pdiscard(BlockDriverState *bs, int64_t offset,
+                                      int count)
 {
     SheepdogAIOCB *acb;
     BDRVSheepdogState *s = bs->opaque;
@@ -2811,7 +2811,7 @@ static coroutine_fn int sd_co_discard(BlockDriverState *bs, int64_t sector_num,
     uint32_t zero = 0;
 
     if (!s->discard_supported) {
-            return 0;
+        return 0;
     }
 
     memset(&discard_iov, 0, sizeof(discard_iov));
@@ -2820,7 +2820,10 @@ static coroutine_fn int sd_co_discard(BlockDriverState *bs, int64_t sector_num,
     iov.iov_len = sizeof(zero);
     discard_iov.iov = &iov;
     discard_iov.niov = 1;
-    acb = sd_aio_setup(bs, &discard_iov, sector_num, nb_sectors);
+    assert((offset & (BDRV_SECTOR_SIZE - 1)) == 0);
+    assert((count & (BDRV_SECTOR_SIZE - 1)) == 0);
+    acb = sd_aio_setup(bs, &discard_iov, offset >> BDRV_SECTOR_BITS,
+                       count >> BDRV_SECTOR_BITS);
     acb->aiocb_type = AIOCB_DISCARD_OBJ;
     acb->aio_done_func = sd_finish_aiocb;
 
@@ -2954,7 +2957,7 @@ static BlockDriver bdrv_sheepdog = {
     .bdrv_co_readv  = sd_co_readv,
     .bdrv_co_writev = sd_co_writev,
     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
-    .bdrv_co_discard = sd_co_discard,
+    .bdrv_co_pdiscard = sd_co_pdiscard,
     .bdrv_co_get_block_status = sd_co_get_block_status,
 
     .bdrv_snapshot_create   = sd_snapshot_create,
@@ -2990,7 +2993,7 @@ static BlockDriver bdrv_sheepdog_tcp = {
     .bdrv_co_readv  = sd_co_readv,
     .bdrv_co_writev = sd_co_writev,
     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
-    .bdrv_co_discard = sd_co_discard,
+    .bdrv_co_pdiscard = sd_co_pdiscard,
     .bdrv_co_get_block_status = sd_co_get_block_status,
 
     .bdrv_snapshot_create   = sd_snapshot_create,
@@ -3026,7 +3029,7 @@ static BlockDriver bdrv_sheepdog_unix = {
     .bdrv_co_readv  = sd_co_readv,
     .bdrv_co_writev = sd_co_writev,
     .bdrv_co_flush_to_disk  = sd_co_flush_to_disk,
-    .bdrv_co_discard = sd_co_discard,
+    .bdrv_co_pdiscard = sd_co_pdiscard,
     .bdrv_co_get_block_status = sd_co_get_block_status,
 
     .bdrv_snapshot_create   = sd_snapshot_create,

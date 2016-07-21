@@ -512,6 +512,8 @@ static BlockBackend *blockdev_init(const char *file, QDict *bs_opts,
 
     writethrough = !qemu_opt_get_bool(opts, BDRV_OPT_CACHE_WB, true);
 
+    id = qemu_opts_id(opts);
+
     qdict_extract_subqdict(bs_opts, &interval_dict, "stats-intervals.");
     qdict_array_split(interval_dict, &interval_list);
 
@@ -616,7 +618,7 @@ static BlockBackend *blockdev_init(const char *file, QDict *bs_opts,
     /* disk I/O throttling */
     if (throttle_enabled(&cfg)) {
         if (!throttling_group) {
-            throttling_group = blk_name(blk);
+            throttling_group = id;
         }
         blk_io_limits_enable(blk, throttling_group);
         blk_set_io_limits(blk, &cfg);
@@ -625,7 +627,7 @@ static BlockBackend *blockdev_init(const char *file, QDict *bs_opts,
     blk_set_enable_write_cache(blk, !writethrough);
     blk_set_on_error(blk, on_read_error, on_write_error);
 
-    if (!monitor_add_blk(blk, qemu_opts_id(opts), errp)) {
+    if (!monitor_add_blk(blk, id, errp)) {
         blk_unref(blk);
         blk = NULL;
         goto err_no_bs_opts;
@@ -1836,9 +1838,9 @@ typedef struct DriveBackupState {
     BlockJob *job;
 } DriveBackupState;
 
-static void do_drive_backup(const char *device, const char *target,
-                            bool has_format, const char *format,
-                            enum MirrorSyncMode sync,
+static void do_drive_backup(const char *job_id, const char *device,
+                            const char *target, bool has_format,
+                            const char *format, enum MirrorSyncMode sync,
                             bool has_mode, enum NewImageMode mode,
                             bool has_speed, int64_t speed,
                             bool has_bitmap, const char *bitmap,
@@ -1876,7 +1878,8 @@ static void drive_backup_prepare(BlkActionState *common, Error **errp)
     bdrv_drained_begin(blk_bs(blk));
     state->bs = blk_bs(blk);
 
-    do_drive_backup(backup->device, backup->target,
+    do_drive_backup(backup->has_job_id ? backup->job_id : NULL,
+                    backup->device, backup->target,
                     backup->has_format, backup->format,
                     backup->sync,
                     backup->has_mode, backup->mode,
@@ -1921,8 +1924,8 @@ typedef struct BlockdevBackupState {
     AioContext *aio_context;
 } BlockdevBackupState;
 
-static void do_blockdev_backup(const char *device, const char *target,
-                               enum MirrorSyncMode sync,
+static void do_blockdev_backup(const char *job_id, const char *device,
+                               const char *target, enum MirrorSyncMode sync,
                                bool has_speed, int64_t speed,
                                bool has_on_source_error,
                                BlockdevOnError on_source_error,
@@ -1968,8 +1971,8 @@ static void blockdev_backup_prepare(BlkActionState *common, Error **errp)
     state->bs = blk_bs(blk);
     bdrv_drained_begin(state->bs);
 
-    do_blockdev_backup(backup->device, backup->target,
-                       backup->sync,
+    do_blockdev_backup(backup->has_job_id ? backup->job_id : NULL,
+                       backup->device, backup->target, backup->sync,
                        backup->has_speed, backup->speed,
                        backup->has_on_source_error, backup->on_source_error,
                        backup->has_on_target_error, backup->on_target_error,
@@ -2631,49 +2634,17 @@ fail:
 }
 
 /* throttling disk I/O limits */
-void qmp_block_set_io_throttle(const char *device, int64_t bps, int64_t bps_rd,
-                               int64_t bps_wr,
-                               int64_t iops,
-                               int64_t iops_rd,
-                               int64_t iops_wr,
-                               bool has_bps_max,
-                               int64_t bps_max,
-                               bool has_bps_rd_max,
-                               int64_t bps_rd_max,
-                               bool has_bps_wr_max,
-                               int64_t bps_wr_max,
-                               bool has_iops_max,
-                               int64_t iops_max,
-                               bool has_iops_rd_max,
-                               int64_t iops_rd_max,
-                               bool has_iops_wr_max,
-                               int64_t iops_wr_max,
-                               bool has_bps_max_length,
-                               int64_t bps_max_length,
-                               bool has_bps_rd_max_length,
-                               int64_t bps_rd_max_length,
-                               bool has_bps_wr_max_length,
-                               int64_t bps_wr_max_length,
-                               bool has_iops_max_length,
-                               int64_t iops_max_length,
-                               bool has_iops_rd_max_length,
-                               int64_t iops_rd_max_length,
-                               bool has_iops_wr_max_length,
-                               int64_t iops_wr_max_length,
-                               bool has_iops_size,
-                               int64_t iops_size,
-                               bool has_group,
-                               const char *group, Error **errp)
+void qmp_block_set_io_throttle(BlockIOThrottle *arg, Error **errp)
 {
     ThrottleConfig cfg;
     BlockDriverState *bs;
     BlockBackend *blk;
     AioContext *aio_context;
 
-    blk = blk_by_name(device);
+    blk = blk_by_name(arg->device);
     if (!blk) {
         error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,
-                  "Device '%s' not found", device);
+                  "Device '%s' not found", arg->device);
         return;
     }
 
@@ -2682,59 +2653,59 @@ void qmp_block_set_io_throttle(const char *device, int64_t bps, int64_t bps_rd,
 
     bs = blk_bs(blk);
     if (!bs) {
-        error_setg(errp, "Device '%s' has no medium", device);
+        error_setg(errp, "Device '%s' has no medium", arg->device);
         goto out;
     }
 
     throttle_config_init(&cfg);
-    cfg.buckets[THROTTLE_BPS_TOTAL].avg = bps;
-    cfg.buckets[THROTTLE_BPS_READ].avg  = bps_rd;
-    cfg.buckets[THROTTLE_BPS_WRITE].avg = bps_wr;
+    cfg.buckets[THROTTLE_BPS_TOTAL].avg = arg->bps;
+    cfg.buckets[THROTTLE_BPS_READ].avg  = arg->bps_rd;
+    cfg.buckets[THROTTLE_BPS_WRITE].avg = arg->bps_wr;
 
-    cfg.buckets[THROTTLE_OPS_TOTAL].avg = iops;
-    cfg.buckets[THROTTLE_OPS_READ].avg  = iops_rd;
-    cfg.buckets[THROTTLE_OPS_WRITE].avg = iops_wr;
+    cfg.buckets[THROTTLE_OPS_TOTAL].avg = arg->iops;
+    cfg.buckets[THROTTLE_OPS_READ].avg  = arg->iops_rd;
+    cfg.buckets[THROTTLE_OPS_WRITE].avg = arg->iops_wr;
 
-    if (has_bps_max) {
-        cfg.buckets[THROTTLE_BPS_TOTAL].max = bps_max;
+    if (arg->has_bps_max) {
+        cfg.buckets[THROTTLE_BPS_TOTAL].max = arg->bps_max;
     }
-    if (has_bps_rd_max) {
-        cfg.buckets[THROTTLE_BPS_READ].max = bps_rd_max;
+    if (arg->has_bps_rd_max) {
+        cfg.buckets[THROTTLE_BPS_READ].max = arg->bps_rd_max;
     }
-    if (has_bps_wr_max) {
-        cfg.buckets[THROTTLE_BPS_WRITE].max = bps_wr_max;
+    if (arg->has_bps_wr_max) {
+        cfg.buckets[THROTTLE_BPS_WRITE].max = arg->bps_wr_max;
     }
-    if (has_iops_max) {
-        cfg.buckets[THROTTLE_OPS_TOTAL].max = iops_max;
+    if (arg->has_iops_max) {
+        cfg.buckets[THROTTLE_OPS_TOTAL].max = arg->iops_max;
     }
-    if (has_iops_rd_max) {
-        cfg.buckets[THROTTLE_OPS_READ].max = iops_rd_max;
+    if (arg->has_iops_rd_max) {
+        cfg.buckets[THROTTLE_OPS_READ].max = arg->iops_rd_max;
     }
-    if (has_iops_wr_max) {
-        cfg.buckets[THROTTLE_OPS_WRITE].max = iops_wr_max;
-    }
-
-    if (has_bps_max_length) {
-        cfg.buckets[THROTTLE_BPS_TOTAL].burst_length = bps_max_length;
-    }
-    if (has_bps_rd_max_length) {
-        cfg.buckets[THROTTLE_BPS_READ].burst_length = bps_rd_max_length;
-    }
-    if (has_bps_wr_max_length) {
-        cfg.buckets[THROTTLE_BPS_WRITE].burst_length = bps_wr_max_length;
-    }
-    if (has_iops_max_length) {
-        cfg.buckets[THROTTLE_OPS_TOTAL].burst_length = iops_max_length;
-    }
-    if (has_iops_rd_max_length) {
-        cfg.buckets[THROTTLE_OPS_READ].burst_length = iops_rd_max_length;
-    }
-    if (has_iops_wr_max_length) {
-        cfg.buckets[THROTTLE_OPS_WRITE].burst_length = iops_wr_max_length;
+    if (arg->has_iops_wr_max) {
+        cfg.buckets[THROTTLE_OPS_WRITE].max = arg->iops_wr_max;
     }
 
-    if (has_iops_size) {
-        cfg.op_size = iops_size;
+    if (arg->has_bps_max_length) {
+        cfg.buckets[THROTTLE_BPS_TOTAL].burst_length = arg->bps_max_length;
+    }
+    if (arg->has_bps_rd_max_length) {
+        cfg.buckets[THROTTLE_BPS_READ].burst_length = arg->bps_rd_max_length;
+    }
+    if (arg->has_bps_wr_max_length) {
+        cfg.buckets[THROTTLE_BPS_WRITE].burst_length = arg->bps_wr_max_length;
+    }
+    if (arg->has_iops_max_length) {
+        cfg.buckets[THROTTLE_OPS_TOTAL].burst_length = arg->iops_max_length;
+    }
+    if (arg->has_iops_rd_max_length) {
+        cfg.buckets[THROTTLE_OPS_READ].burst_length = arg->iops_rd_max_length;
+    }
+    if (arg->has_iops_wr_max_length) {
+        cfg.buckets[THROTTLE_OPS_WRITE].burst_length = arg->iops_wr_max_length;
+    }
+
+    if (arg->has_iops_size) {
+        cfg.op_size = arg->iops_size;
     }
 
     if (!throttle_is_valid(&cfg, errp)) {
@@ -2745,9 +2716,10 @@ void qmp_block_set_io_throttle(const char *device, int64_t bps, int64_t bps_rd,
         /* Enable I/O limits if they're not enabled yet, otherwise
          * just update the throttling group. */
         if (!blk_get_public(blk)->throttle_state) {
-            blk_io_limits_enable(blk, has_group ? group : device);
-        } else if (has_group) {
-            blk_io_limits_update_group(blk, group);
+            blk_io_limits_enable(blk,
+                                 arg->has_group ? arg->group : arg->device);
+        } else if (arg->has_group) {
+            blk_io_limits_update_group(blk, arg->group);
         }
         /* Set the new throttling configuration */
         blk_set_io_limits(blk, &cfg);
@@ -3004,7 +2976,7 @@ static void block_job_cb(void *opaque, int ret)
     }
 }
 
-void qmp_block_stream(const char *device,
+void qmp_block_stream(bool has_job_id, const char *job_id, const char *device,
                       bool has_base, const char *base,
                       bool has_backing_file, const char *backing_file,
                       bool has_speed, int64_t speed,
@@ -3063,8 +3035,8 @@ void qmp_block_stream(const char *device,
     /* backing_file string overrides base bs filename */
     base_name = has_backing_file ? backing_file : base_name;
 
-    stream_start(bs, base_bs, base_name, has_speed ? speed : 0,
-                 on_error, block_job_cb, bs, &local_err);
+    stream_start(has_job_id ? job_id : NULL, bs, base_bs, base_name,
+                 has_speed ? speed : 0, on_error, block_job_cb, bs, &local_err);
     if (local_err) {
         error_propagate(errp, local_err);
         goto out;
@@ -3076,7 +3048,7 @@ out:
     aio_context_release(aio_context);
 }
 
-void qmp_block_commit(const char *device,
+void qmp_block_commit(bool has_job_id, const char *job_id, const char *device,
                       bool has_base, const char *base,
                       bool has_top, const char *top,
                       bool has_backing_file, const char *backing_file,
@@ -3167,10 +3139,11 @@ void qmp_block_commit(const char *device,
                              " but 'top' is the active layer");
             goto out;
         }
-        commit_active_start(bs, base_bs, speed, on_error, block_job_cb,
-                            bs, &local_err);
+        commit_active_start(has_job_id ? job_id : NULL, bs, base_bs, speed,
+                            on_error, block_job_cb, bs, &local_err);
     } else {
-        commit_start(bs, base_bs, top_bs, speed, on_error, block_job_cb, bs,
+        commit_start(has_job_id ? job_id : NULL, bs, base_bs, top_bs, speed,
+                     on_error, block_job_cb, bs,
                      has_backing_file ? backing_file : NULL, &local_err);
     }
     if (local_err != NULL) {
@@ -3182,9 +3155,9 @@ out:
     aio_context_release(aio_context);
 }
 
-static void do_drive_backup(const char *device, const char *target,
-                            bool has_format, const char *format,
-                            enum MirrorSyncMode sync,
+static void do_drive_backup(const char *job_id, const char *device,
+                            const char *target, bool has_format,
+                            const char *format, enum MirrorSyncMode sync,
                             bool has_mode, enum NewImageMode mode,
                             bool has_speed, int64_t speed,
                             bool has_bitmap, const char *bitmap,
@@ -3303,7 +3276,7 @@ static void do_drive_backup(const char *device, const char *target,
         }
     }
 
-    backup_start(bs, target_bs, speed, sync, bmap,
+    backup_start(job_id, bs, target_bs, speed, sync, bmap,
                  on_source_error, on_target_error,
                  block_job_cb, bs, txn, &local_err);
     bdrv_unref(target_bs);
@@ -3316,7 +3289,8 @@ out:
     aio_context_release(aio_context);
 }
 
-void qmp_drive_backup(const char *device, const char *target,
+void qmp_drive_backup(bool has_job_id, const char *job_id,
+                      const char *device, const char *target,
                       bool has_format, const char *format,
                       enum MirrorSyncMode sync,
                       bool has_mode, enum NewImageMode mode,
@@ -3326,7 +3300,8 @@ void qmp_drive_backup(const char *device, const char *target,
                       bool has_on_target_error, BlockdevOnError on_target_error,
                       Error **errp)
 {
-    return do_drive_backup(device, target, has_format, format, sync,
+    return do_drive_backup(has_job_id ? job_id : NULL, device, target,
+                           has_format, format, sync,
                            has_mode, mode, has_speed, speed,
                            has_bitmap, bitmap,
                            has_on_source_error, on_source_error,
@@ -3339,8 +3314,8 @@ BlockDeviceInfoList *qmp_query_named_block_nodes(Error **errp)
     return bdrv_named_nodes_list(errp);
 }
 
-void do_blockdev_backup(const char *device, const char *target,
-                         enum MirrorSyncMode sync,
+void do_blockdev_backup(const char *job_id, const char *device,
+                        const char *target, enum MirrorSyncMode sync,
                          bool has_speed, int64_t speed,
                          bool has_on_source_error,
                          BlockdevOnError on_source_error,
@@ -3395,7 +3370,7 @@ void do_blockdev_backup(const char *device, const char *target,
             goto out;
         }
     }
-    backup_start(bs, target_bs, speed, sync, NULL, on_source_error,
+    backup_start(job_id, bs, target_bs, speed, sync, NULL, on_source_error,
                  on_target_error, block_job_cb, bs, txn, &local_err);
     if (local_err != NULL) {
         error_propagate(errp, local_err);
@@ -3404,7 +3379,8 @@ out:
     aio_context_release(aio_context);
 }
 
-void qmp_blockdev_backup(const char *device, const char *target,
+void qmp_blockdev_backup(bool has_job_id, const char *job_id,
+                         const char *device, const char *target,
                          enum MirrorSyncMode sync,
                          bool has_speed, int64_t speed,
                          bool has_on_source_error,
@@ -3413,7 +3389,8 @@ void qmp_blockdev_backup(const char *device, const char *target,
                          BlockdevOnError on_target_error,
                          Error **errp)
 {
-    do_blockdev_backup(device, target, sync, has_speed, speed,
+    do_blockdev_backup(has_job_id ? job_id : NULL, device, target,
+                       sync, has_speed, speed,
                        has_on_source_error, on_source_error,
                        has_on_target_error, on_target_error,
                        NULL, errp);
@@ -3422,7 +3399,7 @@ void qmp_blockdev_backup(const char *device, const char *target,
 /* Parameter check and block job starting for drive mirroring.
  * Caller should hold @device and @target's aio context (must be the same).
  **/
-static void blockdev_mirror_common(BlockDriverState *bs,
+static void blockdev_mirror_common(const char *job_id, BlockDriverState *bs,
                                    BlockDriverState *target,
                                    bool has_replaces, const char *replaces,
                                    enum MirrorSyncMode sync,
@@ -3482,26 +3459,14 @@ static void blockdev_mirror_common(BlockDriverState *bs,
     /* pass the node name to replace to mirror start since it's loose coupling
      * and will allow to check whether the node still exist at mirror completion
      */
-    mirror_start(bs, target,
+    mirror_start(job_id, bs, target,
                  has_replaces ? replaces : NULL,
                  speed, granularity, buf_size, sync, backing_mode,
                  on_source_error, on_target_error, unmap,
                  block_job_cb, bs, errp);
 }
 
-void qmp_drive_mirror(const char *device, const char *target,
-                      bool has_format, const char *format,
-                      bool has_node_name, const char *node_name,
-                      bool has_replaces, const char *replaces,
-                      enum MirrorSyncMode sync,
-                      bool has_mode, enum NewImageMode mode,
-                      bool has_speed, int64_t speed,
-                      bool has_granularity, uint32_t granularity,
-                      bool has_buf_size, int64_t buf_size,
-                      bool has_on_source_error, BlockdevOnError on_source_error,
-                      bool has_on_target_error, BlockdevOnError on_target_error,
-                      bool has_unmap, bool unmap,
-                      Error **errp)
+void qmp_drive_mirror(DriveMirror *arg, Error **errp)
 {
     BlockDriverState *bs;
     BlockBackend *blk;
@@ -3512,11 +3477,12 @@ void qmp_drive_mirror(const char *device, const char *target,
     QDict *options = NULL;
     int flags;
     int64_t size;
+    const char *format = arg->format;
 
-    blk = blk_by_name(device);
+    blk = blk_by_name(arg->device);
     if (!blk) {
         error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,
-                  "Device '%s' not found", device);
+                  "Device '%s' not found", arg->device);
         return;
     }
 
@@ -3524,24 +3490,25 @@ void qmp_drive_mirror(const char *device, const char *target,
     aio_context_acquire(aio_context);
 
     if (!blk_is_available(blk)) {
-        error_setg(errp, QERR_DEVICE_HAS_NO_MEDIUM, device);
+        error_setg(errp, QERR_DEVICE_HAS_NO_MEDIUM, arg->device);
         goto out;
     }
     bs = blk_bs(blk);
-    if (!has_mode) {
-        mode = NEW_IMAGE_MODE_ABSOLUTE_PATHS;
+    if (!arg->has_mode) {
+        arg->mode = NEW_IMAGE_MODE_ABSOLUTE_PATHS;
     }
 
-    if (!has_format) {
-        format = mode == NEW_IMAGE_MODE_EXISTING ? NULL : bs->drv->format_name;
+    if (!arg->has_format) {
+        format = (arg->mode == NEW_IMAGE_MODE_EXISTING
+                  ? NULL : bs->drv->format_name);
     }
 
     flags = bs->open_flags | BDRV_O_RDWR;
     source = backing_bs(bs);
-    if (!source && sync == MIRROR_SYNC_MODE_TOP) {
-        sync = MIRROR_SYNC_MODE_FULL;
+    if (!source && arg->sync == MIRROR_SYNC_MODE_TOP) {
+        arg->sync = MIRROR_SYNC_MODE_FULL;
     }
-    if (sync == MIRROR_SYNC_MODE_NONE) {
+    if (arg->sync == MIRROR_SYNC_MODE_NONE) {
         source = bs;
     }
 
@@ -3551,18 +3518,18 @@ void qmp_drive_mirror(const char *device, const char *target,
         goto out;
     }
 
-    if (has_replaces) {
+    if (arg->has_replaces) {
         BlockDriverState *to_replace_bs;
         AioContext *replace_aio_context;
         int64_t replace_size;
 
-        if (!has_node_name) {
+        if (!arg->has_node_name) {
             error_setg(errp, "a node-name must be provided when replacing a"
                              " named node of the graph");
             goto out;
         }
 
-        to_replace_bs = check_to_replace_node(bs, replaces, &local_err);
+        to_replace_bs = check_to_replace_node(bs, arg->replaces, &local_err);
 
         if (!to_replace_bs) {
             error_propagate(errp, local_err);
@@ -3581,26 +3548,26 @@ void qmp_drive_mirror(const char *device, const char *target,
         }
     }
 
-    if (mode == NEW_IMAGE_MODE_ABSOLUTE_PATHS) {
+    if (arg->mode == NEW_IMAGE_MODE_ABSOLUTE_PATHS) {
         backing_mode = MIRROR_SOURCE_BACKING_CHAIN;
     } else {
         backing_mode = MIRROR_OPEN_BACKING_CHAIN;
     }
 
-    if ((sync == MIRROR_SYNC_MODE_FULL || !source)
-        && mode != NEW_IMAGE_MODE_EXISTING)
+    if ((arg->sync == MIRROR_SYNC_MODE_FULL || !source)
+        && arg->mode != NEW_IMAGE_MODE_EXISTING)
     {
         /* create new image w/o backing file */
         assert(format);
-        bdrv_img_create(target, format,
+        bdrv_img_create(arg->target, format,
                         NULL, NULL, NULL, size, flags, &local_err, false);
     } else {
-        switch (mode) {
+        switch (arg->mode) {
         case NEW_IMAGE_MODE_EXISTING:
             break;
         case NEW_IMAGE_MODE_ABSOLUTE_PATHS:
             /* create new image with backing file */
-            bdrv_img_create(target, format,
+            bdrv_img_create(arg->target, format,
                             source->filename,
                             source->drv->format_name,
                             NULL, size, flags, &local_err, false);
@@ -3616,8 +3583,8 @@ void qmp_drive_mirror(const char *device, const char *target,
     }
 
     options = qdict_new();
-    if (has_node_name) {
-        qdict_put(options, "node-name", qstring_from_str(node_name));
+    if (arg->has_node_name) {
+        qdict_put(options, "node-name", qstring_from_str(arg->node_name));
     }
     if (format) {
         qdict_put(options, "driver", qstring_from_str(format));
@@ -3626,22 +3593,22 @@ void qmp_drive_mirror(const char *device, const char *target,
     /* Mirroring takes care of copy-on-write using the source's backing
      * file.
      */
-    target_bs = bdrv_open(target, NULL, options, flags | BDRV_O_NO_BACKING,
-                          errp);
+    target_bs = bdrv_open(arg->target, NULL, options,
+                          flags | BDRV_O_NO_BACKING, errp);
     if (!target_bs) {
         goto out;
     }
 
     bdrv_set_aio_context(target_bs, aio_context);
 
-    blockdev_mirror_common(bs, target_bs,
-                           has_replaces, replaces, sync, backing_mode,
-                           has_speed, speed,
-                           has_granularity, granularity,
-                           has_buf_size, buf_size,
-                           has_on_source_error, on_source_error,
-                           has_on_target_error, on_target_error,
-                           has_unmap, unmap,
+    blockdev_mirror_common(arg->has_job_id ? arg->job_id : NULL, bs, target_bs,
+                           arg->has_replaces, arg->replaces, arg->sync,
+                           backing_mode, arg->has_speed, arg->speed,
+                           arg->has_granularity, arg->granularity,
+                           arg->has_buf_size, arg->buf_size,
+                           arg->has_on_source_error, arg->on_source_error,
+                           arg->has_on_target_error, arg->on_target_error,
+                           arg->has_unmap, arg->unmap,
                            &local_err);
     bdrv_unref(target_bs);
     error_propagate(errp, local_err);
@@ -3649,7 +3616,8 @@ out:
     aio_context_release(aio_context);
 }
 
-void qmp_blockdev_mirror(const char *device, const char *target,
+void qmp_blockdev_mirror(bool has_job_id, const char *job_id,
+                         const char *device, const char *target,
                          bool has_replaces, const char *replaces,
                          MirrorSyncMode sync,
                          bool has_speed, int64_t speed,
@@ -3690,7 +3658,7 @@ void qmp_blockdev_mirror(const char *device, const char *target,
 
     bdrv_set_aio_context(target_bs, aio_context);
 
-    blockdev_mirror_common(bs, target_bs,
+    blockdev_mirror_common(has_job_id ? job_id : NULL, bs, target_bs,
                            has_replaces, replaces, sync, backing_mode,
                            has_speed, speed,
                            has_granularity, granularity,
@@ -3704,42 +3672,28 @@ void qmp_blockdev_mirror(const char *device, const char *target,
     aio_context_release(aio_context);
 }
 
-/* Get the block job for a given device name and acquire its AioContext */
-static BlockJob *find_block_job(const char *device, AioContext **aio_context,
+/* Get a block job using its ID and acquire its AioContext */
+static BlockJob *find_block_job(const char *id, AioContext **aio_context,
                                 Error **errp)
 {
-    BlockBackend *blk;
-    BlockDriverState *bs;
+    BlockJob *job;
+
+    assert(id != NULL);
 
     *aio_context = NULL;
 
-    blk = blk_by_name(device);
-    if (!blk) {
-        goto notfound;
+    job = block_job_get(id);
+
+    if (!job) {
+        error_set(errp, ERROR_CLASS_DEVICE_NOT_ACTIVE,
+                  "Block job '%s' not found", id);
+        return NULL;
     }
 
-    *aio_context = blk_get_aio_context(blk);
+    *aio_context = blk_get_aio_context(job->blk);
     aio_context_acquire(*aio_context);
 
-    if (!blk_is_available(blk)) {
-        goto notfound;
-    }
-    bs = blk_bs(blk);
-
-    if (!bs->job) {
-        goto notfound;
-    }
-
-    return bs->job;
-
-notfound:
-    error_set(errp, ERROR_CLASS_DEVICE_NOT_ACTIVE,
-              "No active block job on device '%s'", device);
-    if (*aio_context) {
-        aio_context_release(*aio_context);
-        *aio_context = NULL;
-    }
-    return NULL;
+    return job;
 }
 
 void qmp_block_job_set_speed(const char *device, int64_t speed, Error **errp)

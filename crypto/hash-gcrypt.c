@@ -19,9 +19,9 @@
  */
 
 #include "qemu/osdep.h"
+#include <gcrypt.h>
 #include "qapi/error.h"
 #include "crypto/hash.h"
-#include "gcrypt.h"
 
 
 static int qcrypto_hash_alg_map[QCRYPTO_HASH_ALG__MAX] = {
@@ -55,8 +55,7 @@ int qcrypto_hash_bytesv(QCryptoHashAlgorithm alg,
     gcry_md_hd_t md;
     unsigned char *digest;
 
-    if (alg >= G_N_ELEMENTS(qcrypto_hash_alg_map) ||
-        qcrypto_hash_alg_map[alg] == GCRY_MD_NONE) {
+    if (!qcrypto_hash_supports(alg)) {
         error_setg(errp,
                    "Unknown hash algorithm %d",
                    alg);

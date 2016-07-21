@@ -1077,31 +1077,28 @@ void hmp_block_resize(Monitor *mon, const QDict *qdict)
 
 void hmp_drive_mirror(Monitor *mon, const QDict *qdict)
 {
-    const char *device = qdict_get_str(qdict, "device");
     const char *filename = qdict_get_str(qdict, "target");
     const char *format = qdict_get_try_str(qdict, "format");
     bool reuse = qdict_get_try_bool(qdict, "reuse", false);
     bool full = qdict_get_try_bool(qdict, "full", false);
-    enum NewImageMode mode;
     Error *err = NULL;
+    DriveMirror mirror = {
+        .device = (char *)qdict_get_str(qdict, "device"),
+        .target = (char *)filename,
+        .has_format = !!format,
+        .format = (char *)format,
+        .sync = full ? MIRROR_SYNC_MODE_FULL : MIRROR_SYNC_MODE_TOP,
+        .has_mode = true,
+        .mode = reuse ? NEW_IMAGE_MODE_EXISTING : NEW_IMAGE_MODE_ABSOLUTE_PATHS,
+        .unmap = true,
+    };
 
     if (!filename) {
         error_setg(&err, QERR_MISSING_PARAMETER, "target");
         hmp_handle_error(mon, &err);
         return;
     }
-
-    if (reuse) {
-        mode = NEW_IMAGE_MODE_EXISTING;
-    } else {
-        mode = NEW_IMAGE_MODE_ABSOLUTE_PATHS;
-    }
-
-    qmp_drive_mirror(device, filename, !!format, format,
-                     false, NULL, false, NULL,
-                     full ? MIRROR_SYNC_MODE_FULL : MIRROR_SYNC_MODE_TOP,
-                     true, mode, false, 0, false, 0, false, 0,
-                     false, 0, false, 0, false, true, &err);
+    qmp_drive_mirror(&mirror, &err);
     hmp_handle_error(mon, &err);
 }
 
@@ -1127,7 +1124,7 @@ void hmp_drive_backup(Monitor *mon, const QDict *qdict)
         mode = NEW_IMAGE_MODE_ABSOLUTE_PATHS;
     }
 
-    qmp_drive_backup(device, filename, !!format, format,
+    qmp_drive_backup(false, NULL, device, filename, !!format, format,
                      full ? MIRROR_SYNC_MODE_FULL : MIRROR_SYNC_MODE_TOP,
                      true, mode, false, 0, false, NULL,
                      false, 0, false, 0, &err);
@@ -1439,42 +1436,17 @@ void hmp_change(Monitor *mon, const QDict *qdict)
 void hmp_block_set_io_throttle(Monitor *mon, const QDict *qdict)
 {
     Error *err = NULL;
+    BlockIOThrottle throttle = {
+        .device = (char *) qdict_get_str(qdict, "device"),
+        .bps = qdict_get_int(qdict, "bps"),
+        .bps_rd = qdict_get_int(qdict, "bps_rd"),
+        .bps_wr = qdict_get_int(qdict, "bps_wr"),
+        .iops = qdict_get_int(qdict, "iops"),
+        .iops_rd = qdict_get_int(qdict, "iops_rd"),
+        .iops_wr = qdict_get_int(qdict, "iops_wr"),
+    };
 
-    qmp_block_set_io_throttle(qdict_get_str(qdict, "device"),
-                              qdict_get_int(qdict, "bps"),
-                              qdict_get_int(qdict, "bps_rd"),
-                              qdict_get_int(qdict, "bps_wr"),
-                              qdict_get_int(qdict, "iops"),
-                              qdict_get_int(qdict, "iops_rd"),
-                              qdict_get_int(qdict, "iops_wr"),
-                              false, /* no burst max via HMP */
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false, /* no burst length via HMP */
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false,
-                              0,
-                              false, /* No default I/O size */
-                              0,
-                              false,
-                              NULL, &err);
+    qmp_block_set_io_throttle(&throttle, &err);
     hmp_handle_error(mon, &err);
 }
 
@@ -1485,7 +1457,7 @@ void hmp_block_stream(Monitor *mon, const QDict *qdict)
     const char *base = qdict_get_try_str(qdict, "base");
     int64_t speed = qdict_get_try_int(qdict, "speed", 0);
 
-    qmp_block_stream(device, base != NULL, base, false, NULL,
+    qmp_block_stream(false, NULL, device, base != NULL, base, false, NULL,
                      qdict_haskey(qdict, "speed"), speed,
                      true, BLOCKDEV_ON_ERROR_REPORT, &error);
 

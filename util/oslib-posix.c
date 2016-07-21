@@ -48,7 +48,7 @@
 #include <sys/sysctl.h>
 #endif
 
-#include <qemu/mmap-alloc.h>
+#include "qemu/mmap-alloc.h"
 
 int qemu_get_thread_id(void)
 {
@@ -299,9 +299,11 @@ void qemu_init_exec_dir(const char *argv0)
             return;
         }
     }
-    dir = dirname(p);
+    dir = g_path_get_dirname(p);
 
     pstrcpy(exec_dir, sizeof(exec_dir), dir);
+
+    g_free(dir);
 }
 
 char *qemu_get_exec_dir(void)

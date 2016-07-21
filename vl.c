@@ -4345,9 +4345,6 @@ int main(int argc, char **argv, char **envp)
         qemu_opts_del(icount_opts);
     }
 
-    /* clean up network at qemu process termination */
-    atexit(&net_cleanup);
-
     if (default_net) {
         QemuOptsList *net = qemu_find_opts("net");
         qemu_opts_set(net, NULL, "type", "nic", &error_abort);
@@ -4601,6 +4598,7 @@ int main(int argc, char **argv, char **envp)
 
     os_setup_post();
 
+    trace_init_vcpu_events();
     main_loop();
     replay_disable_events();
 
@@ -4610,6 +4608,10 @@ int main(int argc, char **argv, char **envp)
 #ifdef CONFIG_TPM
     tpm_cleanup();
 #endif
+
+    /* vhost-user must be cleaned up before chardevs.  */
+    net_cleanup();
+    qemu_chr_cleanup();
 
     return 0;
 }

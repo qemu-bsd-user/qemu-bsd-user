@@ -36,7 +36,7 @@
 #include "qemu/config-file.h"
 #include "qemu/error-report.h"
 #if defined(CONFIG_USER_ONLY)
-#include <qemu.h>
+#include "qemu.h"
 #else /* !CONFIG_USER_ONLY */
 #include "hw/hw.h"
 #include "exec/memory.h"
@@ -187,10 +187,12 @@ struct CPUAddressSpace {
 
 static void phys_map_node_reserve(PhysPageMap *map, unsigned nodes)
 {
+    static unsigned alloc_hint = 16;
     if (map->nodes_nb + nodes > map->nodes_nb_alloc) {
-        map->nodes_nb_alloc = MAX(map->nodes_nb_alloc * 2, 16);
+        map->nodes_nb_alloc = MAX(map->nodes_nb_alloc, alloc_hint);
         map->nodes_nb_alloc = MAX(map->nodes_nb_alloc, map->nodes_nb + nodes);
         map->nodes = g_renew(Node, map->nodes, map->nodes_nb_alloc);
+        alloc_hint = map->nodes_nb_alloc;
     }
 }
 
