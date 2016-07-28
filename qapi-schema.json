@@ -2889,6 +2889,7 @@
     'nic':      'NetLegacyNicOptions',
     'user':     'NetdevUserOptions',
     'tap':      'NetdevTapOptions',
+    'pcap':     'NetdevPcapOptions',
     'l2tpv3':   'NetdevL2TPv3Options',
     'socket':   'NetdevSocketOptions',
     'vde':      'NetdevVdeOptions',
