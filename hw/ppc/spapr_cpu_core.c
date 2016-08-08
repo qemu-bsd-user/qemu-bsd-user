@@ -153,7 +153,6 @@ void spapr_core_unplug(HotplugHandler *hotplug_dev, DeviceState *dev,
 void spapr_core_plug(HotplugHandler *hotplug_dev, DeviceState *dev,
                      Error **errp)
 {
-    sPAPRMachineClass *smc = SPAPR_MACHINE_GET_CLASS(OBJECT(hotplug_dev));
     sPAPRMachineState *spapr = SPAPR_MACHINE(OBJECT(hotplug_dev));
     sPAPRCPUCore *core = SPAPR_CPU_CORE(OBJECT(dev));
     CPUCore *cc = CPU_CORE(dev);
@@ -168,15 +167,6 @@ void spapr_core_plug(HotplugHandler *hotplug_dev, DeviceState *dev,
 
     drc = spapr_dr_connector_by_id(SPAPR_DR_CONNECTOR_TYPE_CPU, index * smt);
     spapr->cores[index] = OBJECT(dev);
-
-    if (!smc->dr_cpu_enabled) {
-        /*
-         * This is a cold plugged CPU core but the machine doesn't support
-         * DR. So skip the hotplug path ensuring that the core is brought
-         * up online with out an associated DR connector.
-         */
-        return;
-    }
 
     g_assert(drc);
 
@@ -216,7 +206,7 @@ void spapr_core_pre_plug(HotplugHandler *hotplug_dev, DeviceState *dev,
                          Error **errp)
 {
     MachineState *machine = MACHINE(OBJECT(hotplug_dev));
-    sPAPRMachineClass *smc = SPAPR_MACHINE_GET_CLASS(OBJECT(hotplug_dev));
+    MachineClass *mc = MACHINE_GET_CLASS(hotplug_dev);
     sPAPRMachineState *spapr = SPAPR_MACHINE(OBJECT(hotplug_dev));
     int spapr_max_cores = max_cpus / smp_threads;
     int index;
@@ -225,13 +215,13 @@ void spapr_core_pre_plug(HotplugHandler *hotplug_dev, DeviceState *dev,
     char *base_core_type = spapr_get_cpu_core_type(machine->cpu_model);
     const char *type = object_get_typename(OBJECT(dev));
 
-    if (strcmp(base_core_type, type)) {
-        error_setg(&local_err, "CPU core type should be %s", base_core_type);
+    if (!mc->query_hotpluggable_cpus) {
+        error_setg(&local_err, "CPU hotplug not supported for this machine");
         goto out;
     }
 
-    if (!smc->dr_cpu_enabled && dev->hotplugged) {
-        error_setg(&local_err, "CPU hotplug not supported for this machine");
+    if (strcmp(base_core_type, type)) {
+        error_setg(&local_err, "CPU core type should be %s", base_core_type);
         goto out;
     }
 
@@ -241,7 +231,7 @@ void spapr_core_pre_plug(HotplugHandler *hotplug_dev, DeviceState *dev,
     }
 
     if (cc->core_id % smp_threads) {
-        error_setg(&local_err, "invalid core id %d\n", cc->core_id);
+        error_setg(&local_err, "invalid core id %d", cc->core_id);
         goto out;
     }
 
