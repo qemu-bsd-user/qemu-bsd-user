@@ -2514,11 +2514,14 @@ sub process {
 	my $qemu_error_funcs = qr{error_setg|
 				error_setg_errno|
 				error_setg_win32|
+				error_setg_file_open|
 				error_set|
+				error_prepend|
+				error_reportf_err|
 				error_vreport|
 				error_report}x;
 
-	if ($rawline =~ /\b(?:$qemu_error_funcs)\s*\(\s*\".*\\n/) {
+	if ($rawline =~ /\b(?:$qemu_error_funcs)\s*\(.*\".*\\n/) {
 		WARN("Error messages should not contain newlines\n" . $herecurr);
 	}
 
@@ -2544,7 +2547,7 @@ sub process {
 		}
 	}
 
-# check for non-portable ffs() calls that have portable alternatives in QEMU
+# check for non-portable libc calls that have portable alternatives in QEMU
 		if ($line =~ /\bffs\(/) {
 			ERROR("use ctz32() instead of ffs()\n" . $herecurr);
 		}
@@ -2553,6 +2556,9 @@ sub process {
 		}
 		if ($line =~ /\bffsll\(/) {
 			ERROR("use ctz64() instead of ffsll()\n" . $herecurr);
+		}
+		if ($line =~ /\bbzero\(/) {
+			ERROR("use memset() instead of bzero()\n" . $herecurr);
 		}
 	}
 
