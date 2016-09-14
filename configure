@@ -229,6 +229,7 @@ xfs=""
 
 vhost_net="no"
 vhost_scsi="no"
+vhost_vsock="no"
 kvm="no"
 rdma=""
 gprof="no"
@@ -320,6 +321,7 @@ vhdx=""
 numa=""
 tcmalloc="no"
 jemalloc="no"
+replication="yes"
 
 # parse CC options first
 for opt do
@@ -388,7 +390,11 @@ sdl2_config="${SDL2_CONFIG-${cross_prefix}sdl2-config}"
 ARFLAGS="${ARFLAGS-rv}"
 
 # default flags for all hosts
-QEMU_CFLAGS="-fno-strict-aliasing -fno-common $QEMU_CFLAGS"
+# We use -fwrapv to tell the compiler that we require a C dialect where
+# left shift of signed integers is well defined and has the expected
+# 2s-complement style results. (Both clang and gcc agree that it
+# provides these semantics.)
+QEMU_CFLAGS="-fno-strict-aliasing -fno-common -fwrapv $QEMU_CFLAGS"
 QEMU_CFLAGS="-Wall -Wundef -Wwrite-strings -Wmissing-prototypes $QEMU_CFLAGS"
 QEMU_CFLAGS="-Wstrict-prototypes -Wredundant-decls $QEMU_CFLAGS"
 QEMU_CFLAGS="-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE $QEMU_CFLAGS"
@@ -674,6 +680,7 @@ Haiku)
   kvm="yes"
   vhost_net="yes"
   vhost_scsi="yes"
+  vhost_vsock="yes"
   QEMU_INCLUDES="-I\$(SRC_PATH)/linux-headers -I$(pwd)/linux-headers $QEMU_INCLUDES"
 ;;
 esac
@@ -1017,6 +1024,10 @@ for opt do
   ;;
   --enable-vhost-scsi) vhost_scsi="yes"
   ;;
+  --disable-vhost-vsock) vhost_vsock="no"
+  ;;
+  --enable-vhost-vsock) vhost_vsock="yes"
+  ;;
   --disable-opengl) opengl="no"
   ;;
   --enable-opengl) opengl="yes"
@@ -1149,6 +1160,10 @@ for opt do
   --disable-jemalloc) jemalloc="no"
   ;;
   --enable-jemalloc) jemalloc="yes"
+  ;;
+  --disable-replication) replication="no"
+  ;;
+  --enable-replication) replication="yes"
   ;;
   *)
       echo "ERROR: unknown option $opt"
@@ -1380,6 +1395,7 @@ disabled with --disable-FEATURE, default is enabled if available:
   numa            libnuma support
   tcmalloc        tcmalloc support
   jemalloc        jemalloc support
+  replication     replication support
 
 NOTE: The object files are built at the place where configure is launched
 EOF
@@ -4192,6 +4208,18 @@ if compile_prog "" "" ; then
 fi
 
 ##########################################
+# check if we have posix_syslog
+
+posix_syslog=no
+cat > $TMPC << EOF
+#include <syslog.h>
+int main(void) { openlog("qemu", LOG_PID, LOG_DAEMON); syslog(LOG_INFO, "configure"); return 0; }
+EOF
+if compile_prog "" "" ; then
+    posix_syslog=yes
+fi
+
+##########################################
 # check if trace backend exists
 
 $python "$source_path/scripts/tracetool.py" "--backends=$trace_backends" --check-backends  > /dev/null 2> /dev/null
@@ -4871,6 +4899,7 @@ echo "uuid support      $uuid"
 echo "libcap-ng support $cap_ng"
 echo "vhost-net support $vhost_net"
 echo "vhost-scsi support $vhost_scsi"
+echo "vhost-vsock support $vhost_vsock"
 echo "Trace backends    $trace_backends"
 if have_backend "simple"; then
 echo "Trace output file $trace_file-<pid>"
@@ -4908,6 +4937,7 @@ echo "NUMA host support $numa"
 echo "tcmalloc support  $tcmalloc"
 echo "jemalloc support  $jemalloc"
 echo "avx2 optimization $avx2_opt"
+echo "replication support $replication"
 
 if test "$sdl_too_old" = "yes"; then
 echo "-> Your SDL version is too old - please upgrade to have SDL support"
@@ -5252,6 +5282,9 @@ fi
 if test "$vhost_net" = "yes" ; then
   echo "CONFIG_VHOST_NET_USED=y" >> $config_host_mak
 fi
+if test "$vhost_vsock" = "yes" ; then
+  echo "CONFIG_VHOST_VSOCK=y" >> $config_host_mak
+fi
 if test "$blobs" = "yes" ; then
   echo "INSTALL_BLOBS=yes" >> $config_host_mak
 fi
@@ -5468,6 +5501,13 @@ if have_backend "ftrace"; then
     feature_not_found "ftrace(trace backend)" "ftrace requires Linux"
   fi
 fi
+if have_backend "syslog"; then
+  if test "$posix_syslog" = "yes" ; then
+    echo "CONFIG_TRACE_SYSLOG=y" >> $config_host_mak
+  else
+    feature_not_found "syslog(trace backend)" "syslog not available"
+  fi
+fi
 echo "CONFIG_TRACE_FILE=$trace_file" >> $config_host_mak
 
 if test "$rdma" = "yes" ; then
@@ -5476,6 +5516,10 @@ fi
 
 if test "$have_rtnetlink" = "yes" ; then
   echo "CONFIG_RTNETLINK=y" >> $config_host_mak
+fi
+
+if test "$replication" = "yes" ; then
+  echo "CONFIG_REPLICATION=y" >> $config_host_mak
 fi
 
 # Hold two types of flag:

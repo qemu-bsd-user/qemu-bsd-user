@@ -25,6 +25,7 @@
 #include "trace.h"
 #include "block/block_int.h"
 #include "block/blockjob.h"
+#include "block/nbd.h"
 #include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "qapi/qmp/qerror.h"
@@ -1311,6 +1312,23 @@ void bdrv_set_backing_hd(BlockDriverState *bs, BlockDriverState *backing_hd)
     /* Otherwise we won't be able to commit due to check in bdrv_commit */
     bdrv_op_unblock(backing_hd, BLOCK_OP_TYPE_COMMIT_TARGET,
                     bs->backing_blocker);
+    /*
+     * We do backup in 3 ways:
+     * 1. drive backup
+     *    The target bs is new opened, and the source is top BDS
+     * 2. blockdev backup
+     *    Both the source and the target are top BDSes.
+     * 3. internal backup(used for block replication)
+     *    Both the source and the target are backing file
+     *
+     * In case 1 and 2, neither the source nor the target is the backing file.
+     * In case 3, we will block the top BDS, so there is only one block job
+     * for the top BDS and its backing chain.
+     */
+    bdrv_op_unblock(backing_hd, BLOCK_OP_TYPE_BACKUP_SOURCE,
+                    bs->backing_blocker);
+    bdrv_op_unblock(backing_hd, BLOCK_OP_TYPE_BACKUP_TARGET,
+                    bs->backing_blocker);
 out:
     bdrv_refresh_limits(bs, NULL);
 }
@@ -2206,6 +2224,7 @@ static void bdrv_close(BlockDriverState *bs)
 void bdrv_close_all(void)
 {
     block_job_cancel_sync_all();
+    nbd_export_close_all();
 
     /* Drop references from requests still in flight, such as canceled block
      * jobs whose AIO context has not been polled yet */

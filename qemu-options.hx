@@ -303,7 +303,7 @@ STEXI
 @findex -k
 Use keyboard layout @var{language} (for example @code{fr} for
 French). This option is only needed where it is not easy to get raw PC
-keycodes (e.g. on Macs, with some X11 servers or with a VNC
+keycodes (e.g. on Macs, with some X11 servers or with a VNC or curses
 display). You don't normally need to use it on PC/Linux or PC/Windows
 hosts.
 
@@ -1145,7 +1145,7 @@ Configure wan image compression (lossy for slow links).
 Default is auto.
 
 @item streaming-video=[off|all|filter]
-Configure video stream detection.  Default is filter.
+Configure video stream detection.  Default is off.
 
 @item agent-mouse=[on|off]
 Enable/disable passing mouse events via vdagent.  Default is on.
