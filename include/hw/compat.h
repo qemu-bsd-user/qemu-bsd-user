@@ -1,6 +1,13 @@
 #ifndef HW_COMPAT_H
 #define HW_COMPAT_H
 
+#define HW_COMPAT_2_7 \
+    {\
+        .driver   = "virtio-pci",\
+        .property = "page-per-vq",\
+        .value    = "on",\
+    },
+
 #define HW_COMPAT_2_6 \
     {\
         .driver   = "virtio-mmio",\

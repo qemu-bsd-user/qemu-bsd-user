@@ -53,6 +53,7 @@ struct PCMachineState {
     ISADevice *rtc;
     PCIBus *bus;
     FWCfgState *fw_cfg;
+    qemu_irq *gsi;
 
     /* Configuration options: */
     uint64_t max_ram_below_4g;
@@ -220,7 +221,7 @@ void i8042_mm_init(qemu_irq kbd_irq, qemu_irq mouse_irq,
                    MemoryRegion *region, ram_addr_t size,
                    hwaddr mask);
 void i8042_isa_mouse_fake_event(void *opaque);
-void i8042_setup_a20_line(ISADevice *dev, qemu_irq *a20_out);
+void i8042_setup_a20_line(ISADevice *dev, qemu_irq a20_out);
 
 /* pc.c */
 extern int fd_bootchk;
@@ -366,6 +367,18 @@ void pc_madt_cpu_entry(AcpiDeviceIf *adev, int uid,
 int e820_add_entry(uint64_t, uint64_t, uint32_t);
 int e820_get_num_entries(void);
 bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
+
+#define PC_COMPAT_2_8 \
+    {\
+        .driver   = TYPE_X86_CPU,\
+        .property = "l3-cache",\
+        .value    = "off",\
+    },
+
+
+#define PC_COMPAT_2_7 \
+    PC_COMPAT_2_8 \
+    HW_COMPAT_2_7
 
 #define PC_COMPAT_2_6 \
     HW_COMPAT_2_6 \
@@ -903,7 +916,6 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     { \
         MachineClass *mc = MACHINE_CLASS(oc); \
         optsfn(mc); \
-        mc->name = namestr; \
         mc->init = initfn; \
     } \
     static const TypeInfo pc_machine_type_##suffix = { \

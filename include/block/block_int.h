@@ -204,8 +204,8 @@ struct BlockDriver {
     bool has_variable_length;
     int64_t (*bdrv_get_allocated_file_size)(BlockDriverState *bs);
 
-    int (*bdrv_write_compressed)(BlockDriverState *bs, int64_t sector_num,
-                                 const uint8_t *buf, int nb_sectors);
+    int coroutine_fn (*bdrv_co_pwritev_compressed)(BlockDriverState *bs,
+        uint64_t offset, uint64_t bytes, QEMUIOVector *qiov);
 
     int (*bdrv_snapshot_create)(BlockDriverState *bs,
                                 QEMUSnapshotInfo *sn_info);
@@ -702,13 +702,14 @@ void commit_start(const char *job_id, BlockDriverState *bs,
  * @cb: Completion function for the job.
  * @opaque: Opaque pointer value passed to @cb.
  * @errp: Error object.
+ * @auto_complete: Auto complete the job.
  *
  */
 void commit_active_start(const char *job_id, BlockDriverState *bs,
                          BlockDriverState *base, int64_t speed,
                          BlockdevOnError on_error,
                          BlockCompletionFunc *cb,
-                         void *opaque, Error **errp);
+                         void *opaque, Error **errp, bool auto_complete);
 /*
  * mirror_start:
  * @job_id: The id of the newly-created job, or %NULL to use the
@@ -765,6 +766,7 @@ void mirror_start(const char *job_id, BlockDriverState *bs,
 void backup_start(const char *job_id, BlockDriverState *bs,
                   BlockDriverState *target, int64_t speed,
                   MirrorSyncMode sync_mode, BdrvDirtyBitmap *sync_bitmap,
+                  bool compress,
                   BlockdevOnError on_source_error,
                   BlockdevOnError on_target_error,
                   BlockCompletionFunc *cb, void *opaque,
