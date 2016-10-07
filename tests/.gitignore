@@ -70,10 +70,12 @@ test-string-output-visitor
 test-thread-pool
 test-throttle
 test-timed-average
+test-uuid
 test-visitor-serialization
 test-vmstate
 test-write-threshold
 test-x86-cpuid
+test-x86-cpuid-compat
 test-xbzrle
 test-netfilter
 test-filter-mirror

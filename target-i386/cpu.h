@@ -453,6 +453,8 @@ typedef enum FeatureWord {
     FEAT_SVM,           /* CPUID[8000_000A].EDX */
     FEAT_XSAVE,         /* CPUID[EAX=0xd,ECX=1].EAX */
     FEAT_6_EAX,         /* CPUID[6].EAX */
+    FEAT_XSAVE_COMP_LO, /* CPUID[EAX=0xd,ECX=0].EAX */
+    FEAT_XSAVE_COMP_HI, /* CPUID[EAX=0xd,ECX=0].EDX */
     FEATURE_WORDS,
 } FeatureWord;
 
@@ -877,7 +879,8 @@ typedef union X86LegacyXSaveArea {
 typedef struct X86XSaveHeader {
     uint64_t xstate_bv;
     uint64_t xcomp_bv;
-    uint8_t reserved[48];
+    uint64_t reserve0;
+    uint8_t reserved[40];
 } X86XSaveHeader;
 
 /* Ext. save area 2: AVX State */
@@ -1035,6 +1038,9 @@ typedef struct CPUX86State {
     uint64_t tsc;
     uint64_t tsc_adjust;
     uint64_t tsc_deadline;
+    uint64_t tsc_aux;
+
+    uint64_t xcr0;
 
     uint64_t mcg_status;
     uint64_t msr_ia32_misc_enable;
@@ -1050,6 +1056,8 @@ typedef struct CPUX86State {
 
     uint64_t pat;
     uint32_t smbase;
+
+    uint32_t pkru;
 
     /* End of state preserved by INIT (dummy marker).  */
     struct {} end_init_save;
@@ -1102,11 +1110,15 @@ typedef struct CPUX86State {
     CPU_COMMON
 
     /* Fields from here on are preserved across CPU reset. */
+    struct {} end_reset_fields;
 
     /* processor features (e.g. for CPUID insn) */
-    uint32_t cpuid_level;
-    uint32_t cpuid_xlevel;
-    uint32_t cpuid_xlevel2;
+    /* Minimum level/xlevel/xlevel2, based on CPU model + features */
+    uint32_t cpuid_min_level, cpuid_min_xlevel, cpuid_min_xlevel2;
+    /* Maximum level/xlevel/xlevel2 value for auto-assignment: */
+    uint32_t cpuid_max_level, cpuid_max_xlevel, cpuid_max_xlevel2;
+    /* Actual level/xlevel/xlevel2 value: */
+    uint32_t cpuid_level, cpuid_xlevel, cpuid_xlevel2;
     uint32_t cpuid_vendor1;
     uint32_t cpuid_vendor2;
     uint32_t cpuid_vendor3;
@@ -1135,19 +1147,14 @@ typedef struct CPUX86State {
     uint64_t mcg_ctl;
     uint64_t mcg_ext_ctl;
     uint64_t mce_banks[MCE_BANKS_DEF*4];
-
-    uint64_t tsc_aux;
+    uint64_t xstate_bv;
 
     /* vmstate */
     uint16_t fpus_vmstate;
     uint16_t fptag_vmstate;
     uint16_t fpregs_format_vmstate;
-    uint64_t xstate_bv;
 
-    uint64_t xcr0;
     uint64_t xss;
-
-    uint32_t pkru;
 
     TPRAccess tpr_access_type;
 } CPUX86State;
@@ -1215,6 +1222,9 @@ struct X86CPU {
 
     /* Compatibility bits for old machine types: */
     bool enable_cpuid_0xb;
+
+    /* Enable auto level-increase for all CPUID leaves */
+    bool full_cpuid_auto_level;
 
     /* if true fill the top bits of the MTRR_PHYSMASKn variable range */
     bool fill_mtrr_mask;
@@ -1392,13 +1402,6 @@ int cpu_x86_signal_handler(int host_signum, void *pinfo,
                            void *puc);
 
 /* cpu.c */
-typedef struct ExtSaveArea {
-    uint32_t feature, bits;
-    uint32_t offset, size;
-} ExtSaveArea;
-
-extern const ExtSaveArea x86_ext_save_areas[];
-
 void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
                    uint32_t *eax, uint32_t *ebx,
                    uint32_t *ecx, uint32_t *edx);
