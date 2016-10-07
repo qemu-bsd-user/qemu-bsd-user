@@ -100,7 +100,13 @@ static int pending_cpus;
 static int sleeping_cpus;
 static CPUState *exclusive_cpu;
 
-/* Make sure everything is in a consistent state for calling fork(). */
+#if defined(TARGET_I386)
+int cpu_get_pic_interrupt(CPUX86State *env)
+{
+    return -1;
+}
+#endif
+
 void fork_start(void)
 {
     qemu_mutex_lock(&tcg_ctx.tb_ctx.tb_lock);
@@ -208,6 +214,7 @@ void cpu_exec_end(CPUState *cpu)
             pthread_cond_signal(&exclusive_cond);
         }
     }
+
     exclusive_idle();
     /*
      * This is a hack, we gotta keep an exclusive section while handling signals
@@ -222,18 +229,17 @@ void cpu_exec_end(CPUState *cpu)
     pthread_mutex_unlock(&exclusive_lock);
 }
 
-void cpu_list_lock(void)
-{
-    pthread_mutex_lock(&cpu_list_mutex);
-}
-
-void cpu_list_unlock(void)
-{
-    pthread_mutex_unlock(&cpu_list_mutex);
-}
-
 void cpu_loop(CPUArchState *env)
 {
+    CPUState *cs = CPU(sparc_env_get_cpu(env));
+    int trapnr, ret, syscall_nr;
+    //target_siginfo_t info;
+
+    while (1) {
+        cpu_exec_start(cs);
+        trapnr = cpu_exec(cs);
+        cpu_exec_end(cs);
+        process_queued_cpu_work(cs);
 
     target_cpu_loop(env);
 }
@@ -369,6 +375,7 @@ int main(int argc, char **argv)
 
     save_proc_pathname(argv[0]);
 
+    qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
 
     if ((envlist = envlist_create()) == NULL) {
@@ -626,7 +633,6 @@ int main(int argc, char **argv)
         gdbserver_start (gdbstub_port);
         gdb_handlesig(cpu, 0);
     }
-    trace_init_vcpu_events();
     cpu_loop(env);
     /* never exits */
     return 0;

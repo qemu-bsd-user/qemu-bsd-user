@@ -560,6 +560,25 @@ void *blk_get_attached_dev(BlockBackend *blk)
 }
 
 /*
+ * Return the BlockBackend which has the device model @dev attached if it
+ * exists, else null.
+ *
+ * @dev must not be null.
+ */
+BlockBackend *blk_by_dev(void *dev)
+{
+    BlockBackend *blk = NULL;
+
+    assert(dev != NULL);
+    while ((blk = blk_all_next(blk)) != NULL) {
+        if (blk->dev == dev) {
+            return blk;
+        }
+    }
+    return NULL;
+}
+
+/*
  * Set @blk's device model callbacks to @ops.
  * @opaque is the opaque argument to pass to the callbacks.
  * This is for use by device models.
@@ -1573,13 +1592,12 @@ void blk_update_root_state(BlockBackend *blk)
 }
 
 /*
- * Applies the information in the root state to the given BlockDriverState. This
- * does not include the flags which have to be specified for bdrv_open(), use
- * blk_get_open_flags_from_root_state() to inquire them.
+ * Returns the detect-zeroes setting to be used for bdrv_open() of a
+ * BlockDriverState which is supposed to inherit the root state.
  */
-void blk_apply_root_state(BlockBackend *blk, BlockDriverState *bs)
+bool blk_get_detect_zeroes_from_root_state(BlockBackend *blk)
 {
-    bs->detect_zeroes = blk->root_state.detect_zeroes;
+    return blk->root_state.detect_zeroes;
 }
 
 /*
@@ -1619,28 +1637,6 @@ int blk_commit_all(void)
         aio_context_release(aio_context);
     }
     return 0;
-}
-
-int blk_flush_all(void)
-{
-    BlockBackend *blk = NULL;
-    int result = 0;
-
-    while ((blk = blk_all_next(blk)) != NULL) {
-        AioContext *aio_context = blk_get_aio_context(blk);
-        int ret;
-
-        aio_context_acquire(aio_context);
-        if (blk_is_inserted(blk)) {
-            ret = blk_flush(blk);
-            if (ret < 0 && !result) {
-                result = ret;
-            }
-        }
-        aio_context_release(aio_context);
-    }
-
-    return result;
 }
 
 

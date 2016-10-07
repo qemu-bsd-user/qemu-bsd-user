@@ -29,6 +29,7 @@
 #include "qemu/error-report.h"
 #include "sysemu/sysemu.h"
 #include "hw/qdev-properties.h"
+#include "trace.h"
 
 bool cpu_exists(int64_t id)
 {
@@ -245,6 +246,8 @@ void cpu_reset(CPUState *cpu)
     if (klass->reset != NULL) {
         (*klass->reset)(cpu);
     }
+
+    trace_guest_cpu_reset(cpu);
 }
 
 static void cpu_common_reset(CPUState *cpu)
@@ -333,6 +336,9 @@ static void cpu_common_realizefn(DeviceState *dev, Error **errp)
         cpu_synchronize_post_init(cpu);
         cpu_resume(cpu);
     }
+
+    /* NOTE: latest generic point where the cpu is fully realized */
+    trace_init_vcpu(cpu);
 }
 
 static void cpu_common_initfn(Object *obj)
@@ -342,6 +348,11 @@ static void cpu_common_initfn(Object *obj)
 
     cpu->cpu_index = UNASSIGNED_CPU_INDEX;
     cpu->gdb_num_regs = cpu->gdb_num_g_regs = cc->gdb_num_core_regs;
+    /* *-user doesn't have configurable SMP topology */
+    /* the default value is changed by qemu_init_vcpu() for softmmu */
+    cpu->nr_cores = 1;
+    cpu->nr_threads = 1;
+
     qemu_mutex_init(&cpu->work_mutex);
     QTAILQ_INIT(&cpu->breakpoints);
     QTAILQ_INIT(&cpu->watchpoints);
