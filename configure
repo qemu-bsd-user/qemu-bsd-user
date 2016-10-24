@@ -588,6 +588,7 @@ FreeBSD)
   LIBS="-lprocstat -lkvm -lelf -lutil $LIBS"
   netmap=""  # enable netmap autodetect
   HOST_VARIANT_DIR="freebsd"
+  libs_qga="-lutil $libs_qga"
 ;;
 DragonFly)
   bsd="yes"
