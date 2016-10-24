@@ -300,6 +300,16 @@ void stop_all_tasks(void)
     start_exclusive();
 }
 
+bool qemu_cpu_is_self(CPUState *cpu)
+{
+    return thread_cpu == cpu;
+}
+
+void qemu_cpu_kick(CPUState *cpu)
+{
+    cpu_exit(cpu);
+}
+
 /* Assumes contents are already zeroed.  */
 void init_task_state(TaskState *ts)
 {
@@ -375,6 +385,7 @@ int main(int argc, char **argv)
 
     save_proc_pathname(argv[0]);
 
+    module_call_init(MODULE_INIT_TRACE);
     qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
 

@@ -120,10 +120,10 @@ void cpu_reset_interrupt(CPUState *cpu, int mask)
 
 void cpu_exit(CPUState *cpu)
 {
-    cpu->exit_request = 1;
+    atomic_set(&cpu->exit_request, 1);
     /* Ensure cpu_exec will see the exit request after TCG has exited.  */
     smp_wmb();
-    cpu->tcg_exit_req = 1;
+    atomic_set(&cpu->tcg_exit_req, 1);
 }
 
 int cpu_write_elf32_qemunote(WriteCoreDumpFunction f, CPUState *cpu,
@@ -253,6 +253,7 @@ void cpu_reset(CPUState *cpu)
 static void cpu_common_reset(CPUState *cpu)
 {
     CPUClass *cc = CPU_GET_CLASS(cpu);
+    int i;
 
     if (qemu_loglevel_mask(CPU_LOG_RESET)) {
         qemu_log("CPU Reset (CPU %d)\n", cpu->cpu_index);
@@ -268,7 +269,10 @@ static void cpu_common_reset(CPUState *cpu)
     cpu->can_do_io = 1;
     cpu->exception_index = -1;
     cpu->crash_occurred = false;
-    memset(cpu->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof(void *));
+
+    for (i = 0; i < TB_JMP_CACHE_SIZE; ++i) {
+        atomic_set(&cpu->tb_jmp_cache[i], NULL);
+    }
 }
 
 static bool cpu_common_has_work(CPUState *cs)
@@ -356,12 +360,15 @@ static void cpu_common_initfn(Object *obj)
     qemu_mutex_init(&cpu->work_mutex);
     QTAILQ_INIT(&cpu->breakpoints);
     QTAILQ_INIT(&cpu->watchpoints);
-    bitmap_zero(cpu->trace_dstate, TRACE_VCPU_EVENT_COUNT);
+
+    cpu->trace_dstate = bitmap_new(trace_get_vcpu_event_count());
 }
 
 static void cpu_common_finalize(Object *obj)
 {
-    cpu_exec_exit(CPU(obj));
+    CPUState *cpu = CPU(obj);
+    cpu_exec_exit(cpu);
+    g_free(cpu->trace_dstate);
 }
 
 static int64_t cpu_common_get_arch_id(CPUState *cpu)

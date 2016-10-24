@@ -56,9 +56,6 @@ GENERATED_SOURCES += qmp-marshal.c qapi-types.c qapi-visit.c qapi-event.c
 GENERATED_HEADERS += qmp-introspect.h
 GENERATED_SOURCES += qmp-introspect.c
 
-GENERATED_HEADERS += trace/generated-events.h
-GENERATED_SOURCES += trace/generated-events.c
-
 GENERATED_HEADERS += trace/generated-tracers.h
 ifeq ($(findstring dtrace,$(TRACE_BACKENDS)),dtrace)
 GENERATED_HEADERS += trace/generated-tracers-dtrace.h
@@ -93,7 +90,7 @@ LIBS+=-lz $(LIBS_TOOLS)
 HELPERS-$(CONFIG_LINUX) = qemu-bridge-helper$(EXESUF)
 
 ifdef BUILD_DOCS
-DOCS=qemu-doc.html qemu-tech.html qemu.1 qemu-img.1 qemu-nbd.8 qemu-ga.8
+DOCS=qemu-doc.html qemu.1 qemu-img.1 qemu-nbd.8 qemu-ga.8
 ifdef CONFIG_VIRTFS
 DOCS+=fsdev/virtfs-proxy-helper.1
 endif
@@ -398,7 +395,6 @@ distclean: clean
 	rm -f qemu-doc.vr
 	rm -f config.log
 	rm -f linux-headers/asm
-	rm -f qemu-tech.info qemu-tech.aux qemu-tech.cp qemu-tech.dvi qemu-tech.fn qemu-tech.info qemu-tech.ky qemu-tech.log qemu-tech.pdf qemu-tech.pg qemu-tech.toc qemu-tech.tp qemu-tech.vr
 	for d in $(TARGET_DIRS); do \
 	rm -rf $$d || exit 1 ; \
         done
@@ -434,7 +430,7 @@ endif
 
 install-doc: $(DOCS)
 	$(INSTALL_DIR) "$(DESTDIR)$(qemu_docdir)"
-	$(INSTALL_DATA) qemu-doc.html  qemu-tech.html "$(DESTDIR)$(qemu_docdir)"
+	$(INSTALL_DATA) qemu-doc.html "$(DESTDIR)$(qemu_docdir)"
 	$(INSTALL_DATA) $(SRC_PATH)/docs/qmp-commands.txt "$(DESTDIR)$(qemu_docdir)"
 ifdef CONFIG_POSIX
 	$(INSTALL_DIR) "$(DESTDIR)$(mandir)/man1"
@@ -592,10 +588,10 @@ qemu-ga.8: qemu-ga.texi
 	  $(POD2MAN) --section=8 --center=" " --release=" " qemu-ga.pod > $@, \
 	  "GEN","$@")
 
-dvi: qemu-doc.dvi qemu-tech.dvi
-html: qemu-doc.html qemu-tech.html
-info: qemu-doc.info qemu-tech.info
-pdf: qemu-doc.pdf qemu-tech.pdf
+dvi: qemu-doc.dvi
+html: qemu-doc.html
+info: qemu-doc.info
+pdf: qemu-doc.pdf
 
 qemu-doc.dvi qemu-doc.html qemu-doc.info qemu-doc.pdf: \
 	qemu-img.texi qemu-nbd.texi qemu-options.texi qemu-option-trace.texi \

@@ -20,7 +20,7 @@ Also, the following notation is used to denote data flow:
 -> data issued by the Client
 <- Server data response
 
-Please, refer to the QMP specification (QMP/qmp-spec.txt) for detailed
+Please, refer to the QMP specification (docs/qmp-spec.txt) for detailed
 information on the Server command and response formats.
 
 NOTE: This document is temporary and will be replaced soon.
@@ -2910,7 +2910,9 @@ Set migration parameters
                           throttled for auto-converge (json-int)
 - "cpu-throttle-increment": set throttle increasing percentage for
                             auto-converge (json-int)
-
+- "max-bandwidth": set maximum speed for migrations (in bytes/sec) (json-int)
+- "downtime-limit": set maximum tolerated downtime (in milliseconds) for
+                    migrations (json-int)
 Arguments:
 
 Example:
@@ -2931,7 +2933,10 @@ Query current migration parameters
                                     throttled (json-int)
          - "cpu-throttle-increment" : throttle increasing percentage for
                                       auto-converge (json-int)
-
+         - "max-bandwidth" : maximium migration speed in bytes per second
+                             (json-int)
+         - "downtime-limit" : maximum tolerated downtime of migration in
+                              milliseconds (json-int)
 Arguments:
 
 Example:
@@ -2943,7 +2948,9 @@ Example:
          "cpu-throttle-increment": 10,
          "compress-threads": 8,
          "compress-level": 1,
-         "cpu-throttle-initial": 20
+         "cpu-throttle-initial": 20,
+         "max-bandwidth": 33554432,
+         "downtime-limit": 300
       }
    }
 
@@ -3239,6 +3246,7 @@ Example:
                     "microseconds": 716996 },
      "event": "DEVICE_TRAY_MOVED",
      "data": { "device": "ide1-cd0",
+               "id": "ide0-1-0",
                "tray-open": true } }
 
 <- { "return": {} }
@@ -3267,6 +3275,7 @@ Example:
                     "microseconds": 272147 },
      "event": "DEVICE_TRAY_MOVED",
      "data": { "device": "ide1-cd0",
+               "id": "ide0-1-0",
                "tray-open": false } }
 
 <- { "return": {} }
@@ -3303,6 +3312,7 @@ Example:
                     "microseconds": 549958 },
      "event": "DEVICE_TRAY_MOVED",
      "data": { "device": "ide1-cd0",
+               "id": "ide0-1-0",
                "tray-open": true } }
 
 <- { "return": {} }
