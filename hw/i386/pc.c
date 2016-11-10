@@ -68,6 +68,7 @@
 #include "qapi-visit.h"
 #include "qom/cpu.h"
 #include "hw/nmi.h"
+#include "hw/i386/intel_iommu.h"
 
 /* debug PC/ISA interrupts */
 //#define DEBUG_IRQ
@@ -746,17 +747,15 @@ static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
 
     /* FW_CFG_MAX_CPUS is a bit confusing/problematic on x86:
      *
-     * SeaBIOS needs FW_CFG_MAX_CPUS for CPU hotplug, but the CPU hotplug
-     * QEMU<->SeaBIOS interface is not based on the "CPU index", but on the APIC
-     * ID of hotplugged CPUs[1]. This means that FW_CFG_MAX_CPUS is not the
-     * "maximum number of CPUs", but the "limit to the APIC ID values SeaBIOS
-     * may see".
+     * For machine types prior to 1.8, SeaBIOS needs FW_CFG_MAX_CPUS for
+     * building MPTable, ACPI MADT, ACPI CPU hotplug and ACPI SRAT table,
+     * that tables are based on xAPIC ID and QEMU<->SeaBIOS interface
+     * for CPU hotplug also uses APIC ID and not "CPU index".
+     * This means that FW_CFG_MAX_CPUS is not the "maximum number of CPUs",
+     * but the "limit to the APIC ID values SeaBIOS may see".
      *
-     * So, this means we must not use max_cpus, here, but the maximum possible
-     * APIC ID value, plus one.
-     *
-     * [1] The only kind of "CPU identifier" used between SeaBIOS and QEMU is
-     *     the APIC ID, not the "CPU index"
+     * So for compatibility reasons with old BIOSes we are stuck with
+     * "etc/max-cpus" actually being apic_id_limit
      */
     fw_cfg_add_i16(fw_cfg, FW_CFG_MAX_CPUS, (uint16_t)pcms->apic_id_limit);
     fw_cfg_add_i64(fw_cfg, FW_CFG_RAM_SIZE, (uint64_t)ram_size);
@@ -1087,17 +1086,6 @@ void pc_acpi_smi_interrupt(void *opaque, int irq, int level)
     }
 }
 
-static int pc_present_cpus_count(PCMachineState *pcms)
-{
-    int i, boot_cpus = 0;
-    for (i = 0; i < pcms->possible_cpus->len; i++) {
-        if (pcms->possible_cpus->cpus[i].cpu) {
-            boot_cpus++;
-        }
-    }
-    return boot_cpus;
-}
-
 static X86CPU *pc_new_cpu(const char *typename, int64_t apic_id,
                           Error **errp)
 {
@@ -1190,12 +1178,6 @@ void pc_cpus_init(PCMachineState *pcms)
      * This is used for FW_CFG_MAX_CPUS. See comments on bochs_bios_init().
      */
     pcms->apic_id_limit = x86_cpu_apic_id_from_index(max_cpus - 1) + 1;
-    if (pcms->apic_id_limit > ACPI_CPU_HOTPLUG_ID_LIMIT) {
-        error_report("max_cpus is too large. APIC ID of last CPU is %u",
-                     pcms->apic_id_limit - 1);
-        exit(1);
-    }
-
     pcms->possible_cpus = g_malloc0(sizeof(CPUArchIdList) +
                                     sizeof(CPUArchId) * max_cpus);
     for (i = 0; i < max_cpus; i++) {
@@ -1240,6 +1222,19 @@ static void pc_build_feature_control_file(PCMachineState *pcms)
     fw_cfg_add_file(pcms->fw_cfg, "etc/msr_feature_control", val, sizeof(*val));
 }
 
+static void rtc_set_cpus_count(ISADevice *rtc, uint16_t cpus_count)
+{
+    if (cpus_count > 0xff) {
+        /* If the number of CPUs can't be represented in 8 bits, the
+         * BIOS must use "etc/boot-cpus". Set RTC field to 0 just
+         * to make old BIOSes fail more predictably.
+         */
+        rtc_set_memory(rtc, 0x5f, 0);
+    } else {
+        rtc_set_memory(rtc, 0x5f, cpus_count - 1);
+    }
+}
+
 static
 void pc_machine_done(Notifier *notifier, void *data)
 {
@@ -1248,7 +1243,7 @@ void pc_machine_done(Notifier *notifier, void *data)
     PCIBus *bus = pcms->bus;
 
     /* set the number of CPUs */
-    rtc_set_memory(pcms->rtc, 0x5f, pc_present_cpus_count(pcms) - 1);
+    rtc_set_cpus_count(pcms->rtc, le16_to_cpu(pcms->boot_cpus_le));
 
     if (bus) {
         int extra_hosts = 0;
@@ -1269,8 +1264,28 @@ void pc_machine_done(Notifier *notifier, void *data)
 
     acpi_setup();
     if (pcms->fw_cfg) {
+        MachineClass *mc = MACHINE_GET_CLASS(pcms);
+
         pc_build_smbios(pcms->fw_cfg);
         pc_build_feature_control_file(pcms);
+
+        if (mc->max_cpus > 255) {
+            fw_cfg_add_file(pcms->fw_cfg, "etc/boot-cpus", &pcms->boot_cpus_le,
+                            sizeof(pcms->boot_cpus_le));
+        }
+    }
+
+    if (pcms->apic_id_limit > 255) {
+        IntelIOMMUState *iommu = INTEL_IOMMU_DEVICE(x86_iommu_get_default());
+
+        if (!iommu || !iommu->x86_iommu.intr_supported ||
+            iommu->intr_eim != ON_OFF_AUTO_ON) {
+            error_report("current -smp configuration requires "
+                         "Extended Interrupt Mode enabled. "
+                         "You can add an IOMMU using: "
+                         "-device intel-iommu,intremap=on,eim=on");
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -1589,7 +1604,7 @@ void pc_basic_device_init(ISABus *isa_bus, qemu_irq *gsi,
         pcspk_init(isa_bus, pit);
     }
 
-    serial_hds_isa_init(isa_bus, MAX_SERIAL_PORTS);
+    serial_hds_isa_init(isa_bus, 0, MAX_SERIAL_PORTS);
     parallel_hds_isa_init(isa_bus, MAX_PARALLEL_PORTS);
 
     a20_line = qemu_allocate_irqs(handle_a20_line_change, first_cpu, 2);
@@ -1706,6 +1721,16 @@ out:
     error_propagate(errp, local_err);
 }
 
+static void pc_dimm_post_plug(HotplugHandler *hotplug_dev,
+                              DeviceState *dev, Error **errp)
+{
+    PCMachineState *pcms = PC_MACHINE(hotplug_dev);
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_NVDIMM)) {
+        nvdimm_acpi_hotplug(&pcms->acpi_nvdimm_state);
+    }
+}
+
 static void pc_dimm_unplug_request(HotplugHandler *hotplug_dev,
                                    DeviceState *dev, Error **errp)
 {
@@ -1716,6 +1741,12 @@ static void pc_dimm_unplug_request(HotplugHandler *hotplug_dev,
     if (!pcms->acpi_dev) {
         error_setg(&local_err,
                    "memory hotplug is not enabled: missing acpi device");
+        goto out;
+    }
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_NVDIMM)) {
+        error_setg(&local_err,
+                   "nvdimm device hot unplug is not supported yet.");
         goto out;
     }
 
@@ -1735,6 +1766,12 @@ static void pc_dimm_unplug(HotplugHandler *hotplug_dev,
     MemoryRegion *mr = ddc->get_memory_region(dimm);
     HotplugHandlerClass *hhc;
     Error *local_err = NULL;
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_NVDIMM)) {
+        error_setg(&local_err,
+                   "nvdimm device hot unplug is not supported yet.");
+        goto out;
+    }
 
     hhc = HOTPLUG_HANDLER_GET_CLASS(pcms->acpi_dev);
     hhc->unplug(HOTPLUG_HANDLER(pcms->acpi_dev), dev, &local_err);
@@ -1794,9 +1831,11 @@ static void pc_cpu_plug(HotplugHandler *hotplug_dev,
         }
     }
 
+    /* increment the number of CPUs */
+    pcms->boot_cpus_le = cpu_to_le16(le16_to_cpu(pcms->boot_cpus_le) + 1);
     if (dev->hotplugged) {
-        /* increment the number of CPUs */
-        rtc_set_memory(pcms->rtc, 0x5f, rtc_get_memory(pcms->rtc, 0x5f) + 1);
+        /* Update the number of CPUs in CMOS */
+        rtc_set_cpus_count(pcms->rtc, le16_to_cpu(pcms->boot_cpus_le));
     }
 
     found_cpu = pc_find_cpu_slot(pcms, CPU(dev), NULL);
@@ -1850,7 +1889,10 @@ static void pc_cpu_unplug_cb(HotplugHandler *hotplug_dev,
     found_cpu->cpu = NULL;
     object_unparent(OBJECT(dev));
 
-    rtc_set_memory(pcms->rtc, 0x5f, rtc_get_memory(pcms->rtc, 0x5f) - 1);
+    /* decrement the number of CPUs */
+    pcms->boot_cpus_le = cpu_to_le16(le16_to_cpu(pcms->boot_cpus_le) - 1);
+    /* Update the number of CPUs in CMOS */
+    rtc_set_cpus_count(pcms->rtc, le16_to_cpu(pcms->boot_cpus_le));
  out:
     error_propagate(errp, local_err);
 }
@@ -1963,6 +2005,14 @@ static void pc_machine_device_plug_cb(HotplugHandler *hotplug_dev,
         pc_dimm_plug(hotplug_dev, dev, errp);
     } else if (object_dynamic_cast(OBJECT(dev), TYPE_CPU)) {
         pc_cpu_plug(hotplug_dev, dev, errp);
+    }
+}
+
+static void pc_machine_device_post_plug_cb(HotplugHandler *hotplug_dev,
+                                           DeviceState *dev, Error **errp)
+{
+    if (object_dynamic_cast(OBJECT(dev), TYPE_PC_DIMM)) {
+        pc_dimm_post_plug(hotplug_dev, dev, errp);
     }
 }
 
@@ -2139,6 +2189,8 @@ static void pc_machine_initfn(Object *obj)
     pcms->vmport = ON_OFF_AUTO_AUTO;
     /* nvdimm is disabled on default. */
     pcms->acpi_nvdimm_state.is_enabled = false;
+    /* acpi build is enabled by default if machine supports it */
+    pcms->acpi_build_enabled = PC_MACHINE_GET_CLASS(pcms)->has_acpi_build;
 }
 
 static void pc_machine_reset(void)
@@ -2270,6 +2322,7 @@ static void pc_machine_class_init(ObjectClass *oc, void *data)
     mc->reset = pc_machine_reset;
     hc->pre_plug = pc_machine_device_pre_plug_cb;
     hc->plug = pc_machine_device_plug_cb;
+    hc->post_plug = pc_machine_device_post_plug_cb;
     hc->unplug_request = pc_machine_device_unplug_request_cb;
     hc->unplug = pc_machine_device_unplug_cb;
     nc->nmi_monitor_handler = x86_nmi;

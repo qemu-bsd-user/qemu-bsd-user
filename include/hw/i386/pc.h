@@ -13,7 +13,6 @@
 #include "qemu/bitmap.h"
 #include "sysemu/sysemu.h"
 #include "hw/pci/pci.h"
-#include "hw/boards.h"
 #include "hw/compat.h"
 #include "hw/mem/pc-dimm.h"
 #include "hw/mem/nvdimm.h"
@@ -37,6 +36,7 @@
 /**
  * PCMachineState:
  * @acpi_dev: link to ACPI PM device that performs ACPI hotplug handling
+ * @boot_cpus_le: number of present VCPUs, referenced by 'etc/boot-cpus' fw_cfg
  */
 struct PCMachineState {
     /*< private >*/
@@ -62,6 +62,8 @@ struct PCMachineState {
 
     AcpiNVDIMMState acpi_nvdimm_state;
 
+    bool acpi_build_enabled;
+
     /* RAM information (sizes, addresses, configuration): */
     ram_addr_t below_4g_mem_size, above_4g_mem_size;
 
@@ -69,6 +71,7 @@ struct PCMachineState {
     bool apic_xrupt_override;
     unsigned apic_id_limit;
     CPUArchIdList *possible_cpus;
+    uint16_t boot_cpus_le;
 
     /* NUMA information: */
     uint64_t numa_nodes;

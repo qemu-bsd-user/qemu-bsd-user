@@ -6438,7 +6438,7 @@ static void arm_cpu_do_interrupt_aarch32(CPUState *cs)
     /* Set new mode endianness */
     env->uncached_cpsr &= ~CPSR_E;
     if (env->cp15.sctlr_el[arm_current_el(env)] & SCTLR_EE) {
-        env->uncached_cpsr |= ~CPSR_E;
+        env->uncached_cpsr |= CPSR_E;
     }
     env->daif |= mask;
     /* this is a lie, as the was no c1_sys on V4T/V5, but who cares
@@ -6573,12 +6573,19 @@ static inline bool check_for_semihosting(CPUState *cs)
         /* Only intercept calls from privileged modes, to provide some
          * semblance of security.
          */
-        if (!semihosting_enabled() ||
-            ((env->uncached_cpsr & CPSR_M) == ARM_CPU_MODE_USR)) {
+        if (cs->exception_index != EXCP_SEMIHOST &&
+            (!semihosting_enabled() ||
+             ((env->uncached_cpsr & CPSR_M) == ARM_CPU_MODE_USR))) {
             return false;
         }
 
         switch (cs->exception_index) {
+        case EXCP_SEMIHOST:
+            /* This is always a semihosting call; the "is this usermode"
+             * and "is semihosting enabled" checks have been done at
+             * translate time.
+             */
+            break;
         case EXCP_SWI:
             /* Check for semihosting interrupt.  */
             if (env->thumb) {

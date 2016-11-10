@@ -239,6 +239,7 @@ static void x86_cpu_vendor_words2str(char *dst, uint32_t vendor1,
           CPUID_7_0_EBX_INVPCID, CPUID_7_0_EBX_RTM,
           CPUID_7_0_EBX_RDSEED */
 #define TCG_7_0_ECX_FEATURES (CPUID_7_0_ECX_PKU | CPUID_7_0_ECX_OSPKE)
+#define TCG_7_0_EDX_FEATURES 0
 #define TCG_APM_FEATURES 0
 #define TCG_6_EAX_FEATURES CPUID_6_EAX_ARAT
 #define TCG_XSAVE_FEATURES (CPUID_XSAVE_XSAVEOPT | CPUID_XSAVE_XGETBV1)
@@ -443,6 +444,22 @@ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
         .cpuid_needs_ecx = true, .cpuid_ecx = 0,
         .cpuid_reg = R_ECX,
         .tcg_features = TCG_7_0_ECX_FEATURES,
+    },
+    [FEAT_7_0_EDX] = {
+        .feat_names = {
+            NULL, NULL, "avx512-4vnniw", "avx512-4fmaps",
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+        },
+        .cpuid_eax = 7,
+        .cpuid_needs_ecx = true, .cpuid_ecx = 0,
+        .cpuid_reg = R_EDX,
+        .tcg_features = TCG_7_0_EDX_FEATURES,
     },
     [FEAT_8000_0007_EDX] = {
         .feat_names = {
@@ -1973,6 +1990,11 @@ static const char *x86_cpu_feature_name(FeatureWord w, int bitnr)
  */
 static GList *plus_features, *minus_features;
 
+static gint compare_string(gconstpointer a, gconstpointer b)
+{
+    return g_strcmp0(a, b);
+}
+
 /* Parse "+feature,-feature,feature=foo" CPU feature string
  */
 static void x86_cpu_parse_featurestr(const char *typename, char *features,
@@ -1981,6 +2003,7 @@ static void x86_cpu_parse_featurestr(const char *typename, char *features,
     char *featurestr; /* Single 'key=value" string being parsed */
     Error *local_err = NULL;
     static bool cpu_globals_initialized;
+    bool ambiguous = false;
 
     if (cpu_globals_initialized) {
         return;
@@ -2022,6 +2045,19 @@ static void x86_cpu_parse_featurestr(const char *typename, char *features,
         feat2prop(featurestr);
         name = featurestr;
 
+        if (g_list_find_custom(plus_features, name, compare_string)) {
+            error_report("warning: Ambiguous CPU model string. "
+                         "Don't mix both \"+%s\" and \"%s=%s\"",
+                         name, name, val);
+            ambiguous = true;
+        }
+        if (g_list_find_custom(minus_features, name, compare_string)) {
+            error_report("warning: Ambiguous CPU model string. "
+                         "Don't mix both \"-%s\" and \"%s=%s\"",
+                         name, name, val);
+            ambiguous = true;
+        }
+
         /* Special case: */
         if (!strcmp(name, "tsc-freq")) {
             int64_t tsc_freq;
@@ -2044,6 +2080,11 @@ static void x86_cpu_parse_featurestr(const char *typename, char *features,
         prop->value = g_strdup(val);
         prop->errp = &error_fatal;
         qdev_prop_register_global(prop);
+    }
+
+    if (ambiguous) {
+        error_report("warning: Compatibility of ambiguous CPU model "
+                     "strings won't be kept on future QEMU versions");
     }
 
     if (local_err) {
@@ -2536,7 +2577,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
             if ((*ecx & CPUID_7_0_ECX_PKU) && env->cr[4] & CR4_PKE_MASK) {
                 *ecx |= CPUID_7_0_ECX_OSPKE;
             }
-            *edx = 0; /* Reserved */
+            *edx = env->features[FEAT_7_0_EDX]; /* Feature flags */
         } else {
             *eax = 0;
             *ebx = 0;
@@ -2945,7 +2986,7 @@ static void x86_cpu_apic_create(X86CPU *cpu, Error **errp)
                               OBJECT(cpu->apic_state), &error_abort);
     object_unref(OBJECT(cpu->apic_state));
 
-    qdev_prop_set_uint8(cpu->apic_state, "id", cpu->apic_id);
+    qdev_prop_set_uint32(cpu->apic_state, "id", cpu->apic_id);
     /* TODO: convert to link<> */
     apic = APIC_COMMON(cpu->apic_state);
     apic->cpu = cpu;
@@ -3271,7 +3312,11 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
             cpu->phys_bits = 32;
         }
     }
-    cpu_exec_init(cs, &error_abort);
+    cpu_exec_realizefn(cs, &local_err);
+    if (local_err != NULL) {
+        error_propagate(errp, local_err);
+        return;
+    }
 
     if (tcg_enabled()) {
         tcg_x86_init();
@@ -3352,6 +3397,8 @@ out:
 static void x86_cpu_unrealizefn(DeviceState *dev, Error **errp)
 {
     X86CPU *cpu = X86_CPU(dev);
+    X86CPUClass *xcc = X86_CPU_GET_CLASS(dev);
+    Error *local_err = NULL;
 
 #ifndef CONFIG_USER_ONLY
     cpu_remove_sync(CPU(dev));
@@ -3361,6 +3408,12 @@ static void x86_cpu_unrealizefn(DeviceState *dev, Error **errp)
     if (cpu->apic_state) {
         object_unparent(OBJECT(cpu->apic_state));
         cpu->apic_state = NULL;
+    }
+
+    xcc->parent_unrealize(dev, &local_err);
+    if (local_err != NULL) {
+        error_propagate(errp, local_err);
+        return;
     }
 }
 
@@ -3636,6 +3689,7 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
     DeviceClass *dc = DEVICE_CLASS(oc);
 
     xcc->parent_realize = dc->realize;
+    xcc->parent_unrealize = dc->unrealize;
     dc->realize = x86_cpu_realizefn;
     dc->unrealize = x86_cpu_unrealizefn;
     dc->props = x86_cpu_properties;
