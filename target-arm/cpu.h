@@ -46,13 +46,12 @@
 #define EXCP_BKPT            7
 #define EXCP_EXCEPTION_EXIT  8   /* Return from v7M exception.  */
 #define EXCP_KERNEL_TRAP     9   /* Jumped to kernel code page.  */
-#define EXCP_STREX          10
 #define EXCP_HVC            11   /* HyperVisor Call */
 #define EXCP_HYP_TRAP       12
 #define EXCP_SMC            13   /* Secure Monitor Call */
 #define EXCP_VIRQ           14
 #define EXCP_VFIQ           15
-#define EXCP_SEMIHOST       16   /* semihosting call (A64 only) */
+#define EXCP_SEMIHOST       16   /* semihosting call */
 
 #define ARMV7M_EXCP_RESET   1
 #define ARMV7M_EXCP_NMI     2
@@ -475,10 +474,6 @@ typedef struct CPUARMState {
     uint64_t exclusive_addr;
     uint64_t exclusive_val;
     uint64_t exclusive_high;
-#if defined(CONFIG_USER_ONLY)
-    uint64_t exclusive_test;
-    uint32_t exclusive_info;
-#endif
 
     /* iwMMXt coprocessor state.  */
     struct {
@@ -1129,6 +1124,7 @@ enum arm_features {
     ARM_FEATURE_V8_SHA256, /* implements SHA256 part of v8 Crypto Extensions */
     ARM_FEATURE_V8_PMULL, /* implements PMULL part of v8 Crypto Extensions */
     ARM_FEATURE_THUMB_DSP, /* DSP insns supported in the Thumb encodings */
+    ARM_FEATURE_PMU, /* has PMU support */
 };
 
 static inline int arm_feature(CPUARMState *env, int feature)
@@ -1766,10 +1762,11 @@ bool write_cpustate_to_list(ARMCPU *cpu);
 #if defined(CONFIG_USER_ONLY)
 #define TARGET_PAGE_BITS 12
 #else
-/* The ARM MMU allows 1k pages.  */
-/* ??? Linux doesn't actually use these, and they're deprecated in recent
-   architecture revisions.  Maybe a configure option to disable them.  */
-#define TARGET_PAGE_BITS 10
+/* ARMv7 and later CPUs have 4K pages minimum, but ARMv5 and v6
+ * have to support 1K tiny pages.
+ */
+#define TARGET_PAGE_BITS_VARY
+#define TARGET_PAGE_BITS_MIN 10
 #endif
 
 #if defined(TARGET_AARCH64)
