@@ -119,7 +119,6 @@ void fork_end(int child)
 
 void cpu_loop(CPUArchState *env)
 {
-
     target_cpu_loop(env);
 }
 
