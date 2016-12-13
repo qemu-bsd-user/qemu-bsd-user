@@ -260,7 +260,7 @@ int main(int argc, char **argv)
         usage();
 
     module_call_init(MODULE_INIT_TRACE);
-    //qemu_init_cpu_list();
+    qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
 
     if ((envlist = envlist_create()) == NULL) {
