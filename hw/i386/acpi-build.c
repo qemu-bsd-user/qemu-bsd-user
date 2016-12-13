@@ -2860,7 +2860,7 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
          */
         int legacy_aml_len =
             pcmc->legacy_acpi_table_size +
-            ACPI_BUILD_LEGACY_CPU_AML_SIZE * max_cpus;
+            ACPI_BUILD_LEGACY_CPU_AML_SIZE * pcms->apic_id_limit;
         int legacy_table_size =
             ROUND_UP(tables_blob->len - aml_len + legacy_aml_len,
                      ACPI_BUILD_ALIGN_SIZE);
@@ -2936,7 +2936,7 @@ static MemoryRegion *acpi_add_rom_blob(AcpiBuildState *build_state,
                                        uint64_t max_size)
 {
     return rom_add_blob(name, blob->data, acpi_data_len(blob), max_size, -1,
-                        name, acpi_build_update, build_state);
+                        name, acpi_build_update, build_state, NULL);
 }
 
 static const VMStateDescription vmstate_acpi_build = {

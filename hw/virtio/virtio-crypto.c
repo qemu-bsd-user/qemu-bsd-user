@@ -692,8 +692,17 @@ static void virtio_crypto_dataq_bh(void *opaque)
         return;
     }
 
-    virtio_crypto_handle_dataq(vdev, q->dataq);
-    virtio_queue_set_notification(q->dataq, 1);
+    for (;;) {
+        virtio_crypto_handle_dataq(vdev, q->dataq);
+        virtio_queue_set_notification(q->dataq, 1);
+
+        /* Are we done or did the guest add more buffers? */
+        if (virtio_queue_empty(q->dataq)) {
+            break;
+        }
+
+        virtio_queue_set_notification(q->dataq, 0);
+    }
 }
 
 static void
@@ -829,7 +838,7 @@ static Property virtio_crypto_properties[] = {
 static void virtio_crypto_get_config(VirtIODevice *vdev, uint8_t *config)
 {
     VirtIOCrypto *c = VIRTIO_CRYPTO(vdev);
-    struct virtio_crypto_config crypto_cfg;
+    struct virtio_crypto_config crypto_cfg = {};
 
     /*
      * Virtio-crypto device conforms to VIRTIO 1.0 which is always LE,
