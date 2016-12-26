@@ -255,7 +255,6 @@ int main(int argc, char **argv)
     char **target_environ, **wrk;
     envlist_t *envlist = NULL;
     char *trace_file = NULL;
-    bsd_type = target_openbsd;
     bsd_type = HOST_DEFAULT_BSD_TYPE;
 
     if (argc <= 1)
