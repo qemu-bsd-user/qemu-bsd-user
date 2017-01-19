@@ -777,6 +777,7 @@ typedef enum {
     CC_OP_ADCOX, /* CC_DST = C, CC_SRC2 = O, CC_SRC = rest.  */
 
     CC_OP_CLR, /* Z set, all other flags clear.  */
+    CC_OP_POPCNT, /* Z via CC_SRC, all other flags clear.  */
 
     CC_OP_NB,
 } CCOp;
@@ -1122,10 +1123,12 @@ typedef struct CPUX86State {
     uint8_t nmi_injected;
     uint8_t nmi_pending;
 
+    /* Fields up to this point are cleared by a CPU reset */
+    struct {} end_reset_fields;
+
     CPU_COMMON
 
-    /* Fields from here on are preserved across CPU reset. */
-    struct {} end_reset_fields;
+    /* Fields after CPU_COMMON are preserved across CPU reset. */
 
     /* processor features (e.g. for CPUID insn) */
     /* Minimum level/xlevel/xlevel2, based on CPU model + features */

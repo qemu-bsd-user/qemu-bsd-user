@@ -25,6 +25,12 @@
 #
 # The <format-string> should be a sprintf()-compatible format string.
 
+# aio-posix.c
+run_poll_handlers_begin(void *ctx, int64_t max_ns) "ctx %p max_ns %"PRId64
+run_poll_handlers_end(void *ctx, bool progress) "ctx %p progress %d"
+poll_shrink(void *ctx, int64_t old, int64_t new) "ctx %p old %"PRId64" new %"PRId64
+poll_grow(void *ctx, int64_t old, int64_t new) "ctx %p old %"PRId64" new %"PRId64
+
 # thread-pool.c
 thread_pool_submit(void *pool, void *req, void *opaque) "pool %p req %p opaque %p"
 thread_pool_complete(void *pool, void *req, void *opaque, int ret) "pool %p req %p opaque %p ret %d"
@@ -47,7 +53,7 @@ qemu_system_shutdown_request(void) ""
 qemu_system_powerdown_request(void) ""
 
 # spice-qemu-char.c
-spice_vmc_write(ssize_t out, int len) "spice wrottn %zd of requested %d"
+spice_vmc_write(ssize_t out, int len) "spice wrote %zd of requested %d"
 spice_vmc_read(int bytes, int len) "spice read %d of requested %d"
 spice_vmc_register_interface(void *scd) "spice vmc registered interface %p"
 spice_vmc_unregister_interface(void *scd) "spice vmc unregistered interface %p"
@@ -134,6 +140,12 @@ memory_region_ram_device_write(int cpu_index, void *mr, uint64_t addr, uint64_t 
 # Mode: user, softmmu
 # Targets: all
 vcpu guest_cpu_enter(void)
+
+# Hot-unplug a virtual (guest) CPU
+#
+# Mode: user, softmmu
+# Targets: all
+vcpu guest_cpu_exit(void)
 
 # Reset the state of a virtual (guest) CPU
 #

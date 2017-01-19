@@ -1277,11 +1277,6 @@ static void smp_parse(QemuOpts *opts)
 
         max_cpus = qemu_opt_get_number(opts, "maxcpus", cpus);
 
-        if (max_cpus > MAX_CPUMASK_BITS) {
-            error_report("unsupported number of maxcpus");
-            exit(1);
-        }
-
         if (max_cpus < cpus) {
             error_report("maxcpus must be equal to or greater than smp");
             exit(1);
@@ -2859,7 +2854,8 @@ static bool object_create_initial(const char *type)
         g_str_equal(type, "filter-mirror") ||
         g_str_equal(type, "filter-redirector") ||
         g_str_equal(type, "colo-compare") ||
-        g_str_equal(type, "filter-rewriter")) {
+        g_str_equal(type, "filter-rewriter") ||
+        g_str_equal(type, "filter-replay")) {
         return false;
     }
 
