@@ -103,28 +103,6 @@ HELPER_ST(sd, stq, uint64_t)
 #endif
 #undef HELPER_ST
 
-target_ulong helper_clo (target_ulong arg1)
-{
-    return clo32(arg1);
-}
-
-target_ulong helper_clz (target_ulong arg1)
-{
-    return clz32(arg1);
-}
-
-#if defined(TARGET_MIPS64)
-target_ulong helper_dclo (target_ulong arg1)
-{
-    return clo64(arg1);
-}
-
-target_ulong helper_dclz (target_ulong arg1)
-{
-    return clz64(arg1);
-}
-#endif /* TARGET_MIPS64 */
-
 /* 64 bits arithmetic for 32 bits hosts */
 static inline uint64_t get_HILO(CPUMIPSState *env)
 {
@@ -1431,7 +1409,7 @@ void helper_mtc0_entryhi(CPUMIPSState *env, target_ulong arg1)
     /* If the ASID changes, flush qemu's TLB.  */
     if ((old & env->CP0_EntryHi_ASID_mask) !=
         (val & env->CP0_EntryHi_ASID_mask)) {
-        cpu_mips_tlb_flush(env, 1);
+        cpu_mips_tlb_flush(env);
     }
 }
 
@@ -2021,7 +1999,7 @@ void r4k_helper_tlbinv(CPUMIPSState *env)
             tlb->EHINV = 1;
         }
     }
-    cpu_mips_tlb_flush(env, 1);
+    cpu_mips_tlb_flush(env);
 }
 
 void r4k_helper_tlbinvf(CPUMIPSState *env)
@@ -2031,7 +2009,7 @@ void r4k_helper_tlbinvf(CPUMIPSState *env)
     for (idx = 0; idx < env->tlb->nb_tlb; idx++) {
         env->tlb->mmu.r4k.tlb[idx].EHINV = 1;
     }
-    cpu_mips_tlb_flush(env, 1);
+    cpu_mips_tlb_flush(env);
 }
 
 void r4k_helper_tlbwi(CPUMIPSState *env)
@@ -2145,7 +2123,7 @@ void r4k_helper_tlbr(CPUMIPSState *env)
 
     /* If this will change the current ASID, flush qemu's TLB.  */
     if (ASID != tlb->ASID)
-        cpu_mips_tlb_flush (env, 1);
+        cpu_mips_tlb_flush(env);
 
     r4k_mips_tlb_flush_extra(env, env->tlb->nb_tlb);
 

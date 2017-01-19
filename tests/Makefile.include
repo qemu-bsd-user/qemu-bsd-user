@@ -81,6 +81,7 @@ gcov-files-test-qht-y = util/qht.c
 check-unit-y += tests/test-qht-par$(EXESUF)
 gcov-files-test-qht-par-y = util/qht.c
 check-unit-y += tests/test-bitops$(EXESUF)
+check-unit-y += tests/test-bitcnt$(EXESUF)
 check-unit-$(CONFIG_HAS_GLIB_SUBPROCESS_TESTS) += tests/test-qdev-global-props$(EXESUF)
 check-unit-y += tests/check-qom-interface$(EXESUF)
 gcov-files-check-qom-interface-y = qom/object.c
@@ -351,6 +352,24 @@ qapi-schema += base-cycle-direct.json
 qapi-schema += base-cycle-indirect.json
 qapi-schema += command-int.json
 qapi-schema += comments.json
+qapi-schema += doc-bad-args.json
+qapi-schema += doc-bad-symbol.json
+qapi-schema += doc-duplicated-arg.json
+qapi-schema += doc-duplicated-return.json
+qapi-schema += doc-duplicated-since.json
+qapi-schema += doc-empty-arg.json
+qapi-schema += doc-empty-section.json
+qapi-schema += doc-empty-symbol.json
+qapi-schema += doc-interleaved-section.json
+qapi-schema += doc-invalid-end.json
+qapi-schema += doc-invalid-end2.json
+qapi-schema += doc-invalid-return.json
+qapi-schema += doc-invalid-section.json
+qapi-schema += doc-invalid-start.json
+qapi-schema += doc-missing-colon.json
+qapi-schema += doc-missing-expr.json
+qapi-schema += doc-missing-space.json
+qapi-schema += doc-optional.json
 qapi-schema += double-data.json
 qapi-schema += double-type.json
 qapi-schema += duplicate-key.json
@@ -444,6 +463,8 @@ qapi-schema += union-optional-branch.json
 qapi-schema += union-unknown.json
 qapi-schema += unknown-escape.json
 qapi-schema += unknown-expr-key.json
+
+
 check-qapi-schema-y := $(addprefix tests/qapi-schema/, $(qapi-schema))
 
 GENERATED_HEADERS += tests/test-qapi-types.h tests/test-qapi-visit.h \
@@ -571,6 +592,7 @@ tests/test-opts-visitor$(EXESUF): tests/test-opts-visitor.o $(test-qapi-obj-y)
 
 tests/test-mul64$(EXESUF): tests/test-mul64.o $(test-util-obj-y)
 tests/test-bitops$(EXESUF): tests/test-bitops.o $(test-util-obj-y)
+tests/test-bitcnt$(EXESUF): tests/test-bitcnt.o $(test-util-obj-y)
 tests/test-crypto-hash$(EXESUF): tests/test-crypto-hash.o $(test-crypto-obj-y)
 tests/test-crypto-hmac$(EXESUF): tests/test-crypto-hmac.o $(test-crypto-obj-y)
 tests/test-crypto-cipher$(EXESUF): tests/test-crypto-cipher.o $(test-crypto-obj-y)
@@ -689,7 +711,7 @@ tests/test-filter-mirror$(EXESUF): tests/test-filter-mirror.o $(qtest-obj-y)
 tests/test-filter-redirector$(EXESUF): tests/test-filter-redirector.o $(qtest-obj-y)
 tests/test-x86-cpuid-compat$(EXESUF): tests/test-x86-cpuid-compat.o $(qtest-obj-y)
 tests/ivshmem-test$(EXESUF): tests/ivshmem-test.o contrib/ivshmem-server/ivshmem-server.o $(libqos-pc-obj-y)
-tests/vhost-user-bridge$(EXESUF): tests/vhost-user-bridge.o
+tests/vhost-user-bridge$(EXESUF): tests/vhost-user-bridge.o contrib/libvhost-user/libvhost-user.o $(test-util-obj-y)
 tests/test-uuid$(EXESUF): tests/test-uuid.o $(test-util-obj-y)
 tests/test-arm-mptimer$(EXESUF): tests/test-arm-mptimer.o
 
