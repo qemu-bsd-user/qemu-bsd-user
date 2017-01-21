@@ -3816,6 +3816,15 @@
     '*br':     'str',
     '*helper': 'str' } }
 
+##
+# @NetdevPcapOptions:
+#
+# Use ifname as a source to capture
+#
+# @ifname: #required to determine which interface to capture
+#
+# Since: 1.2
+##
 { 'struct': 'NetdevPcapOptions',
   'data': {
     '*ifname':     'str' } }
