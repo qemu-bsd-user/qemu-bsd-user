@@ -104,7 +104,7 @@ void fork_end(int child)
          */
         CPU_FOREACH_SAFE(cpu, next_cpu) {
             if (cpu != thread_cpu) {
-                QTAILQ_REMOVE(&cpus, thread_cpu, node);
+                QTAILQ_REMOVE(&cpus, cpu, node);
             }
         }
         qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
