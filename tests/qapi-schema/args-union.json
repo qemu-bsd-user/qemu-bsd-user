@@ -1,4 +1,10 @@
-# we do not allow union arguments
-# TODO should we support this?
+# use of union arguments requires 'boxed':true
+
+##
+# @Uni:
+##
 { 'union': 'Uni', 'data': { 'case1': 'int', 'case2': 'str' } }
+##
+# oops:
+##
 { 'command': 'oops', 'data': 'Uni' }

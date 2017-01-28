@@ -65,7 +65,6 @@ do {                                                        \
 #define DPRINTF(fmt, ...) do { } while (0)
 #endif
 
-#define TYPE_CFI_PFLASH01 "cfi.pflash01"
 #define CFI_PFLASH01(obj) OBJECT_CHECK(pflash_t, (obj), TYPE_CFI_PFLASH01)
 
 #define PFLASH_BE          0
@@ -707,6 +706,19 @@ static void pflash_cfi01_realize(DeviceState *dev, Error **errp)
     uint64_t blocks_per_device, device_len;
     int num_devices;
     Error *local_err = NULL;
+
+    if (pfl->sector_len == 0) {
+        error_setg(errp, "attribute \"sector-length\" not specified or zero.");
+        return;
+    }
+    if (pfl->nb_blocs == 0) {
+        error_setg(errp, "attribute \"num-blocks\" not specified or zero.");
+        return;
+    }
+    if (pfl->name == NULL) {
+        error_setg(errp, "attribute \"name\" not specified.");
+        return;
+    }
 
     total_len = pfl->sector_len * pfl->nb_blocs;
 

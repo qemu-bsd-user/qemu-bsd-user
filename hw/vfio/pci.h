@@ -135,7 +135,6 @@ typedef struct VFIOPCIDevice {
     int32_t bootindex;
     uint32_t igd_gms;
     uint8_t pm_cap;
-    bool has_vga;
     bool pci_aer;
     bool req_enabled;
     bool has_flr;
@@ -162,9 +161,10 @@ void vfio_bar_quirk_exit(VFIOPCIDevice *vdev, int nr);
 void vfio_bar_quirk_finalize(VFIOPCIDevice *vdev, int nr);
 void vfio_setup_resetfn_quirk(VFIOPCIDevice *vdev);
 
-int vfio_populate_vga(VFIOPCIDevice *vdev);
+int vfio_populate_vga(VFIOPCIDevice *vdev, Error **errp);
 
 int vfio_pci_igd_opregion_init(VFIOPCIDevice *vdev,
-                               struct vfio_region_info *info);
+                               struct vfio_region_info *info,
+                               Error **errp);
 
 #endif /* HW_VFIO_VFIO_PCI_H */

@@ -198,6 +198,15 @@ static void versatile_init(MachineState *machine, int board_id)
     int done_smc = 0;
     DriveInfo *dinfo;
 
+    if (machine->ram_size > 0x10000000) {
+        /* Device starting at address 0x10000000,
+         * and memory cannot overlap with devices.
+         * Refuse to run rather than behaving very confusingly.
+         */
+        error_report("versatilepb: memory size must not exceed 256MB");
+        exit(1);
+    }
+
     if (!machine->cpu_model) {
         machine->cpu_model = "arm926";
     }
@@ -276,7 +285,7 @@ static void versatile_init(MachineState *machine, int board_id)
             pci_nic_init_nofail(nd, pci_bus, "rtl8139", NULL);
         }
     }
-    if (usb_enabled()) {
+    if (machine_usb(machine)) {
         pci_create_simple(pci_bus, -1, "pci-ohci");
     }
     n = drive_get_max_bus(IF_SCSI);

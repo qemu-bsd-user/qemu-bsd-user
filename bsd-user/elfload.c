@@ -17,6 +17,7 @@
  */
 
 #include "qemu/osdep.h"
+
 #include <err.h>
 #include <libgen.h>
 #include <sys/mman.h>

@@ -22,17 +22,17 @@
  */
 
 #include "qemu/osdep.h"
-#include <hw/hw.h>
-#include <hw/pci/msi.h>
-#include <hw/i386/pc.h>
-#include <hw/pci/pci.h>
+#include "hw/hw.h"
+#include "hw/pci/msi.h"
+#include "hw/i386/pc.h"
+#include "hw/pci/pci.h"
 
 #include "qemu/error-report.h"
 #include "sysemu/block-backend.h"
 #include "sysemu/dma.h"
-#include "internal.h"
-#include <hw/ide/pci.h>
-#include <hw/ide/ahci.h>
+#include "hw/ide/internal.h"
+#include "hw/ide/pci.h"
+#include "hw/ide/ahci.h"
 
 #define DEBUG_AHCI 0
 
@@ -919,6 +919,7 @@ static void ncq_err(NCQTransferState *ncq_tfs)
     ide_state->error = ABRT_ERR;
     ide_state->status = READY_STAT | ERR_STAT;
     ncq_tfs->drive->port_regs.scr_err |= (1 << ncq_tfs->tag);
+    qemu_sglist_destroy(&ncq_tfs->sglist);
     ncq_tfs->used = 0;
 }
 
@@ -947,6 +948,7 @@ static void ncq_cb(void *opaque, int ret)
     NCQTransferState *ncq_tfs = (NCQTransferState *)opaque;
     IDEState *ide_state = &ncq_tfs->drive->port.ifs[0];
 
+    ncq_tfs->aiocb = NULL;
     if (ret == -ECANCELED) {
         return;
     }
@@ -1007,6 +1009,7 @@ static void execute_ncq_command(NCQTransferState *ncq_tfs)
                        &ncq_tfs->sglist, BLOCK_ACCT_READ);
         ncq_tfs->aiocb = dma_blk_read(ide_state->blk, &ncq_tfs->sglist,
                                       ncq_tfs->lba << BDRV_SECTOR_BITS,
+                                      BDRV_SECTOR_SIZE,
                                       ncq_cb, ncq_tfs);
         break;
     case WRITE_FPDMA_QUEUED:
@@ -1020,12 +1023,12 @@ static void execute_ncq_command(NCQTransferState *ncq_tfs)
                        &ncq_tfs->sglist, BLOCK_ACCT_WRITE);
         ncq_tfs->aiocb = dma_blk_write(ide_state->blk, &ncq_tfs->sglist,
                                        ncq_tfs->lba << BDRV_SECTOR_BITS,
+                                       BDRV_SECTOR_SIZE,
                                        ncq_cb, ncq_tfs);
         break;
     default:
         DPRINTF(port, "error: unsupported NCQ command (0x%02x) received\n",
                 ncq_tfs->cmd);
-        qemu_sglist_destroy(&ncq_tfs->sglist);
         ncq_err(ncq_tfs);
     }
 }
@@ -1092,7 +1095,6 @@ static void process_ncq_command(AHCIState *s, int port, uint8_t *cmd_fis,
         error_report("ahci: PRDT length for NCQ command (0x%zx) "
                      "is smaller than the requested size (0x%zx)",
                      ncq_tfs->sglist.size, size);
-        qemu_sglist_destroy(&ncq_tfs->sglist);
         ncq_err(ncq_tfs);
         ahci_trigger_irq(ad->hba, ad, PORT_IRQ_OVERFLOW);
         return;
@@ -1478,6 +1480,7 @@ void ahci_realize(AHCIState *s, DeviceState *qdev, AddressSpace *as, int ports)
         ad->port.dma->ops = &ahci_dma_ops;
         ide_register_restart_cb(&ad->port);
     }
+    g_free(irqs);
 }
 
 void ahci_uninit(AHCIState *s)

@@ -217,20 +217,20 @@ static int parse_numa(void *opaque, QemuOpts *opts, Error **errp)
     Error *err = NULL;
 
     {
-        OptsVisitor *ov = opts_visitor_new(opts);
-        visit_type_NumaOptions(opts_get_visitor(ov), NULL, &object, &err);
-        opts_visitor_cleanup(ov);
+        Visitor *v = opts_visitor_new(opts);
+        visit_type_NumaOptions(v, NULL, &object, &err);
+        visit_free(v);
     }
 
     if (err) {
-        goto error;
+        goto end;
     }
 
     switch (object->type) {
     case NUMA_OPTIONS_KIND_NODE:
         numa_node_parse(object->u.node.data, opts, &err);
         if (err) {
-            goto error;
+            goto end;
         }
         nb_numa_nodes++;
         break;
@@ -238,13 +238,14 @@ static int parse_numa(void *opaque, QemuOpts *opts, Error **errp)
         abort();
     }
 
-    return 0;
-
-error:
-    error_report_err(err);
+end:
     qapi_free_NumaOptions(object);
+    if (err) {
+        error_report_err(err);
+        return -1;
+    }
 
-    return -1;
+    return 0;
 }
 
 static char *enumerate_cpus(unsigned long *cpus, int max_cpus)
@@ -265,20 +266,19 @@ static char *enumerate_cpus(unsigned long *cpus, int max_cpus)
 static void validate_numa_cpus(void)
 {
     int i;
-    DECLARE_BITMAP(seen_cpus, MAX_CPUMASK_BITS);
+    unsigned long *seen_cpus = bitmap_new(max_cpus);
 
-    bitmap_zero(seen_cpus, MAX_CPUMASK_BITS);
     for (i = 0; i < nb_numa_nodes; i++) {
-        if (bitmap_intersects(seen_cpus, numa_info[i].node_cpu,
-                              MAX_CPUMASK_BITS)) {
+        if (bitmap_intersects(seen_cpus, numa_info[i].node_cpu, max_cpus)) {
             bitmap_and(seen_cpus, seen_cpus,
-                       numa_info[i].node_cpu, MAX_CPUMASK_BITS);
+                       numa_info[i].node_cpu, max_cpus);
             error_report("CPU(s) present in multiple NUMA nodes: %s",
                          enumerate_cpus(seen_cpus, max_cpus));
+            g_free(seen_cpus);
             exit(EXIT_FAILURE);
         }
         bitmap_or(seen_cpus, seen_cpus,
-                  numa_info[i].node_cpu, MAX_CPUMASK_BITS);
+                  numa_info[i].node_cpu, max_cpus);
     }
 
     if (!bitmap_full(seen_cpus, max_cpus)) {
@@ -290,11 +290,16 @@ static void validate_numa_cpus(void)
                      "in NUMA config");
         g_free(msg);
     }
+    g_free(seen_cpus);
 }
 
 void parse_numa_opts(MachineClass *mc)
 {
     int i;
+
+    for (i = 0; i < MAX_NODES; i++) {
+        numa_info[i].node_cpu = bitmap_new(max_cpus);
+    }
 
     if (qemu_opts_foreach(qemu_find_opts("numa"), parse_numa, NULL, NULL)) {
         exit(1);
@@ -361,7 +366,7 @@ void parse_numa_opts(MachineClass *mc)
         numa_set_mem_ranges();
 
         for (i = 0; i < nb_numa_nodes; i++) {
-            if (!bitmap_empty(numa_info[i].node_cpu, MAX_CPUMASK_BITS)) {
+            if (!bitmap_empty(numa_info[i].node_cpu, max_cpus)) {
                 break;
             }
         }
@@ -396,6 +401,7 @@ void numa_post_machine_init(void)
 
     CPU_FOREACH(cpu) {
         for (i = 0; i < nb_numa_nodes; i++) {
+            assert(cpu->cpu_index < max_cpus);
             if (test_bit(cpu->cpu_index, numa_info[i].node_cpu)) {
                 cpu->numa_node = i;
             }
@@ -463,6 +469,7 @@ void memory_region_allocate_system_memory(MemoryRegion *mr, Object *owner,
             exit(1);
         }
 
+        host_memory_backend_set_mapped(backend, true);
         memory_region_add_subregion(mr, addr, seg);
         vmstate_register_ram_global(seg);
         addr += size;
@@ -516,6 +523,9 @@ static int query_memdev(Object *obj, void *opaque)
 
         m->value = g_malloc0(sizeof(*m->value));
 
+        m->value->id = object_property_get_str(obj, "id", NULL);
+        m->value->has_id = !!m->value->id;
+
         m->value->size = object_property_get_int(obj, "size",
                                                  &error_abort);
         m->value->merge = object_property_get_bool(obj, "merge",
@@ -547,4 +557,18 @@ MemdevList *qmp_query_memdev(Error **errp)
 
     object_child_foreach(obj, query_memdev, &list);
     return list;
+}
+
+int numa_get_node_for_cpu(int idx)
+{
+    int i;
+
+    assert(idx < max_cpus);
+
+    for (i = 0; i < nb_numa_nodes; i++) {
+        if (test_bit(idx, numa_info[i].node_cpu)) {
+            break;
+        }
+    }
+    return i;
 }

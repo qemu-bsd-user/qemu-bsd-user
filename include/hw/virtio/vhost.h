@@ -14,12 +14,14 @@ struct vhost_virtqueue {
     void *avail;
     void *used;
     int num;
+    unsigned long long desc_phys;
+    unsigned desc_size;
+    unsigned long long avail_phys;
+    unsigned avail_size;
     unsigned long long used_phys;
     unsigned used_size;
-    void *ring;
-    unsigned long long ring_phys;
-    unsigned ring_size;
     EventNotifier masked_notifier;
+    struct vhost_dev *dev;
 };
 
 typedef unsigned long vhost_log_chunk_t;
@@ -37,6 +39,7 @@ struct vhost_log {
 
 struct vhost_memory;
 struct vhost_dev {
+    VirtIODevice *vdev;
     MemoryListener memory_listener;
     struct vhost_memory *mem;
     int n_mem_sections;
@@ -61,10 +64,12 @@ struct vhost_dev {
     void *opaque;
     struct vhost_log *log;
     QLIST_ENTRY(vhost_dev) entry;
+    IOMMUNotifier n;
 };
 
 int vhost_dev_init(struct vhost_dev *hdev, void *opaque,
-                   VhostBackendType backend_type);
+                   VhostBackendType backend_type,
+                   uint32_t busyloop_timeout);
 void vhost_dev_cleanup(struct vhost_dev *hdev);
 int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev);
 void vhost_dev_stop(struct vhost_dev *hdev, VirtIODevice *vdev);
@@ -85,4 +90,9 @@ uint64_t vhost_get_features(struct vhost_dev *hdev, const int *feature_bits,
 void vhost_ack_features(struct vhost_dev *hdev, const int *feature_bits,
                         uint64_t features);
 bool vhost_has_free_slot(void);
+
+int vhost_net_set_backend(struct vhost_dev *hdev,
+                          struct vhost_vring_file *file);
+
+void vhost_device_iotlb_miss(struct vhost_dev *dev, uint64_t iova, int write);
 #endif

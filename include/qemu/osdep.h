@@ -128,6 +128,9 @@ extern int daemon(int, int);
 #if !defined(EMEDIUMTYPE)
 #define EMEDIUMTYPE 4098
 #endif
+#if !defined(ESHUTDOWN)
+#define ESHUTDOWN 4099
+#endif
 #ifndef TIME_MAX
 #define TIME_MAX LONG_MAX
 #endif
@@ -141,6 +144,14 @@ extern int daemon(int, int);
 # error Unknown pointer size
 #endif
 
+/* Mac OSX has a <stdint.h> bug that incorrectly defines SIZE_MAX with
+ * the wrong type. Our replacement isn't usable in preprocessor
+ * expressions, but it is sufficient for our needs. */
+#if defined(HAVE_BROKEN_SIZE_MAX) && HAVE_BROKEN_SIZE_MAX
+#undef SIZE_MAX
+#define SIZE_MAX ((size_t)-1)
+#endif
+
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -151,13 +162,15 @@ extern int daemon(int, int);
 /* Minimum function that returns zero only iff both values are zero.
  * Intended for use with unsigned values only. */
 #ifndef MIN_NON_ZERO
-#define MIN_NON_ZERO(a, b) (((a) != 0 && (a) < (b)) ? (a) : (b))
+#define MIN_NON_ZERO(a, b) ((a) == 0 ? (b) : \
+                                ((b) == 0 ? (a) : (MIN(a, b))))
 #endif
 
 /* Round number down to multiple */
 #define QEMU_ALIGN_DOWN(n, m) ((n) / (m) * (m))
 
-/* Round number up to multiple */
+/* Round number up to multiple. Safe when m is not a power of 2 (see
+ * ROUND_UP for a faster version when a power of 2 is guaranteed) */
 #define QEMU_ALIGN_UP(n, m) QEMU_ALIGN_DOWN((n) + (m) - 1, (m))
 
 /* Check if n is a multiple of m */
@@ -174,6 +187,9 @@ extern int daemon(int, int);
 /* Check if pointer p is n-bytes aligned */
 #define QEMU_PTR_IS_ALIGNED(p, n) QEMU_IS_ALIGNED((uintptr_t)(p), (n))
 
+/* Round number up to multiple. Requires that d be a power of 2 (see
+ * QEMU_ALIGN_UP for a safer but slower version on arbitrary
+ * numbers) */
 #ifndef ROUND_UP
 #define ROUND_UP(n,d) (((n) + (d) - 1) & -(d))
 #endif
@@ -196,8 +212,6 @@ void qemu_anon_ram_free(void *ptr, size_t size);
 #define QEMU_MADV_INVALID -1
 
 #if defined(CONFIG_MADVISE)
-
-#include <sys/mman.h>
 
 #define QEMU_MADV_WILLNEED  MADV_WILLNEED
 #define QEMU_MADV_DONTNEED  MADV_DONTNEED
@@ -280,6 +294,9 @@ int qemu_madvise(void *addr, size_t len, int advice);
 
 int qemu_open(const char *name, int flags, ...);
 int qemu_close(int fd);
+#ifndef _WIN32
+int qemu_dup(int fd);
+#endif
 
 #if defined(__HAIKU__) && defined(__i386__)
 #define FMT_pid "%ld"
@@ -377,9 +394,19 @@ unsigned long qemu_getauxval(unsigned long type);
 
 void qemu_set_tty_echo(int fd, bool echo);
 
-void os_mem_prealloc(int fd, char *area, size_t sz);
+void os_mem_prealloc(int fd, char *area, size_t sz, Error **errp);
 
 int qemu_read_password(char *buf, int buf_size);
+
+/**
+ * qemu_get_pid_name:
+ * @pid: pid of a process
+ *
+ * For given @pid fetch its name. Caller is responsible for
+ * freeing the string when no longer needed.
+ * Returns allocated string on success, NULL on failure.
+ */
+char *qemu_get_pid_name(pid_t pid);
 
 /**
  * qemu_fork:

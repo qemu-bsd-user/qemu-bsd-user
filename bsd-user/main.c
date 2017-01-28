@@ -18,11 +18,12 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "qemu/osdep.h"
+#include "qemu-version.h"
 #include <machine/trap.h>
-#include <sys/mman.h>
 
+#include "qapi/error.h"
 #include "qemu.h"
-#include "qemu-common.h"
+#include "qemu/config-file.h"
 #include "qemu/path.h"
 #include "qemu/help_option.h"
 /* For tb_lock */
@@ -32,6 +33,8 @@
 #include "qemu/timer.h"
 #include "qemu/envlist.h"
 #include "exec/log.h"
+#include "trace/control.h"
+#include "glib-compat.h"
 
 #include "host_os.h"
 #include "target_arch_cpu.h"
@@ -83,25 +86,10 @@ char qemu_proc_pathname[PATH_MAX];  /* full path to exeutable */
 
 /* Helper routines for implementing atomic operations. */
 
-/*
- * To implement exclusive operations we force all cpus to synchronize.
- * We don't require a full sync, only that no cpus are executing guest code.
- * The alternative is to map target atomic ops onto host eqivalents,
- * which requires quite a lot of per host/target work.
- */
-static pthread_mutex_t cpu_list_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t exclusive_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t exclusive_cond = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t exclusive_resume = PTHREAD_COND_INITIALIZER;
-static int pending_cpus;
-static int sleeping_cpus;
-static CPUState *exclusive_cpu;
-
-/* Make sure everything is in a consistent state for calling fork(). */
 void fork_start(void)
 {
+    cpu_list_lock();
     qemu_mutex_lock(&tcg_ctx.tb_ctx.tb_lock);
-    pthread_mutex_lock(&exclusive_lock);
     mmap_fork_start();
 }
 
@@ -116,128 +104,28 @@ void fork_end(int child)
          */
         CPU_FOREACH_SAFE(cpu, next_cpu) {
             if (cpu != thread_cpu) {
-                QTAILQ_REMOVE(&cpus, thread_cpu, node);
+                QTAILQ_REMOVE(&cpus, cpu, node);
             }
         }
-        pending_cpus = 0;
-        pthread_mutex_init(&exclusive_lock, NULL);
-        pthread_mutex_init(&cpu_list_mutex, NULL);
-        pthread_cond_init(&exclusive_cond, NULL);
-        pthread_cond_init(&exclusive_resume, NULL);
         qemu_mutex_init(&tcg_ctx.tb_ctx.tb_lock);
+	qemu_init_cpu_list();
         gdbserver_fork(thread_cpu);
     } else {
-        pthread_mutex_unlock(&exclusive_lock);
         qemu_mutex_unlock(&tcg_ctx.tb_ctx.tb_lock);
+	cpu_list_unlock();
     }
 
-}
-
-/*
- * Wait for pending exclusive operations to complete.  The exclusive lock
- * must be held.
- */
-static inline void exclusive_idle(void)
-{
-    while (exclusive_cpu != NULL && exclusive_cpu != thread_cpu) {
-	if (thread_cpu->running)
-		sleeping_cpus++;
-	pthread_cond_signal(&exclusive_cond);
-        pthread_cond_wait(&exclusive_resume, &exclusive_lock);
-	if (thread_cpu->running)
-		sleeping_cpus--;
-    }
-}
-
-/* Start an exclusive operation.  Must only be called outside of cpu_exec. */
-void start_exclusive(void)
-{
-    CPUState *other_cpu;
-
-    pthread_mutex_lock(&exclusive_lock);
-    exclusive_idle();
-    
-    exclusive_cpu = thread_cpu;
-
-    do {
-	    pending_cpus = 1;
-	    /* Make all other cpus stop executing. */
-	    CPU_FOREACH(other_cpu) {
-		    if (other_cpu != thread_cpu && other_cpu->running) {
-			    pending_cpus++;
-			    cpu_exit(other_cpu);
-		    }
-	    }
-	    if ((pending_cpus - sleeping_cpus) > 1) {
-		    pthread_cond_wait(&exclusive_cond, &exclusive_lock);
-	    } else
-		    break;
-    } while (1);
-    
-}
-
-/* Finish an exclusive operation. */
-void end_exclusive(void)
-{
-    pending_cpus = 0;
-    exclusive_cpu = NULL;
-    pthread_cond_broadcast(&exclusive_resume);
-    pthread_mutex_unlock(&exclusive_lock);
-}
-
-/* Wait for exclusive ops to finish, and begin cpu execution. */
-void cpu_exec_start(CPUState *cpu)
-{
-    pthread_mutex_lock(&exclusive_lock);
-    exclusive_idle();
-    cpu->running = true;
-    pthread_mutex_unlock(&exclusive_lock);
-}
-
-/* Mark cpu as not excuting, and release pending exclusive ops. */
-void cpu_exec_end(CPUState *cpu)
-{
-    pthread_mutex_lock(&exclusive_lock);
-    cpu->running = false;
-    if (pending_cpus > 1) {
-        pending_cpus--;
-        if (pending_cpus == 1) {
-            pthread_cond_signal(&exclusive_cond);
-        }
-    }
-    exclusive_idle();
-    /*
-     * This is a hack, we gotta keep an exclusive section while handling signals
-     * but it will returns using longjmp, so we never have the opportunity to
-     * call end_exclusive()
-     */
-    if (exclusive_cpu == thread_cpu) {
-	    pending_cpus--;
-	    exclusive_cpu = NULL;
-	    pthread_cond_broadcast(&exclusive_resume);
-    }
-    pthread_mutex_unlock(&exclusive_lock);
-}
-
-void cpu_list_lock(void)
-{
-    pthread_mutex_lock(&cpu_list_mutex);
-}
-
-void cpu_list_unlock(void)
-{
-    pthread_mutex_unlock(&cpu_list_mutex);
 }
 
 void cpu_loop(CPUArchState *env)
 {
-
     target_cpu_loop(env);
 }
 
 static void usage(void)
 {
-    printf("qemu-" TARGET_NAME " version " QEMU_VERSION ", Copyright (c) 2003-2008 Fabrice Bellard\n"
+    printf("qemu-" TARGET_NAME " version " QEMU_VERSION QEMU_PKGVERSION
+           "\n" QEMU_COPYRIGHT "\n"
            "usage: qemu-" TARGET_NAME " [options] program [arguments...]\n"
            "BSD CPU emulator (compiled for %s emulation)\n"
            "\n"
@@ -257,9 +145,10 @@ static void usage(void)
            "-d item1[,...]    enable logging of specified items\n"
            "                  (use '-d help' for a list of log items)\n"
            "-D logfile        write logs to 'logfile' (default stderr)\n"
-           "-p pagesize       set the host page size to 'pagesize'\n"
            "-singlestep       always run in singlestep mode\n"
            "-strace           log system calls\n"
+           "-trace            [[enable=]<pattern>][,events=<file>][,file=<file>]\n"
+           "                  specify tracing options\n"
            "\n"
            "Environment variables:\n"
            "QEMU_STRACE       Print system calls and arguments similar to the\n"
@@ -286,6 +175,16 @@ void stop_all_tasks(void)
      * stopping correctly.
      */
     start_exclusive();
+}
+
+bool qemu_cpu_is_self(CPUState *cpu)
+{
+    return thread_cpu == cpu;
+}
+
+void qemu_cpu_kick(CPUState *cpu)
+{
+    cpu_exit(cpu);
 }
 
 /* Assumes contents are already zeroed.  */
@@ -354,6 +253,7 @@ int main(int argc, char **argv)
     int gdbstub_port = 0;
     char **target_environ, **wrk;
     envlist_t *envlist = NULL;
+    char *trace_file = NULL;
     bsd_type = HOST_DEFAULT_BSD_TYPE;
 
     if (argc <= 1)
@@ -361,6 +261,8 @@ int main(int argc, char **argv)
 
     save_proc_pathname(argv[0]);
 
+    module_call_init(MODULE_INIT_TRACE);
+    qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
 
     if ((envlist = envlist_create()) == NULL) {
@@ -374,6 +276,8 @@ int main(int argc, char **argv)
     }
 
     cpu_model = NULL;
+
+    qemu_add_opts(&qemu_trace_opts);
 
     optind = 1;
     for (;;) {
@@ -466,8 +370,10 @@ int main(int argc, char **argv)
             singlestep = 1;
         } else if (!strcmp(r, "strace")) {
             do_strace = 1;
-        } else
-        {
+        } else if (!strcmp(r, "trace")) {
+            g_free(trace_file);
+            trace_file = trace_opt_parse(optarg);
+        } else {
             usage();
         }
     }
@@ -475,7 +381,7 @@ int main(int argc, char **argv)
     /* init debug */
     if (log_file) {
         qemu_log_needs_buffers();
-        qemu_set_log_filename(log_file);
+        qemu_set_log_filename(log_file, &error_fatal);
     }
     if (log_mask) {
         int mask;
@@ -492,6 +398,11 @@ int main(int argc, char **argv)
         usage();
     }
     filename = argv[optind];
+
+    if (!trace_init_backends()) {
+        exit(1);
+    }
+    trace_init_file(trace_file);
 
     /* Zero out regs */
     memset(regs, 0, sizeof(struct target_pt_regs));

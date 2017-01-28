@@ -1,5 +1,5 @@
 /*
- * QEMU live migration via Unix Domain Sockets
+ * QEMU live migration via socket
  *
  * Copyright Red Hat, Inc. 2009-2016
  *
@@ -83,7 +83,7 @@ static void socket_outgoing_migration(Object *src,
         migrate_fd_error(data->s, err);
     } else {
         trace_migration_socket_outgoing_connected(data->hostname);
-        migration_set_outgoing_channel(data->s, sioc, data->hostname);
+        migration_channel_connect(data->s, sioc, data->hostname);
     }
     object_unref(src);
 }
@@ -94,10 +94,13 @@ static void socket_start_outgoing_migration(MigrationState *s,
 {
     QIOChannelSocket *sioc = qio_channel_socket_new();
     struct SocketConnectData *data = g_new0(struct SocketConnectData, 1);
+
     data->s = s;
     if (saddr->type == SOCKET_ADDRESS_KIND_INET) {
         data->hostname = g_strdup(saddr->u.inet.data->host);
     }
+
+    qio_channel_set_name(QIO_CHANNEL(sioc), "migration-socket-outgoing");
     qio_channel_socket_connect_async(sioc,
                                      saddr,
                                      socket_outgoing_migration,
@@ -110,8 +113,12 @@ void tcp_start_outgoing_migration(MigrationState *s,
                                   const char *host_port,
                                   Error **errp)
 {
-    SocketAddress *saddr = tcp_build_address(host_port, errp);
-    socket_start_outgoing_migration(s, saddr, errp);
+    Error *err = NULL;
+    SocketAddress *saddr = tcp_build_address(host_port, &err);
+    if (!err) {
+        socket_start_outgoing_migration(s, saddr, &err);
+    }
+    error_propagate(errp, err);
 }
 
 void unix_start_outgoing_migration(MigrationState *s,
@@ -140,8 +147,9 @@ static gboolean socket_accept_incoming_migration(QIOChannel *ioc,
 
     trace_migration_socket_incoming_accepted();
 
-    migration_set_incoming_channel(migrate_get_current(),
-                                   QIO_CHANNEL(sioc));
+    qio_channel_set_name(QIO_CHANNEL(sioc), "migration-socket-incoming");
+    migration_channel_process_incoming(migrate_get_current(),
+                                       QIO_CHANNEL(sioc));
     object_unref(OBJECT(sioc));
 
 out:
@@ -155,6 +163,9 @@ static void socket_start_incoming_migration(SocketAddress *saddr,
                                             Error **errp)
 {
     QIOChannelSocket *listen_ioc = qio_channel_socket_new();
+
+    qio_channel_set_name(QIO_CHANNEL(listen_ioc),
+                         "migration-socket-listener");
 
     if (qio_channel_socket_listen_sync(listen_ioc, saddr, errp) < 0) {
         object_unref(OBJECT(listen_ioc));
@@ -172,8 +183,12 @@ static void socket_start_incoming_migration(SocketAddress *saddr,
 
 void tcp_start_incoming_migration(const char *host_port, Error **errp)
 {
-    SocketAddress *saddr = tcp_build_address(host_port, errp);
-    socket_start_incoming_migration(saddr, errp);
+    Error *err = NULL;
+    SocketAddress *saddr = tcp_build_address(host_port, &err);
+    if (!err) {
+        socket_start_incoming_migration(saddr, &err);
+    }
+    error_propagate(errp, err);
 }
 
 void unix_start_incoming_migration(const char *path, Error **errp)

@@ -1258,7 +1258,7 @@ static void pxa2xx_i2c_update(PXA2xxI2CState *s)
 }
 
 /* These are only stubs now.  */
-static void pxa2xx_i2c_event(I2CSlave *i2c, enum i2c_event event)
+static int pxa2xx_i2c_event(I2CSlave *i2c, enum i2c_event event)
 {
     PXA2xxI2CSlaveState *slave = PXA2XX_I2C_SLAVE(i2c);
     PXA2xxI2CState *s = slave->host;
@@ -1280,6 +1280,8 @@ static void pxa2xx_i2c_event(I2CSlave *i2c, enum i2c_event event)
         break;
     }
     pxa2xx_i2c_update(s);
+
+    return 0;
 }
 
 static int pxa2xx_i2c_rx(I2CSlave *i2c)
@@ -1449,17 +1451,10 @@ static const VMStateDescription vmstate_pxa2xx_i2c = {
     }
 };
 
-static int pxa2xx_i2c_slave_init(I2CSlave *i2c)
-{
-    /* Nothing to do.  */
-    return 0;
-}
-
 static void pxa2xx_i2c_slave_class_init(ObjectClass *klass, void *data)
 {
     I2CSlaveClass *k = I2C_SLAVE_CLASS(klass);
 
-    k->init = pxa2xx_i2c_slave_init;
     k->event = pxa2xx_i2c_event;
     k->recv = pxa2xx_i2c_rx;
     k->send = pxa2xx_i2c_tx;
@@ -1505,7 +1500,7 @@ static void pxa2xx_i2c_initfn(Object *obj)
     PXA2xxI2CState *s = PXA2XX_I2C(obj);
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
 
-    s->bus = i2c_init_bus(dev, "i2c");
+    s->bus = i2c_init_bus(dev, NULL);
 
     memory_region_init_io(&s->iomem, obj, &pxa2xx_i2c_ops, s,
                           "pxa2xx-i2c", s->region_size);
@@ -1764,7 +1759,7 @@ struct PXA2xxFIrState {
     qemu_irq rx_dma;
     qemu_irq tx_dma;
     uint32_t enable;
-    CharDriverState *chr;
+    CharBackend chr;
 
     uint8_t control[3];
     uint8_t status[2];
@@ -1898,12 +1893,16 @@ static void pxa2xx_fir_write(void *opaque, hwaddr addr,
         pxa2xx_fir_update(s);
         break;
     case ICDR:
-        if (s->control[2] & (1 << 2))			/* TXP */
+        if (s->control[2] & (1 << 2)) { /* TXP */
             ch = value;
-        else
+        } else {
             ch = ~value;
-        if (s->chr && s->enable && (s->control[0] & (1 << 3)))	/* TXE */
-            qemu_chr_fe_write(s->chr, &ch, 1);
+        }
+        if (s->enable && (s->control[0] & (1 << 3))) { /* TXE */
+            /* XXX this blocks entire thread. Rewrite to use
+             * qemu_chr_fe_write and background I/O callbacks */
+            qemu_chr_fe_write_all(&s->chr, &ch, 1);
+        }
         break;
     case ICSR0:
         s->status[0] &= ~(value & 0x66);
@@ -1971,11 +1970,8 @@ static void pxa2xx_fir_realize(DeviceState *dev, Error **errp)
 {
     PXA2xxFIrState *s = PXA2XX_FIR(dev);
 
-    if (s->chr) {
-        qemu_chr_fe_claim_no_fail(s->chr);
-        qemu_chr_add_handlers(s->chr, pxa2xx_fir_is_empty,
-                        pxa2xx_fir_rx, pxa2xx_fir_event, s);
-    }
+    qemu_chr_fe_set_handlers(&s->chr, pxa2xx_fir_is_empty,
+                             pxa2xx_fir_rx, pxa2xx_fir_event, s, NULL, true);
 }
 
 static bool pxa2xx_fir_vmstate_validate(void *opaque, int version_id)
@@ -2069,7 +2065,7 @@ PXA2xxState *pxa270_init(MemoryRegion *address_space,
     }
     if (!revision)
         revision = "pxa270";
-    
+
     s->cpu = cpu_arm_init(revision);
     if (s->cpu == NULL) {
         fprintf(stderr, "Unable to find CPU definition\n");
@@ -2165,10 +2161,8 @@ PXA2xxState *pxa270_init(MemoryRegion *address_space,
         s->ssp[i] = (SSIBus *)qdev_get_child_bus(dev, "ssi");
     }
 
-    if (usb_enabled()) {
-        sysbus_create_simple("sysbus-ohci", 0x4c000000,
-                        qdev_get_gpio_in(s->pic, PXA2XX_PIC_USBH1));
-    }
+    sysbus_create_simple("sysbus-ohci", 0x4c000000,
+                         qdev_get_gpio_in(s->pic, PXA2XX_PIC_USBH1));
 
     s->pcmcia[0] = pxa2xx_pcmcia_init(address_space, 0x20000000);
     s->pcmcia[1] = pxa2xx_pcmcia_init(address_space, 0x30000000);
@@ -2268,7 +2262,9 @@ PXA2xxState *pxa255_init(MemoryRegion *address_space, unsigned int sdram_size)
                     qdev_get_gpio_in(s->pic, PXA2XX_PIC_LCD));
 
     s->cm_base = 0x41300000;
-    s->cm_regs[CCCR >> 2] = 0x02000210;	/* 416.0 MHz */
+    s->cm_regs[CCCR >> 2] = 0x00000121;         /* from datasheet */
+    s->cm_regs[CKEN >> 2] = 0x00017def;         /* from datasheet */
+
     s->clkcfg = 0x00000009;		/* Turbo mode active */
     memory_region_init_io(&s->cm_iomem, NULL, &pxa2xx_cm_ops, s, "pxa2xx-cm", 0x1000);
     memory_region_add_subregion(address_space, s->cm_base, &s->cm_iomem);
@@ -2298,10 +2294,8 @@ PXA2xxState *pxa255_init(MemoryRegion *address_space, unsigned int sdram_size)
         s->ssp[i] = (SSIBus *)qdev_get_child_bus(dev, "ssi");
     }
 
-    if (usb_enabled()) {
-        sysbus_create_simple("sysbus-ohci", 0x4c000000,
-                        qdev_get_gpio_in(s->pic, PXA2XX_PIC_USBH1));
-    }
+    sysbus_create_simple("sysbus-ohci", 0x4c000000,
+                         qdev_get_gpio_in(s->pic, PXA2XX_PIC_USBH1));
 
     s->pcmcia[0] = pxa2xx_pcmcia_init(address_space, 0x20000000);
     s->pcmcia[1] = pxa2xx_pcmcia_init(address_space, 0x30000000);

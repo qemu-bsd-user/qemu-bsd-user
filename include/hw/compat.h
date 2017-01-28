@@ -1,8 +1,54 @@
 #ifndef HW_COMPAT_H
 #define HW_COMPAT_H
 
+#define HW_COMPAT_2_8 \
+    {\
+        .driver   = "fw_cfg_mem",\
+        .property = "x-file-slots",\
+        .value    = stringify(0x10),\
+    },{\
+        .driver   = "fw_cfg_io",\
+        .property = "x-file-slots",\
+        .value    = stringify(0x10),\
+    },
+
+#define HW_COMPAT_2_7 \
+    {\
+        .driver   = "virtio-pci",\
+        .property = "page-per-vq",\
+        .value    = "on",\
+    },{\
+        .driver   = "virtio-serial-device",\
+        .property = "emergency-write",\
+        .value    = "off",\
+    },{\
+        .driver   = "ioapic",\
+        .property = "version",\
+        .value    = "0x11",\
+    },{\
+        .driver   = "intel-iommu",\
+        .property = "x-buggy-eim",\
+        .value    = "true",\
+    },{\
+        .driver   = "virtio-pci",\
+        .property = "x-ignore-backend-features",\
+        .value    = "on",\
+    },
+
 #define HW_COMPAT_2_6 \
-    /* empty */
+    {\
+        .driver   = "virtio-mmio",\
+        .property = "format_transport_address",\
+        .value    = "off",\
+    },{\
+        .driver   = "virtio-pci",\
+        .property = "disable-modern",\
+        .value    = "on",\
+    },{\
+        .driver   = "virtio-pci",\
+        .property = "disable-legacy",\
+        .value    = "off",\
+    },
 
 #define HW_COMPAT_2_5 \
     {\
@@ -75,6 +121,10 @@
     },{\
         .driver   = "virtio-rng-pci",\
         .property = "any_layout",\
+        .value    = "off",\
+    },{\
+        .driver   = TYPE_PCI_DEVICE,\
+        .property = "x-pcie-lnksta-dllla",\
         .value    = "off",\
     },
 

@@ -9,7 +9,9 @@
 #include "hw/hw.h"
 #include "net/net.h"
 #include "hw/m68k/mcf.h"
+#include "hw/m68k/mcf_fec.h"
 #include "hw/net/mii.h"
+#include "hw/sysbus.h"
 /* For crc32 */
 #include <zlib.h>
 #include "exec/address-spaces.h"
@@ -23,12 +25,14 @@ do { printf("mcf_fec: " fmt , ## __VA_ARGS__); } while (0)
 #define DPRINTF(fmt, ...) do {} while(0)
 #endif
 
+#define FEC_MAX_DESC 1024
 #define FEC_MAX_FRAME_SIZE 2032
 
 typedef struct {
-    MemoryRegion *sysmem;
+    SysBusDevice parent_obj;
+
     MemoryRegion iomem;
-    qemu_irq *irq;
+    qemu_irq irq[FEC_NUM_IRQ];
     NICState *nic;
     NICConf conf;
     uint32_t irq_state;
@@ -67,7 +71,6 @@ typedef struct {
 #define FEC_RESET   1
 
 /* Map interrupt flags onto IRQ lines.  */
-#define FEC_NUM_IRQ 13
 static const uint32_t mcf_fec_irq_map[FEC_NUM_IRQ] = {
     FEC_INT_TXF,
     FEC_INT_TXB,
@@ -149,7 +152,7 @@ static void mcf_fec_do_tx(mcf_fec_state *s)
     uint32_t addr;
     mcf_fec_bd bd;
     int frame_size;
-    int len;
+    int len, descnt = 0;
     uint8_t frame[FEC_MAX_FRAME_SIZE];
     uint8_t *ptr;
 
@@ -157,7 +160,7 @@ static void mcf_fec_do_tx(mcf_fec_state *s)
     ptr = frame;
     frame_size = 0;
     addr = s->tx_descriptor;
-    while (1) {
+    while (descnt++ < FEC_MAX_DESC) {
         mcf_fec_read_bd(&bd, addr);
         DPRINTF("tx_bd %x flags %04x len %d data %08x\n",
                 addr, bd.flags, bd.length, bd.data);
@@ -176,7 +179,7 @@ static void mcf_fec_do_tx(mcf_fec_state *s)
         if (bd.flags & FEC_BD_L) {
             /* Last buffer in frame.  */
             DPRINTF("Sending packet\n");
-            qemu_send_packet(qemu_get_queue(s->nic), frame, len);
+            qemu_send_packet(qemu_get_queue(s->nic), frame, frame_size);
             ptr = frame;
             frame_size = 0;
             s->eir |= FEC_INT_TXF;
@@ -207,8 +210,10 @@ static void mcf_fec_enable_rx(mcf_fec_state *s)
     }
 }
 
-static void mcf_fec_reset(mcf_fec_state *s)
+static void mcf_fec_reset(DeviceState *dev)
 {
+    mcf_fec_state *s = MCF_FEC_NET(dev);
+
     s->eir = 0;
     s->eimr = 0;
     s->rx_enabled = 0;
@@ -329,7 +334,7 @@ static void mcf_fec_write(void *opaque, hwaddr addr,
         s->ecr = value;
         if (value & FEC_RESET) {
             DPRINTF("Reset\n");
-            mcf_fec_reset(s);
+            mcf_fec_reset(opaque);
         }
         if ((s->ecr & FEC_EN) == 0) {
             s->rx_enabled = 0;
@@ -392,7 +397,7 @@ static void mcf_fec_write(void *opaque, hwaddr addr,
         s->tx_descriptor = s->etdsr;
         break;
     case 0x188:
-        s->emrbr = value & 0x7f0;
+        s->emrbr = value > 0 ? value & 0x7F0 : 0x7F0;
         break;
     default:
         hw_error("mcf_fec_write Bad address 0x%x\n", (int)addr);
@@ -507,29 +512,60 @@ static const MemoryRegionOps mcf_fec_ops = {
 };
 
 static NetClientInfo net_mcf_fec_info = {
-    .type = NET_CLIENT_OPTIONS_KIND_NIC,
+    .type = NET_CLIENT_DRIVER_NIC,
     .size = sizeof(NICState),
     .receive = mcf_fec_receive,
 };
 
-void mcf_fec_init(MemoryRegion *sysmem, NICInfo *nd,
-                  hwaddr base, qemu_irq *irq)
+static void mcf_fec_realize(DeviceState *dev, Error **errp)
 {
-    mcf_fec_state *s;
+    mcf_fec_state *s = MCF_FEC_NET(dev);
 
-    qemu_check_nic_model(nd, "mcf_fec");
-
-    s = (mcf_fec_state *)g_malloc0(sizeof(mcf_fec_state));
-    s->sysmem = sysmem;
-    s->irq = irq;
-
-    memory_region_init_io(&s->iomem, NULL, &mcf_fec_ops, s, "fec", 0x400);
-    memory_region_add_subregion(sysmem, base, &s->iomem);
-
-    s->conf.macaddr = nd->macaddr;
-    s->conf.peers.ncs[0] = nd->netdev;
-
-    s->nic = qemu_new_nic(&net_mcf_fec_info, &s->conf, nd->model, nd->name, s);
-
+    s->nic = qemu_new_nic(&net_mcf_fec_info, &s->conf,
+                          object_get_typename(OBJECT(dev)), dev->id, s);
     qemu_format_nic_info_str(qemu_get_queue(s->nic), s->conf.macaddr.a);
 }
+
+static void mcf_fec_instance_init(Object *obj)
+{
+    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
+    mcf_fec_state *s = MCF_FEC_NET(obj);
+    int i;
+
+    memory_region_init_io(&s->iomem, obj, &mcf_fec_ops, s, "fec", 0x400);
+    sysbus_init_mmio(sbd, &s->iomem);
+    for (i = 0; i < FEC_NUM_IRQ; i++) {
+        sysbus_init_irq(sbd, &s->irq[i]);
+    }
+}
+
+static Property mcf_fec_properties[] = {
+    DEFINE_NIC_PROPERTIES(mcf_fec_state, conf),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+static void mcf_fec_class_init(ObjectClass *oc, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(oc);
+
+    set_bit(DEVICE_CATEGORY_NETWORK, dc->categories);
+    dc->realize = mcf_fec_realize;
+    dc->desc = "MCF Fast Ethernet Controller network device";
+    dc->reset = mcf_fec_reset;
+    dc->props = mcf_fec_properties;
+}
+
+static const TypeInfo mcf_fec_info = {
+    .name          = TYPE_MCF_FEC_NET,
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(mcf_fec_state),
+    .instance_init = mcf_fec_instance_init,
+    .class_init    = mcf_fec_class_init,
+};
+
+static void mcf_fec_register_types(void)
+{
+    type_register_static(&mcf_fec_info);
+}
+
+type_init(mcf_fec_register_types)

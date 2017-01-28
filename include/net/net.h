@@ -66,7 +66,7 @@ typedef struct SocketReadState SocketReadState;
 typedef void (SocketReadStateFinalize)(SocketReadState *rs);
 
 typedef struct NetClientInfo {
-    NetClientOptionsKind type;
+    NetClientDriver type;
     size_t size;
     NetReceive *receive;
     NetReceive *receive_raw;
@@ -99,6 +99,7 @@ struct NetClientState {
     NetClientDestructor *destructor;
     unsigned int queue_index;
     unsigned rxfilter_notify_enabled:1;
+    int vring_enable;
     QTAILQ_HEAD(NetFilterHead, NetFilterState) filters;
 };
 
@@ -121,7 +122,7 @@ int net_fill_rstate(SocketReadState *rs, const uint8_t *buf, int size);
 char *qemu_mac_strdup_printf(const uint8_t *macaddr);
 NetClientState *qemu_find_netdev(const char *id);
 int qemu_find_net_clients_except(const char *id, NetClientState **ncs,
-                                 NetClientOptionsKind type, int max);
+                                 NetClientDriver type, int max);
 NetClientState *qemu_new_net_client(NetClientInfo *info,
                                     NetClientState *peer,
                                     const char *model,
@@ -137,8 +138,6 @@ NetClientState *qemu_get_queue(NICState *nic);
 NICState *qemu_get_nic(NetClientState *nc);
 void *qemu_get_nic_opaque(NetClientState *nc);
 void qemu_del_net_client(NetClientState *nc);
-NetClientState *qemu_find_vlan_client_by_name(Monitor *mon, int vlan_id,
-                                              const char *client_str);
 typedef void (*qemu_nic_foreach)(NICState *nic, void *opaque);
 void qemu_foreach_nic(qemu_nic_foreach func, void *opaque);
 int qemu_can_send_packet(NetClientState *nc);
@@ -202,7 +201,7 @@ extern const char *host_net_devices[];
 extern const char *legacy_tftp_prefix;
 extern const char *legacy_bootp_filename;
 
-int net_client_init(QemuOpts *opts, int is_netdev, Error **errp);
+int net_client_init(QemuOpts *opts, bool is_netdev, Error **errp);
 int net_client_parse(QemuOptsList *opts_list, const char *str);
 int net_init_clients(void);
 void net_check_clients(void);

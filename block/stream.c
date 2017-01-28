@@ -14,7 +14,7 @@
 #include "qemu/osdep.h"
 #include "trace.h"
 #include "block/block_int.h"
-#include "block/blockjob.h"
+#include "block/blockjob_int.h"
 #include "qapi/error.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/ratelimit.h"
@@ -37,6 +37,7 @@ typedef struct StreamBlockJob {
     BlockDriverState *base;
     BlockdevOnError on_error;
     char *backing_file_str;
+    int bs_flags;
 } StreamBlockJob;
 
 static int coroutine_fn stream_populate(BlockBackend *blk,
@@ -81,6 +82,11 @@ static void stream_complete(BlockJob *job, void *opaque)
         bdrv_set_backing_hd(bs, base);
     }
 
+    /* Reopen the image back in read-only mode if necessary */
+    if (s->bs_flags != bdrv_get_flags(bs)) {
+        bdrv_reopen(bs, s->bs_flags, NULL);
+    }
+
     g_free(s->backing_file_str);
     block_job_completed(&s->common, data->ret);
     g_free(data);
@@ -95,6 +101,7 @@ static void coroutine_fn stream_run(void *opaque)
     BlockDriverState *base = s->base;
     int64_t sector_num = 0;
     int64_t end = -1;
+    uint64_t delay_ns = 0;
     int error = 0;
     int ret = 0;
     int n = 0;
@@ -123,10 +130,8 @@ static void coroutine_fn stream_run(void *opaque)
     }
 
     for (sector_num = 0; sector_num < end; sector_num += n) {
-        uint64_t delay_ns = 0;
         bool copy;
 
-wait:
         /* Note that even when no rate limit is applied we need to yield
          * with no pending I/O here so that bdrv_drain_all() returns.
          */
@@ -156,12 +161,6 @@ wait:
         }
         trace_stream_one_iteration(s, sector_num, n, ret);
         if (copy) {
-            if (s->common.speed) {
-                delay_ns = ratelimit_calculate_delay(&s->limit, n);
-                if (delay_ns > 0) {
-                    goto wait;
-                }
-            }
             ret = stream_populate(blk, sector_num, n, buf);
         }
         if (ret < 0) {
@@ -182,6 +181,9 @@ wait:
 
         /* Publish progress */
         s->common.offset += n * BDRV_SECTOR_SIZE;
+        if (copy && s->common.speed) {
+            delay_ns = ratelimit_calculate_delay(&s->limit, n);
+        }
     }
 
     if (!base) {
@@ -216,26 +218,43 @@ static const BlockJobDriver stream_job_driver = {
     .instance_size = sizeof(StreamBlockJob),
     .job_type      = BLOCK_JOB_TYPE_STREAM,
     .set_speed     = stream_set_speed,
+    .start         = stream_run,
 };
 
-void stream_start(BlockDriverState *bs, BlockDriverState *base,
-                  const char *backing_file_str, int64_t speed,
-                  BlockdevOnError on_error,
-                  BlockCompletionFunc *cb,
-                  void *opaque, Error **errp)
+void stream_start(const char *job_id, BlockDriverState *bs,
+                  BlockDriverState *base, const char *backing_file_str,
+                  int64_t speed, BlockdevOnError on_error, Error **errp)
 {
     StreamBlockJob *s;
+    BlockDriverState *iter;
+    int orig_bs_flags;
 
-    s = block_job_create(&stream_job_driver, bs, speed, cb, opaque, errp);
+    s = block_job_create(job_id, &stream_job_driver, bs, speed,
+                         BLOCK_JOB_DEFAULT, NULL, NULL, errp);
     if (!s) {
         return;
     }
 
+    /* Make sure that the image is opened in read-write mode */
+    orig_bs_flags = bdrv_get_flags(bs);
+    if (!(orig_bs_flags & BDRV_O_RDWR)) {
+        if (bdrv_reopen(bs, orig_bs_flags | BDRV_O_RDWR, errp) != 0) {
+            block_job_unref(&s->common);
+            return;
+        }
+    }
+
+    /* Block all intermediate nodes between bs and base, because they
+     * will disappear from the chain after this operation */
+    for (iter = backing_bs(bs); iter && iter != base; iter = backing_bs(iter)) {
+        block_job_add_bdrv(&s->common, iter);
+    }
+
     s->base = base;
     s->backing_file_str = g_strdup(backing_file_str);
+    s->bs_flags = orig_bs_flags;
 
     s->on_error = on_error;
-    s->common.co = qemu_coroutine_create(stream_run);
-    trace_stream_start(bs, base, s, s->common.co, opaque);
-    qemu_coroutine_enter(s->common.co, s);
+    trace_stream_start(bs, base, s);
+    block_job_start(&s->common);
 }

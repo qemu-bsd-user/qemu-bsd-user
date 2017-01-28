@@ -11,6 +11,7 @@
 #include "cpu.h"
 #include "hw/hw.h"
 #include "hw/m68k/mcf.h"
+#include "hw/m68k/mcf_fec.h"
 #include "qemu/timer.h"
 #include "hw/ptimer.h"
 #include "sysemu/sysemu.h"
@@ -18,10 +19,11 @@
 #include "net/net.h"
 #include "hw/boards.h"
 #include "hw/loader.h"
+#include "hw/sysbus.h"
 #include "elf.h"
 #include "exec/address-spaces.h"
 
-#define SYS_FREQ 66000000
+#define SYS_FREQ 166666666
 
 #define PCSR_EN         0x0001
 #define PCSR_RLD        0x0002
@@ -183,13 +185,33 @@ static void mcf5208_sys_init(MemoryRegion *address_space, qemu_irq *pic)
     for (i = 0; i < 2; i++) {
         s = (m5208_timer_state *)g_malloc0(sizeof(m5208_timer_state));
         bh = qemu_bh_new(m5208_timer_trigger, s);
-        s->timer = ptimer_init(bh);
+        s->timer = ptimer_init(bh, PTIMER_POLICY_DEFAULT);
         memory_region_init_io(&s->iomem, NULL, &m5208_timer_ops, s,
                               "m5208-timer", 0x00004000);
         memory_region_add_subregion(address_space, 0xfc080000 + 0x4000 * i,
                                     &s->iomem);
         s->irq = pic[4 + i];
     }
+}
+
+static void mcf_fec_init(MemoryRegion *sysmem, NICInfo *nd, hwaddr base,
+                         qemu_irq *irqs)
+{
+    DeviceState *dev;
+    SysBusDevice *s;
+    int i;
+
+    qemu_check_nic_model(nd, TYPE_MCF_FEC_NET);
+    dev = qdev_create(NULL, TYPE_MCF_FEC_NET);
+    qdev_set_nic_properties(dev, nd);
+    qdev_init_nofail(dev);
+
+    s = SYS_BUS_DEVICE(dev);
+    for (i = 0; i < FEC_NUM_IRQ; i++) {
+        sysbus_connect_irq(s, i, irqs[i]);
+    }
+
+    memory_region_add_subregion(sysmem, base, sysbus_mmio_get_region(s, 0));
 }
 
 static void mcf5208evb_init(MachineState *machine)
@@ -243,9 +265,10 @@ static void mcf5208evb_init(MachineState *machine)
         fprintf(stderr, "Too many NICs\n");
         exit(1);
     }
-    if (nd_table[0].used)
+    if (nd_table[0].used) {
         mcf_fec_init(address_space_mem, &nd_table[0],
                      0xfc030000, pic + 36);
+    }
 
     /*  0xfc000000 SCM.  */
     /*  0xfc004000 XBS.  */

@@ -21,6 +21,7 @@
 #include "migration/vmstate.h"
 #include "qapi-types.h"
 #include "exec/cpu-common.h"
+#include "qemu/coroutine_int.h"
 
 #define QEMU_VM_FILE_MAGIC           0x5145564d
 #define QEMU_VM_FILE_VERSION_COMPAT  0x00000002
@@ -107,6 +108,12 @@ struct MigrationIncomingState {
     QEMUBH *bh;
 
     int state;
+
+    bool have_colo_incoming_thread;
+    QemuThread colo_incoming_thread;
+    /* The coroutine we should enter (back) after failover */
+    Coroutine *migration_incoming_co;
+
     /* See savevm.c */
     LoadStateEntry_Head loadvm_handlers;
 };
@@ -129,7 +136,6 @@ struct MigrationSrcPageRequest {
 
 struct MigrationState
 {
-    int64_t bandwidth_limit;
     size_t bytes_xfer;
     size_t xfer_limit;
     QemuThread thread;
@@ -160,6 +166,8 @@ struct MigrationState
     int64_t xbzrle_cache_size;
     int64_t setup_time;
     int64_t dirty_sync_count;
+    /* Count of requests incoming from destination */
+    int64_t postcopy_requests;
 
     /* Flag set once the migration has been asked to enter postcopy */
     bool start_postcopy;
@@ -181,25 +189,25 @@ struct MigrationState
 
 void migrate_set_state(int *state, int old_state, int new_state);
 
-void process_incoming_migration(QEMUFile *f);
+void migration_fd_process_incoming(QEMUFile *f);
 
 void qemu_start_incoming_migration(const char *uri, Error **errp);
 
-void migration_set_incoming_channel(MigrationState *s,
-                                    QIOChannel *ioc);
+void migration_channel_process_incoming(MigrationState *s,
+                                        QIOChannel *ioc);
 
-void migration_tls_set_incoming_channel(MigrationState *s,
-                                        QIOChannel *ioc,
-                                        Error **errp);
+void migration_tls_channel_process_incoming(MigrationState *s,
+                                            QIOChannel *ioc,
+                                            Error **errp);
 
-void migration_set_outgoing_channel(MigrationState *s,
-                                    QIOChannel *ioc,
-                                    const char *hostname);
+void migration_channel_connect(MigrationState *s,
+                               QIOChannel *ioc,
+                               const char *hostname);
 
-void migration_tls_set_outgoing_channel(MigrationState *s,
-                                        QIOChannel *ioc,
-                                        const char *hostname,
-                                        Error **errp);
+void migration_tls_channel_connect(MigrationState *s,
+                                   QIOChannel *ioc,
+                                   const char *hostname,
+                                   Error **errp);
 
 uint64_t migrate_max_downtime(void);
 
@@ -226,8 +234,6 @@ void rdma_start_incoming_migration(const char *host_port, Error **errp);
 void migrate_fd_error(MigrationState *s, const Error *error);
 
 void migrate_fd_connect(MigrationState *s);
-
-int migrate_fd_close(MigrationState *s);
 
 void add_migration_state_change_notifier(Notifier *notify);
 void remove_migration_state_change_notifier(Notifier *notify);
@@ -299,6 +305,7 @@ int xbzrle_decode_buffer(uint8_t *src, int slen, uint8_t *dst, int dlen);
 
 int migrate_use_xbzrle(void);
 int64_t migrate_xbzrle_cache_size(void);
+bool migrate_colo_enabled(void);
 
 int64_t xbzrle_cache_resize(int64_t new_size);
 

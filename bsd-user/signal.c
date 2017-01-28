@@ -441,12 +441,9 @@ static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
      */
     if ((host_signum == SIGSEGV || host_signum == SIGBUS) &&
             info->si_code < 0x10000) {
-        start_exclusive();
         if (cpu_signal_handler(host_signum, info, puc)) {
-            end_exclusive();
             return;
         }
-        end_exclusive();
     }
 
     /* Get the target signal number. */
@@ -558,6 +555,7 @@ int do_sigaction(int sig, const struct target_sigaction *act,
             TARGET_SIGSTOP == sig) {
         return -EINVAL;
     }
+
     k = &sigact_table[sig - 1];
     if (oact) {
         oact->_sa_handler = tswapal(k->_sa_handler);

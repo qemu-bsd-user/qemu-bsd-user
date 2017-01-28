@@ -18,6 +18,10 @@
 
 #include "qemu/option.h"
 
+/* Copyright string for -version arguments, About dialogs, etc */
+#define QEMU_COPYRIGHT "Copyright (c) 2003-2016 " \
+    "Fabrice Bellard and the QEMU Project developers"
+
 /* main function, renamed */
 #if defined(CONFIG_COCOA)
 int qemu_main(int argc, char **argv, char **envp);
@@ -76,6 +80,19 @@ void tcg_exec_init(unsigned long tb_size);
 bool tcg_enabled(void);
 
 void cpu_exec_init_all(void);
+void cpu_exec_step_atomic(CPUState *cpu);
+
+/**
+ * set_preferred_target_page_bits:
+ * @bits: number of bits needed to represent an address within the page
+ *
+ * Set the preferred target page size (the actual target page
+ * size may be smaller than any given CPU's preference).
+ * Returns true on success, false on failure (which can only happen
+ * if this is called after the system has already finalized its
+ * choice of page size and the requested page size is smaller than that).
+ */
+bool set_preferred_target_page_bits(int bits);
 
 /**
  * Sends a (part of) iovec down a socket, yielding when the socket is full, or

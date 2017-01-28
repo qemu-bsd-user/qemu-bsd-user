@@ -19,13 +19,10 @@
  *  GNU GPL, version 2 or (at your option) any later version.
  */
 
-#include <libusb.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/mman.h>
-#include <sys/time.h>
-
 #include "qemu/osdep.h"
+#include <libusb.h>
+#include <sys/user.h>
+
 #include "qemu-common.h"
 #include "qemu/config-file.h"
 #include "hw/sysbus.h"
@@ -35,7 +32,6 @@
 #include "qapi/qmp/qbool.h"
 #include "qapi/qmp/qint.h"
 #include "qapi/qmp/qstring.h"
-#include "sys/user.h"
 
 #include <xen/io/ring.h>
 #include <xen/io/usbif.h>
@@ -51,7 +47,7 @@
         struct timeval tv;                                          \
                                                                     \
         gettimeofday(&tv, NULL);                                    \
-        xen_be_printf(xendev, lvl, "%8ld.%06ld xen-usb(%s):" fmt,   \
+        xen_pv_printf(xendev, lvl, "%8ld.%06ld xen-usb(%s):" fmt,   \
                       tv.tv_sec, tv.tv_usec, __func__, ##args);     \
     }
 #define TR_BUS(xendev, fmt, args...) TR(xendev, 2, fmt, ##args)
@@ -94,6 +90,8 @@ struct usbback_req {
     void                     *buffer;
     void                     *isoc_buffer;
     struct libusb_transfer   *xfer;
+
+    bool                     cancelled;
 };
 
 struct usbback_hotplug {
@@ -155,15 +153,15 @@ static int usbback_gnttab_map(struct usbback_req *usbback_req)
     }
 
     if (nr_segs > USBIF_MAX_SEGMENTS_PER_REQUEST) {
-        xen_be_printf(xendev, 0, "bad number of segments in request (%d)\n",
+        xen_pv_printf(xendev, 0, "bad number of segments in request (%d)\n",
                       nr_segs);
         return -EINVAL;
     }
 
     for (i = 0; i < nr_segs; i++) {
         if ((unsigned)usbback_req->req.seg[i].offset +
-            (unsigned)usbback_req->req.seg[i].length > PAGE_SIZE) {
-            xen_be_printf(xendev, 0, "segment crosses page boundary\n");
+            (unsigned)usbback_req->req.seg[i].length > XC_PAGE_SIZE) {
+            xen_pv_printf(xendev, 0, "segment crosses page boundary\n");
             return -EINVAL;
         }
     }
@@ -185,7 +183,7 @@ static int usbback_gnttab_map(struct usbback_req *usbback_req)
 
         for (i = 0; i < usbback_req->nr_buffer_segs; i++) {
             seg = usbback_req->req.seg + i;
-            addr = usbback_req->buffer + i * PAGE_SIZE + seg->offset;
+            addr = usbback_req->buffer + i * XC_PAGE_SIZE + seg->offset;
             qemu_iovec_add(&usbback_req->packet.iov, addr, seg->length);
         }
     }
@@ -201,7 +199,7 @@ static int usbback_gnttab_map(struct usbback_req *usbback_req)
      */
 
     if (!usbback_req->nr_extra_segs) {
-        xen_be_printf(xendev, 0, "iso request without descriptor segments\n");
+        xen_pv_printf(xendev, 0, "iso request without descriptor segments\n");
         return -EINVAL;
     }
 
@@ -257,7 +255,8 @@ static int usbback_init_packet(struct usbback_req *usbback_req)
 
     case USBIF_PIPE_TYPE_CTRL:
         packet->parameter = *(uint64_t *)usbback_req->req.u.ctrl;
-        TR_REQ(xendev, "ctrl parameter: %lx, buflen: %x\n", packet->parameter,
+        TR_REQ(xendev, "ctrl parameter: %"PRIx64", buflen: %x\n",
+               packet->parameter,
                usbback_req->req.buffer_length);
         break;
 
@@ -304,20 +303,23 @@ static void usbback_do_response(struct usbback_req *usbback_req, int32_t status,
         usbback_req->isoc_buffer = NULL;
     }
 
-    res = RING_GET_RESPONSE(&usbif->urb_ring, usbif->urb_ring.rsp_prod_pvt);
-    res->id = usbback_req->req.id;
-    res->status = status;
-    res->actual_length = actual_length;
-    res->error_count = error_count;
-    res->start_frame = 0;
-    usbif->urb_ring.rsp_prod_pvt++;
-    RING_PUSH_RESPONSES_AND_CHECK_NOTIFY(&usbif->urb_ring, notify);
+    if (usbif->urb_sring) {
+        res = RING_GET_RESPONSE(&usbif->urb_ring, usbif->urb_ring.rsp_prod_pvt);
+        res->id = usbback_req->req.id;
+        res->status = status;
+        res->actual_length = actual_length;
+        res->error_count = error_count;
+        res->start_frame = 0;
+        usbif->urb_ring.rsp_prod_pvt++;
+        RING_PUSH_RESPONSES_AND_CHECK_NOTIFY(&usbif->urb_ring, notify);
 
-    if (notify) {
-        xen_be_send_notify(xendev);
+        if (notify) {
+            xen_pv_send_notify(xendev);
+        }
     }
 
-    usbback_put_req(usbback_req);
+    if (!usbback_req->cancelled)
+        usbback_put_req(usbback_req);
 }
 
 static void usbback_do_response_ret(struct usbback_req *usbback_req,
@@ -369,15 +371,14 @@ static void usbback_set_address(struct usbback_info *usbif,
     }
 }
 
-static bool usbback_cancel_req(struct usbback_req *usbback_req)
+static void usbback_cancel_req(struct usbback_req *usbback_req)
 {
-    bool ret = false;
-
     if (usb_packet_is_inflight(&usbback_req->packet)) {
         usb_cancel_packet(&usbback_req->packet);
-        ret = true;
+        QTAILQ_REMOVE(&usbback_req->stub->submit_q, usbback_req, q);
+        usbback_req->cancelled = true;
+        usbback_do_response_ret(usbback_req, -EPROTO);
     }
-    return ret;
 }
 
 static void usbback_process_unlink_req(struct usbback_req *usbback_req)
@@ -394,7 +395,7 @@ static void usbback_process_unlink_req(struct usbback_req *usbback_req)
     devnum = usbif_pipedevice(usbback_req->req.pipe);
     if (unlikely(devnum == 0)) {
         usbback_req->stub = usbif->ports +
-                            usbif_pipeportnum(usbback_req->req.pipe);
+                            usbif_pipeportnum(usbback_req->req.pipe) - 1;
         if (unlikely(!usbback_req->stub)) {
             ret = -ENODEV;
             goto fail_response;
@@ -409,9 +410,7 @@ static void usbback_process_unlink_req(struct usbback_req *usbback_req)
 
     QTAILQ_FOREACH(unlink_req, &usbback_req->stub->submit_q, q) {
         if (unlink_req->req.id == id) {
-            if (usbback_cancel_req(unlink_req)) {
-                usbback_do_response_ret(unlink_req, -EPROTO);
-            }
+            usbback_cancel_req(unlink_req);
             break;
         }
     }
@@ -552,14 +551,14 @@ static void usbback_dispatch(struct usbback_req *usbback_req)
 
     ret = usbback_init_packet(usbback_req);
     if (ret) {
-        xen_be_printf(&usbif->xendev, 0, "invalid request\n");
+        xen_pv_printf(&usbif->xendev, 0, "invalid request\n");
         ret = -ESHUTDOWN;
         goto fail_free_urb;
     }
 
     ret = usbback_gnttab_map(usbback_req);
     if (ret) {
-        xen_be_printf(&usbif->xendev, 0, "invalid buffer, ret=%d\n", ret);
+        xen_pv_printf(&usbif->xendev, 0, "invalid buffer, ret=%d\n", ret);
         ret = -ESHUTDOWN;
         goto fail_free_urb;
     }
@@ -591,7 +590,7 @@ static void usbback_hotplug_notify(struct usbback_info *usbif)
 
     /* Check for full ring. */
     if ((RING_SIZE(ring) - ring->rsp_prod_pvt - ring->req_cons) == 0) {
-        xen_be_send_notify(&usbif->xendev);
+        xen_pv_send_notify(&usbif->xendev);
         return;
     }
 
@@ -610,7 +609,7 @@ static void usbback_hotplug_notify(struct usbback_info *usbif)
     RING_PUSH_RESPONSES_AND_CHECK_NOTIFY(ring, notify);
 
     if (notify) {
-        xen_be_send_notify(&usbif->xendev);
+        xen_pv_send_notify(&usbif->xendev);
     }
 
     TR_BUS(&usbif->xendev, "hotplug port %d speed %d\n", usb_hp->port,
@@ -647,7 +646,7 @@ static void usbback_bh(void *opaque)
 
     if (RING_REQUEST_PROD_OVERFLOW(urb_ring, rp)) {
         rc = urb_ring->rsp_prod_pvt;
-        xen_be_printf(&usbif->xendev, 0, "domU provided bogus ring requests "
+        xen_pv_printf(&usbif->xendev, 0, "domU provided bogus ring requests "
                       "(%#x - %#x = %u). Halting ring processing.\n",
                       rp, rc, rp - rc);
         usbif->ring_error = true;
@@ -684,22 +683,42 @@ static void usbback_hotplug_enq(struct usbback_info *usbif, unsigned port)
     usbback_hotplug_notify(usbif);
 }
 
+static void usbback_portid_drain(struct usbback_info *usbif, unsigned port)
+{
+    struct usbback_req *req, *tmp;
+    bool sched = false;
+
+    QTAILQ_FOREACH_SAFE(req, &usbif->ports[port - 1].submit_q, q, tmp) {
+        usbback_cancel_req(req);
+        sched = true;
+    }
+
+    if (sched) {
+        qemu_bh_schedule(usbif->bh);
+    }
+}
+
+static void usbback_portid_detach(struct usbback_info *usbif, unsigned port)
+{
+    if (!usbif->ports[port - 1].attached) {
+        return;
+    }
+
+    usbif->ports[port - 1].speed = USBIF_SPEED_NONE;
+    usbif->ports[port - 1].attached = false;
+    usbback_portid_drain(usbif, port);
+    usbback_hotplug_enq(usbif, port);
+}
+
 static void usbback_portid_remove(struct usbback_info *usbif, unsigned port)
 {
-    USBPort *p;
-
     if (!usbif->ports[port - 1].dev) {
         return;
     }
 
-    p = &(usbif->ports[port - 1].port);
-    snprintf(p->path, sizeof(p->path), "%d", 99);
-
     object_unparent(OBJECT(usbif->ports[port - 1].dev));
     usbif->ports[port - 1].dev = NULL;
-    usbif->ports[port - 1].speed = USBIF_SPEED_NONE;
-    usbif->ports[port - 1].attached = false;
-    usbback_hotplug_enq(usbif, port);
+    usbback_portid_detach(usbif, port);
 
     TR_BUS(&usbif->xendev, "port %d removed\n", port);
 }
@@ -709,10 +728,10 @@ static void usbback_portid_add(struct usbback_info *usbif, unsigned port,
 {
     unsigned speed;
     char *portname;
-    USBPort *p;
     Error *local_err = NULL;
     QDict *qdict;
     QemuOpts *opts;
+    char *tmp;
 
     if (usbif->ports[port - 1].dev) {
         return;
@@ -720,16 +739,21 @@ static void usbback_portid_add(struct usbback_info *usbif, unsigned port,
 
     portname = strchr(busid, '-');
     if (!portname) {
-        xen_be_printf(&usbif->xendev, 0, "device %s illegal specification\n",
+        xen_pv_printf(&usbif->xendev, 0, "device %s illegal specification\n",
                       busid);
         return;
     }
     portname++;
-    p = &(usbif->ports[port - 1].port);
-    snprintf(p->path, sizeof(p->path), "%s", portname);
 
     qdict = qdict_new();
     qdict_put(qdict, "driver", qstring_from_str("usb-host"));
+    tmp = g_strdup_printf("%s.0", usbif->xendev.qdev.id);
+    qdict_put(qdict, "bus", qstring_from_str(tmp));
+    g_free(tmp);
+    tmp = g_strdup_printf("%s-%u", usbif->xendev.qdev.id, port);
+    qdict_put(qdict, "id", qstring_from_str(tmp));
+    g_free(tmp);
+    qdict_put(qdict, "port", qint_from_int(port));
     qdict_put(qdict, "hostbus", qint_from_int(atoi(busid)));
     qdict_put(qdict, "hostport", qstring_from_str(portname));
     opts = qemu_opts_from_qdict(qemu_find_opts("device"), qdict, &local_err);
@@ -741,7 +765,6 @@ static void usbback_portid_add(struct usbback_info *usbif, unsigned port,
         goto err;
     }
     QDECREF(qdict);
-    snprintf(p->path, sizeof(p->path), "%d", port);
     speed = usbif->ports[port - 1].dev->speed;
     switch (speed) {
     case USB_SPEED_LOW:
@@ -759,7 +782,7 @@ static void usbback_portid_add(struct usbback_info *usbif, unsigned port,
         break;
     }
     if (speed == USBIF_SPEED_NONE) {
-        xen_be_printf(&usbif->xendev, 0, "device %s wrong speed\n", busid);
+        xen_pv_printf(&usbif->xendev, 0, "device %s wrong speed\n", busid);
         object_unparent(OBJECT(usbif->ports[port - 1].dev));
         usbif->ports[port - 1].dev = NULL;
         return;
@@ -775,8 +798,7 @@ static void usbback_portid_add(struct usbback_info *usbif, unsigned port,
 
 err:
     QDECREF(qdict);
-    snprintf(p->path, sizeof(p->path), "%d", 99);
-    xen_be_printf(&usbif->xendev, 0, "device %s could not be opened\n", busid);
+    xen_pv_printf(&usbif->xendev, 0, "device %s could not be opened\n", busid);
 }
 
 static void usbback_process_port(struct usbback_info *usbif, unsigned port)
@@ -787,7 +809,7 @@ static void usbback_process_port(struct usbback_info *usbif, unsigned port)
     snprintf(node, sizeof(node), "port/%d", port);
     busid = xenstore_read_be_str(&usbif->xendev, node);
     if (busid == NULL) {
-        xen_be_printf(&usbif->xendev, 0, "xenstore_read %s failed\n", node);
+        xen_pv_printf(&usbif->xendev, 0, "xenstore_read %s failed\n", node);
         return;
     }
 
@@ -804,14 +826,13 @@ static void usbback_process_port(struct usbback_info *usbif, unsigned port)
 static void usbback_disconnect(struct XenDevice *xendev)
 {
     struct usbback_info *usbif;
-    struct usbback_req *req, *tmp;
     unsigned int i;
 
     TR_BUS(xendev, "start\n");
 
     usbif = container_of(xendev, struct usbback_info, xendev);
 
-    xen_be_unbind_evtchn(xendev);
+    xen_pv_unbind_evtchn(xendev);
 
     if (usbif->urb_sring) {
         xengnttab_unmap(xendev->gnttabdev, usbif->urb_sring, 1);
@@ -823,11 +844,8 @@ static void usbback_disconnect(struct XenDevice *xendev)
     }
 
     for (i = 0; i < usbif->num_ports; i++) {
-        if (!usbif->ports[i].dev) {
-            continue;
-        }
-        QTAILQ_FOREACH_SAFE(req, &usbif->ports[i].submit_q, q, tmp) {
-            usbback_cancel_req(req);
+        if (usbif->ports[i].dev) {
+            usbback_portid_drain(usbif, i + 1);
         }
     }
 
@@ -848,15 +866,15 @@ static int usbback_connect(struct XenDevice *xendev)
     usbif = container_of(xendev, struct usbback_info, xendev);
 
     if (xenstore_read_fe_int(xendev, "urb-ring-ref", &urb_ring_ref)) {
-        xen_be_printf(xendev, 0, "error reading urb-ring-ref\n");
+        xen_pv_printf(xendev, 0, "error reading urb-ring-ref\n");
         return -1;
     }
     if (xenstore_read_fe_int(xendev, "conn-ring-ref", &conn_ring_ref)) {
-        xen_be_printf(xendev, 0, "error reading conn-ring-ref\n");
+        xen_pv_printf(xendev, 0, "error reading conn-ring-ref\n");
         return -1;
     }
     if (xenstore_read_fe_int(xendev, "event-channel", &xendev->remote_port)) {
-        xen_be_printf(xendev, 0, "error reading event-channel\n");
+        xen_pv_printf(xendev, 0, "error reading event-channel\n");
         return -1;
     }
 
@@ -867,7 +885,7 @@ static int usbback_connect(struct XenDevice *xendev)
                                                 conn_ring_ref,
                                                 PROT_READ | PROT_WRITE);
     if (!usbif->urb_sring || !usbif->conn_sring) {
-        xen_be_printf(xendev, 0, "error mapping rings\n");
+        xen_pv_printf(xendev, 0, "error mapping rings\n");
         usbback_disconnect(xendev);
         return -1;
     }
@@ -879,7 +897,7 @@ static int usbback_connect(struct XenDevice *xendev)
 
     xen_be_bind_evtchn(xendev);
 
-    xen_be_printf(xendev, 1, "urb-ring-ref %d, conn-ring-ref %d, "
+    xen_pv_printf(xendev, 1, "urb-ring-ref %d, conn-ring-ref %d, "
                   "remote port %d, local port %d\n", urb_ring_ref,
                   conn_ring_ref, xendev->remote_port, xendev->local_port);
 
@@ -915,12 +933,12 @@ static int usbback_init(struct XenDevice *xendev)
 
     if (xenstore_read_be_int(xendev, "num-ports", &usbif->num_ports) ||
         usbif->num_ports < 1 || usbif->num_ports > USBBACK_MAXPORTS) {
-        xen_be_printf(xendev, 0, "num-ports not readable or out of bounds\n");
+        xen_pv_printf(xendev, 0, "num-ports not readable or out of bounds\n");
         return -1;
     }
     if (xenstore_read_be_int(xendev, "usb-ver", &usbif->usb_ver) ||
         (usbif->usb_ver != USB_VER_USB11 && usbif->usb_ver != USB_VER_USB20)) {
-        xen_be_printf(xendev, 0, "usb-ver not readable or out of bounds\n");
+        xen_pv_printf(xendev, 0, "usb-ver not readable or out of bounds\n");
         return -1;
     }
 
@@ -947,8 +965,7 @@ static void xen_bus_detach(USBPort *port)
 
     usbif = port->opaque;
     TR_BUS(&usbif->xendev, "\n");
-    usbif->ports[port->index].attached = false;
-    usbback_hotplug_enq(usbif, port->index + 1);
+    usbback_portid_detach(usbif, port->index + 1);
 }
 
 static void xen_bus_child_detach(USBPort *port, USBDevice *child)
@@ -961,9 +978,16 @@ static void xen_bus_child_detach(USBPort *port, USBDevice *child)
 
 static void xen_bus_complete(USBPort *port, USBPacket *packet)
 {
+    struct usbback_req *usbback_req;
     struct usbback_info *usbif;
 
-    usbif = port->opaque;
+    usbback_req = container_of(packet, struct usbback_req, packet);
+    if (usbback_req->cancelled) {
+        g_free(usbback_req);
+        return;
+    }
+
+    usbif = usbback_req->usbif;
     TR_REQ(&usbif->xendev, "\n");
     usbback_packet_complete(packet);
 }
@@ -986,13 +1010,13 @@ static void usbback_alloc(struct XenDevice *xendev)
 
     usbif = container_of(xendev, struct usbback_info, xendev);
 
-    usb_bus_new(&usbif->bus, sizeof(usbif->bus), &xen_usb_bus_ops, xen_sysdev);
+    usb_bus_new(&usbif->bus, sizeof(usbif->bus), &xen_usb_bus_ops,
+                DEVICE(&xendev->qdev));
     for (i = 0; i < USBBACK_MAXPORTS; i++) {
         p = &(usbif->ports[i].port);
         usb_register_port(&usbif->bus, p, usbif, i, &xen_usb_port_ops,
                           USB_SPEED_MASK_LOW | USB_SPEED_MASK_FULL |
                           USB_SPEED_MASK_HIGH);
-        snprintf(p->path, sizeof(p->path), "%d", 99);
     }
 
     QTAILQ_INIT(&usbif->req_free_q);
@@ -1002,7 +1026,7 @@ static void usbback_alloc(struct XenDevice *xendev)
     /* max_grants: for each request and for the rings (request and connect). */
     max_grants = USBIF_MAX_SEGMENTS_PER_REQUEST * USB_URB_RING_SIZE + 2;
     if (xengnttab_set_max_grants(xendev->gnttabdev, max_grants) < 0) {
-        xen_be_printf(xendev, 0, "xengnttab_set_max_grants failed: %s\n",
+        xen_pv_printf(xendev, 0, "xengnttab_set_max_grants failed: %s\n",
                       strerror(errno));
     }
 }

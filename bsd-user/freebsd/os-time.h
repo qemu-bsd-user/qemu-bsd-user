@@ -606,6 +606,10 @@ static inline abi_long do_freebsd_kevent(abi_long arg1, abi_ulong arg2,
     }
     ret = get_errno(kevent(arg1, changelist, arg3, eventlist, arg5,
                 arg6 != 0 ? &ts : NULL));
+
+    if (arg5 == 0)
+        return ret;
+
     if (!is_error(ret)) {
         target_eventlist = lock_user(VERIFY_WRITE, arg4,
                 sizeof(struct target_freebsd_kevent) * arg5, 0);
@@ -764,7 +768,7 @@ static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1 __unused,
 }
 #endif /* ! __FreeBSD_version >= 902503 */
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100056
+#if defined(__FreeBSD_version) && ((__FreeBSD__ == 10 && __FreeBSD_version >= 1003000) || __FreeBSD_version >= 1100056)
 
 static inline abi_long do_freebsd_futimens(abi_ulong arg1,
         abi_ulong arg2)

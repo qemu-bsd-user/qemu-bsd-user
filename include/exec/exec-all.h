@@ -17,8 +17,8 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _EXEC_ALL_H_
-#define _EXEC_ALL_H_
+#ifndef EXEC_ALL_H
+#define EXEC_ALL_H
 
 #include "qemu-common.h"
 #include "exec/tb-context.h"
@@ -56,9 +56,10 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
                               target_ulong pc, target_ulong cs_base,
                               uint32_t flags,
                               int cflags);
-void cpu_exec_init(CPUState *cpu, Error **errp);
+
 void QEMU_NORETURN cpu_loop_exit(CPUState *cpu);
 void QEMU_NORETURN cpu_loop_exit_restore(CPUState *cpu, uintptr_t pc);
+void QEMU_NORETURN cpu_loop_exit_atomic(CPUState *cpu, uintptr_t pc);
 
 #if !defined(CONFIG_USER_ONLY)
 void cpu_reloading_memory_map(void);
@@ -94,15 +95,13 @@ void tlb_flush_page(CPUState *cpu, target_ulong addr);
 /**
  * tlb_flush:
  * @cpu: CPU whose TLB should be flushed
- * @flush_global: ignored
  *
- * Flush the entire TLB for the specified CPU.
- * The flush_global flag is in theory an indicator of whether the whole
- * TLB should be flushed, or only those entries not marked global.
- * In practice QEMU does not implement any global/not global flag for
- * TLB entries, and the argument is ignored.
+ * Flush the entire TLB for the specified CPU. Most CPU architectures
+ * allow the implementation to drop entries from the TLB at any time
+ * so this is generally safe. If more selective flushing is required
+ * use one of the other functions for efficiency.
  */
-void tlb_flush(CPUState *cpu, int flush_global);
+void tlb_flush(CPUState *cpu);
 /**
  * tlb_flush_page_by_mmuidx:
  * @cpu: CPU whose TLB should be flushed
@@ -164,7 +163,7 @@ static inline void tlb_flush_page(CPUState *cpu, target_ulong addr)
 {
 }
 
-static inline void tlb_flush(CPUState *cpu, int flush_global)
+static inline void tlb_flush(CPUState *cpu)
 {
 }
 
@@ -213,10 +212,10 @@ struct TranslationBlock {
 #define CF_USE_ICOUNT  0x20000
 #define CF_IGNORE_ICOUNT 0x40000 /* Do not generate icount code */
 
+    uint16_t invalid;
+
     void *tc_ptr;    /* pointer to the translated code */
     uint8_t *tc_search;  /* pointer to search data */
-    /* next matching tb for physical address. */
-    struct TranslationBlock *phys_hash_next;
     /* original tb when cflags has CF_NOCACHE */
     struct TranslationBlock *orig_tb;
     /* first and second physical page containing code. The lower bit
@@ -315,6 +314,7 @@ static inline void tb_set_jmp_target(TranslationBlock *tb,
 
 #endif
 
+/* Called with tb_lock held.  */
 static inline void tb_add_jump(TranslationBlock *tb, int n,
                                TranslationBlock *tb_next)
 {
@@ -337,13 +337,12 @@ static inline void tb_add_jump(TranslationBlock *tb, int n,
     tb_next->jmp_list_first = (uintptr_t)tb | n;
 }
 
-/* GETRA is the true target of the return instruction that we'll execute,
-   defined here for simplicity of defining the follow-up macros.  */
+/* GETPC is the true target of the return instruction that we'll execute.  */
 #if defined(CONFIG_TCG_INTERPRETER)
 extern uintptr_t tci_tb_ptr;
-# define GETRA() tci_tb_ptr
+# define GETPC() tci_tb_ptr
 #else
-# define GETRA() \
+# define GETPC() \
     ((uintptr_t)__builtin_extract_return_addr(__builtin_return_address(0)))
 #endif
 
@@ -356,21 +355,20 @@ extern uintptr_t tci_tb_ptr;
    smaller than 4 bytes, so we don't worry about special-casing this.  */
 #define GETPC_ADJ   2
 
-#define GETPC()  (GETRA() - GETPC_ADJ)
-
 #if !defined(CONFIG_USER_ONLY)
 
 struct MemoryRegion *iotlb_to_region(CPUState *cpu,
                                      hwaddr index, MemTxAttrs attrs);
 
-void tlb_fill(CPUState *cpu, target_ulong addr, int is_write, int mmu_idx,
-              uintptr_t retaddr);
+void tlb_fill(CPUState *cpu, target_ulong addr, MMUAccessType access_type,
+              int mmu_idx, uintptr_t retaddr);
 
 #endif
 
 #if defined(CONFIG_USER_ONLY)
 void mmap_lock(void);
 void mmap_unlock(void);
+bool have_mmap_lock(void);
 
 static inline tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
 {

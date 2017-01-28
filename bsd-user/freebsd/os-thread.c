@@ -120,17 +120,15 @@ void *new_freebsd_thread_start(void *arg)
     CPUState *cpu;
     long tid;
 
+    rcu_register_thread();
     env = info->env;
     cpu = ENV_GET_CPU(env);
     thread_cpu = cpu;
-
     (void)thr_self(&tid);
     cpu->host_tid = tid;
 
     /* copy out the child TID */
     if (info->param.child_tid) {
-        // TaskState *ts = (TaskState *)cpu->opaque;
-        // ts->child_tidptr = info->param.child_tid;
         put_user_ual(tid, info->param.child_tid);
     }
 
@@ -944,10 +942,9 @@ abi_long freebsd_unlock_umutex(abi_ulong target_addr, uint32_t id)
  * condition vars so I am sure performance may be a problem if there are lots
  * of CVs.
  *
- * XXXss This needs to be reinitialized in fork_end().
  */
-static struct umutex _cv_mutex = { 0, 0, { 0, 0 }, { 0, 0, 0, 0 } };
 
+static struct umutex _cv_mutex;
 
 /*
  * wflags CVWAIT_CHECK_UNPARKING, CVWAIT_ABSTIME, CVWAIT_CLOCKID
@@ -1378,6 +1375,7 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, NEW_STACK_SIZE);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
     if (rtp_ptr) {
         rtp_to_schedparam(&rtp, &sched_policy, &sched_param);
         pthread_attr_setschedpolicy(&attr, sched_policy);
@@ -1390,6 +1388,14 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
      */
     sigfillset(&sigmask);
     sigprocmask(SIG_BLOCK, &sigmask, &info.sigmask);
+
+    /* If this is our first additional thread, we need to ensure we
+     * generate code for parallel execution and flush old translations.
+     */
+    if (!parallel_cpus) {
+        parallel_cpus = true;
+        tb_flush(cpu);
+    }
 
     ret = pthread_create(&info.thread, &attr, new_freebsd_thread_start, &info);
     /* XXX Free new CPU state if thread creation fails. */

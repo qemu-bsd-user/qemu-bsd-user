@@ -1,5 +1,5 @@
-#ifndef __COMMON_H__
-#define __COMMON_H__
+#ifndef SLIRP_H
+#define SLIRP_H
 
 #include "qemu/host-utils.h"
 #include "slirp_config.h"
@@ -105,7 +105,7 @@ struct ethhdr {
     unsigned short h_proto;            /* packet type ID field */
 };
 
-struct arphdr {
+struct slirp_arphdr {
     unsigned short ar_hrd;      /* format of hardware address */
     unsigned short ar_pro;      /* format of protocol address */
     unsigned char  ar_hln;      /* length of hardware address */
@@ -124,7 +124,7 @@ struct arphdr {
 #define ARP_TABLE_SIZE 16
 
 typedef struct ArpTable {
-    struct arphdr table[ARP_TABLE_SIZE];
+    struct slirp_arphdr table[ARP_TABLE_SIZE];
     int next_victim;
 } ArpTable;
 
@@ -291,10 +291,5 @@ uint8_t tcp_tos(struct socket *);
 int tcp_emu(struct socket *, struct mbuf *);
 int tcp_ctl(struct socket *);
 struct tcpcb *tcp_drop(struct tcpcb *tp, int err);
-
-#ifndef _WIN32
-#define min(x,y) ((x) < (y) ? (x) : (y))
-#define max(x,y) ((x) > (y) ? (x) : (y))
-#endif
 
 #endif
