@@ -23,9 +23,9 @@
  */
 /*
    Shix 2.0 board by Alexis Polti, described at
-   http://perso.enst.fr/~polti/realisations/shix20/
+   https://web.archive.org/web/20070917001736/perso.enst.fr/~polti/realisations/shix20
 
-   More information in target-sh4/README.sh4
+   More information in target/sh4/README.sh4
 */
 #include "qemu/osdep.h"
 #include "qapi/error.h"

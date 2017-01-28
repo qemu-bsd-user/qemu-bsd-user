@@ -11,14 +11,15 @@
  * See the COPYING file in the top-level directory.
  */
 
-#ifndef _QEMU_VIRTIO_VGA_H
-#define _QEMU_VIRTIO_VGA_H
+#ifndef HW_VIRTIO_GPU_H
+#define HW_VIRTIO_GPU_H
 
 #include "qemu/queue.h"
 #include "ui/qemu-pixman.h"
 #include "ui/console.h"
 #include "hw/virtio/virtio.h"
 #include "hw/pci/pci.h"
+#include "qemu/log.h"
 
 #include "standard-headers/linux/virtio_gpu.h"
 #define TYPE_VIRTIO_GPU "virtio-gpu-device"
@@ -37,6 +38,7 @@ struct virtio_gpu_simple_resource {
     unsigned int iov_cnt;
     uint32_t scanout_bitmask;
     pixman_image_t *image;
+    uint64_t hostmem;
     QTAILQ_ENTRY(virtio_gpu_simple_resource) next;
 };
 
@@ -67,6 +69,7 @@ enum virtio_gpu_conf_flags {
     (_cfg.flags & (1 << VIRTIO_GPU_FLAG_STATS_ENABLED))
 
 struct virtio_gpu_conf {
+    uint64_t max_hostmem;
     uint32_t max_outputs;
     uint32_t flags;
 };
@@ -102,12 +105,13 @@ typedef struct VirtIOGPU {
     struct virtio_gpu_requested_state req_state[VIRTIO_GPU_MAX_SCANOUTS];
 
     struct virtio_gpu_conf conf;
+    uint64_t hostmem;
     int enabled_output_bitmask;
     struct virtio_gpu_config virtio_config;
 
     bool use_virgl_renderer;
     bool renderer_inited;
-    bool renderer_blocked;
+    int renderer_blocked;
     QEMUTimer *fence_poll;
     QEMUTimer *print_stats;
 
@@ -118,6 +122,8 @@ typedef struct VirtIOGPU {
         uint32_t req_3d;
         uint32_t bytes_3d;
     } stats;
+
+    Error *migration_blocker;
 } VirtIOGPU;
 
 extern const GraphicHwOps virtio_gpu_ops;

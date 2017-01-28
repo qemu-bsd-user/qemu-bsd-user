@@ -23,17 +23,10 @@
  */
 #include "qemu/osdep.h"
 #include "qemu/host-utils.h"
-
-/* This file is compiled once, and thus we can't include the standard
-   "exec/helper-proto.h", which has includes that are target specific.  */
-
-#include "exec/helper-head.h"
-
-#define DEF_HELPER_FLAGS_2(name, flags, ret, t1, t2) \
-  dh_ctype(ret) HELPER(name) (dh_ctype(t1), dh_ctype(t2));
-
-#include "tcg-runtime.h"
-
+#include "cpu.h"
+#include "exec/helper-proto.h"
+#include "exec/cpu_ldst.h"
+#include "exec/exec-all.h"
 
 /* 32-bit helpers */
 
@@ -107,3 +100,102 @@ int64_t HELPER(mulsh_i64)(int64_t arg1, int64_t arg2)
     muls64(&l, &h, arg1, arg2);
     return h;
 }
+
+uint32_t HELPER(clz_i32)(uint32_t arg, uint32_t zero_val)
+{
+    return arg ? clz32(arg) : zero_val;
+}
+
+uint32_t HELPER(ctz_i32)(uint32_t arg, uint32_t zero_val)
+{
+    return arg ? ctz32(arg) : zero_val;
+}
+
+uint64_t HELPER(clz_i64)(uint64_t arg, uint64_t zero_val)
+{
+    return arg ? clz64(arg) : zero_val;
+}
+
+uint64_t HELPER(ctz_i64)(uint64_t arg, uint64_t zero_val)
+{
+    return arg ? ctz64(arg) : zero_val;
+}
+
+uint32_t HELPER(clrsb_i32)(uint32_t arg)
+{
+    return clrsb32(arg);
+}
+
+uint64_t HELPER(clrsb_i64)(uint64_t arg)
+{
+    return clrsb64(arg);
+}
+
+uint32_t HELPER(ctpop_i32)(uint32_t arg)
+{
+    return ctpop32(arg);
+}
+
+uint64_t HELPER(ctpop_i64)(uint64_t arg)
+{
+    return ctpop64(arg);
+}
+
+void HELPER(exit_atomic)(CPUArchState *env)
+{
+    cpu_loop_exit_atomic(ENV_GET_CPU(env), GETPC());
+}
+
+#ifndef CONFIG_SOFTMMU
+/* The softmmu versions of these helpers are in cputlb.c.  */
+
+/* Do not allow unaligned operations to proceed.  Return the host address.  */
+static void *atomic_mmu_lookup(CPUArchState *env, target_ulong addr,
+                               int size, uintptr_t retaddr)
+{
+    /* Enforce qemu required alignment.  */
+    if (unlikely(addr & (size - 1))) {
+        cpu_loop_exit_atomic(ENV_GET_CPU(env), retaddr);
+    }
+    return g2h(addr);
+}
+
+/* Macro to call the above, with local variables from the use context.  */
+#define ATOMIC_MMU_LOOKUP  atomic_mmu_lookup(env, addr, DATA_SIZE, GETPC())
+
+#define ATOMIC_NAME(X)   HELPER(glue(glue(atomic_ ## X, SUFFIX), END))
+#define EXTRA_ARGS
+
+#define DATA_SIZE 1
+#include "atomic_template.h"
+
+#define DATA_SIZE 2
+#include "atomic_template.h"
+
+#define DATA_SIZE 4
+#include "atomic_template.h"
+
+#ifdef CONFIG_ATOMIC64
+#define DATA_SIZE 8
+#include "atomic_template.h"
+#endif
+
+/* The following is only callable from other helpers, and matches up
+   with the softmmu version.  */
+
+#ifdef CONFIG_ATOMIC128
+
+#undef EXTRA_ARGS
+#undef ATOMIC_NAME
+#undef ATOMIC_MMU_LOOKUP
+
+#define EXTRA_ARGS     , TCGMemOpIdx oi, uintptr_t retaddr
+#define ATOMIC_NAME(X) \
+    HELPER(glue(glue(glue(atomic_ ## X, SUFFIX), END), _mmu))
+#define ATOMIC_MMU_LOOKUP  atomic_mmu_lookup(env, addr, DATA_SIZE, retaddr)
+
+#define DATA_SIZE 16
+#include "atomic_template.h"
+#endif /* CONFIG_ATOMIC128 */
+
+#endif /* !CONFIG_SOFTMMU */

@@ -7,7 +7,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu-common.h"
-#include <slirp.h>
+#include "slirp.h"
 #include "ip_icmp.h"
 #ifdef __sun__
 #include <sys/filio.h>
@@ -66,6 +66,23 @@ void
 sofree(struct socket *so)
 {
   Slirp *slirp = so->slirp;
+  struct mbuf *ifm;
+
+  for (ifm = (struct mbuf *) slirp->if_fastq.qh_link;
+       (struct quehead *) ifm != &slirp->if_fastq;
+       ifm = ifm->ifq_next) {
+    if (ifm->ifq_so == so) {
+      ifm->ifq_so = NULL;
+    }
+  }
+
+  for (ifm = (struct mbuf *) slirp->if_batchq.qh_link;
+       (struct quehead *) ifm != &slirp->if_batchq;
+       ifm = ifm->ifq_next) {
+    if (ifm->ifq_so == so) {
+      ifm->ifq_so = NULL;
+    }
+  }
 
   if (so->so_emu==EMU_RSH && so->extra) {
 	sofree(so->extra);
@@ -816,9 +833,12 @@ void sotranslate_out(struct socket *so, struct sockaddr_storage *addr)
         if (in6_equal_net(&so->so_faddr6, &slirp->vprefix_addr6,
                     slirp->vprefix_len)) {
             if (in6_equal(&so->so_faddr6, &slirp->vnameserver_addr6)) {
-                /*if (get_dns_addr(&addr) < 0) {*/ /* TODO */
+                uint32_t scope_id;
+                if (get_dns6_addr(&sin6->sin6_addr, &scope_id) >= 0) {
+                    sin6->sin6_scope_id = scope_id;
+                } else {
                     sin6->sin6_addr = in6addr_loopback;
-                /*}*/
+                }
             } else {
                 sin6->sin6_addr = in6addr_loopback;
             }

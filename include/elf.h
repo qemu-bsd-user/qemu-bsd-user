@@ -1,6 +1,5 @@
-#ifndef _QEMU_ELF_H
-#define _QEMU_ELF_H
-
+#ifndef QEMU_ELF_H
+#define QEMU_ELF_H
 
 /* 32-bit ELF base types. */
 typedef uint32_t Elf32_Addr;
@@ -53,6 +52,8 @@ typedef int64_t  Elf64_Sxword;
 #define EF_MIPS_OPTIONS_FIRST	0x00000080
 #define EF_MIPS_32BITMODE	0x00000100
 #define EF_MIPS_ABI		0x0000f000
+#define EF_MIPS_FP64      0x00000200
+#define EF_MIPS_NAN2008   0x00000400
 #define EF_MIPS_ARCH      0xf0000000
 
 /* These constants define the different elf file types */
@@ -1571,4 +1572,4 @@ struct elf32_fdpic_loadmap {
 #endif /* ELF_CLASS */
 
 
-#endif /* _QEMU_ELF_H */
+#endif /* QEMU_ELF_H */

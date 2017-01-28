@@ -350,6 +350,7 @@ typedef struct RDMAContext {
      */
     int error_state;
     int error_reported;
+    int received_error;
 
     /*
      * Description of ram blocks used throughout the code.
@@ -1511,7 +1512,7 @@ static int qemu_rdma_block_for_wrid(RDMAContext *rdma, int wrid_requested,
 
     while (1) {
         /*
-         * Coroutine doesn't start until process_incoming_migration()
+         * Coroutine doesn't start until migration_fd_process_incoming()
          * so don't yield unless we know we're running inside of a coroutine.
          */
         if (rdma->migration_started_on_destination) {
@@ -1676,6 +1677,9 @@ static int qemu_rdma_exchange_get_response(RDMAContext *rdma,
                 ", but got: %s (%d), length: %d",
                 control_desc[expecting], expecting,
                 control_desc[head->type], head->type, head->len);
+        if (head->type == RDMA_CONTROL_ERROR) {
+            rdma->received_error = true;
+        }
         return -EIO;
     }
     if (head->len > RDMA_CONTROL_MAX_BUFFER - sizeof(*head)) {
@@ -1934,10 +1938,7 @@ retry:
              * memset() + madvise() the entire chunk without RDMA.
              */
 
-            if (can_use_buffer_find_nonzero_offset((void *)(uintptr_t)sge.addr,
-                                                   length)
-                   && buffer_find_nonzero_offset((void *)(uintptr_t)sge.addr,
-                                                    length) == length) {
+            if (buffer_is_zero((void *)(uintptr_t)sge.addr, length)) {
                 RDMACompress comp = {
                                         .offset = current_addr,
                                         .value = 0,
@@ -2205,7 +2206,7 @@ static void qemu_rdma_cleanup(RDMAContext *rdma)
     int ret, idx;
 
     if (rdma->cm_id && rdma->connected) {
-        if (rdma->error_state) {
+        if (rdma->error_state && !rdma->received_error) {
             RDMAControlHeader head = { .len = 0,
                                        .type = RDMA_CONTROL_ERROR,
                                        .repeat = 1,
@@ -2807,6 +2808,9 @@ static int qio_channel_rdma_close(QIOChannel *ioc,
     QIOChannelRDMA *rioc = QIO_CHANNEL_RDMA(ioc);
     trace_qemu_rdma_close();
     if (rioc->rdma) {
+        if (!rioc->rdma->error_state) {
+            rioc->rdma->error_state = qemu_file_get_error(rioc->file);
+        }
         qemu_rdma_cleanup(rioc->rdma);
         g_free(rioc->rdma);
         rioc->rdma = NULL;
@@ -3620,7 +3624,7 @@ static void rdma_accept_incoming_migration(void *opaque)
     }
 
     rdma->migration_started_on_destination = 1;
-    process_incoming_migration(f);
+    migration_fd_process_incoming(f);
 }
 
 void rdma_start_incoming_migration(const char *host_port, Error **errp)

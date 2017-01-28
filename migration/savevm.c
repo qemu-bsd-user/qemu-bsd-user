@@ -265,6 +265,7 @@ typedef struct SaveState {
     bool skip_configuration;
     uint32_t len;
     const char *name;
+    uint32_t target_page_bits;
 } SaveState;
 
 static SaveState savevm_state = {
@@ -286,6 +287,19 @@ static void configuration_pre_save(void *opaque)
 
     state->len = strlen(current_name);
     state->name = current_name;
+    state->target_page_bits = TARGET_PAGE_BITS;
+}
+
+static int configuration_pre_load(void *opaque)
+{
+    SaveState *state = opaque;
+
+    /* If there is no target-page-bits subsection it means the source
+     * predates the variable-target-page-bits support and is using the
+     * minimum possible value for this CPU.
+     */
+    state->target_page_bits = TARGET_PAGE_BITS_MIN;
+    return 0;
 }
 
 static int configuration_post_load(void *opaque, int version_id)
@@ -298,12 +312,43 @@ static int configuration_post_load(void *opaque, int version_id)
                      (int) state->len, state->name, current_name);
         return -EINVAL;
     }
+
+    if (state->target_page_bits != TARGET_PAGE_BITS) {
+        error_report("Received TARGET_PAGE_BITS is %d but local is %d",
+                     state->target_page_bits, TARGET_PAGE_BITS);
+        return -EINVAL;
+    }
+
     return 0;
 }
+
+/* The target-page-bits subsection is present only if the
+ * target page size is not the same as the default (ie the
+ * minimum page size for a variable-page-size guest CPU).
+ * If it is present then it contains the actual target page
+ * bits for the machine, and migration will fail if the
+ * two ends don't agree about it.
+ */
+static bool vmstate_target_page_bits_needed(void *opaque)
+{
+    return TARGET_PAGE_BITS > TARGET_PAGE_BITS_MIN;
+}
+
+static const VMStateDescription vmstate_target_page_bits = {
+    .name = "configuration/target-page-bits",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = vmstate_target_page_bits_needed,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT32(target_page_bits, SaveState),
+        VMSTATE_END_OF_LIST()
+    }
+};
 
 static const VMStateDescription vmstate_configuration = {
     .name = "configuration",
     .version_id = 1,
+    .pre_load = configuration_pre_load,
     .post_load = configuration_post_load,
     .pre_save = configuration_pre_save,
     .fields = (VMStateField[]) {
@@ -311,6 +356,10 @@ static const VMStateDescription vmstate_configuration = {
         VMSTATE_VBUFFER_ALLOC_UINT32(name, SaveState, 0, NULL, 0, len),
         VMSTATE_END_OF_LIST()
     },
+    .subsections = (const VMStateDescription*[]) {
+        &vmstate_target_page_bits,
+        NULL
+    }
 };
 
 static void dump_vmstate_vmsd(FILE *out_file,
@@ -483,6 +532,34 @@ static int calculate_compat_instance_id(const char *idstr)
     return instance_id;
 }
 
+static inline MigrationPriority save_state_priority(SaveStateEntry *se)
+{
+    if (se->vmsd) {
+        return se->vmsd->priority;
+    }
+    return MIG_PRI_DEFAULT;
+}
+
+static void savevm_state_handler_insert(SaveStateEntry *nse)
+{
+    MigrationPriority priority = save_state_priority(nse);
+    SaveStateEntry *se;
+
+    assert(priority <= MIG_PRI_MAX);
+
+    QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {
+        if (save_state_priority(se) < priority) {
+            break;
+        }
+    }
+
+    if (se) {
+        QTAILQ_INSERT_BEFORE(se, nse, entry);
+    } else {
+        QTAILQ_INSERT_TAIL(&savevm_state.handlers, nse, entry);
+    }
+}
+
 /* TODO: Individual devices generally have very little idea about the rest
    of the system, so instance_id should be removed/replaced.
    Meanwhile pass -1 as instance_id if you do not already have a clearly
@@ -529,8 +606,7 @@ int register_savevm_live(DeviceState *dev,
         se->instance_id = instance_id;
     }
     assert(!se->compat || se->instance_id == 0);
-    /* add at the end of list */
-    QTAILQ_INSERT_TAIL(&savevm_state.handlers, se, entry);
+    savevm_state_handler_insert(se);
     return 0;
 }
 
@@ -613,8 +689,7 @@ int vmstate_register_with_alias_id(DeviceState *dev, int instance_id,
         se->instance_id = instance_id;
     }
     assert(!se->compat || se->instance_id == 0);
-    /* add at the end of list */
-    QTAILQ_INSERT_TAIL(&savevm_state.handlers, se, entry);
+    savevm_state_handler_insert(se);
     return 0;
 }
 
@@ -823,9 +898,9 @@ void qemu_savevm_send_postcopy_ram_discard(QEMUFile *f, const char *name,
     buf[tmplen++] = '\0';
 
     for (t = 0; t < len; t++) {
-        cpu_to_be64w((uint64_t *)(buf + tmplen), start_list[t]);
+        stq_be_p(buf + tmplen, start_list[t]);
         tmplen += 8;
-        cpu_to_be64w((uint64_t *)(buf + tmplen), length_list[t]);
+        stq_be_p(buf + tmplen, length_list[t]);
         tmplen += 8;
     }
     qemu_savevm_command_send(f, MIG_CMD_POSTCOPY_RAM_DISCARD, tmplen, buf);
@@ -1150,10 +1225,12 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
         .shared = 0
     };
     MigrationState *ms = migrate_init(&params);
+    MigrationStatus status;
     ms->to_dst_file = f;
 
     if (migration_is_blocked(errp)) {
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     qemu_mutex_unlock_iothread();
@@ -1176,6 +1253,14 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
     if (ret != 0) {
         error_setg_errno(errp, -ret, "Error while writing VM state");
     }
+
+done:
+    if (ret != 0) {
+        status = MIGRATION_STATUS_FAILED;
+    } else {
+        status = MIGRATION_STATUS_COMPLETED;
+    }
+    migrate_set_state(&ms->state, MIGRATION_STATUS_SETUP, status);
     return ret;
 }
 
@@ -1572,6 +1657,7 @@ static int loadvm_handle_cmd_packaged(MigrationIncomingState *mis)
     }
 
     bioc = qio_channel_buffer_new(length);
+    qio_channel_set_name(QIO_CHANNEL(bioc), "migration-loadvm-buffer");
     ret = qemu_get_buffer(mis->from_src_file,
                           bioc->data,
                           length);
@@ -1818,40 +1904,45 @@ qemu_loadvm_section_part_end(QEMUFile *f, MigrationIncomingState *mis)
 static int qemu_loadvm_state_main(QEMUFile *f, MigrationIncomingState *mis)
 {
     uint8_t section_type;
-    int ret;
+    int ret = 0;
 
     while ((section_type = qemu_get_byte(f)) != QEMU_VM_EOF) {
-
+        ret = 0;
         trace_qemu_loadvm_state_section(section_type);
         switch (section_type) {
         case QEMU_VM_SECTION_START:
         case QEMU_VM_SECTION_FULL:
             ret = qemu_loadvm_section_start_full(f, mis);
             if (ret < 0) {
-                return ret;
+                goto out;
             }
             break;
         case QEMU_VM_SECTION_PART:
         case QEMU_VM_SECTION_END:
             ret = qemu_loadvm_section_part_end(f, mis);
             if (ret < 0) {
-                return ret;
+                goto out;
             }
             break;
         case QEMU_VM_COMMAND:
             ret = loadvm_process_command(f);
             trace_qemu_loadvm_state_section_command(ret);
             if ((ret < 0) || (ret & LOADVM_QUIT)) {
-                return ret;
+                goto out;
             }
             break;
         default:
             error_report("Unknown savevm section type %d", section_type);
-            return -EINVAL;
+            ret = -EINVAL;
+            goto out;
         }
     }
 
-    return 0;
+out:
+    if (ret < 0) {
+        qemu_file_set_error(f, ret);
+    }
+    return ret;
 }
 
 int qemu_loadvm_state(QEMUFile *f)
@@ -2058,6 +2149,7 @@ void qmp_xen_save_devices_state(const char *filename, Error **errp)
     if (!ioc) {
         goto the_end;
     }
+    qio_channel_set_name(QIO_CHANNEL(ioc), "migration-xen-save-state");
     f = qemu_fopen_channel_output(QIO_CHANNEL(ioc));
     ret = qemu_save_device_state(f);
     qemu_fclose(f);
@@ -2090,6 +2182,7 @@ void qmp_xen_load_devices_state(const char *filename, Error **errp)
     if (!ioc) {
         return;
     }
+    qio_channel_set_name(QIO_CHANNEL(ioc), "migration-xen-load-state");
     f = qemu_fopen_channel_input(QIO_CHANNEL(ioc));
 
     migration_incoming_state_new(f);
@@ -2190,11 +2283,30 @@ void hmp_delvm(Monitor *mon, const QDict *qdict)
 void hmp_info_snapshots(Monitor *mon, const QDict *qdict)
 {
     BlockDriverState *bs, *bs1;
+    BdrvNextIterator it1;
     QEMUSnapshotInfo *sn_tab, *sn;
+    bool no_snapshot = true;
     int nb_sns, i;
     int total;
-    int *available_snapshots;
+    int *global_snapshots;
     AioContext *aio_context;
+
+    typedef struct SnapshotEntry {
+        QEMUSnapshotInfo sn;
+        QTAILQ_ENTRY(SnapshotEntry) next;
+    } SnapshotEntry;
+
+    typedef struct ImageEntry {
+        const char *imagename;
+        QTAILQ_ENTRY(ImageEntry) next;
+        QTAILQ_HEAD(, SnapshotEntry) snapshots;
+    } ImageEntry;
+
+    QTAILQ_HEAD(, ImageEntry) image_list =
+        QTAILQ_HEAD_INITIALIZER(image_list);
+
+    ImageEntry *image_entry, *next_ie;
+    SnapshotEntry *snapshot_entry;
 
     bs = bdrv_all_find_vmstate_bs();
     if (!bs) {
@@ -2212,34 +2324,102 @@ void hmp_info_snapshots(Monitor *mon, const QDict *qdict)
         return;
     }
 
-    if (nb_sns == 0) {
+    for (bs1 = bdrv_first(&it1); bs1; bs1 = bdrv_next(&it1)) {
+        int bs1_nb_sns = 0;
+        ImageEntry *ie;
+        SnapshotEntry *se;
+        AioContext *ctx = bdrv_get_aio_context(bs1);
+
+        aio_context_acquire(ctx);
+        if (bdrv_can_snapshot(bs1)) {
+            sn = NULL;
+            bs1_nb_sns = bdrv_snapshot_list(bs1, &sn);
+            if (bs1_nb_sns > 0) {
+                no_snapshot = false;
+                ie = g_new0(ImageEntry, 1);
+                ie->imagename = bdrv_get_device_name(bs1);
+                QTAILQ_INIT(&ie->snapshots);
+                QTAILQ_INSERT_TAIL(&image_list, ie, next);
+                for (i = 0; i < bs1_nb_sns; i++) {
+                    se = g_new0(SnapshotEntry, 1);
+                    se->sn = sn[i];
+                    QTAILQ_INSERT_TAIL(&ie->snapshots, se, next);
+                }
+            }
+            g_free(sn);
+        }
+        aio_context_release(ctx);
+    }
+
+    if (no_snapshot) {
         monitor_printf(mon, "There is no snapshot available.\n");
         return;
     }
 
-    available_snapshots = g_new0(int, nb_sns);
+    global_snapshots = g_new0(int, nb_sns);
     total = 0;
     for (i = 0; i < nb_sns; i++) {
-        if (bdrv_all_find_snapshot(sn_tab[i].id_str, &bs1) == 0) {
-            available_snapshots[total] = i;
+        SnapshotEntry *next_sn;
+        if (bdrv_all_find_snapshot(sn_tab[i].name, &bs1) == 0) {
+            global_snapshots[total] = i;
             total++;
+            QTAILQ_FOREACH(image_entry, &image_list, next) {
+                QTAILQ_FOREACH_SAFE(snapshot_entry, &image_entry->snapshots,
+                                    next, next_sn) {
+                    if (!strcmp(sn_tab[i].name, snapshot_entry->sn.name)) {
+                        QTAILQ_REMOVE(&image_entry->snapshots, snapshot_entry,
+                                      next);
+                        g_free(snapshot_entry);
+                    }
+                }
+            }
         }
     }
+
+    monitor_printf(mon, "List of snapshots present on all disks:\n");
 
     if (total > 0) {
         bdrv_snapshot_dump((fprintf_function)monitor_printf, mon, NULL);
         monitor_printf(mon, "\n");
         for (i = 0; i < total; i++) {
-            sn = &sn_tab[available_snapshots[i]];
+            sn = &sn_tab[global_snapshots[i]];
+            /* The ID is not guaranteed to be the same on all images, so
+             * overwrite it.
+             */
+            pstrcpy(sn->id_str, sizeof(sn->id_str), "--");
             bdrv_snapshot_dump((fprintf_function)monitor_printf, mon, sn);
             monitor_printf(mon, "\n");
         }
     } else {
-        monitor_printf(mon, "There is no suitable snapshot available\n");
+        monitor_printf(mon, "None\n");
     }
 
+    QTAILQ_FOREACH(image_entry, &image_list, next) {
+        if (QTAILQ_EMPTY(&image_entry->snapshots)) {
+            continue;
+        }
+        monitor_printf(mon,
+                       "\nList of partial (non-loadable) snapshots on '%s':\n",
+                       image_entry->imagename);
+        bdrv_snapshot_dump((fprintf_function)monitor_printf, mon, NULL);
+        monitor_printf(mon, "\n");
+        QTAILQ_FOREACH(snapshot_entry, &image_entry->snapshots, next) {
+            bdrv_snapshot_dump((fprintf_function)monitor_printf, mon,
+                               &snapshot_entry->sn);
+            monitor_printf(mon, "\n");
+        }
+    }
+
+    QTAILQ_FOREACH_SAFE(image_entry, &image_list, next, next_ie) {
+        SnapshotEntry *next_sn;
+        QTAILQ_FOREACH_SAFE(snapshot_entry, &image_entry->snapshots, next,
+                            next_sn) {
+            g_free(snapshot_entry);
+        }
+        g_free(image_entry);
+    }
     g_free(sn_tab);
-    g_free(available_snapshots);
+    g_free(global_snapshots);
 
 }
 

@@ -24,10 +24,12 @@
 #include <gcrypt.h>
 
 
-bool qcrypto_cipher_supports(QCryptoCipherAlgorithm alg)
+bool qcrypto_cipher_supports(QCryptoCipherAlgorithm alg,
+                             QCryptoCipherMode mode)
 {
     switch (alg) {
     case QCRYPTO_CIPHER_ALG_DES_RFB:
+    case QCRYPTO_CIPHER_ALG_3DES:
     case QCRYPTO_CIPHER_ALG_AES_128:
     case QCRYPTO_CIPHER_ALG_AES_192:
     case QCRYPTO_CIPHER_ALG_AES_256:
@@ -37,6 +39,16 @@ bool qcrypto_cipher_supports(QCryptoCipherAlgorithm alg)
     case QCRYPTO_CIPHER_ALG_SERPENT_256:
     case QCRYPTO_CIPHER_ALG_TWOFISH_128:
     case QCRYPTO_CIPHER_ALG_TWOFISH_256:
+        break;
+    default:
+        return false;
+    }
+
+    switch (mode) {
+    case QCRYPTO_CIPHER_MODE_ECB:
+    case QCRYPTO_CIPHER_MODE_CBC:
+    case QCRYPTO_CIPHER_MODE_XTS:
+    case QCRYPTO_CIPHER_MODE_CTR:
         return true;
     default:
         return false;
@@ -48,6 +60,7 @@ struct QCryptoCipherGcrypt {
     gcry_cipher_hd_t handle;
     gcry_cipher_hd_t tweakhandle;
     size_t blocksize;
+    /* Initialization vector or Counter */
     uint8_t *iv;
 };
 
@@ -69,8 +82,12 @@ QCryptoCipher *qcrypto_cipher_new(QCryptoCipherAlgorithm alg,
     case QCRYPTO_CIPHER_MODE_CBC:
         gcrymode = GCRY_CIPHER_MODE_CBC;
         break;
+    case QCRYPTO_CIPHER_MODE_CTR:
+        gcrymode = GCRY_CIPHER_MODE_CTR;
+        break;
     default:
-        error_setg(errp, "Unsupported cipher mode %d", mode);
+        error_setg(errp, "Unsupported cipher mode %s",
+                   QCryptoCipherMode_lookup[mode]);
         return NULL;
     }
 
@@ -81,6 +98,10 @@ QCryptoCipher *qcrypto_cipher_new(QCryptoCipherAlgorithm alg,
     switch (alg) {
     case QCRYPTO_CIPHER_ALG_DES_RFB:
         gcryalg = GCRY_CIPHER_DES;
+        break;
+
+    case QCRYPTO_CIPHER_ALG_3DES:
+        gcryalg = GCRY_CIPHER_3DES;
         break;
 
     case QCRYPTO_CIPHER_ALG_AES_128:
@@ -120,7 +141,8 @@ QCryptoCipher *qcrypto_cipher_new(QCryptoCipherAlgorithm alg,
         break;
 
     default:
-        error_setg(errp, "Unsupported cipher algorithm %d", alg);
+        error_setg(errp, "Unsupported cipher algorithm %s",
+                   QCryptoCipherAlgorithm_lookup[alg]);
         return NULL;
     }
 
@@ -183,6 +205,7 @@ QCryptoCipher *qcrypto_cipher_new(QCryptoCipherAlgorithm alg,
         case QCRYPTO_CIPHER_ALG_TWOFISH_256:
             ctx->blocksize = 16;
             break;
+        case QCRYPTO_CIPHER_ALG_3DES:
         case QCRYPTO_CIPHER_ALG_CAST5_128:
             ctx->blocksize = 8;
             break;
@@ -192,6 +215,12 @@ QCryptoCipher *qcrypto_cipher_new(QCryptoCipherAlgorithm alg,
     }
 
     if (cipher->mode == QCRYPTO_CIPHER_MODE_XTS) {
+        if (ctx->blocksize != XTS_BLOCK_SIZE) {
+            error_setg(errp,
+                       "Cipher block size %zu must equal XTS block size %d",
+                       ctx->blocksize, XTS_BLOCK_SIZE);
+            goto error;
+        }
         ctx->iv = g_new0(uint8_t, ctx->blocksize);
     }
 
@@ -331,12 +360,21 @@ int qcrypto_cipher_setiv(QCryptoCipher *cipher,
     if (ctx->iv) {
         memcpy(ctx->iv, iv, niv);
     } else {
-        gcry_cipher_reset(ctx->handle);
-        err = gcry_cipher_setiv(ctx->handle, iv, niv);
-        if (err != 0) {
-            error_setg(errp, "Cannot set IV: %s",
-                   gcry_strerror(err));
-            return -1;
+        if (cipher->mode == QCRYPTO_CIPHER_MODE_CTR) {
+            err = gcry_cipher_setctr(ctx->handle, iv, niv);
+            if (err != 0) {
+                error_setg(errp, "Cannot set Counter: %s",
+                       gcry_strerror(err));
+                return -1;
+            }
+        } else {
+            gcry_cipher_reset(ctx->handle);
+            err = gcry_cipher_setiv(ctx->handle, iv, niv);
+            if (err != 0) {
+                error_setg(errp, "Cannot set IV: %s",
+                       gcry_strerror(err));
+                return -1;
+            }
         }
     }
 

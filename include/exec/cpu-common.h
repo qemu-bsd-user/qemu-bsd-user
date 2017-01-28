@@ -1,5 +1,5 @@
 #ifndef CPU_COMMON_H
-#define CPU_COMMON_H 1
+#define CPU_COMMON_H
 
 /* CPU interfaces that are target independent.  */
 
@@ -23,11 +23,10 @@ typedef struct CPUListState {
     FILE *file;
 } CPUListState;
 
-typedef enum MMUAccessType {
-    MMU_DATA_LOAD  = 0,
-    MMU_DATA_STORE = 1,
-    MMU_INST_FETCH = 2
-} MMUAccessType;
+/* The CPU list lock nests outside tb_lock/tb_unlock.  */
+void qemu_init_cpu_list(void);
+void cpu_list_lock(void);
+void cpu_list_unlock(void);
 
 #if !defined(CONFIG_USER_ONLY)
 
@@ -64,6 +63,7 @@ RAMBlock *qemu_ram_block_from_host(void *ptr, bool round_offset,
 void qemu_ram_set_idstr(RAMBlock *block, const char *name, DeviceState *dev);
 void qemu_ram_unset_idstr(RAMBlock *block);
 const char *qemu_ram_get_idstr(RAMBlock *rb);
+size_t qemu_ram_pagesize(RAMBlock *block);
 
 void cpu_physical_memory_rw(hwaddr addr, uint8_t *buf,
                             int len, int is_write);
@@ -94,21 +94,6 @@ bool cpu_physical_memory_is_io(hwaddr phys_addr);
  */
 void qemu_flush_coalesced_mmio_buffer(void);
 
-uint32_t ldub_phys(AddressSpace *as, hwaddr addr);
-uint32_t lduw_le_phys(AddressSpace *as, hwaddr addr);
-uint32_t lduw_be_phys(AddressSpace *as, hwaddr addr);
-uint32_t ldl_le_phys(AddressSpace *as, hwaddr addr);
-uint32_t ldl_be_phys(AddressSpace *as, hwaddr addr);
-uint64_t ldq_le_phys(AddressSpace *as, hwaddr addr);
-uint64_t ldq_be_phys(AddressSpace *as, hwaddr addr);
-void stb_phys(AddressSpace *as, hwaddr addr, uint32_t val);
-void stw_le_phys(AddressSpace *as, hwaddr addr, uint32_t val);
-void stw_be_phys(AddressSpace *as, hwaddr addr, uint32_t val);
-void stl_le_phys(AddressSpace *as, hwaddr addr, uint32_t val);
-void stl_be_phys(AddressSpace *as, hwaddr addr, uint32_t val);
-void stq_le_phys(AddressSpace *as, hwaddr addr, uint64_t val);
-void stq_be_phys(AddressSpace *as, hwaddr addr, uint64_t val);
-
 void cpu_physical_memory_write_rom(AddressSpace *as, hwaddr addr,
                                    const uint8_t *buf, int len);
 void cpu_flush_icache_range(hwaddr start, int len);
@@ -123,4 +108,4 @@ int qemu_ram_foreach_block(RAMBlockIterFunc func, void *opaque);
 
 #endif
 
-#endif /* !CPU_COMMON_H */
+#endif /* CPU_COMMON_H */

@@ -32,6 +32,7 @@ static int vmstate_n_elems(void *opaque, VMStateField *field)
         n_elems *= field->num;
     }
 
+    trace_vmstate_n_elems(field->name, n_elems);
     return n_elems;
 }
 
@@ -129,6 +130,8 @@ int vmstate_load_state(QEMUFile *f, const VMStateDescription *vmsd,
                 }
                 if (ret < 0) {
                     qemu_file_set_error(f, ret);
+                    error_report("Failed to load %s:%s", vmsd->name,
+                                 field->name);
                     trace_vmstate_load_field_error(field->name, ret);
                     return ret;
                 }
@@ -381,25 +384,25 @@ static int vmstate_subsection_load(QEMUFile *f, const VMStateDescription *vmsd,
         len = qemu_peek_byte(f, 1);
         if (len < strlen(vmsd->name) + 1) {
             /* subsection name has be be "section_name/a" */
-            trace_vmstate_subsection_load_bad(vmsd->name, "(short)");
+            trace_vmstate_subsection_load_bad(vmsd->name, "(short)", "");
             return 0;
         }
         size = qemu_peek_buffer(f, (uint8_t **)&idstr_ret, len, 2);
         if (size != len) {
-            trace_vmstate_subsection_load_bad(vmsd->name, "(peek fail)");
+            trace_vmstate_subsection_load_bad(vmsd->name, "(peek fail)", "");
             return 0;
         }
         memcpy(idstr, idstr_ret, size);
         idstr[size] = 0;
 
         if (strncmp(vmsd->name, idstr, strlen(vmsd->name)) != 0) {
-            trace_vmstate_subsection_load_bad(vmsd->name, idstr);
-            /* it don't have a valid subsection name */
+            trace_vmstate_subsection_load_bad(vmsd->name, idstr, "(prefix)");
+            /* it doesn't have a valid subsection name */
             return 0;
         }
         sub_vmsd = vmstate_get_subsection(vmsd->subsections, idstr);
         if (sub_vmsd == NULL) {
-            trace_vmstate_subsection_load_bad(vmsd->name, "(lookup)");
+            trace_vmstate_subsection_load_bad(vmsd->name, idstr, "(lookup)");
             return -ENOENT;
         }
         qemu_file_skip(f, 1); /* subsection */
@@ -409,7 +412,7 @@ static int vmstate_subsection_load(QEMUFile *f, const VMStateDescription *vmsd,
 
         ret = vmstate_load_state(f, sub_vmsd, opaque, version_id);
         if (ret) {
-            trace_vmstate_subsection_load_bad(vmsd->name, "(child)");
+            trace_vmstate_subsection_load_bad(vmsd->name, idstr, "(child)");
             return ret;
         }
     }
@@ -554,6 +557,7 @@ static int get_int32_equal(QEMUFile *f, void *pv, size_t size)
     if (*v == v2) {
         return 0;
     }
+    error_report("%" PRIx32 " != %" PRIx32, *v, v2);
     return -EINVAL;
 }
 
@@ -577,6 +581,9 @@ static int get_int32_le(QEMUFile *f, void *pv, size_t size)
         *cur = loaded;
         return 0;
     }
+    error_report("Invalid value %" PRId32
+                 " expecting positive value <= %" PRId32,
+                 loaded, *cur);
     return -EINVAL;
 }
 
@@ -682,6 +689,7 @@ static int get_uint32_equal(QEMUFile *f, void *pv, size_t size)
     if (*v == v2) {
         return 0;
     }
+    error_report("%" PRIx32 " != %" PRIx32, *v, v2);
     return -EINVAL;
 }
 
@@ -724,6 +732,7 @@ static int get_uint64_equal(QEMUFile *f, void *pv, size_t size)
     if (*v == v2) {
         return 0;
     }
+    error_report("%" PRIx64 " != %" PRIx64, *v, v2);
     return -EINVAL;
 }
 
@@ -745,6 +754,7 @@ static int get_uint8_equal(QEMUFile *f, void *pv, size_t size)
     if (*v == v2) {
         return 0;
     }
+    error_report("%x != %x", *v, v2);
     return -EINVAL;
 }
 
@@ -766,6 +776,7 @@ static int get_uint16_equal(QEMUFile *f, void *pv, size_t size)
     if (*v == v2) {
         return 0;
     }
+    error_report("%x != %x", *v, v2);
     return -EINVAL;
 }
 

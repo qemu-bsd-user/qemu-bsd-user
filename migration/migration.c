@@ -36,6 +36,7 @@
 #include "exec/address-spaces.h"
 #include "io/channel-buffer.h"
 #include "io/channel-tls.h"
+#include "migration/colo.h"
 
 #define MAX_THROTTLE  (32 << 20)      /* Migration transfer speed throttling */
 
@@ -43,6 +44,10 @@
  * data. */
 #define BUFFER_DELAY     100
 #define XFER_LIMIT_RATIO (1000 / BUFFER_DELAY)
+
+/* Time in milliseconds we are allowed to stop the source,
+ * for sending the last part */
+#define DEFAULT_MIGRATE_SET_DOWNTIME 300
 
 /* Default compression thread count */
 #define DEFAULT_MIGRATE_COMPRESS_THREAD_COUNT 8
@@ -57,6 +62,11 @@
 
 /* Migration XBZRLE default cache size */
 #define DEFAULT_MIGRATE_CACHE_SIZE (64 * 1024 * 1024)
+
+/* The delay time (in ms) between two COLO checkpoints
+ * Note: Please change this default value to 10000 when we support hybrid mode.
+ */
+#define DEFAULT_MIGRATE_X_CHECKPOINT_DELAY 200
 
 static NotifierList migration_state_notifiers =
     NOTIFIER_LIST_INITIALIZER(migration_state_notifiers);
@@ -80,7 +90,6 @@ MigrationState *migrate_get_current(void)
     static bool once;
     static MigrationState current_migration = {
         .state = MIGRATION_STATUS_NONE,
-        .bandwidth_limit = MAX_THROTTLE,
         .xbzrle_cache_size = DEFAULT_MIGRATE_CACHE_SIZE,
         .mbps = -1,
         .parameters = {
@@ -89,6 +98,9 @@ MigrationState *migrate_get_current(void)
             .decompress_threads = DEFAULT_MIGRATE_DECOMPRESS_THREAD_COUNT,
             .cpu_throttle_initial = DEFAULT_MIGRATE_CPU_THROTTLE_INITIAL,
             .cpu_throttle_increment = DEFAULT_MIGRATE_CPU_THROTTLE_INCREMENT,
+            .max_bandwidth = MAX_THROTTLE,
+            .downtime_limit = DEFAULT_MIGRATE_SET_DOWNTIME,
+            .x_checkpoint_delay = DEFAULT_MIGRATE_X_CHECKPOINT_DELAY,
         },
     };
 
@@ -401,6 +413,18 @@ static void process_incoming_migration_co(void *opaque)
         /* Else if something went wrong then just fall out of the normal exit */
     }
 
+    /* we get COLO info, and know if we are in COLO mode */
+    if (!ret && migration_incoming_enable_colo()) {
+        mis->migration_incoming_co = qemu_coroutine_self();
+        qemu_thread_create(&mis->colo_incoming_thread, "COLO incoming",
+             colo_process_incoming_thread, mis, QEMU_THREAD_JOINABLE);
+        mis->have_colo_incoming_thread = true;
+        qemu_coroutine_yield();
+
+        /* Wait checkpoint incoming thread exit before free resource */
+        qemu_thread_join(&mis->colo_incoming_thread);
+    }
+
     qemu_fclose(f);
     free_xbzrle_decoded_buf();
 
@@ -416,18 +440,18 @@ static void process_incoming_migration_co(void *opaque)
     qemu_bh_schedule(mis->bh);
 }
 
-void process_incoming_migration(QEMUFile *f)
+void migration_fd_process_incoming(QEMUFile *f)
 {
-    Coroutine *co = qemu_coroutine_create(process_incoming_migration_co);
+    Coroutine *co = qemu_coroutine_create(process_incoming_migration_co, f);
 
     migrate_decompress_threads_create();
     qemu_file_set_blocking(f, false);
-    qemu_coroutine_enter(co, f);
+    qemu_coroutine_enter(co);
 }
 
 
-void migration_set_incoming_channel(MigrationState *s,
-                                    QIOChannel *ioc)
+void migration_channel_process_incoming(MigrationState *s,
+                                        QIOChannel *ioc)
 {
     trace_migration_set_incoming_channel(
         ioc, object_get_typename(OBJECT(ioc)));
@@ -436,20 +460,20 @@ void migration_set_incoming_channel(MigrationState *s,
         !object_dynamic_cast(OBJECT(ioc),
                              TYPE_QIO_CHANNEL_TLS)) {
         Error *local_err = NULL;
-        migration_tls_set_incoming_channel(s, ioc, &local_err);
+        migration_tls_channel_process_incoming(s, ioc, &local_err);
         if (local_err) {
             error_report_err(local_err);
         }
     } else {
         QEMUFile *f = qemu_fopen_channel_input(ioc);
-        process_incoming_migration(f);
+        migration_fd_process_incoming(f);
     }
 }
 
 
-void migration_set_outgoing_channel(MigrationState *s,
-                                    QIOChannel *ioc,
-                                    const char *hostname)
+void migration_channel_connect(MigrationState *s,
+                               QIOChannel *ioc,
+                               const char *hostname)
 {
     trace_migration_set_outgoing_channel(
         ioc, object_get_typename(OBJECT(ioc)), hostname);
@@ -458,7 +482,7 @@ void migration_set_outgoing_channel(MigrationState *s,
         !object_dynamic_cast(OBJECT(ioc),
                              TYPE_QIO_CHANNEL_TLS)) {
         Error *local_err = NULL;
-        migration_tls_set_outgoing_channel(s, ioc, hostname, &local_err);
+        migration_tls_channel_connect(s, ioc, hostname, &local_err);
         if (local_err) {
             migrate_fd_error(s, local_err);
             error_free(local_err);
@@ -517,17 +541,6 @@ void migrate_send_rp_pong(MigrationIncomingState *mis,
     migrate_send_rp_message(mis, MIG_RP_MSG_PONG, sizeof(buf), &buf);
 }
 
-/* amount of nanoseconds we are willing to wait for migration to be down.
- * the choice of nanoseconds is because it is the maximum resolution that
- * get_clock() can achieve. It is an internal measure. All user-visible
- * units must be in seconds */
-static uint64_t max_downtime = 300000000;
-
-uint64_t migrate_max_downtime(void)
-{
-    return max_downtime;
-}
-
 MigrationCapabilityStatusList *qmp_query_migrate_capabilities(Error **errp)
 {
     MigrationCapabilityStatusList *head = NULL;
@@ -537,6 +550,9 @@ MigrationCapabilityStatusList *qmp_query_migrate_capabilities(Error **errp)
 
     caps = NULL; /* silence compiler warning */
     for (i = 0; i < MIGRATION_CAPABILITY__MAX; i++) {
+        if (i == MIGRATION_CAPABILITY_X_COLO && !colo_supported()) {
+            continue;
+        }
         if (head == NULL) {
             head = g_malloc0(sizeof(*caps));
             caps = head;
@@ -559,13 +575,26 @@ MigrationParameters *qmp_query_migrate_parameters(Error **errp)
     MigrationState *s = migrate_get_current();
 
     params = g_malloc0(sizeof(*params));
+    params->has_compress_level = true;
     params->compress_level = s->parameters.compress_level;
+    params->has_compress_threads = true;
     params->compress_threads = s->parameters.compress_threads;
+    params->has_decompress_threads = true;
     params->decompress_threads = s->parameters.decompress_threads;
+    params->has_cpu_throttle_initial = true;
     params->cpu_throttle_initial = s->parameters.cpu_throttle_initial;
+    params->has_cpu_throttle_increment = true;
     params->cpu_throttle_increment = s->parameters.cpu_throttle_increment;
+    params->has_tls_creds = !!s->parameters.tls_creds;
     params->tls_creds = g_strdup(s->parameters.tls_creds);
+    params->has_tls_hostname = !!s->parameters.tls_hostname;
     params->tls_hostname = g_strdup(s->parameters.tls_hostname);
+    params->has_max_bandwidth = true;
+    params->max_bandwidth = s->parameters.max_bandwidth;
+    params->has_downtime_limit = true;
+    params->downtime_limit = s->parameters.downtime_limit;
+    params->has_x_checkpoint_delay = true;
+    params->x_checkpoint_delay = s->parameters.x_checkpoint_delay;
 
     return params;
 }
@@ -602,6 +631,26 @@ static void get_xbzrle_cache_stats(MigrationInfo *info)
     }
 }
 
+static void populate_ram_info(MigrationInfo *info, MigrationState *s)
+{
+    info->has_ram = true;
+    info->ram = g_malloc0(sizeof(*info->ram));
+    info->ram->transferred = ram_bytes_transferred();
+    info->ram->total = ram_bytes_total();
+    info->ram->duplicate = dup_mig_pages_transferred();
+    info->ram->skipped = skipped_mig_pages_transferred();
+    info->ram->normal = norm_mig_pages_transferred();
+    info->ram->normal_bytes = norm_mig_bytes_transferred();
+    info->ram->mbps = s->mbps;
+    info->ram->dirty_sync_count = s->dirty_sync_count;
+    info->ram->postcopy_requests = s->postcopy_requests;
+
+    if (s->state != MIGRATION_STATUS_COMPLETED) {
+        info->ram->remaining = ram_bytes_remaining();
+        info->ram->dirty_pages_rate = s->dirty_pages_rate;
+    }
+}
+
 MigrationInfo *qmp_query_migrate(Error **errp)
 {
     MigrationInfo *info = g_malloc0(sizeof(*info));
@@ -626,18 +675,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
         info->has_setup_time = true;
         info->setup_time = s->setup_time;
 
-        info->has_ram = true;
-        info->ram = g_malloc0(sizeof(*info->ram));
-        info->ram->transferred = ram_bytes_transferred();
-        info->ram->remaining = ram_bytes_remaining();
-        info->ram->total = ram_bytes_total();
-        info->ram->duplicate = dup_mig_pages_transferred();
-        info->ram->skipped = skipped_mig_pages_transferred();
-        info->ram->normal = norm_mig_pages_transferred();
-        info->ram->normal_bytes = norm_mig_bytes_transferred();
-        info->ram->dirty_pages_rate = s->dirty_pages_rate;
-        info->ram->mbps = s->mbps;
-        info->ram->dirty_sync_count = s->dirty_sync_count;
+        populate_ram_info(info, s);
 
         if (blk_mig_active()) {
             info->has_disk = true;
@@ -665,18 +703,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
         info->has_setup_time = true;
         info->setup_time = s->setup_time;
 
-        info->has_ram = true;
-        info->ram = g_malloc0(sizeof(*info->ram));
-        info->ram->transferred = ram_bytes_transferred();
-        info->ram->remaining = ram_bytes_remaining();
-        info->ram->total = ram_bytes_total();
-        info->ram->duplicate = dup_mig_pages_transferred();
-        info->ram->skipped = skipped_mig_pages_transferred();
-        info->ram->normal = norm_mig_pages_transferred();
-        info->ram->normal_bytes = norm_mig_bytes_transferred();
-        info->ram->dirty_pages_rate = s->dirty_pages_rate;
-        info->ram->mbps = s->mbps;
-        info->ram->dirty_sync_count = s->dirty_sync_count;
+        populate_ram_info(info, s);
 
         if (blk_mig_active()) {
             info->has_disk = true;
@@ -687,6 +714,10 @@ MigrationInfo *qmp_query_migrate(Error **errp)
         }
 
         get_xbzrle_cache_stats(info);
+        break;
+    case MIGRATION_STATUS_COLO:
+        info->has_status = true;
+        /* TODO: display COLO specific information (checkpoint info etc.) */
         break;
     case MIGRATION_STATUS_COMPLETED:
         get_xbzrle_cache_stats(info);
@@ -699,17 +730,7 @@ MigrationInfo *qmp_query_migrate(Error **errp)
         info->has_setup_time = true;
         info->setup_time = s->setup_time;
 
-        info->has_ram = true;
-        info->ram = g_malloc0(sizeof(*info->ram));
-        info->ram->transferred = ram_bytes_transferred();
-        info->ram->remaining = 0;
-        info->ram->total = ram_bytes_total();
-        info->ram->duplicate = dup_mig_pages_transferred();
-        info->ram->skipped = skipped_mig_pages_transferred();
-        info->ram->normal = norm_mig_pages_transferred();
-        info->ram->normal_bytes = norm_mig_bytes_transferred();
-        info->ram->mbps = s->mbps;
-        info->ram->dirty_sync_count = s->dirty_sync_count;
+        populate_ram_info(info, s);
         break;
     case MIGRATION_STATUS_FAILED:
         info->has_status = true;
@@ -732,6 +753,7 @@ void qmp_migrate_set_capabilities(MigrationCapabilityStatusList *params,
 {
     MigrationState *s = migrate_get_current();
     MigrationCapabilityStatusList *cap;
+    bool old_postcopy_cap = migrate_postcopy_ram();
 
     if (migration_is_setup_or_active(s->state)) {
         error_setg(errp, QERR_MIGRATION_ACTIVE);
@@ -739,6 +761,14 @@ void qmp_migrate_set_capabilities(MigrationCapabilityStatusList *params,
     }
 
     for (cap = params; cap; cap = cap->next) {
+        if (cap->value->capability == MIGRATION_CAPABILITY_X_COLO) {
+            if (!colo_supported()) {
+                error_setg(errp, "COLO is not currently supported, please"
+                             " configure with --enable-colo option in order to"
+                             " support COLO feature");
+                continue;
+            }
+        }
         s->enabled_capabilities[cap->value->capability] = cap->value->state;
     }
 
@@ -754,81 +784,117 @@ void qmp_migrate_set_capabilities(MigrationCapabilityStatusList *params,
             s->enabled_capabilities[MIGRATION_CAPABILITY_POSTCOPY_RAM] =
                 false;
         }
+        /* This check is reasonably expensive, so only when it's being
+         * set the first time, also it's only the destination that needs
+         * special support.
+         */
+        if (!old_postcopy_cap && runstate_check(RUN_STATE_INMIGRATE) &&
+            !postcopy_ram_supported_by_host()) {
+            /* postcopy_ram_supported_by_host will have emitted a more
+             * detailed message
+             */
+            error_report("Postcopy is not supported");
+            s->enabled_capabilities[MIGRATION_CAPABILITY_POSTCOPY_RAM] =
+                false;
+        }
     }
 }
 
-void qmp_migrate_set_parameters(bool has_compress_level,
-                                int64_t compress_level,
-                                bool has_compress_threads,
-                                int64_t compress_threads,
-                                bool has_decompress_threads,
-                                int64_t decompress_threads,
-                                bool has_cpu_throttle_initial,
-                                int64_t cpu_throttle_initial,
-                                bool has_cpu_throttle_increment,
-                                int64_t cpu_throttle_increment,
-                                bool has_tls_creds,
-                                const char *tls_creds,
-                                bool has_tls_hostname,
-                                const char *tls_hostname,
-                                Error **errp)
+void qmp_migrate_set_parameters(MigrationParameters *params, Error **errp)
 {
     MigrationState *s = migrate_get_current();
 
-    if (has_compress_level && (compress_level < 0 || compress_level > 9)) {
+    if (params->has_compress_level &&
+        (params->compress_level < 0 || params->compress_level > 9)) {
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE, "compress_level",
                    "is invalid, it should be in the range of 0 to 9");
         return;
     }
-    if (has_compress_threads &&
-            (compress_threads < 1 || compress_threads > 255)) {
+    if (params->has_compress_threads &&
+        (params->compress_threads < 1 || params->compress_threads > 255)) {
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
                    "compress_threads",
                    "is invalid, it should be in the range of 1 to 255");
         return;
     }
-    if (has_decompress_threads &&
-            (decompress_threads < 1 || decompress_threads > 255)) {
+    if (params->has_decompress_threads &&
+        (params->decompress_threads < 1 || params->decompress_threads > 255)) {
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
                    "decompress_threads",
                    "is invalid, it should be in the range of 1 to 255");
         return;
     }
-    if (has_cpu_throttle_initial &&
-            (cpu_throttle_initial < 1 || cpu_throttle_initial > 99)) {
+    if (params->has_cpu_throttle_initial &&
+        (params->cpu_throttle_initial < 1 ||
+         params->cpu_throttle_initial > 99)) {
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
                    "cpu_throttle_initial",
                    "an integer in the range of 1 to 99");
+        return;
     }
-    if (has_cpu_throttle_increment &&
-            (cpu_throttle_increment < 1 || cpu_throttle_increment > 99)) {
+    if (params->has_cpu_throttle_increment &&
+        (params->cpu_throttle_increment < 1 ||
+         params->cpu_throttle_increment > 99)) {
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
                    "cpu_throttle_increment",
                    "an integer in the range of 1 to 99");
+        return;
+    }
+    if (params->has_max_bandwidth &&
+        (params->max_bandwidth < 0 || params->max_bandwidth > SIZE_MAX)) {
+        error_setg(errp, "Parameter 'max_bandwidth' expects an integer in the"
+                         " range of 0 to %zu bytes/second", SIZE_MAX);
+        return;
+    }
+    if (params->has_downtime_limit &&
+        (params->downtime_limit < 0 || params->downtime_limit > 2000000)) {
+        error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
+                   "downtime_limit",
+                   "an integer in the range of 0 to 2000000 milliseconds");
+        return;
+    }
+    if (params->has_x_checkpoint_delay && (params->x_checkpoint_delay < 0)) {
+        error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
+                    "x_checkpoint_delay",
+                    "is invalid, it should be positive");
     }
 
-    if (has_compress_level) {
-        s->parameters.compress_level = compress_level;
+    if (params->has_compress_level) {
+        s->parameters.compress_level = params->compress_level;
     }
-    if (has_compress_threads) {
-        s->parameters.compress_threads = compress_threads;
+    if (params->has_compress_threads) {
+        s->parameters.compress_threads = params->compress_threads;
     }
-    if (has_decompress_threads) {
-        s->parameters.decompress_threads = decompress_threads;
+    if (params->has_decompress_threads) {
+        s->parameters.decompress_threads = params->decompress_threads;
     }
-    if (has_cpu_throttle_initial) {
-        s->parameters.cpu_throttle_initial = cpu_throttle_initial;
+    if (params->has_cpu_throttle_initial) {
+        s->parameters.cpu_throttle_initial = params->cpu_throttle_initial;
     }
-    if (has_cpu_throttle_increment) {
-        s->parameters.cpu_throttle_increment = cpu_throttle_increment;
+    if (params->has_cpu_throttle_increment) {
+        s->parameters.cpu_throttle_increment = params->cpu_throttle_increment;
     }
-    if (has_tls_creds) {
+    if (params->has_tls_creds) {
         g_free(s->parameters.tls_creds);
-        s->parameters.tls_creds = g_strdup(tls_creds);
+        s->parameters.tls_creds = g_strdup(params->tls_creds);
     }
-    if (has_tls_hostname) {
+    if (params->has_tls_hostname) {
         g_free(s->parameters.tls_hostname);
-        s->parameters.tls_hostname = g_strdup(tls_hostname);
+        s->parameters.tls_hostname = g_strdup(params->tls_hostname);
+    }
+    if (params->has_max_bandwidth) {
+        s->parameters.max_bandwidth = params->max_bandwidth;
+        if (s->to_dst_file) {
+            qemu_file_set_rate_limit(s->to_dst_file,
+                                s->parameters.max_bandwidth / XFER_LIMIT_RATIO);
+        }
+    }
+    if (params->has_downtime_limit) {
+        s->parameters.downtime_limit = params->downtime_limit;
+    }
+
+    if (params->has_x_checkpoint_delay) {
+        s->parameters.x_checkpoint_delay = params->x_checkpoint_delay;
     }
 }
 
@@ -901,7 +967,7 @@ static void migrate_fd_cleanup(void *opaque)
 
 void migrate_fd_error(MigrationState *s, const Error *error)
 {
-    trace_migrate_fd_error(error ? error_get_pretty(error) : "");
+    trace_migrate_fd_error(error_get_pretty(error));
     assert(s->to_dst_file == NULL);
     migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
                       MIGRATION_STATUS_FAILED);
@@ -1004,6 +1070,7 @@ MigrationState *migrate_init(const MigrationParams *params)
     s->dirty_sync_count = 0;
     s->start_postcopy = false;
     s->postcopy_after_devices = false;
+    s->postcopy_requests = 0;
     s->migration_thread_running = false;
     s->last_req_rb = NULL;
     error_free(s->error);
@@ -1079,7 +1146,8 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
     params.shared = has_inc && inc;
 
     if (migration_is_setup_or_active(s->state) ||
-        s->state == MIGRATION_STATUS_CANCELLING) {
+        s->state == MIGRATION_STATUS_CANCELLING ||
+        s->state == MIGRATION_STATUS_COLO) {
         error_setg(errp, QERR_MIGRATION_ACTIVE);
         return;
     }
@@ -1162,28 +1230,25 @@ int64_t qmp_query_migrate_cache_size(Error **errp)
 
 void qmp_migrate_set_speed(int64_t value, Error **errp)
 {
-    MigrationState *s;
+    MigrationParameters p = {
+        .has_max_bandwidth = true,
+        .max_bandwidth = value,
+    };
 
-    if (value < 0) {
-        value = 0;
-    }
-    if (value > SIZE_MAX) {
-        value = SIZE_MAX;
-    }
-
-    s = migrate_get_current();
-    s->bandwidth_limit = value;
-    if (s->to_dst_file) {
-        qemu_file_set_rate_limit(s->to_dst_file,
-                                 s->bandwidth_limit / XFER_LIMIT_RATIO);
-    }
+    qmp_migrate_set_parameters(&p, errp);
 }
 
 void qmp_migrate_set_downtime(double value, Error **errp)
 {
-    value *= 1e9;
-    value = MAX(0, MIN(UINT64_MAX, value));
-    max_downtime = (uint64_t)value;
+    value *= 1000; /* Convert to milliseconds */
+    value = MAX(0, MIN(INT64_MAX, value));
+
+    MigrationParameters p = {
+        .has_downtime_limit = true,
+        .downtime_limit = value,
+    };
+
+    qmp_migrate_set_parameters(&p, errp);
 }
 
 bool migrate_postcopy_ram(void)
@@ -1381,7 +1446,7 @@ static void *source_return_path_thread(void *opaque)
         /* OK, we have the message and the data */
         switch (header_type) {
         case MIG_RP_MSG_SHUT:
-            sibling_error = be32_to_cpup((uint32_t *)buf);
+            sibling_error = ldl_be_p(buf);
             trace_source_return_path_thread_shut(sibling_error);
             if (sibling_error) {
                 error_report("RP: Sibling indicated error %d", sibling_error);
@@ -1395,13 +1460,13 @@ static void *source_return_path_thread(void *opaque)
             goto out;
 
         case MIG_RP_MSG_PONG:
-            tmp32 = be32_to_cpup((uint32_t *)buf);
+            tmp32 = ldl_be_p(buf);
             trace_source_return_path_thread_pong(tmp32);
             break;
 
         case MIG_RP_MSG_REQ_PAGES:
-            start = be64_to_cpup((uint64_t *)buf);
-            len = be32_to_cpup((uint32_t *)(buf + 8));
+            start = ldq_be_p(buf);
+            len = ldl_be_p(buf + 8);
             migrate_handle_rp_req_pages(ms, NULL, start, len);
             break;
 
@@ -1409,8 +1474,8 @@ static void *source_return_path_thread(void *opaque)
             expected_len = 12 + 1; /* header + termination */
 
             if (header_len >= expected_len) {
-                start = be64_to_cpup((uint64_t *)buf);
-                len = be32_to_cpup((uint32_t *)(buf + 8));
+                start = ldq_be_p(buf);
+                len = ldl_be_p(buf + 8);
                 /* Now we expect an idstr */
                 tmp32 = buf[12]; /* Length of the following idstr */
                 buf[13 + tmp32] = '\0';
@@ -1548,6 +1613,7 @@ static int postcopy_start(MigrationState *ms, bool *old_vm_running)
      * to do this we use a qemu_buf to hold the whole of the device state.
      */
     bioc = qio_channel_buffer_new(4096);
+    qio_channel_set_name(QIO_CHANNEL(bioc), "migration-postcopy-buffer");
     fb = qemu_fopen_channel_output(QIO_CHANNEL(bioc));
     object_unref(OBJECT(bioc));
 
@@ -1629,7 +1695,11 @@ static void migration_completion(MigrationState *s, int current_active_state,
 
         if (!ret) {
             ret = vm_stop_force_state(RUN_STATE_FINISH_MIGRATE);
-            if (ret >= 0) {
+            /*
+             * Don't mark the image with BDRV_O_INACTIVE flag if
+             * we will go into COLO stage later.
+             */
+            if (ret >= 0 && !migrate_colo_enabled()) {
                 ret = bdrv_inactivate_all();
             }
             if (ret >= 0) {
@@ -1671,8 +1741,11 @@ static void migration_completion(MigrationState *s, int current_active_state,
         goto fail_invalidate;
     }
 
-    migrate_set_state(&s->state, current_active_state,
-                      MIGRATION_STATUS_COMPLETED);
+    if (!migrate_colo_enabled()) {
+        migrate_set_state(&s->state, current_active_state,
+                          MIGRATION_STATUS_COMPLETED);
+    }
+
     return;
 
 fail_invalidate:
@@ -1693,6 +1766,12 @@ fail:
                       MIGRATION_STATUS_FAILED);
 }
 
+bool migrate_colo_enabled(void)
+{
+    MigrationState *s = migrate_get_current();
+    return s->enabled_capabilities[MIGRATION_CAPABILITY_X_COLO];
+}
+
 /*
  * Master migration thread on the source VM.
  * It drives the migration and pumps the data down the outgoing channel.
@@ -1711,6 +1790,7 @@ static void *migration_thread(void *opaque)
     bool entered_postcopy = false;
     /* The active state we expect to be in; ACTIVE or POSTCOPY_ACTIVE */
     enum MigrationStatus current_active_state = MIGRATION_STATUS_ACTIVE;
+    bool enable_colo = migrate_colo_enabled();
 
     rcu_register_thread();
 
@@ -1790,7 +1870,7 @@ static void *migration_thread(void *opaque)
                                          initial_bytes;
             uint64_t time_spent = current_time - initial_time;
             double bandwidth = (double)transferred_bytes / time_spent;
-            max_size = bandwidth * migrate_max_downtime() / 1000000;
+            max_size = bandwidth * s->parameters.downtime_limit;
 
             s->mbps = (((double) transferred_bytes * 8.0) /
                     ((double) time_spent / 1000.0)) / 1000.0 / 1000.0;
@@ -1819,7 +1899,13 @@ static void *migration_thread(void *opaque)
     end_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
 
     qemu_mutex_lock_iothread();
-    qemu_savevm_state_cleanup();
+    /*
+     * The resource has been allocated by migration will be reused in COLO
+     * process, so don't release them.
+     */
+    if (!enable_colo) {
+        qemu_savevm_state_cleanup();
+    }
     if (s->state == MIGRATION_STATUS_COMPLETED) {
         uint64_t transferred_bytes = qemu_ftell(s->to_dst_file);
         s->total_time = end_time - s->total_time;
@@ -1832,8 +1918,21 @@ static void *migration_thread(void *opaque)
         }
         runstate_set(RUN_STATE_POSTMIGRATE);
     } else {
+        if (s->state == MIGRATION_STATUS_ACTIVE && enable_colo) {
+            migrate_start_colo_process(s);
+            qemu_savevm_state_cleanup();
+            /*
+            * Fixme: we will run VM in COLO no matter its old running state.
+            * After exited COLO, we will keep running.
+            */
+            old_vm_running = true;
+        }
         if (old_vm_running && !entered_postcopy) {
             vm_start();
+        } else {
+            if (runstate_check(RUN_STATE_FINISH_MIGRATE)) {
+                runstate_set(RUN_STATE_POSTMIGRATE);
+            }
         }
     }
     qemu_bh_schedule(s->cleanup_bh);
@@ -1845,13 +1944,12 @@ static void *migration_thread(void *opaque)
 
 void migrate_fd_connect(MigrationState *s)
 {
-    /* This is a best 1st approximation. ns to ms */
-    s->expected_downtime = max_downtime/1000000;
+    s->expected_downtime = s->parameters.downtime_limit;
     s->cleanup_bh = qemu_bh_new(migrate_fd_cleanup, s);
 
     qemu_file_set_blocking(s->to_dst_file, true);
     qemu_file_set_rate_limit(s->to_dst_file,
-                             s->bandwidth_limit / XFER_LIMIT_RATIO);
+                             s->parameters.max_bandwidth / XFER_LIMIT_RATIO);
 
     /* Notify before starting migration thread */
     notifier_list_notify(&migration_state_notifiers, s);

@@ -191,10 +191,8 @@ struct AcpiFadtDescriptorRev5_1 {
 
 typedef struct AcpiFadtDescriptorRev5_1 AcpiFadtDescriptorRev5_1;
 
-enum {
-    ACPI_FADT_ARM_USE_PSCI_G_0_2 = 0,
-    ACPI_FADT_ARM_PSCI_USE_HVC = 1,
-};
+#define ACPI_FADT_ARM_PSCI_COMPLIANT  (1 << 0)
+#define ACPI_FADT_ARM_PSCI_USE_HVC    (1 << 1)
 
 /*
  * Serial Port Console Redirection Table (SPCR), Rev. 1.02
@@ -290,11 +288,12 @@ typedef struct AcpiMultipleApicTable AcpiMultipleApicTable;
 #define ACPI_APIC_XRUPT_SOURCE       8
 #define ACPI_APIC_LOCAL_X2APIC       9
 #define ACPI_APIC_LOCAL_X2APIC_NMI      10
-#define ACPI_APIC_GENERIC_INTERRUPT     11
+#define ACPI_APIC_GENERIC_CPU_INTERFACE 11
 #define ACPI_APIC_GENERIC_DISTRIBUTOR   12
 #define ACPI_APIC_GENERIC_MSI_FRAME     13
 #define ACPI_APIC_GENERIC_REDISTRIBUTOR 14
-#define ACPI_APIC_RESERVED              15   /* 15 and greater are reserved */
+#define ACPI_APIC_GENERIC_TRANSLATOR    15
+#define ACPI_APIC_RESERVED              16   /* 16 and greater are reserved */
 
 /*
  * MADT sub-structures (Follow MULTIPLE_APIC_DESCRIPTION_TABLE)
@@ -342,7 +341,25 @@ struct AcpiMadtLocalNmi {
 } QEMU_PACKED;
 typedef struct AcpiMadtLocalNmi AcpiMadtLocalNmi;
 
-struct AcpiMadtGenericInterrupt {
+struct AcpiMadtProcessorX2Apic {
+    ACPI_SUB_HEADER_DEF
+    uint16_t reserved;
+    uint32_t x2apic_id;              /* Processor's local x2APIC ID */
+    uint32_t flags;
+    uint32_t uid;                    /* Processor object _UID */
+} QEMU_PACKED;
+typedef struct AcpiMadtProcessorX2Apic AcpiMadtProcessorX2Apic;
+
+struct AcpiMadtLocalX2ApicNmi {
+    ACPI_SUB_HEADER_DEF
+    uint16_t flags;                  /* MPS INTI flags */
+    uint32_t uid;                    /* Processor object _UID */
+    uint8_t  lint;                   /* Local APIC LINT# */
+    uint8_t  reserved[3];            /* Local APIC LINT# */
+} QEMU_PACKED;
+typedef struct AcpiMadtLocalX2ApicNmi AcpiMadtLocalX2ApicNmi;
+
+struct AcpiMadtGenericCpuInterface {
     ACPI_SUB_HEADER_DEF
     uint16_t reserved;
     uint32_t cpu_interface_number;
@@ -359,7 +376,10 @@ struct AcpiMadtGenericInterrupt {
     uint64_t arm_mpidr;
 } QEMU_PACKED;
 
-typedef struct AcpiMadtGenericInterrupt AcpiMadtGenericInterrupt;
+typedef struct AcpiMadtGenericCpuInterface AcpiMadtGenericCpuInterface;
+
+/* GICC CPU Interface Flags */
+#define ACPI_MADT_GICC_ENABLED 1
 
 struct AcpiMadtGenericDistributor {
     ACPI_SUB_HEADER_DEF
@@ -367,7 +387,9 @@ struct AcpiMadtGenericDistributor {
     uint32_t gic_id;
     uint64_t base_address;
     uint32_t global_irq_base;
-    uint32_t reserved2;
+    /* ACPI 5.1 Errata 1228 Present GIC version in MADT table */
+    uint8_t version;
+    uint8_t reserved2[3];
 } QEMU_PACKED;
 
 typedef struct AcpiMadtGenericDistributor AcpiMadtGenericDistributor;
@@ -393,24 +415,22 @@ struct AcpiMadtGenericRedistributor {
 
 typedef struct AcpiMadtGenericRedistributor AcpiMadtGenericRedistributor;
 
+struct AcpiMadtGenericTranslator {
+    ACPI_SUB_HEADER_DEF
+    uint16_t reserved;
+    uint32_t translation_id;
+    uint64_t base_address;
+    uint32_t reserved2;
+} QEMU_PACKED;
+
+typedef struct AcpiMadtGenericTranslator AcpiMadtGenericTranslator;
+
 /*
  * Generic Timer Description Table (GTDT)
  */
-
-#define ACPI_GTDT_INTERRUPT_MODE        (1 << 0)
-#define ACPI_GTDT_INTERRUPT_POLARITY    (1 << 1)
-#define ACPI_GTDT_ALWAYS_ON             (1 << 2)
-
-/* Triggering */
-
-#define ACPI_LEVEL_SENSITIVE            ((uint8_t) 0x00)
-#define ACPI_EDGE_SENSITIVE             ((uint8_t) 0x01)
-
-/* Polarity */
-
-#define ACPI_ACTIVE_HIGH                ((uint8_t) 0x00)
-#define ACPI_ACTIVE_LOW                 ((uint8_t) 0x01)
-#define ACPI_ACTIVE_BOTH                ((uint8_t) 0x02)
+#define ACPI_GTDT_INTERRUPT_MODE_LEVEL    (0 << 0)
+#define ACPI_GTDT_INTERRUPT_MODE_EDGE     (1 << 0)
+#define ACPI_GTDT_CAP_ALWAYS_ON           (1 << 2)
 
 struct AcpiGenericTimerTable {
     ACPI_TABLE_HEADER_DEF
@@ -471,6 +491,17 @@ struct AcpiSratProcessorAffinity
     uint32_t    reserved;
 } QEMU_PACKED;
 typedef struct AcpiSratProcessorAffinity AcpiSratProcessorAffinity;
+
+struct AcpiSratProcessorX2ApicAffinity {
+    ACPI_SUB_HEADER_DEF
+    uint16_t    reserved;
+    uint32_t    proximity_domain;
+    uint32_t    x2apic_id;
+    uint32_t    flags;
+    uint32_t    clk_domain;
+    uint32_t    reserved2;
+} QEMU_PACKED;
+typedef struct AcpiSratProcessorX2ApicAffinity AcpiSratProcessorX2ApicAffinity;
 
 struct AcpiSratMemoryAffinity
 {
@@ -569,6 +600,21 @@ enum {
 /*
  * Sub-structures for DMAR
  */
+
+/* Device scope structure for DRHD. */
+struct AcpiDmarDeviceScope {
+    uint8_t entry_type;
+    uint8_t length;
+    uint16_t reserved;
+    uint8_t enumeration_id;
+    uint8_t bus;
+    struct {
+        uint8_t device;
+        uint8_t function;
+    } path[0];
+} QEMU_PACKED;
+typedef struct AcpiDmarDeviceScope AcpiDmarDeviceScope;
+
 /* Type 0: Hardware Unit Definition */
 struct AcpiDmarHardwareUnit {
     uint16_t type;
@@ -577,10 +623,91 @@ struct AcpiDmarHardwareUnit {
     uint8_t reserved;
     uint16_t pci_segment;   /* The PCI Segment associated with this unit */
     uint64_t address;   /* Base address of remapping hardware register-set */
+    AcpiDmarDeviceScope scope[0];
 } QEMU_PACKED;
 typedef struct AcpiDmarHardwareUnit AcpiDmarHardwareUnit;
 
+/* Type 2: Root Port ATS Capability Reporting Structure */
+struct AcpiDmarRootPortATS {
+    uint16_t type;
+    uint16_t length;
+    uint8_t flags;
+    uint8_t reserved;
+    uint16_t pci_segment;
+    AcpiDmarDeviceScope scope[0];
+} QEMU_PACKED;
+typedef struct AcpiDmarRootPortATS AcpiDmarRootPortATS;
+
 /* Masks for Flags field above */
 #define ACPI_DMAR_INCLUDE_PCI_ALL   1
+#define ACPI_DMAR_ATSR_ALL_PORTS    1
+
+/*
+ * Input Output Remapping Table (IORT)
+ * Conforms to "IO Remapping Table System Software on ARM Platforms",
+ * Document number: ARM DEN 0049B, October 2015
+ */
+
+struct AcpiIortTable {
+    ACPI_TABLE_HEADER_DEF     /* ACPI common table header */
+    uint32_t node_count;
+    uint32_t node_offset;
+    uint32_t reserved;
+} QEMU_PACKED;
+typedef struct AcpiIortTable AcpiIortTable;
+
+/*
+ * IORT node types
+ */
+
+#define ACPI_IORT_NODE_HEADER_DEF   /* Node format common fields */ \
+    uint8_t  type;          \
+    uint16_t length;        \
+    uint8_t  revision;      \
+    uint32_t reserved;      \
+    uint32_t mapping_count; \
+    uint32_t mapping_offset;
+
+/* Values for node Type above */
+enum {
+        ACPI_IORT_NODE_ITS_GROUP = 0x00,
+        ACPI_IORT_NODE_NAMED_COMPONENT = 0x01,
+        ACPI_IORT_NODE_PCI_ROOT_COMPLEX = 0x02,
+        ACPI_IORT_NODE_SMMU = 0x03,
+        ACPI_IORT_NODE_SMMU_V3 = 0x04
+};
+
+struct AcpiIortIdMapping {
+    uint32_t input_base;
+    uint32_t id_count;
+    uint32_t output_base;
+    uint32_t output_reference;
+    uint32_t flags;
+} QEMU_PACKED;
+typedef struct AcpiIortIdMapping AcpiIortIdMapping;
+
+struct AcpiIortMemoryAccess {
+    uint32_t cache_coherency;
+    uint8_t  hints;
+    uint16_t reserved;
+    uint8_t  memory_flags;
+} QEMU_PACKED;
+typedef struct AcpiIortMemoryAccess AcpiIortMemoryAccess;
+
+struct AcpiIortItsGroup {
+    ACPI_IORT_NODE_HEADER_DEF
+    uint32_t its_count;
+    uint32_t identifiers[0];
+} QEMU_PACKED;
+typedef struct AcpiIortItsGroup AcpiIortItsGroup;
+
+struct AcpiIortRC {
+    ACPI_IORT_NODE_HEADER_DEF
+    AcpiIortMemoryAccess memory_properties;
+    uint32_t ats_attribute;
+    uint32_t pci_segment_number;
+    AcpiIortIdMapping id_mapping_array[0];
+} QEMU_PACKED;
+typedef struct AcpiIortRC AcpiIortRC;
 
 #endif

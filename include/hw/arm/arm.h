@@ -8,11 +8,11 @@
  *
  */
 
-#ifndef ARM_MISC_H
-#define ARM_MISC_H 1
+#ifndef HW_ARM_H
+#define HW_ARM_H
 
 #include "exec/memory.h"
-#include "target-arm/cpu-qom.h"
+#include "target/arm/cpu-qom.h"
 #include "hw/irq.h"
 #include "qemu/notify.h"
 
@@ -140,4 +140,4 @@ void arm_write_secure_board_setup_dummy_smc(ARMCPU *cpu,
    ticks.  */
 extern int system_clock_scale;
 
-#endif /* !ARM_MISC_H */
+#endif /* HW_ARM_H */

@@ -15,7 +15,7 @@
 #define HW_S390_PCI_INST_H
 
 #include "s390-pci-bus.h"
-#include <sysemu/dma.h>
+#include "sysemu/dma.h"
 
 /* CLP common request & response block size */
 #define CLP_BLK_SIZE 4096
@@ -104,7 +104,7 @@ typedef struct ClpRspListPci {
     uint64_t resume_token;
     uint32_t mdd;
     uint16_t max_fn;
-    uint8_t reserved2;
+    uint8_t flags;
     uint8_t entry_size;
     ClpFhListEntry fh_list[CLP_FH_LIST_NR_ENTRIES];
 } QEMU_PACKED ClpRspListPci;
@@ -249,6 +249,11 @@ typedef struct ClpReqRspQueryPciGrp {
 #define ZPCI_MOD_FC_RESET_BLOCK 9
 #define ZPCI_MOD_FC_SET_MEASURE 10
 
+/* Store PCI Function Controls status codes */
+#define ZPCI_STPCIFC_ST_PERM_ERROR    8
+#define ZPCI_STPCIFC_ST_INVAL_DMAAS   28
+#define ZPCI_STPCIFC_ST_ERROR_RECOVER 40
+
 /* FIB function controls */
 #define ZPCI_FIB_FC_ENABLED     0x80
 #define ZPCI_FIB_FC_ERROR       0x40
@@ -287,7 +292,7 @@ typedef struct ZpciFib {
 } QEMU_PACKED ZpciFib;
 
 int pci_dereg_irqs(S390PCIBusDevice *pbdev);
-void pci_dereg_ioat(S390PCIBusDevice *pbdev);
+void pci_dereg_ioat(S390PCIIOMMU *iommu);
 int clp_service_call(S390CPU *cpu, uint8_t r2);
 int pcilg_service_call(S390CPU *cpu, uint8_t r1, uint8_t r2);
 int pcistg_service_call(S390CPU *cpu, uint8_t r1, uint8_t r2);

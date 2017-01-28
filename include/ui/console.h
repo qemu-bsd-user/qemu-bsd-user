@@ -217,6 +217,7 @@ typedef struct DisplayChangeListenerOps {
 
     void (*dpy_gl_scanout)(DisplayChangeListener *dcl,
                            uint32_t backing_id, bool backing_y_0_top,
+                           uint32_t backing_width, uint32_t backing_height,
                            uint32_t x, uint32_t y, uint32_t w, uint32_t h);
     void (*dpy_gl_update)(DisplayChangeListener *dcl,
                           uint32_t x, uint32_t y, uint32_t w, uint32_t h);
@@ -285,6 +286,7 @@ bool dpy_gfx_check_format(QemuConsole *con,
 
 void dpy_gl_scanout(QemuConsole *con,
                     uint32_t backing_id, bool backing_y_0_top,
+                    uint32_t backing_width, uint32_t backing_height,
                     uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 void dpy_gl_update(QemuConsole *con,
                    uint32_t x, uint32_t y, uint32_t w, uint32_t h);
@@ -335,7 +337,10 @@ static inline pixman_format_code_t surface_format(DisplaySurface *s)
 }
 
 #ifdef CONFIG_CURSES
+/* KEY_EVENT is defined in wincon.h and in curses.h. Avoid redefinition. */
+#undef KEY_EVENT
 #include <curses.h>
+#undef KEY_EVENT
 typedef chtype console_ch_t;
 extern chtype vga_to_curses[];
 #else
@@ -385,16 +390,19 @@ QemuConsole *qemu_console_lookup_by_device_name(const char *device_id,
 bool qemu_console_is_visible(QemuConsole *con);
 bool qemu_console_is_graphic(QemuConsole *con);
 bool qemu_console_is_fixedsize(QemuConsole *con);
+bool qemu_console_is_gl_blocked(QemuConsole *con);
 char *qemu_console_get_label(QemuConsole *con);
 int qemu_console_get_index(QemuConsole *con);
 uint32_t qemu_console_get_head(QemuConsole *con);
 QemuUIInfo *qemu_console_get_ui_info(QemuConsole *con);
 int qemu_console_get_width(QemuConsole *con, int fallback);
 int qemu_console_get_height(QemuConsole *con, int fallback);
+/* Return the low-level window id for the console */
+int qemu_console_get_window_id(QemuConsole *con);
+/* Set the low-level window id for the console */
+void qemu_console_set_window_id(QemuConsole *con, int window_id);
 
-void text_consoles_set_display(DisplayState *ds);
 void console_select(unsigned int index);
-void console_color_init(DisplayState *ds);
 void qemu_console_resize(QemuConsole *con, int width, int height);
 void qemu_console_copy(QemuConsole *con, int src_x, int src_y,
                        int dst_x, int dst_y, int w, int h);
@@ -460,7 +468,6 @@ void vnc_display_add_client(const char *id, int csock, bool skipauth);
 #ifdef CONFIG_VNC
 int vnc_display_password(const char *id, const char *password);
 int vnc_display_pw_expire(const char *id, time_t expires);
-char *vnc_display_local_addr(const char *id);
 QemuOpts *vnc_parse(const char *str, Error **errp);
 int vnc_init_func(void *opaque, QemuOpts *opts, Error **errp);
 #else
@@ -481,12 +488,6 @@ static inline int vnc_init_func(void *opaque, QemuOpts *opts, Error **errp)
 {
     error_setg(errp, "VNC support is disabled");
     return -1;
-}
-static inline char *vnc_display_local_addr(const char *id)
-{
-    /* This must never be called if CONFIG_VNC is disabled */
-    error_report("VNC support is disabled");
-    abort();
 }
 #endif
 

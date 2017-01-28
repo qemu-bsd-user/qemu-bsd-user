@@ -1676,7 +1676,7 @@ print_insn_arg (const char *d,
 	  (*info->fprintf_func) (info->stream, "%%sfc");
 	else
 	  /* xgettext:c-format */
-	  (*info->fprintf_func) (info->stream, _("<function code %d>"), fc);
+	  (*info->fprintf_func) (info->stream, "<function code %d>", fc);
       }
       break;
 
@@ -1827,7 +1827,7 @@ match_insn_m68k (bfd_vma memaddr,
 	{
 	  info->fprintf_func (info->stream,
 			      /* xgettext:c-format */
-			      _("<internal error in opcode table: %s %s>\n"),
+			      "<internal error in opcode table: %s %s>\n",
 			      best->name,  best->args);
 	  info->fprintf_func = save_printer;
 	  info->print_address_func = save_print_address;
@@ -4698,10 +4698,6 @@ get_field (const unsigned char *data, enum floatformat_byteorders order,
   return result;
 }
 
-#ifndef min
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#endif
-
 /* Convert from FMT to a double.
    FROM is the address of the extended float.
    Store the double in *TO.  */
@@ -4733,7 +4729,7 @@ floatformat_to_double (const struct floatformat *fmt,
       nan = 0;
       while (mant_bits_left > 0)
 	{
-	  mant_bits = min (mant_bits_left, 32);
+          mant_bits = MIN(mant_bits_left, 32);
 
 	  if (get_field (ufrom, fmt->byteorder, fmt->totalsize,
 			 mant_off, mant_bits) != 0)
@@ -4793,7 +4789,7 @@ floatformat_to_double (const struct floatformat *fmt,
 
   while (mant_bits_left > 0)
     {
-      mant_bits = min (mant_bits_left, 32);
+      mant_bits = MIN(mant_bits_left, 32);
 
       mant = get_field (ufrom, fmt->byteorder, fmt->totalsize,
 			 mant_off, mant_bits);

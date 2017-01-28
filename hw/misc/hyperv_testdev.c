@@ -12,12 +12,12 @@
  */
 
 #include "qemu/osdep.h"
+#include <linux/kvm.h>
 #include "hw/hw.h"
 #include "hw/qdev.h"
 #include "hw/isa/isa.h"
 #include "sysemu/kvm.h"
-#include "linux/kvm.h"
-#include "target-i386/hyperv.h"
+#include "target/i386/hyperv.h"
 #include "kvm_i386.h"
 
 #define HV_TEST_DEV_MAX_SINT_ROUTES 64

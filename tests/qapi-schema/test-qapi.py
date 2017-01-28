@@ -36,21 +36,36 @@ class QAPISchemaTestVisitor(QAPISchemaVisitor):
         self._print_variants(variants)
 
     def visit_command(self, name, info, arg_type, ret_type,
-                      gen, success_response):
+                      gen, success_response, boxed):
         print 'command %s %s -> %s' % \
             (name, arg_type and arg_type.name, ret_type and ret_type.name)
-        print '   gen=%s success_response=%s' % (gen, success_response)
+        print '   gen=%s success_response=%s boxed=%s' % \
+            (gen, success_response, boxed)
 
-    def visit_event(self, name, info, arg_type):
+    def visit_event(self, name, info, arg_type, boxed):
         print 'event %s %s' % (name, arg_type and arg_type.name)
+        print '   boxed=%s' % boxed
 
     @staticmethod
     def _print_variants(variants):
         if variants:
-            if variants.tag_name:
-                print '    tag %s' % variants.tag_name
+            print '    tag %s' % variants.tag_member.name
             for v in variants.variants:
                 print '    case %s: %s' % (v.name, v.type.name)
 
 schema = QAPISchema(sys.argv[1])
 schema.visit(QAPISchemaTestVisitor())
+
+for doc in schema.docs:
+    if doc.symbol:
+        print 'doc symbol=%s expr=%s' % \
+            (doc.symbol, doc.expr.items()[0])
+    else:
+        print 'doc freeform'
+    for arg, section in doc.args.iteritems():
+        print '    arg=%s\n%s' % (arg, section)
+    for section in doc.sections:
+        print '    section=%s\n%s' % (section.name, section)
+    body = str(doc.body)
+    if body:
+        print '    body=\n%s' % body

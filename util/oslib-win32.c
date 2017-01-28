@@ -539,7 +539,7 @@ int getpagesize(void)
     return system_info.dwPageSize;
 }
 
-void os_mem_prealloc(int fd, char *area, size_t memory)
+void os_mem_prealloc(int fd, char *area, size_t memory, Error **errp)
 {
     int i;
     size_t pagesize = getpagesize();
@@ -572,6 +572,13 @@ int qemu_read_password(char *buf, int buf_size)
     }
     buf[i] = '\0';
     return 0;
+}
+
+
+char *qemu_get_pid_name(pid_t pid)
+{
+    /* XXX Implement me */
+    abort();
 }
 
 

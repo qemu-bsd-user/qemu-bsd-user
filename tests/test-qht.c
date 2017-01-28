@@ -5,8 +5,8 @@
  *   See the COPYING file in the top-level directory.
  */
 #include "qemu/osdep.h"
-#include <glib.h>
 #include "qemu/qht.h"
+#include "qemu/rcu.h"
 
 #define N 5000
 
@@ -52,6 +52,7 @@ static void check(int a, int b, bool expected)
     struct qht_stats stats;
     int i;
 
+    rcu_read_lock();
     for (i = a; i < b; i++) {
         void *p;
         uint32_t hash;
@@ -62,6 +63,8 @@ static void check(int a, int b, bool expected)
         p = qht_lookup(&ht, is_equal, &val, hash);
         g_assert_true(!!p == expected);
     }
+    rcu_read_unlock();
+
     qht_statistics_init(&ht, &stats);
     if (stats.used_head_buckets) {
         g_assert_cmpfloat(qdist_avg(&stats.chain), >=, 1.0);
@@ -96,8 +99,12 @@ static void iter_check(unsigned int count)
 
 static void qht_do_test(unsigned int mode, size_t init_entries)
 {
+    /* under KVM we might fetch stats from an uninitialized qht */
+    check_n(0);
+
     qht_init(&ht, 0, mode);
 
+    check_n(0);
     insert(0, N);
     check(0, N, true);
     check_n(N);

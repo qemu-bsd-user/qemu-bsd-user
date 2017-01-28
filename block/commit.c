@@ -15,7 +15,7 @@
 #include "qemu/osdep.h"
 #include "trace.h"
 #include "block/block_int.h"
-#include "block/blockjob.h"
+#include "block/blockjob_int.h"
 #include "qapi/error.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/ratelimit.h"
@@ -83,7 +83,7 @@ static void commit_complete(BlockJob *job, void *opaque)
     BlockDriverState *active = s->active;
     BlockDriverState *top = blk_bs(s->top);
     BlockDriverState *base = blk_bs(s->base);
-    BlockDriverState *overlay_bs;
+    BlockDriverState *overlay_bs = bdrv_find_overlay(active, top);
     int ret = data->ret;
 
     if (!block_job_is_cancelled(&s->common) && ret == 0) {
@@ -97,7 +97,6 @@ static void commit_complete(BlockJob *job, void *opaque)
     if (s->base_flags != bdrv_get_flags(base)) {
         bdrv_reopen(base, s->base_flags, NULL);
     }
-    overlay_bs = bdrv_find_overlay(active, top);
     if (overlay_bs && s->orig_overlay_flags != bdrv_get_flags(overlay_bs)) {
         bdrv_reopen(overlay_bs, s->orig_overlay_flags, NULL);
     }
@@ -113,6 +112,7 @@ static void coroutine_fn commit_run(void *opaque)
     CommitBlockJob *s = opaque;
     CommitCompleteData *data;
     int64_t sector_num, end;
+    uint64_t delay_ns = 0;
     int ret = 0;
     int n = 0;
     void *buf = NULL;
@@ -142,10 +142,8 @@ static void coroutine_fn commit_run(void *opaque)
     buf = blk_blockalign(s->top, COMMIT_BUFFER_SIZE);
 
     for (sector_num = 0; sector_num < end; sector_num += n) {
-        uint64_t delay_ns = 0;
         bool copy;
 
-wait:
         /* Note that even when no rate limit is applied we need to yield
          * with no pending I/O here so that bdrv_drain_all() returns.
          */
@@ -161,19 +159,13 @@ wait:
         copy = (ret == 1);
         trace_commit_one_iteration(s, sector_num, n, ret);
         if (copy) {
-            if (s->common.speed) {
-                delay_ns = ratelimit_calculate_delay(&s->limit, n);
-                if (delay_ns > 0) {
-                    goto wait;
-                }
-            }
             ret = commit_populate(s->top, s->base, sector_num, n, buf);
             bytes_written += n * BDRV_SECTOR_SIZE;
         }
         if (ret < 0) {
-            if (s->on_error == BLOCKDEV_ON_ERROR_STOP ||
-                s->on_error == BLOCKDEV_ON_ERROR_REPORT||
-                (s->on_error == BLOCKDEV_ON_ERROR_ENOSPC && ret == -ENOSPC)) {
+            BlockErrorAction action =
+                block_job_error_action(&s->common, false, s->on_error, -ret);
+            if (action == BLOCK_ERROR_ACTION_REPORT) {
                 goto out;
             } else {
                 n = 0;
@@ -182,6 +174,10 @@ wait:
         }
         /* Publish progress */
         s->common.offset += n * BDRV_SECTOR_SIZE;
+
+        if (copy && s->common.speed) {
+            delay_ns = ratelimit_calculate_delay(&s->limit, n);
+        }
     }
 
     ret = 0;
@@ -209,17 +205,19 @@ static const BlockJobDriver commit_job_driver = {
     .instance_size = sizeof(CommitBlockJob),
     .job_type      = BLOCK_JOB_TYPE_COMMIT,
     .set_speed     = commit_set_speed,
+    .start         = commit_run,
 };
 
-void commit_start(BlockDriverState *bs, BlockDriverState *base,
-                  BlockDriverState *top, int64_t speed,
-                  BlockdevOnError on_error, BlockCompletionFunc *cb,
-                  void *opaque, const char *backing_file_str, Error **errp)
+void commit_start(const char *job_id, BlockDriverState *bs,
+                  BlockDriverState *base, BlockDriverState *top, int64_t speed,
+                  BlockdevOnError on_error, const char *backing_file_str,
+                  Error **errp)
 {
     CommitBlockJob *s;
     BlockReopenQueue *reopen_queue = NULL;
     int orig_overlay_flags;
     int orig_base_flags;
+    BlockDriverState *iter;
     BlockDriverState *overlay_bs;
     Error *local_err = NULL;
 
@@ -236,30 +234,45 @@ void commit_start(BlockDriverState *bs, BlockDriverState *base,
         return;
     }
 
+    s = block_job_create(job_id, &commit_job_driver, bs, speed,
+                         BLOCK_JOB_DEFAULT, NULL, NULL, errp);
+    if (!s) {
+        return;
+    }
+
     orig_base_flags    = bdrv_get_flags(base);
     orig_overlay_flags = bdrv_get_flags(overlay_bs);
 
     /* convert base & overlay_bs to r/w, if necessary */
-    if (!(orig_overlay_flags & BDRV_O_RDWR)) {
-        reopen_queue = bdrv_reopen_queue(reopen_queue, overlay_bs, NULL,
-                                         orig_overlay_flags | BDRV_O_RDWR);
-    }
     if (!(orig_base_flags & BDRV_O_RDWR)) {
         reopen_queue = bdrv_reopen_queue(reopen_queue, base, NULL,
                                          orig_base_flags | BDRV_O_RDWR);
     }
+    if (!(orig_overlay_flags & BDRV_O_RDWR)) {
+        reopen_queue = bdrv_reopen_queue(reopen_queue, overlay_bs, NULL,
+                                         orig_overlay_flags | BDRV_O_RDWR);
+    }
     if (reopen_queue) {
-        bdrv_reopen_multiple(reopen_queue, &local_err);
+        bdrv_reopen_multiple(bdrv_get_aio_context(bs), reopen_queue, &local_err);
         if (local_err != NULL) {
             error_propagate(errp, local_err);
+            block_job_unref(&s->common);
             return;
         }
     }
 
 
-    s = block_job_create(&commit_job_driver, bs, speed, cb, opaque, errp);
-    if (!s) {
-        return;
+    /* Block all nodes between top and base, because they will
+     * disappear from the chain after this operation. */
+    assert(bdrv_chain_contains(top, base));
+    for (iter = top; iter != backing_bs(base); iter = backing_bs(iter)) {
+        block_job_add_bdrv(&s->common, iter);
+    }
+    /* overlay_bs must be blocked because it needs to be modified to
+     * update the backing image string, but if it's the root node then
+     * don't block it again */
+    if (bs != overlay_bs) {
+        block_job_add_bdrv(&s->common, overlay_bs);
     }
 
     s->base = blk_new();
@@ -276,8 +289,128 @@ void commit_start(BlockDriverState *bs, BlockDriverState *base,
     s->backing_file_str = g_strdup(backing_file_str);
 
     s->on_error = on_error;
-    s->common.co = qemu_coroutine_create(commit_run);
 
-    trace_commit_start(bs, base, top, s, s->common.co, opaque);
-    qemu_coroutine_enter(s->common.co, s);
+    trace_commit_start(bs, base, top, s);
+    block_job_start(&s->common);
+}
+
+
+#define COMMIT_BUF_SECTORS 2048
+
+/* commit COW file into the raw image */
+int bdrv_commit(BlockDriverState *bs)
+{
+    BlockBackend *src, *backing;
+    BlockDriver *drv = bs->drv;
+    int64_t sector, total_sectors, length, backing_length;
+    int n, ro, open_flags;
+    int ret = 0;
+    uint8_t *buf = NULL;
+
+    if (!drv)
+        return -ENOMEDIUM;
+
+    if (!bs->backing) {
+        return -ENOTSUP;
+    }
+
+    if (bdrv_op_is_blocked(bs, BLOCK_OP_TYPE_COMMIT_SOURCE, NULL) ||
+        bdrv_op_is_blocked(bs->backing->bs, BLOCK_OP_TYPE_COMMIT_TARGET, NULL)) {
+        return -EBUSY;
+    }
+
+    ro = bs->backing->bs->read_only;
+    open_flags =  bs->backing->bs->open_flags;
+
+    if (ro) {
+        if (bdrv_reopen(bs->backing->bs, open_flags | BDRV_O_RDWR, NULL)) {
+            return -EACCES;
+        }
+    }
+
+    src = blk_new();
+    blk_insert_bs(src, bs);
+
+    backing = blk_new();
+    blk_insert_bs(backing, bs->backing->bs);
+
+    length = blk_getlength(src);
+    if (length < 0) {
+        ret = length;
+        goto ro_cleanup;
+    }
+
+    backing_length = blk_getlength(backing);
+    if (backing_length < 0) {
+        ret = backing_length;
+        goto ro_cleanup;
+    }
+
+    /* If our top snapshot is larger than the backing file image,
+     * grow the backing file image if possible.  If not possible,
+     * we must return an error */
+    if (length > backing_length) {
+        ret = blk_truncate(backing, length);
+        if (ret < 0) {
+            goto ro_cleanup;
+        }
+    }
+
+    total_sectors = length >> BDRV_SECTOR_BITS;
+
+    /* blk_try_blockalign() for src will choose an alignment that works for
+     * backing as well, so no need to compare the alignment manually. */
+    buf = blk_try_blockalign(src, COMMIT_BUF_SECTORS * BDRV_SECTOR_SIZE);
+    if (buf == NULL) {
+        ret = -ENOMEM;
+        goto ro_cleanup;
+    }
+
+    for (sector = 0; sector < total_sectors; sector += n) {
+        ret = bdrv_is_allocated(bs, sector, COMMIT_BUF_SECTORS, &n);
+        if (ret < 0) {
+            goto ro_cleanup;
+        }
+        if (ret) {
+            ret = blk_pread(src, sector * BDRV_SECTOR_SIZE, buf,
+                            n * BDRV_SECTOR_SIZE);
+            if (ret < 0) {
+                goto ro_cleanup;
+            }
+
+            ret = blk_pwrite(backing, sector * BDRV_SECTOR_SIZE, buf,
+                             n * BDRV_SECTOR_SIZE, 0);
+            if (ret < 0) {
+                goto ro_cleanup;
+            }
+        }
+    }
+
+    if (drv->bdrv_make_empty) {
+        ret = drv->bdrv_make_empty(bs);
+        if (ret < 0) {
+            goto ro_cleanup;
+        }
+        blk_flush(src);
+    }
+
+    /*
+     * Make sure all data we wrote to the backing device is actually
+     * stable on disk.
+     */
+    blk_flush(backing);
+
+    ret = 0;
+ro_cleanup:
+    qemu_vfree(buf);
+
+    blk_unref(src);
+    blk_unref(backing);
+
+    if (ro) {
+        /* ignoring error return here */
+        bdrv_reopen(bs->backing->bs, open_flags & ~BDRV_O_RDWR, NULL);
+    }
+
+    return ret;
 }

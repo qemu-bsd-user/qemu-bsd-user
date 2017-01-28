@@ -16,10 +16,12 @@
 #include "qom/object_interfaces.h"
 #include "qemu/module.h"
 #include "block/aio.h"
+#include "block/block.h"
 #include "sysemu/iothread.h"
 #include "qmp-commands.h"
 #include "qemu/error-report.h"
 #include "qemu/rcu.h"
+#include "qemu/main-loop.h"
 
 typedef ObjectClass IOThreadClass;
 
@@ -28,44 +30,57 @@ typedef ObjectClass IOThreadClass;
 #define IOTHREAD_CLASS(klass) \
    OBJECT_CLASS_CHECK(IOThreadClass, klass, TYPE_IOTHREAD)
 
+static __thread IOThread *my_iothread;
+
+AioContext *qemu_get_current_aio_context(void)
+{
+    return my_iothread ? my_iothread->ctx : qemu_get_aio_context();
+}
+
 static void *iothread_run(void *opaque)
 {
     IOThread *iothread = opaque;
-    bool blocking;
 
     rcu_register_thread();
 
+    my_iothread = iothread;
     qemu_mutex_lock(&iothread->init_done_lock);
     iothread->thread_id = qemu_get_thread_id();
     qemu_cond_signal(&iothread->init_done_cond);
     qemu_mutex_unlock(&iothread->init_done_lock);
 
-    while (!iothread->stopping) {
-        aio_context_acquire(iothread->ctx);
-        blocking = true;
-        while (!iothread->stopping && aio_poll(iothread->ctx, blocking)) {
-            /* Progress was made, keep going */
-            blocking = false;
-        }
-        aio_context_release(iothread->ctx);
+    while (!atomic_read(&iothread->stopping)) {
+        aio_poll(iothread->ctx, true);
     }
 
     rcu_unregister_thread();
     return NULL;
 }
 
-static void iothread_instance_finalize(Object *obj)
+static int iothread_stop(Object *object, void *opaque)
 {
-    IOThread *iothread = IOTHREAD(obj);
+    IOThread *iothread;
 
-    if (!iothread->ctx) {
-        return;
+    iothread = (IOThread *)object_dynamic_cast(object, TYPE_IOTHREAD);
+    if (!iothread || !iothread->ctx) {
+        return 0;
     }
     iothread->stopping = true;
     aio_notify(iothread->ctx);
     qemu_thread_join(&iothread->thread);
+    return 0;
+}
+
+static void iothread_instance_finalize(Object *obj)
+{
+    IOThread *iothread = IOTHREAD(obj);
+
+    iothread_stop(obj, NULL);
     qemu_cond_destroy(&iothread->init_done_cond);
     qemu_mutex_destroy(&iothread->init_done_lock);
+    if (!iothread->ctx) {
+        return;
+    }
     aio_context_unref(iothread->ctx);
 }
 
@@ -80,6 +95,18 @@ static void iothread_complete(UserCreatable *obj, Error **errp)
     iothread->ctx = aio_context_new(&local_error);
     if (!iothread->ctx) {
         error_propagate(errp, local_error);
+        return;
+    }
+
+    aio_context_set_poll_params(iothread->ctx,
+                                iothread->poll_max_ns,
+                                iothread->poll_grow,
+                                iothread->poll_shrink,
+                                &local_error);
+    if (local_error) {
+        error_propagate(errp, local_error);
+        aio_context_unref(iothread->ctx);
+        iothread->ctx = NULL;
         return;
     }
 
@@ -105,10 +132,82 @@ static void iothread_complete(UserCreatable *obj, Error **errp)
     qemu_mutex_unlock(&iothread->init_done_lock);
 }
 
+typedef struct {
+    const char *name;
+    ptrdiff_t offset; /* field's byte offset in IOThread struct */
+} PollParamInfo;
+
+static PollParamInfo poll_max_ns_info = {
+    "poll-max-ns", offsetof(IOThread, poll_max_ns),
+};
+static PollParamInfo poll_grow_info = {
+    "poll-grow", offsetof(IOThread, poll_grow),
+};
+static PollParamInfo poll_shrink_info = {
+    "poll-shrink", offsetof(IOThread, poll_shrink),
+};
+
+static void iothread_get_poll_param(Object *obj, Visitor *v,
+        const char *name, void *opaque, Error **errp)
+{
+    IOThread *iothread = IOTHREAD(obj);
+    PollParamInfo *info = opaque;
+    int64_t *field = (void *)iothread + info->offset;
+
+    visit_type_int64(v, name, field, errp);
+}
+
+static void iothread_set_poll_param(Object *obj, Visitor *v,
+        const char *name, void *opaque, Error **errp)
+{
+    IOThread *iothread = IOTHREAD(obj);
+    PollParamInfo *info = opaque;
+    int64_t *field = (void *)iothread + info->offset;
+    Error *local_err = NULL;
+    int64_t value;
+
+    visit_type_int64(v, name, &value, &local_err);
+    if (local_err) {
+        goto out;
+    }
+
+    if (value < 0) {
+        error_setg(&local_err, "%s value must be in range [0, %"PRId64"]",
+                   info->name, INT64_MAX);
+        goto out;
+    }
+
+    *field = value;
+
+    if (iothread->ctx) {
+        aio_context_set_poll_params(iothread->ctx,
+                                    iothread->poll_max_ns,
+                                    iothread->poll_grow,
+                                    iothread->poll_shrink,
+                                    &local_err);
+    }
+
+out:
+    error_propagate(errp, local_err);
+}
+
 static void iothread_class_init(ObjectClass *klass, void *class_data)
 {
     UserCreatableClass *ucc = USER_CREATABLE_CLASS(klass);
     ucc->complete = iothread_complete;
+
+    object_class_property_add(klass, "poll-max-ns", "int",
+                              iothread_get_poll_param,
+                              iothread_set_poll_param,
+                              NULL, &poll_max_ns_info, &error_abort);
+    object_class_property_add(klass, "poll-grow", "int",
+                              iothread_get_poll_param,
+                              iothread_set_poll_param,
+                              NULL, &poll_grow_info, &error_abort);
+    object_class_property_add(klass, "poll-shrink", "int",
+                              iothread_get_poll_param,
+                              iothread_set_poll_param,
+                              NULL, &poll_shrink_info, &error_abort);
 }
 
 static const TypeInfo iothread_info = {
@@ -173,4 +272,23 @@ IOThreadInfoList *qmp_query_iothreads(Error **errp)
 
     object_child_foreach(container, query_one_iothread, &prev);
     return head;
+}
+
+void iothread_stop_all(void)
+{
+    Object *container = object_get_objects_root();
+    BlockDriverState *bs;
+    BdrvNextIterator it;
+
+    for (bs = bdrv_first(&it); bs; bs = bdrv_next(&it)) {
+        AioContext *ctx = bdrv_get_aio_context(bs);
+        if (ctx == qemu_get_aio_context()) {
+            continue;
+        }
+        aio_context_acquire(ctx);
+        bdrv_set_aio_context(bs, qemu_get_aio_context());
+        aio_context_release(ctx);
+    }
+
+    object_child_foreach(container, iothread_stop, NULL);
 }

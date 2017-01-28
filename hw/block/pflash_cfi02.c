@@ -57,7 +57,6 @@ do {                                                       \
 
 #define PFLASH_LAZY_ROMD_THRESHOLD 42
 
-#define TYPE_CFI_PFLASH02 "cfi.pflash02"
 #define CFI_PFLASH02(obj) OBJECT_CHECK(pflash_t, (obj), TYPE_CFI_PFLASH02)
 
 struct pflash_t {
@@ -600,6 +599,19 @@ static void pflash_cfi02_realize(DeviceState *dev, Error **errp)
     uint32_t chip_len;
     int ret;
     Error *local_err = NULL;
+
+    if (pfl->sector_len == 0) {
+        error_setg(errp, "attribute \"sector-length\" not specified or zero.");
+        return;
+    }
+    if (pfl->nb_blocs == 0) {
+        error_setg(errp, "attribute \"num-blocks\" not specified or zero.");
+        return;
+    }
+    if (pfl->name == NULL) {
+        error_setg(errp, "attribute \"name\" not specified.");
+        return;
+    }
 
     chip_len = pfl->sector_len * pfl->nb_blocs;
     /* XXX: to be fixed */

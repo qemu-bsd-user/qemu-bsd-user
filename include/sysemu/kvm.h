@@ -53,6 +53,7 @@ extern bool kvm_gsi_direct_mapping;
 extern bool kvm_readonly_mem_allowed;
 extern bool kvm_direct_msi_allowed;
 extern bool kvm_ioeventfd_any_length_allowed;
+extern bool kvm_msi_use_devid;
 
 #if defined CONFIG_KVM || !defined NEED_CPU_H
 #define kvm_enabled()           (kvm_allowed)
@@ -169,6 +170,13 @@ extern bool kvm_ioeventfd_any_length_allowed;
  */
 #define kvm_ioeventfd_any_length_enabled() (kvm_ioeventfd_any_length_allowed)
 
+/**
+ * kvm_msi_devid_required:
+ * Returns: true if KVM requires a device id to be provided while
+ * defining an MSI routing entry.
+ */
+#define kvm_msi_devid_required() (kvm_msi_use_devid)
+
 #else
 #define kvm_enabled()           (0)
 #define kvm_irqchip_in_kernel() (false)
@@ -184,6 +192,7 @@ extern bool kvm_ioeventfd_any_length_allowed;
 #define kvm_readonly_mem_enabled() (false)
 #define kvm_direct_msi_enabled() (false)
 #define kvm_ioeventfd_any_length_enabled() (false)
+#define kvm_msi_devid_required() (false)
 #endif
 
 struct kvm_run;
@@ -221,7 +230,6 @@ int kvm_destroy_vcpu(CPUState *cpu);
 #ifdef NEED_CPU_H
 #include "cpu.h"
 
-void kvm_setup_guest_memory(void *start, size_t size);
 void kvm_flush_coalesced_mmio_buffer(void);
 
 int kvm_insert_breakpoint(CPUState *cpu, target_ulong addr,
@@ -327,8 +335,6 @@ MemTxAttrs kvm_arch_post_run(CPUState *cpu, struct kvm_run *run);
 
 int kvm_arch_handle_exit(CPUState *cpu, struct kvm_run *run);
 
-int kvm_arch_handle_ioapic_eoi(CPUState *cpu, struct kvm_run *run);
-
 int kvm_arch_process_async_events(CPUState *cpu);
 
 int kvm_arch_get_registers(CPUState *cpu);
@@ -359,15 +365,19 @@ void kvm_arch_init_irq_routing(KVMState *s);
 int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
                              uint64_t address, uint32_t data, PCIDevice *dev);
 
+/* Notify arch about newly added MSI routes */
+int kvm_arch_add_msi_route_post(struct kvm_irq_routing_entry *route,
+                                int vector, PCIDevice *dev);
+/* Notify arch about released MSI routes */
+int kvm_arch_release_virq_post(int virq);
+
 int kvm_arch_msi_data_to_gsi(uint32_t data);
 
 int kvm_set_irq(KVMState *s, int irq, int level);
 int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg);
 
 void kvm_irqchip_add_irq_route(KVMState *s, int gsi, int irqchip, int pin);
-void kvm_irqchip_commit_routes(KVMState *s);
 
-void kvm_put_apic_state(DeviceState *d, struct kvm_lapic_state *kapic);
 void kvm_get_apic_state(DeviceState *d, struct kvm_lapic_state *kapic);
 
 struct kvm_guest_debug;
@@ -474,9 +484,21 @@ static inline void cpu_synchronize_post_init(CPUState *cpu)
     }
 }
 
-int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg, PCIDevice *dev);
+/**
+ * kvm_irqchip_add_msi_route - Add MSI route for specific vector
+ * @s:      KVM state
+ * @vector: which vector to add. This can be either MSI/MSIX
+ *          vector. The function will automatically detect whether
+ *          MSI/MSIX is enabled, and fetch corresponding MSI
+ *          message.
+ * @dev:    Owner PCI device to add the route. If @dev is specified
+ *          as @NULL, an empty MSI message will be inited.
+ * @return: virq (>=0) when success, errno (<0) when failed.
+ */
+int kvm_irqchip_add_msi_route(KVMState *s, int vector, PCIDevice *dev);
 int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg,
                                  PCIDevice *dev);
+void kvm_irqchip_commit_routes(KVMState *s);
 void kvm_irqchip_release_virq(KVMState *s, int virq);
 
 int kvm_irqchip_add_adapter_route(KVMState *s, AdapterInfo *adapter);

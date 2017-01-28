@@ -11,7 +11,7 @@ $(call set-vpath, $(SRC_PATH):$(BUILD_DIR))
 ifdef CONFIG_LINUX
 QEMU_CFLAGS += -I../linux-headers
 endif
-QEMU_CFLAGS += -I.. -I$(SRC_PATH)/target-$(TARGET_BASE_ARCH) -DNEED_CPU_H
+QEMU_CFLAGS += -I.. -I$(SRC_PATH)/target/$(TARGET_BASE_ARCH) -DNEED_CPU_H
 
 QEMU_CFLAGS+=-I$(SRC_PATH)/include
 
@@ -26,7 +26,7 @@ ifneq (,$(findstring -mwindows,$(libs_softmmu)))
 # Terminate program name with a 'w' because the linker builds a windows executable.
 QEMU_PROGW=qemu-system-$(TARGET_NAME)w$(EXESUF)
 $(QEMU_PROG): $(QEMU_PROGW)
-	$(call quiet-command,$(OBJCOPY) --subsystem console $(QEMU_PROGW) $(QEMU_PROG),"  GEN   $(TARGET_DIR)$(QEMU_PROG)")
+	$(call quiet-command,$(OBJCOPY) --subsystem console $(QEMU_PROGW) $(QEMU_PROG),"GEN","$(TARGET_DIR)$(QEMU_PROG)")
 QEMU_PROG_BUILD = $(QEMU_PROGW)
 else
 QEMU_PROG_BUILD = $(QEMU_PROG)
@@ -48,34 +48,35 @@ else
 TARGET_TYPE=system
 endif
 
-$(QEMU_PROG).stp-installed: $(SRC_PATH)/trace-events
+$(QEMU_PROG).stp-installed: $(BUILD_DIR)/trace-events-all
 	$(call quiet-command,$(TRACETOOL) \
 		--format=stap \
 		--backends=$(TRACE_BACKENDS) \
 		--binary=$(bindir)/$(QEMU_PROG) \
 		--target-name=$(TARGET_NAME) \
 		--target-type=$(TARGET_TYPE) \
-		< $< > $@,"  GEN   $(TARGET_DIR)$(QEMU_PROG).stp-installed")
+		$< > $@,"GEN","$(TARGET_DIR)$(QEMU_PROG).stp-installed")
 
-$(QEMU_PROG).stp: $(SRC_PATH)/trace-events
+$(QEMU_PROG).stp: $(BUILD_DIR)/trace-events-all
 	$(call quiet-command,$(TRACETOOL) \
 		--format=stap \
 		--backends=$(TRACE_BACKENDS) \
 		--binary=$(realpath .)/$(QEMU_PROG) \
 		--target-name=$(TARGET_NAME) \
 		--target-type=$(TARGET_TYPE) \
-		< $< > $@,"  GEN   $(TARGET_DIR)$(QEMU_PROG).stp")
+		$< > $@,"GEN","$(TARGET_DIR)$(QEMU_PROG).stp")
 
-$(QEMU_PROG)-simpletrace.stp: $(SRC_PATH)/trace-events
+$(QEMU_PROG)-simpletrace.stp: $(BUILD_DIR)/trace-events-all
 	$(call quiet-command,$(TRACETOOL) \
 		--format=simpletrace-stap \
 		--backends=$(TRACE_BACKENDS) \
 		--probe-prefix=qemu.$(TARGET_TYPE).$(TARGET_NAME) \
-		< $< > $@,"  GEN   $(TARGET_DIR)$(QEMU_PROG)-simpletrace.stp")
+		$< > $@,"GEN","$(TARGET_DIR)$(QEMU_PROG)-simpletrace.stp")
 
 else
 stap:
 endif
+.PHONY: stap
 
 all: $(PROGS) stap
 
@@ -92,8 +93,9 @@ obj-$(CONFIG_TCG_INTERPRETER) += tci.o
 obj-y += tcg/tcg-common.o
 obj-$(CONFIG_TCG_INTERPRETER) += disas/tci.o
 obj-y += fpu/softfloat.o
-obj-y += target-$(TARGET_BASE_ARCH)/
+obj-y += target/$(TARGET_BASE_ARCH)/
 obj-y += disas.o
+obj-y += tcg-runtime.o
 obj-$(call notempty,$(TARGET_XML_FILES)) += gdbstub-xml.o
 obj-$(call lnot,$(CONFIG_KVM)) += kvm-stub.o
 
@@ -108,11 +110,8 @@ obj-$(CONFIG_LIBDECNUMBER) += libdecnumber/dpd/decimal128.o
 
 ifdef CONFIG_LINUX_USER
 
-# Note that we only add linux-user/host/$ARCH if it exists, and
-# that it must come before linux-user/host/generic in the search path.
 QEMU_CFLAGS+=-I$(SRC_PATH)/linux-user/$(TARGET_ABI_DIR) \
-             $(patsubst %,-I%,$(wildcard $(SRC_PATH)/linux-user/host/$(ARCH))) \
-             -I$(SRC_PATH)/linux-user/host/generic \
+             -I$(SRC_PATH)/linux-user/host/$(ARCH) \
              -I$(SRC_PATH)/linux-user
 
 obj-y += linux-user/
@@ -159,7 +158,7 @@ else
 obj-y += hw/$(TARGET_BASE_ARCH)/
 endif
 
-GENERATED_HEADERS += hmp-commands.h hmp-commands-info.h qmp-commands-old.h
+GENERATED_HEADERS += hmp-commands.h hmp-commands-info.h
 
 endif # CONFIG_SOFTMMU
 
@@ -199,26 +198,23 @@ $(QEMU_PROG_BUILD): config-devices.mak
 $(QEMU_PROG_BUILD): $(all-obj-y) ../libqemuutil.a ../libqemustub.a
 	$(call LINK, $(filter-out %.mak, $^))
 ifdef CONFIG_DARWIN
-	$(call quiet-command,Rez -append $(SRC_PATH)/pc-bios/qemu.rsrc -o $@,"  REZ   $(TARGET_DIR)$@")
-	$(call quiet-command,SetFile -a C $@,"  SETFILE $(TARGET_DIR)$@")
+	$(call quiet-command,Rez -append $(SRC_PATH)/pc-bios/qemu.rsrc -o $@,"REZ","$(TARGET_DIR)$@")
+	$(call quiet-command,SetFile -a C $@,"SETFILE","$(TARGET_DIR)$@")
 endif
 
 gdbstub-xml.c: $(TARGET_XML_FILES) $(SRC_PATH)/scripts/feature_to_c.sh
-	$(call quiet-command,rm -f $@ && $(SHELL) $(SRC_PATH)/scripts/feature_to_c.sh $@ $(TARGET_XML_FILES),"  GEN   $(TARGET_DIR)$@")
+	$(call quiet-command,rm -f $@ && $(SHELL) $(SRC_PATH)/scripts/feature_to_c.sh $@ $(TARGET_XML_FILES),"GEN","$(TARGET_DIR)$@")
 
 hmp-commands.h: $(SRC_PATH)/hmp-commands.hx $(SRC_PATH)/scripts/hxtool
-	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
+	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"GEN","$(TARGET_DIR)$@")
 
 hmp-commands-info.h: $(SRC_PATH)/hmp-commands-info.hx $(SRC_PATH)/scripts/hxtool
-	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
+	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"GEN","$(TARGET_DIR)$@")
 
-qmp-commands-old.h: $(SRC_PATH)/qmp-commands.hx $(SRC_PATH)/scripts/hxtool
-	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
-
-clean:
+clean: clean-target
 	rm -f *.a *~ $(PROGS)
 	rm -f $(shell find . -name '*.[od]')
-	rm -f hmp-commands.h qmp-commands-old.h gdbstub-xml.c
+	rm -f hmp-commands.h gdbstub-xml.c
 ifdef CONFIG_TRACE_SYSTEMTAP
 	rm -f *.stp
 endif

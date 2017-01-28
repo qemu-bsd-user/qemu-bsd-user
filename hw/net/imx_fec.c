@@ -429,7 +429,7 @@ static void imx_fec_do_tx(IMXFECState *s)
         frame_size += len;
         if (bd.flags & ENET_BD_L) {
             /* Last buffer in frame.  */
-            qemu_send_packet(qemu_get_queue(s->nic), frame, len);
+            qemu_send_packet(qemu_get_queue(s->nic), frame, frame_size);
             ptr = frame;
             frame_size = 0;
             s->regs[ENET_EIR] |= ENET_INT_TXF;
@@ -1147,7 +1147,7 @@ static void imx_eth_cleanup(NetClientState *nc)
 }
 
 static NetClientInfo imx_eth_net_info = {
-    .type                = NET_CLIENT_OPTIONS_KIND_NIC,
+    .type                = NET_CLIENT_DRIVER_NIC,
     .size                = sizeof(NICState),
     .can_receive         = imx_eth_can_receive,
     .receive             = imx_eth_receive,

@@ -17,6 +17,8 @@ struct I2CNode {
     QLIST_ENTRY(I2CNode) next;
 };
 
+#define I2C_BROADCAST 0x00
+
 struct I2CBus
 {
     BusState qbus;
@@ -47,6 +49,8 @@ static void i2c_bus_pre_save(void *opaque)
     if (!QLIST_EMPTY(&bus->current_devs)) {
         if (!bus->broadcast) {
             bus->saved_address = QLIST_FIRST(&bus->current_devs)->elt->address;
+        } else {
+            bus->saved_address = I2C_BROADCAST;
         }
     }
 }
@@ -58,7 +62,6 @@ static const VMStateDescription vmstate_i2c_bus = {
     .pre_save = i2c_bus_pre_save,
     .fields = (VMStateField[]) {
         VMSTATE_UINT8(saved_address, I2CBus),
-        VMSTATE_BOOL(broadcast, I2CBus),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -85,15 +88,28 @@ int i2c_bus_busy(I2CBus *bus)
     return !QLIST_EMPTY(&bus->current_devs);
 }
 
-/* Returns non-zero if the address is not valid.  */
 /* TODO: Make this handle multiple masters.  */
+/*
+ * Start or continue an i2c transaction.  When this is called for the
+ * first time or after an i2c_end_transfer(), if it returns an error
+ * the bus transaction is terminated (or really never started).  If
+ * this is called after another i2c_start_transfer() without an
+ * intervening i2c_end_transfer(), and it returns an error, the
+ * transaction will not be terminated.  The caller must do it.
+ *
+ * This corresponds with the way real hardware works.  The SMBus
+ * protocol uses a start transfer to switch from write to read mode
+ * without releasing the bus.  If that fails, the bus is still
+ * in a transaction.
+ */
 int i2c_start_transfer(I2CBus *bus, uint8_t address, int recv)
 {
     BusChild *kid;
     I2CSlaveClass *sc;
     I2CNode *node;
+    bool bus_scanned = false;
 
-    if (address == 0x00) {
+    if (address == I2C_BROADCAST) {
         /*
          * This is a broadcast, the current_devs will be all the devices of the
          * bus.
@@ -101,17 +117,28 @@ int i2c_start_transfer(I2CBus *bus, uint8_t address, int recv)
         bus->broadcast = true;
     }
 
-    QTAILQ_FOREACH(kid, &bus->qbus.children, sibling) {
-        DeviceState *qdev = kid->child;
-        I2CSlave *candidate = I2C_SLAVE(qdev);
-        if ((candidate->address == address) || (bus->broadcast)) {
-            node = g_malloc(sizeof(struct I2CNode));
-            node->elt = candidate;
-            QLIST_INSERT_HEAD(&bus->current_devs, node, next);
-            if (!bus->broadcast) {
-                break;
+    /*
+     * If there are already devices in the list, that means we are in
+     * the middle of a transaction and we shouldn't rescan the bus.
+     *
+     * This happens with any SMBus transaction, even on a pure I2C
+     * device.  The interface does a transaction start without
+     * terminating the previous transaction.
+     */
+    if (QLIST_EMPTY(&bus->current_devs)) {
+        QTAILQ_FOREACH(kid, &bus->qbus.children, sibling) {
+            DeviceState *qdev = kid->child;
+            I2CSlave *candidate = I2C_SLAVE(qdev);
+            if ((candidate->address == address) || (bus->broadcast)) {
+                node = g_malloc(sizeof(struct I2CNode));
+                node->elt = candidate;
+                QLIST_INSERT_HEAD(&bus->current_devs, node, next);
+                if (!bus->broadcast) {
+                    break;
+                }
             }
         }
+        bus_scanned = true;
     }
 
     if (QLIST_EMPTY(&bus->current_devs)) {
@@ -119,11 +146,21 @@ int i2c_start_transfer(I2CBus *bus, uint8_t address, int recv)
     }
 
     QLIST_FOREACH(node, &bus->current_devs, next) {
+        int rv;
+
         sc = I2C_SLAVE_GET_CLASS(node->elt);
         /* If the bus is already busy, assume this is a repeated
            start condition.  */
+
         if (sc->event) {
-            sc->event(node->elt, recv ? I2C_START_RECV : I2C_START_SEND);
+            rv = sc->event(node->elt, recv ? I2C_START_RECV : I2C_START_SEND);
+            if (rv && !bus->broadcast) {
+                if (bus_scanned) {
+                    /* First call, terminate the transfer. */
+                    i2c_end_transfer(bus);
+                }
+                return rv;
+            }
         }
     }
     return 0;
@@ -133,10 +170,6 @@ void i2c_end_transfer(I2CBus *bus)
 {
     I2CSlaveClass *sc;
     I2CNode *node, *next;
-
-    if (QLIST_EMPTY(&bus->current_devs)) {
-        return;
-    }
 
     QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
         sc = I2C_SLAVE_GET_CLASS(node->elt);
@@ -221,7 +254,8 @@ static int i2c_slave_post_load(void *opaque, int version_id)
     I2CNode *node;
 
     bus = I2C_BUS(qdev_get_parent_bus(DEVICE(dev)));
-    if ((bus->saved_address == dev->address) || (bus->broadcast)) {
+    if ((bus->saved_address == dev->address) ||
+        (bus->saved_address == I2C_BROADCAST)) {
         node = g_malloc(sizeof(struct I2CNode));
         node->elt = dev;
         QLIST_INSERT_HEAD(&bus->current_devs, node, next);
@@ -245,7 +279,11 @@ static int i2c_slave_qdev_init(DeviceState *dev)
     I2CSlave *s = I2C_SLAVE(dev);
     I2CSlaveClass *sc = I2C_SLAVE_GET_CLASS(s);
 
-    return sc->init(s);
+    if (sc->init) {
+        return sc->init(s);
+    }
+
+    return 0;
 }
 
 DeviceState *i2c_create_slave(I2CBus *bus, const char *name, uint8_t addr)

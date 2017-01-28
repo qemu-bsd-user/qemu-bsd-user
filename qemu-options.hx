@@ -38,7 +38,6 @@ DEF("machine", HAS_ARG, QEMU_OPTION_machine, \
     "                kvm_shadow_mem=size of KVM shadow MMU in bytes\n"
     "                dump-guest-core=on|off include guest memory in a core dump (default=on)\n"
     "                mem-merge=on|off controls memory merge support (default: on)\n"
-    "                iommu=on|off controls emulated Intel IOMMU (VT-d) support (default=off)\n"
     "                igd-passthru=on|off controls IGD GFX passthrough support (default=off)\n"
     "                aes-key-wrap=on|off controls support for AES key wrapping (default=on)\n"
     "                dea-key-wrap=on|off controls support for DEA key wrapping (default=on)\n"
@@ -73,8 +72,6 @@ Include guest memory in a core dump. The default is on.
 Enables or disables memory merge support. This feature, when supported by
 the host, de-duplicates identical memory pages among VMs instances
 (enabled by default).
-@item iommu=on|off
-Enables or disables emulated Intel IOMMU (VT-d) support. The default is off.
 @item aes-key-wrap=on|off
 Enables or disables AES key wrapping support on s390-ccw hosts. This feature
 controls whether AES wrapping keys will be created to allow
@@ -175,7 +172,7 @@ DEF("set", HAS_ARG, QEMU_OPTION_set,
 STEXI
 @item -set @var{group}.@var{id}.@var{arg}=@var{value}
 @findex -set
-Set parameter @var{arg} for item @var{id} of type @var{group}\n"
+Set parameter @var{arg} for item @var{id} of type @var{group}
 ETEXI
 
 DEF("global", HAS_ARG, QEMU_OPTION_global,
@@ -306,7 +303,7 @@ STEXI
 @findex -k
 Use keyboard layout @var{language} (for example @code{fr} for
 French). This option is only needed where it is not easy to get raw PC
-keycodes (e.g. on Macs, with some X11 servers or with a VNC
+keycodes (e.g. on Macs, with some X11 servers or with a VNC or curses
 display). You don't normally need to use it on PC/Linux or PC/Windows
 hosts.
 
@@ -930,10 +927,25 @@ ETEXI
 
 DEF("display", HAS_ARG, QEMU_OPTION_display,
     "-display sdl[,frame=on|off][,alt_grab=on|off][,ctrl_grab=on|off]\n"
-    "            [,window_close=on|off]|curses|none|\n"
-    "            gtk[,grab_on_hover=on|off]|\n"
-    "            vnc=<display>[,<optargs>]\n"
-    "                select display type\n", QEMU_ARCH_ALL)
+    "            [,window_close=on|off][,gl=on|off]|curses|none|\n"
+    "-display gtk[,grab_on_hover=on|off][,gl=on|off]|\n"
+    "-display vnc=<display>[,<optargs>]\n"
+    "-display curses\n"
+    "-display none"
+    "                select display type\n"
+    "The default display is equivalent to\n"
+#if defined(CONFIG_GTK)
+            "\t\"-display gtk\"\n"
+#elif defined(CONFIG_SDL)
+            "\t\"-display sdl\"\n"
+#elif defined(CONFIG_COCOA)
+            "\t\"-display cocoa\"\n"
+#elif defined(CONFIG_VNC)
+            "\t\"-vnc localhost:0,to=99,id=default\"\n"
+#else
+            "\t\"-display none\"\n"
+#endif
+    , QEMU_ARCH_ALL)
 STEXI
 @item -display @var{type}
 @findex -display
@@ -970,24 +982,27 @@ DEF("nographic", 0, QEMU_OPTION_nographic,
 STEXI
 @item -nographic
 @findex -nographic
-Normally, QEMU uses SDL to display the VGA output. With this option,
-you can totally disable graphical output so that QEMU is a simple
-command line application. The emulated serial port is redirected on
-the console and muxed with the monitor (unless redirected elsewhere
-explicitly). Therefore, you can still use QEMU to debug a Linux kernel
-with a serial console.  Use @key{C-a h} for help on switching between
-the console and monitor.
+Normally, if QEMU is compiled with graphical window support, it displays
+output such as guest graphics, guest console, and the QEMU monitor in a
+window. With this option, you can totally disable graphical output so
+that QEMU is a simple command line application. The emulated serial port
+is redirected on the console and muxed with the monitor (unless
+redirected elsewhere explicitly). Therefore, you can still use QEMU to
+debug a Linux kernel with a serial console. Use @key{C-a h} for help on
+switching between the console and monitor.
 ETEXI
 
 DEF("curses", 0, QEMU_OPTION_curses,
-    "-curses         use a curses/ncurses interface instead of SDL\n",
+    "-curses         shorthand for -display curses\n",
     QEMU_ARCH_ALL)
 STEXI
 @item -curses
 @findex -curses
-Normally, QEMU uses SDL to display the VGA output.  With this option,
-QEMU can display the VGA output when in text mode using a
-curses/ncurses interface.  Nothing is displayed in graphical mode.
+Normally, if QEMU is compiled with graphical window support, it displays
+output such as guest graphics, guest console, and the QEMU monitor in a
+window. With this option, QEMU can display the VGA output when in text
+mode using a curses/ncurses interface. Nothing is displayed in graphical
+mode.
 ETEXI
 
 DEF("no-frame", 0, QEMU_OPTION_no_frame,
@@ -1030,7 +1045,7 @@ Disable SDL window close capability.
 ETEXI
 
 DEF("sdl", 0, QEMU_OPTION_sdl,
-    "-sdl            enable SDL\n", QEMU_ARCH_ALL)
+    "-sdl            shorthand for -display sdl\n", QEMU_ARCH_ALL)
 STEXI
 @item -sdl
 @findex -sdl
@@ -1133,7 +1148,7 @@ Configure wan image compression (lossy for slow links).
 Default is auto.
 
 @item streaming-video=[off|all|filter]
-Configure video stream detection.  Default is filter.
+Configure video stream detection.  Default is off.
 
 @item agent-mouse=[on|off]
 Enable/disable passing mouse events via vdagent.  Default is on.
@@ -1227,17 +1242,18 @@ Set the initial graphical resolution and depth (PPC, SPARC only).
 ETEXI
 
 DEF("vnc", HAS_ARG, QEMU_OPTION_vnc ,
-    "-vnc display    start a VNC server on display\n", QEMU_ARCH_ALL)
+    "-vnc <display>  shorthand for -display vnc=<display>\n", QEMU_ARCH_ALL)
 STEXI
 @item -vnc @var{display}[,@var{option}[,@var{option}[,...]]]
 @findex -vnc
-Normally, QEMU uses SDL to display the VGA output.  With this option,
-you can have QEMU listen on VNC display @var{display} and redirect the VGA
-display over the VNC session.  It is very useful to enable the usb
-tablet device when using this option (option @option{-usbdevice
-tablet}). When using the VNC display, you must use the @option{-k}
-parameter to set the keyboard layout if you are not using en-us. Valid
-syntax for the @var{display} is
+Normally, if QEMU is compiled with graphical window support, it displays
+output such as guest graphics, guest console, and the QEMU monitor in a
+window. With this option, you can have QEMU listen on VNC display
+@var{display} and redirect the VGA display over the VNC session. It is
+very useful to enable the usb tablet device when using this option
+(option @option{-usbdevice tablet}). When using the VNC display, you
+must use the @option{-k} parameter to set the keyboard layout if you are
+not using en-us. Valid syntax for the @var{display} is
 
 @table @option
 
@@ -1582,9 +1598,11 @@ DEF("netdev", HAS_ARG, QEMU_OPTION_netdev,
     "                configure a host TAP network backend with ID 'str'\n"
 #else
     "-netdev tap,id=str[,fd=h][,fds=x:y:...:z][,ifname=name][,script=file][,downscript=dfile]\n"
-    "         [,helper=helper][,sndbuf=nbytes][,vnet_hdr=on|off][,vhost=on|off]\n"
+    "         [,br=bridge][,helper=helper][,sndbuf=nbytes][,vnet_hdr=on|off][,vhost=on|off]\n"
     "         [,vhostfd=h][,vhostfds=x:y:...:z][,vhostforce=on|off][,queues=n]\n"
+    "         [,poll-us=n]\n"
     "                configure a host TAP network backend with ID 'str'\n"
+    "                connected to a bridge (default=" DEFAULT_BRIDGE_INTERFACE ")\n"
     "                use network scripts 'file' (default=" DEFAULT_NETWORK_SCRIPT ")\n"
     "                to configure it and 'dfile' (default=" DEFAULT_NETWORK_DOWN_SCRIPT ")\n"
     "                to deconfigure it\n"
@@ -1603,6 +1621,8 @@ DEF("netdev", HAS_ARG, QEMU_OPTION_netdev,
     "                use 'vhostfd=h' to connect to an already opened vhost net device\n"
     "                use 'vhostfds=x:y:...:z to connect to multiple already opened vhost net devices\n"
     "                use 'queues=n' to specify the number of queues to be created for multiqueue TAP\n"
+    "                use 'poll-us=n' to speciy the maximum number of microseconds that could be\n"
+    "                spent on busy polling for vhost net\n"
     "-netdev bridge,id=str[,br=bridge][,helper=helper]\n"
     "                configure a host TAP network backend with ID 'str' that is\n"
     "                connected to a bridge (default=" DEFAULT_BRIDGE_INTERFACE ")\n"
@@ -1869,8 +1889,8 @@ processed and applied to -net user. Mixing them with the new configuration
 syntax gives undefined results. Their use for new applications is discouraged
 as they will be removed from future versions.
 
-@item -netdev tap,id=@var{id}[,fd=@var{h}][,ifname=@var{name}][,script=@var{file}][,downscript=@var{dfile}][,helper=@var{helper}]
-@itemx -net tap[,vlan=@var{n}][,name=@var{name}][,fd=@var{h}][,ifname=@var{name}][,script=@var{file}][,downscript=@var{dfile}][,helper=@var{helper}]
+@item -netdev tap,id=@var{id}[,fd=@var{h}][,ifname=@var{name}][,script=@var{file}][,downscript=@var{dfile}][,br=@var{bridge}][,helper=@var{helper}]
+@itemx -net tap[,vlan=@var{n}][,name=@var{name}][,fd=@var{h}][,ifname=@var{name}][,script=@var{file}][,downscript=@var{dfile}][,br=@var{bridge}][,helper=@var{helper}]
 Connect the host TAP network interface @var{name} to VLAN @var{n}.
 
 Use the network script @var{file} to configure it and the network script
@@ -1881,8 +1901,9 @@ automatically provides one. The default network configure script is
 to disable script execution.
 
 If running QEMU as an unprivileged user, use the network helper
-@var{helper} to configure the TAP interface. The default network
-helper executable is @file{/path/to/qemu-bridge-helper}.
+@var{helper} to configure the TAP interface and attach it to the bridge.
+The default network helper executable is @file{/path/to/qemu-bridge-helper}
+and the default bridge device is @file{br0}.
 
 @option{fd}=@var{h} can be used to specify the handle of an already
 opened host TAP interface.
@@ -2133,6 +2154,7 @@ The general form of a character device option is:
 ETEXI
 
 DEF("chardev", HAS_ARG, QEMU_OPTION_chardev,
+    "-chardev help\n"
     "-chardev null,id=id[,mux=on|off][,logfile=PATH][,logappend=on|off]\n"
     "-chardev socket,id=id[,host=host],port=port[,to=to][,ipv4][,ipv6][,nodelay][,reconnect=seconds]\n"
     "         [,server][,nowait][,telnet][,reconnect=seconds][,mux=on|off]\n"
@@ -2198,6 +2220,8 @@ Backend is one of:
 @option{spiceport}.
 The specific backend will determine the applicable options.
 
+Use "-chardev help" to print all available chardev backend types.
+
 All devices must have an id, which can be any string up to 127 characters long.
 It is used to uniquely identify this device in other command line directives.
 
@@ -2215,7 +2239,7 @@ two serial ports and the QEMU monitor:
 
 @example
 -chardev stdio,mux=on,id=char0 \
--mon chardev=char0,mode=readline,default \
+-mon chardev=char0,mode=readline \
 -serial chardev:char0 \
 -serial chardev:char0
 @end example
@@ -2226,7 +2250,7 @@ multiplexed between the QEMU monitor and a parallel port:
 
 @example
 -chardev stdio,mux=on,id=char0 \
--mon chardev=char0,mode=readline,default \
+-mon chardev=char0,mode=readline \
 -parallel chardev:char0 \
 -chardev tcp,...,mux=on,id=char1 \
 -serial chardev:char1 \
@@ -2350,7 +2374,7 @@ console with the given dimensions.
 @item -chardev ringbuf ,id=@var{id} [,size=@var{size}]
 
 Create a ring buffer with fixed size @option{size}.
-@var{size} must be a power of two, and defaults to @code{64K}).
+@var{size} must be a power of two and defaults to @code{64K}.
 
 @item -chardev file ,id=@var{id} ,path=@var{path}
 
@@ -2571,19 +2595,40 @@ TCP, Unix Domain Sockets and RDMA transport protocols.
 
 Syntax for specifying a VM disk image on GlusterFS volume is
 @example
-gluster[+transport]://[server[:port]]/volname/image[?socket=...]
+
+URI:
+gluster[+type]://[host[:port]]/volume/path[?socket=...][,debug=N][,logfile=...]
+
+JSON:
+'json:@{"driver":"qcow2","file":@{"driver":"gluster","volume":"testvol","path":"a.img","debug":N,"logfile":"...",
+@                                 "server":[@{"type":"tcp","host":"...","port":"..."@},
+@                                           @{"type":"unix","socket":"..."@}]@}@}'
 @end example
 
 
 Example
 @example
-qemu-system-x86_64 --drive file=gluster://192.0.2.1/testvol/a.img
+URI:
+qemu-system-x86_64 --drive file=gluster://192.0.2.1/testvol/a.img,
+@                               file.debug=9,file.logfile=/var/log/qemu-gluster.log
+
+JSON:
+qemu-system-x86_64 'json:@{"driver":"qcow2",
+@                          "file":@{"driver":"gluster",
+@                                   "volume":"testvol","path":"a.img",
+@                                   "debug":9,"logfile":"/var/log/qemu-gluster.log",
+@                                   "server":[@{"type":"tcp","host":"1.2.3.4","port":24007@},
+@                                             @{"type":"unix","socket":"/var/run/glusterd.socket"@}]@}@}'
+qemu-system-x86_64 -drive driver=qcow2,file.driver=gluster,file.volume=testvol,file.path=/path/a.img,
+@                                      file.debug=9,file.logfile=/var/log/qemu-gluster.log,
+@                                      file.server.0.type=tcp,file.server.0.host=1.2.3.4,file.server.0.port=24007,
+@                                      file.server.1.type=unix,file.server.1.socket=/var/run/glusterd.socket
 @end example
 
 See also @url{http://www.gluster.org}.
 
-@item HTTP/HTTPS/FTP/FTPS/TFTP
-QEMU supports read-only access to files accessed over http(s), ftp(s) and tftp.
+@item HTTP/HTTPS/FTP/FTPS
+QEMU supports read-only access to files accessed over http(s) and ftp(s).
 
 Syntax using a single filename:
 @example
@@ -2593,7 +2638,7 @@ Syntax using a single filename:
 where:
 @table @option
 @item protocol
-'http', 'https', 'ftp', 'ftps', or 'tftp'.
+'http', 'https', 'ftp', or 'ftps'.
 
 @item username
 Optional username for authentication to the remote server.
@@ -3088,9 +3133,9 @@ Like -qmp but uses pretty JSON formatting.
 ETEXI
 
 DEF("mon", HAS_ARG, QEMU_OPTION_mon, \
-    "-mon [chardev=]name[,mode=readline|control][,default]\n", QEMU_ARCH_ALL)
+    "-mon [chardev=]name[,mode=readline|control]\n", QEMU_ARCH_ALL)
 STEXI
-@item -mon [chardev=]name[,mode=readline|control][,default]
+@item -mon [chardev=]name[,mode=readline|control]
 @findex -mon
 Setup monitor on chardev @var{name}.
 ETEXI
@@ -3214,6 +3259,8 @@ STEXI
 @item -L  @var{path}
 @findex -L
 Set the directory for the BIOS, VGA BIOS and keymaps.
+
+To list all the data directories, use @code{-L help}.
 ETEXI
 
 DEF("bios", HAS_ARG, QEMU_OPTION_bios, \
@@ -3667,34 +3714,9 @@ DEF("trace", HAS_ARG, QEMU_OPTION_trace,
 STEXI
 HXCOMM This line is not accurate, as some sub-options are backend-specific but
 HXCOMM HX does not support conditional compilation of text.
-@item -trace [events=@var{file}][,file=@var{file}]
+@item -trace [[enable=]@var{pattern}][,events=@var{file}][,file=@var{file}]
 @findex -trace
-
-Specify tracing options.
-
-@table @option
-@item [enable=]@var{pattern}
-Immediately enable events matching @var{pattern}.
-The file must contain one event name (as listed in the @file{trace-events} file)
-per line; globbing patterns are accepted too.  This option is only
-available if QEMU has been compiled with the @var{simple}, @var{stderr}
-or @var{ftrace} tracing backend.  To specify multiple events or patterns,
-specify the @option{-trace} option multiple times.
-
-Use @code{-trace help} to print a list of names of trace points.
-
-@item events=@var{file}
-Immediately enable events listed in @var{file}.
-The file must contain one event name (as listed in the @file{trace-events} file)
-per line; globbing patterns are accepted too.  This option is only
-available if QEMU has been compiled with the @var{simple}, @var{stderr} or
-@var{ftrace} tracing backend.
-
-@item file=@var{file}
-Log output traces to @var{file}.
-This option is only available if QEMU has been compiled with
-the @var{simple} tracing backend.
-@end table
+@include qemu-option-trace.texi
 ETEXI
 
 HXCOMM Internal use
@@ -3888,12 +3910,82 @@ Create a filter-redirector we need to differ outdev id from indev id, id can not
 be the same. we can just use indev or outdev, but at least one of indev or outdev
 need to be specified.
 
-@item -object filter-dump,id=@var{id},netdev=@var{dev},file=@var{filename}][,maxlen=@var{len}]
+@item -object filter-rewriter,id=@var{id},netdev=@var{netdevid},rewriter-mode=@var{mode}[,queue=@var{all|rx|tx}]
+
+Filter-rewriter is a part of COLO project.It will rewrite tcp packet to
+secondary from primary to keep secondary tcp connection,and rewrite
+tcp packet to primary from secondary make tcp packet can be handled by
+client.
+
+usage:
+colo secondary:
+-object filter-redirector,id=f1,netdev=hn0,queue=tx,indev=red0
+-object filter-redirector,id=f2,netdev=hn0,queue=rx,outdev=red1
+-object filter-rewriter,id=rew0,netdev=hn0,queue=all
+
+@item -object filter-dump,id=@var{id},netdev=@var{dev}[,file=@var{filename}][,maxlen=@var{len}]
 
 Dump the network traffic on netdev @var{dev} to the file specified by
 @var{filename}. At most @var{len} bytes (64k by default) per packet are stored.
 The file format is libpcap, so it can be analyzed with tools such as tcpdump
 or Wireshark.
+
+@item -object colo-compare,id=@var{id},primary_in=@var{chardevid},secondary_in=@var{chardevid},
+outdev=@var{chardevid}
+
+Colo-compare gets packet from primary_in@var{chardevid} and secondary_in@var{chardevid}, than compare primary packet with
+secondary packet. If the packets are same, we will output primary
+packet to outdev@var{chardevid}, else we will notify colo-frame
+do checkpoint and send primary packet to outdev@var{chardevid}.
+
+we must use it with the help of filter-mirror and filter-redirector.
+
+@example
+
+primary:
+-netdev tap,id=hn0,vhost=off,script=/etc/qemu-ifup,downscript=/etc/qemu-ifdown
+-device e1000,id=e0,netdev=hn0,mac=52:a4:00:12:78:66
+-chardev socket,id=mirror0,host=3.3.3.3,port=9003,server,nowait
+-chardev socket,id=compare1,host=3.3.3.3,port=9004,server,nowait
+-chardev socket,id=compare0,host=3.3.3.3,port=9001,server,nowait
+-chardev socket,id=compare0-0,host=3.3.3.3,port=9001
+-chardev socket,id=compare_out,host=3.3.3.3,port=9005,server,nowait
+-chardev socket,id=compare_out0,host=3.3.3.3,port=9005
+-object filter-mirror,id=m0,netdev=hn0,queue=tx,outdev=mirror0
+-object filter-redirector,netdev=hn0,id=redire0,queue=rx,indev=compare_out
+-object filter-redirector,netdev=hn0,id=redire1,queue=rx,outdev=compare0
+-object colo-compare,id=comp0,primary_in=compare0-0,secondary_in=compare1,outdev=compare_out0
+
+secondary:
+-netdev tap,id=hn0,vhost=off,script=/etc/qemu-ifup,down script=/etc/qemu-ifdown
+-device e1000,netdev=hn0,mac=52:a4:00:12:78:66
+-chardev socket,id=red0,host=3.3.3.3,port=9003
+-chardev socket,id=red1,host=3.3.3.3,port=9004
+-object filter-redirector,id=f1,netdev=hn0,queue=tx,indev=red0
+-object filter-redirector,id=f2,netdev=hn0,queue=rx,outdev=red1
+
+@end example
+
+If you want to know the detail of above command line, you can read
+the colo-compare git log.
+
+@item -object cryptodev-backend-builtin,id=@var{id}[,queues=@var{queues}]
+
+Creates a cryptodev backend which executes crypto opreation from
+the QEMU cipher APIS. The @var{id} parameter is
+a unique ID that will be used to reference this cryptodev backend from
+the @option{virtio-crypto} device. The @var{queues} parameter is optional,
+which specify the queue number of cryptodev backend, the default of
+@var{queues} is 1.
+
+@example
+
+ # qemu-system-x86_64 \
+   [...] \
+       -object cryptodev-backend-builtin,id=cryptodev0 \
+       -device virtio-crypto-pci,id=crypto0,cryptodev=cryptodev0 \
+   [...]
+@end example
 
 @item -object secret,id=@var{id},data=@var{string},format=@var{raw|base64}[,keyid=@var{secretid},iv=@var{string}]
 @item -object secret,id=@var{id},file=@var{filename},format=@var{raw|base64}[,keyid=@var{secretid},iv=@var{string}]

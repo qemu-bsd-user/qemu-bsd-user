@@ -9,6 +9,7 @@
 #include "qemu/notify.h"
 #include "qemu/main-loop.h"
 #include "qemu/bitmap.h"
+#include "qemu/uuid.h"
 #include "qom/object.h"
 
 /* vl.c */
@@ -16,12 +17,8 @@
 extern const char *bios_name;
 
 extern const char *qemu_name;
-extern uint8_t qemu_uuid[];
+extern QemuUUID qemu_uuid;
 extern bool qemu_uuid_set;
-int qemu_uuid_parse(const char *str, uint8_t *uuid);
-
-#define UUID_FMT "%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx"
-#define UUID_NONE "00000000-0000-0000-0000-000000000000"
 
 bool runstate_check(RunState state);
 void runstate_set(RunState new_state);
@@ -75,6 +72,7 @@ void qemu_add_exit_notifier(Notifier *notify);
 void qemu_remove_exit_notifier(Notifier *notify);
 
 void qemu_add_machine_init_done_notifier(Notifier *notify);
+void qemu_remove_machine_init_done_notifier(Notifier *notify);
 
 void hmp_savevm(Monitor *mon, const QDict *qdict);
 int load_vmstate(const char *name);
@@ -170,13 +168,6 @@ extern int mem_prealloc;
 #define MAX_NODES 128
 #define NUMA_NODE_UNASSIGNED MAX_NODES
 
-/* The following shall be true for all CPUs:
- *   cpu->cpu_index < max_cpus <= MAX_CPUMASK_BITS
- *
- * Note that cpu->get_arch_id() may be larger than MAX_CPUMASK_BITS.
- */
-#define MAX_CPUMASK_BITS 255
-
 #define MAX_OPTION_ROMS 16
 typedef struct QEMUOptionRom {
     const char *name;
@@ -237,6 +228,7 @@ bool defaults_enabled(void);
 extern QemuOptsList qemu_legacy_drive_opts;
 extern QemuOptsList qemu_common_drive_opts;
 extern QemuOptsList qemu_drive_opts;
+extern QemuOptsList bdrv_runtime_opts;
 extern QemuOptsList qemu_chardev_opts;
 extern QemuOptsList qemu_device_opts;
 extern QemuOptsList qemu_netdev_opts;

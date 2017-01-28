@@ -38,7 +38,8 @@ void fd_start_outgoing_migration(MigrationState *s, const char *fdname, Error **
         return;
     }
 
-    migration_set_outgoing_channel(s, ioc, NULL);
+    qio_channel_set_name(QIO_CHANNEL(ioc), "migration-fd-outgoing");
+    migration_channel_connect(s, ioc, NULL);
     object_unref(OBJECT(ioc));
 }
 
@@ -46,7 +47,7 @@ static gboolean fd_accept_incoming_migration(QIOChannel *ioc,
                                              GIOCondition condition,
                                              gpointer opaque)
 {
-    migration_set_incoming_channel(migrate_get_current(), ioc);
+    migration_channel_process_incoming(migrate_get_current(), ioc);
     object_unref(OBJECT(ioc));
     return FALSE; /* unregister */
 }
@@ -65,6 +66,7 @@ void fd_start_incoming_migration(const char *infd, Error **errp)
         return;
     }
 
+    qio_channel_set_name(QIO_CHANNEL(ioc), "migration-fd-incoming");
     qio_channel_add_watch(ioc,
                           G_IO_IN,
                           fd_accept_incoming_migration,
