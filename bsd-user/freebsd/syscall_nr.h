@@ -469,7 +469,10 @@
 #define	TARGET_FREEBSD_NR_ppoll	545
 #define	TARGET_FREEBSD_NR_futimens	546
 #define	TARGET_FREEBSD_NR_utimensat	547
-#define	TARGET_FREEBSD_NR_MAXSYSCALL	548
+#define	TARGET_FREEBSD_NR_numa_getaffinity	548
+#define	TARGET_FREEBSD_NR_numa_setaffinity	549
+#define	TARGET_FREEBSD_NR_fdatasync	550
+#define	TARGET_FREEBSD_NR_MAXSYSCALL	551
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
 #define	TARGET_FREEBSD_NR_killpg	146
