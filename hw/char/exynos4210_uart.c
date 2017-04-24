@@ -102,7 +102,7 @@ typedef struct Exynos4210UartReg {
     uint32_t            reset_value;
 } Exynos4210UartReg;
 
-static Exynos4210UartReg exynos4210_uart_regs[] = {
+static const Exynos4210UartReg exynos4210_uart_regs[] = {
     {"ULCON",    ULCON,    0x00000000},
     {"UCON",     UCON,     0x00003000},
     {"UFCON",    UFCON,    0x00000000},
@@ -220,7 +220,7 @@ static uint8_t fifo_retrieve(Exynos4210UartFIFO *q)
     return  ret;
 }
 
-static int fifo_elements_number(Exynos4210UartFIFO *q)
+static int fifo_elements_number(const Exynos4210UartFIFO *q)
 {
     if (q->sp < q->rp) {
         return q->size - q->rp + q->sp;
@@ -229,7 +229,7 @@ static int fifo_elements_number(Exynos4210UartFIFO *q)
     return q->sp - q->rp;
 }
 
-static int fifo_empty_elements_number(Exynos4210UartFIFO *q)
+static int fifo_empty_elements_number(const Exynos4210UartFIFO *q)
 {
     return q->size - fifo_elements_number(q);
 }
@@ -245,7 +245,7 @@ static void fifo_reset(Exynos4210UartFIFO *q)
     q->rp = 0;
 }
 
-static uint32_t exynos4210_uart_Tx_FIFO_trigger_level(Exynos4210UartState *s)
+static uint32_t exynos4210_uart_Tx_FIFO_trigger_level(const Exynos4210UartState *s)
 {
     uint32_t level = 0;
     uint32_t reg;
@@ -306,7 +306,7 @@ static void exynos4210_uart_update_irq(Exynos4210UartState *s)
 
 static void exynos4210_uart_update_parameters(Exynos4210UartState *s)
 {
-    int speed, parity, data_bits, stop_bits, frame_size;
+    int speed, parity, data_bits, stop_bits;
     QEMUSerialSetParams ssp;
     uint64_t uclk_rate;
 
@@ -314,9 +314,7 @@ static void exynos4210_uart_update_parameters(Exynos4210UartState *s)
         return;
     }
 
-    frame_size = 1; /* start bit */
     if (s->reg[I_(ULCON)] & 0x20) {
-        frame_size++; /* parity bit */
         if (s->reg[I_(ULCON)] & 0x28) {
             parity = 'E';
         } else {
@@ -333,8 +331,6 @@ static void exynos4210_uart_update_parameters(Exynos4210UartState *s)
     }
 
     data_bits = (s->reg[I_(ULCON)] & 0x3) + 5;
-
-    frame_size += data_bits + stop_bits;
 
     uclk_rate = 24000000;
 
@@ -565,7 +561,7 @@ static const VMStateDescription vmstate_exynos4210_uart_fifo = {
     .fields = (VMStateField[]) {
         VMSTATE_UINT32(sp, Exynos4210UartFIFO),
         VMSTATE_UINT32(rp, Exynos4210UartFIFO),
-        VMSTATE_VBUFFER_UINT32(data, Exynos4210UartFIFO, 1, NULL, 0, size),
+        VMSTATE_VBUFFER_UINT32(data, Exynos4210UartFIFO, 1, NULL, size),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -586,7 +582,7 @@ static const VMStateDescription vmstate_exynos4210_uart = {
 DeviceState *exynos4210_uart_create(hwaddr addr,
                                     int fifo_size,
                                     int channel,
-                                    CharDriverState *chr,
+                                    Chardev *chr,
                                     qemu_irq irq)
 {
     DeviceState  *dev;

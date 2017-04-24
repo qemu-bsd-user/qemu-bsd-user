@@ -25,6 +25,8 @@
 #ifndef TARGET_ARM_INTERNALS_H
 #define TARGET_ARM_INTERNALS_H
 
+#include "hw/registerfields.h"
+
 /* register banks for CPU modes */
 #define BANK_USRSYS 0
 #define BANK_SVC    1
@@ -49,31 +51,15 @@ static inline bool excp_is_internal(int excp)
         || excp == EXCP_SEMIHOST;
 }
 
-/* Exception names for debug logging; note that not all of these
- * precisely correspond to architectural exceptions.
- */
-static const char * const excnames[] = {
-    [EXCP_UDEF] = "Undefined Instruction",
-    [EXCP_SWI] = "SVC",
-    [EXCP_PREFETCH_ABORT] = "Prefetch Abort",
-    [EXCP_DATA_ABORT] = "Data Abort",
-    [EXCP_IRQ] = "IRQ",
-    [EXCP_FIQ] = "FIQ",
-    [EXCP_BKPT] = "Breakpoint",
-    [EXCP_EXCEPTION_EXIT] = "QEMU v7M exception exit",
-    [EXCP_KERNEL_TRAP] = "QEMU intercept of kernel commpage",
-    [EXCP_HVC] = "Hypervisor Call",
-    [EXCP_HYP_TRAP] = "Hypervisor Trap",
-    [EXCP_SMC] = "Secure Monitor Call",
-    [EXCP_VIRQ] = "Virtual IRQ",
-    [EXCP_VFIQ] = "Virtual FIQ",
-    [EXCP_SEMIHOST] = "Semihosting call",
-};
-
 /* Scale factor for generic timers, ie number of ns per tick.
  * This gives a 62.5MHz timer.
  */
 #define GTIMER_SCALE 16
+
+/* Bit definitions for the v7M CONTROL register */
+FIELD(V7M_CONTROL, NPRIV, 0, 1)
+FIELD(V7M_CONTROL, SPSEL, 1, 1)
+FIELD(V7M_CONTROL, FPCA, 2, 1)
 
 /*
  * For AArch64, map a given EL to an index in the banked_spsr array.
@@ -436,6 +422,11 @@ void hw_breakpoint_update_all(ARMCPU *cpu);
 
 /* Callback function for checking if a watchpoint should trigger. */
 bool arm_debug_check_watchpoint(CPUState *cs, CPUWatchpoint *wp);
+
+/* Adjust addresses (in BE32 mode) before testing against watchpoint
+ * addresses.
+ */
+vaddr arm_adjust_watchpoint_address(CPUState *cs, vaddr addr, int len);
 
 /* Callback function for when a watchpoint or breakpoint triggers. */
 void arm_debug_excp_handler(CPUState *cs);

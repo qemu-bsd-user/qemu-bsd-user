@@ -1297,15 +1297,17 @@ void x86_cpu_do_interrupt(CPUState *cs)
     /* successfully delivered */
     env->old_exception = -1;
 #else
-    /* simulate a real cpu exception. On i386, it can
-       trigger new exceptions, but we do not handle
-       double or triple faults yet. */
-    do_interrupt_all(cpu, cs->exception_index,
-                     env->exception_is_int,
-                     env->error_code,
-                     env->exception_next_eip, 0);
-    /* successfully delivered */
-    env->old_exception = -1;
+    if (cs->exception_index >= EXCP_VMEXIT) {
+        assert(env->old_exception == -1);
+        do_vmexit(env, cs->exception_index - EXCP_VMEXIT, env->error_code);
+    } else {
+        do_interrupt_all(cpu, cs->exception_index,
+                         env->exception_is_int,
+                         env->error_code,
+                         env->exception_next_eip, 0);
+        /* successfully delivered */
+        env->old_exception = -1;
+    }
 #endif
 }
 
@@ -1331,10 +1333,11 @@ bool x86_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
 #endif
     if (interrupt_request & CPU_INTERRUPT_SIPI) {
         do_cpu_sipi(cpu);
+        ret = true;
     } else if (env->hflags2 & HF2_GIF_MASK) {
         if ((interrupt_request & CPU_INTERRUPT_SMI) &&
             !(env->hflags & HF_SMM_MASK)) {
-            cpu_svm_check_intercept_param(env, SVM_EXIT_SMI, 0);
+            cpu_svm_check_intercept_param(env, SVM_EXIT_SMI, 0, 0);
             cs->interrupt_request &= ~CPU_INTERRUPT_SMI;
             do_smm_enter(cpu);
             ret = true;
@@ -1355,7 +1358,7 @@ bool x86_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
                      (env->eflags & IF_MASK &&
                       !(env->hflags & HF_INHIBIT_IRQ_MASK))))) {
             int intno;
-            cpu_svm_check_intercept_param(env, SVM_EXIT_INTR, 0);
+            cpu_svm_check_intercept_param(env, SVM_EXIT_INTR, 0, 0);
             cs->interrupt_request &= ~(CPU_INTERRUPT_HARD |
                                        CPU_INTERRUPT_VIRQ);
             intno = cpu_get_pic_interrupt(env);
@@ -1371,7 +1374,7 @@ bool x86_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
                    !(env->hflags & HF_INHIBIT_IRQ_MASK)) {
             int intno;
             /* FIXME: this should respect TPR */
-            cpu_svm_check_intercept_param(env, SVM_EXIT_VINTR, 0);
+            cpu_svm_check_intercept_param(env, SVM_EXIT_VINTR, 0, 0);
             intno = x86_ldl_phys(cs, env->vm_vmcb
                              + offsetof(struct vmcb, control.int_vector));
             qemu_log_mask(CPU_LOG_TB_IN_ASM,

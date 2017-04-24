@@ -35,6 +35,7 @@
 #include "sysemu/kvm.h"
 #include "hw/i386/apic_internal.h"
 #include "kvm_i386.h"
+#include "trace.h"
 
 /*#define DEBUG_INTEL_IOMMU*/
 #ifdef DEBUG_INTEL_IOMMU
@@ -167,6 +168,7 @@ static gboolean vtd_hash_remove_by_domain(gpointer key, gpointer value,
 /* The shift of an addr for a certain level of paging structure */
 static inline uint32_t vtd_slpt_level_shift(uint32_t level)
 {
+    assert(level != 0);
     return VTD_PAGE_SHIFT_4K + (level - 1) * VTD_SL_LEVEL_BITS;
 }
 
@@ -259,11 +261,9 @@ static void vtd_update_iotlb(IntelIOMMUState *s, uint16_t source_id,
     uint64_t *key = g_malloc(sizeof(*key));
     uint64_t gfn = vtd_get_iotlb_gfn(addr, level);
 
-    VTD_DPRINTF(CACHE, "update iotlb sid 0x%"PRIx16 " gpa 0x%"PRIx64
-                " slpte 0x%"PRIx64 " did 0x%"PRIx16, source_id, addr, slpte,
-                domain_id);
+    trace_vtd_iotlb_page_update(source_id, addr, slpte, domain_id);
     if (g_hash_table_size(s->iotlb) >= VTD_IOTLB_MAX_SIZE) {
-        VTD_DPRINTF(CACHE, "iotlb exceeds size limit, forced to reset");
+        trace_vtd_iotlb_reset("iotlb exceeds size limit");
         vtd_reset_iotlb(s);
     }
 
@@ -474,22 +474,19 @@ static void vtd_handle_inv_queue_error(IntelIOMMUState *s)
 /* Set the IWC field and try to generate an invalidation completion interrupt */
 static void vtd_generate_completion_event(IntelIOMMUState *s)
 {
-    VTD_DPRINTF(INV, "completes an invalidation wait command with "
-                "Interrupt Flag");
     if (vtd_get_long_raw(s, DMAR_ICS_REG) & VTD_ICS_IWC) {
-        VTD_DPRINTF(INV, "there is a previous interrupt condition to be "
-                    "serviced by software, "
-                    "new invalidation event is not generated");
+        trace_vtd_inv_desc_wait_irq("One pending, skip current");
         return;
     }
     vtd_set_clear_mask_long(s, DMAR_ICS_REG, 0, VTD_ICS_IWC);
     vtd_set_clear_mask_long(s, DMAR_IECTL_REG, 0, VTD_IECTL_IP);
     if (vtd_get_long_raw(s, DMAR_IECTL_REG) & VTD_IECTL_IM) {
-        VTD_DPRINTF(INV, "IM filed in IECTL_REG is set, new invalidation "
-                    "event is not generated");
+        trace_vtd_inv_desc_wait_irq("IM in IECTL_REG is set, "
+                                    "new event not generated");
         return;
     } else {
         /* Generate the interrupt event */
+        trace_vtd_inv_desc_wait_irq("Generating complete event");
         vtd_generate_interrupt(s, DMAR_IEADDR_REG, DMAR_IEDATA_REG);
         vtd_set_clear_mask_long(s, DMAR_IECTL_REG, VTD_IECTL_IP, 0);
     }
@@ -507,8 +504,7 @@ static int vtd_get_root_entry(IntelIOMMUState *s, uint8_t index,
 
     addr = s->root + index * sizeof(*re);
     if (dma_memory_read(&address_space_memory, addr, re, sizeof(*re))) {
-        VTD_DPRINTF(GENERAL, "error: fail to access root-entry at 0x%"PRIx64
-                    " + %"PRIu8, s->root, index);
+        trace_vtd_re_invalid(re->rsvd, re->val);
         re->val = 0;
         return -VTD_FR_ROOT_TABLE_INV;
     }
@@ -526,15 +522,10 @@ static int vtd_get_context_entry_from_root(VTDRootEntry *root, uint8_t index,
 {
     dma_addr_t addr;
 
-    if (!vtd_root_entry_present(root)) {
-        VTD_DPRINTF(GENERAL, "error: root-entry is not present");
-        return -VTD_FR_ROOT_ENTRY_P;
-    }
+    /* we have checked that root entry is present */
     addr = (root->val & VTD_ROOT_ENTRY_CTP) + index * sizeof(*ce);
     if (dma_memory_read(&address_space_memory, addr, ce, sizeof(*ce))) {
-        VTD_DPRINTF(GENERAL, "error: fail to access context-entry at 0x%"PRIx64
-                    " + %"PRIu8,
-                    (uint64_t)(root->val & VTD_ROOT_ENTRY_CTP), index);
+        trace_vtd_re_invalid(root->rsvd, root->val);
         return -VTD_FR_CONTEXT_TABLE_INV;
     }
     ce->lo = le64_to_cpu(ce->lo);
@@ -575,12 +566,12 @@ static uint64_t vtd_get_slpte(dma_addr_t base_addr, uint32_t index)
     return slpte;
 }
 
-/* Given a gpa and the level of paging structure, return the offset of current
- * level.
+/* Given an iova and the level of paging structure, return the offset
+ * of current level.
  */
-static inline uint32_t vtd_gpa_level_offset(uint64_t gpa, uint32_t level)
+static inline uint32_t vtd_iova_level_offset(uint64_t iova, uint32_t level)
 {
-    return (gpa >> vtd_slpt_level_shift(level)) &
+    return (iova >> vtd_slpt_level_shift(level)) &
             ((1ULL << VTD_SL_LEVEL_BITS) - 1);
 }
 
@@ -602,6 +593,22 @@ static inline uint32_t vtd_get_level_from_context_entry(VTDContextEntry *ce)
 static inline uint32_t vtd_get_agaw_from_context_entry(VTDContextEntry *ce)
 {
     return 30 + (ce->hi & VTD_CONTEXT_ENTRY_AW) * 9;
+}
+
+static inline uint64_t vtd_iova_limit(VTDContextEntry *ce)
+{
+    uint32_t ce_agaw = vtd_get_agaw_from_context_entry(ce);
+    return 1ULL << MIN(ce_agaw, VTD_MGAW);
+}
+
+/* Return true if IOVA passes range check, otherwise false. */
+static inline bool vtd_iova_range_check(uint64_t iova, VTDContextEntry *ce)
+{
+    /*
+     * Check if @iova is above 2^X-1, where X is the minimum of MGAW
+     * in CAP_REG and AW in context-entry.
+     */
+    return !(iova & ~(vtd_iova_limit(ce) - 1));
 }
 
 static const uint64_t vtd_paging_entry_rsvd_field[] = {
@@ -628,25 +635,21 @@ static bool vtd_slpte_nonzero_rsvd(uint64_t slpte, uint32_t level)
     }
 }
 
-/* Given the @gpa, get relevant @slptep. @slpte_level will be the last level
+/* Given the @iova, get relevant @slptep. @slpte_level will be the last level
  * of the translation, can be used for deciding the size of large page.
  */
-static int vtd_gpa_to_slpte(VTDContextEntry *ce, uint64_t gpa, bool is_write,
-                            uint64_t *slptep, uint32_t *slpte_level,
-                            bool *reads, bool *writes)
+static int vtd_iova_to_slpte(VTDContextEntry *ce, uint64_t iova, bool is_write,
+                             uint64_t *slptep, uint32_t *slpte_level,
+                             bool *reads, bool *writes)
 {
     dma_addr_t addr = vtd_get_slpt_base_from_context(ce);
     uint32_t level = vtd_get_level_from_context_entry(ce);
     uint32_t offset;
     uint64_t slpte;
-    uint32_t ce_agaw = vtd_get_agaw_from_context_entry(ce);
     uint64_t access_right_check;
 
-    /* Check if @gpa is above 2^X-1, where X is the minimum of MGAW in CAP_REG
-     * and AW in context-entry.
-     */
-    if (gpa & ~((1ULL << MIN(ce_agaw, VTD_MGAW)) - 1)) {
-        VTD_DPRINTF(GENERAL, "error: gpa 0x%"PRIx64 " exceeds limits", gpa);
+    if (!vtd_iova_range_check(iova, ce)) {
+        VTD_DPRINTF(GENERAL, "error: iova 0x%"PRIx64 " exceeds limits", iova);
         return -VTD_FR_ADDR_BEYOND_MGAW;
     }
 
@@ -654,13 +657,13 @@ static int vtd_gpa_to_slpte(VTDContextEntry *ce, uint64_t gpa, bool is_write,
     access_right_check = is_write ? VTD_SL_W : VTD_SL_R;
 
     while (true) {
-        offset = vtd_gpa_level_offset(gpa, level);
+        offset = vtd_iova_level_offset(iova, level);
         slpte = vtd_get_slpte(addr, offset);
 
         if (slpte == (uint64_t)-1) {
             VTD_DPRINTF(GENERAL, "error: fail to access second-level paging "
-                        "entry at level %"PRIu32 " for gpa 0x%"PRIx64,
-                        level, gpa);
+                        "entry at level %"PRIu32 " for iova 0x%"PRIx64,
+                        level, iova);
             if (level == vtd_get_level_from_context_entry(ce)) {
                 /* Invalid programming of context-entry */
                 return -VTD_FR_CONTEXT_ENTRY_INV;
@@ -672,8 +675,8 @@ static int vtd_gpa_to_slpte(VTDContextEntry *ce, uint64_t gpa, bool is_write,
         *writes = (*writes) && (slpte & VTD_SL_W);
         if (!(slpte & access_right_check)) {
             VTD_DPRINTF(GENERAL, "error: lack of %s permission for "
-                        "gpa 0x%"PRIx64 " slpte 0x%"PRIx64,
-                        (is_write ? "write" : "read"), gpa, slpte);
+                        "iova 0x%"PRIx64 " slpte 0x%"PRIx64,
+                        (is_write ? "write" : "read"), iova, slpte);
             return is_write ? -VTD_FR_WRITE : -VTD_FR_READ;
         }
         if (vtd_slpte_nonzero_rsvd(slpte, level)) {
@@ -693,6 +696,135 @@ static int vtd_gpa_to_slpte(VTDContextEntry *ce, uint64_t gpa, bool is_write,
     }
 }
 
+typedef int (*vtd_page_walk_hook)(IOMMUTLBEntry *entry, void *private);
+
+/**
+ * vtd_page_walk_level - walk over specific level for IOVA range
+ *
+ * @addr: base GPA addr to start the walk
+ * @start: IOVA range start address
+ * @end: IOVA range end address (start <= addr < end)
+ * @hook_fn: hook func to be called when detected page
+ * @private: private data to be passed into hook func
+ * @read: whether parent level has read permission
+ * @write: whether parent level has write permission
+ * @notify_unmap: whether we should notify invalid entries
+ */
+static int vtd_page_walk_level(dma_addr_t addr, uint64_t start,
+                               uint64_t end, vtd_page_walk_hook hook_fn,
+                               void *private, uint32_t level,
+                               bool read, bool write, bool notify_unmap)
+{
+    bool read_cur, write_cur, entry_valid;
+    uint32_t offset;
+    uint64_t slpte;
+    uint64_t subpage_size, subpage_mask;
+    IOMMUTLBEntry entry;
+    uint64_t iova = start;
+    uint64_t iova_next;
+    int ret = 0;
+
+    trace_vtd_page_walk_level(addr, level, start, end);
+
+    subpage_size = 1ULL << vtd_slpt_level_shift(level);
+    subpage_mask = vtd_slpt_level_page_mask(level);
+
+    while (iova < end) {
+        iova_next = (iova & subpage_mask) + subpage_size;
+
+        offset = vtd_iova_level_offset(iova, level);
+        slpte = vtd_get_slpte(addr, offset);
+
+        if (slpte == (uint64_t)-1) {
+            trace_vtd_page_walk_skip_read(iova, iova_next);
+            goto next;
+        }
+
+        if (vtd_slpte_nonzero_rsvd(slpte, level)) {
+            trace_vtd_page_walk_skip_reserve(iova, iova_next);
+            goto next;
+        }
+
+        /* Permissions are stacked with parents' */
+        read_cur = read && (slpte & VTD_SL_R);
+        write_cur = write && (slpte & VTD_SL_W);
+
+        /*
+         * As long as we have either read/write permission, this is a
+         * valid entry. The rule works for both page entries and page
+         * table entries.
+         */
+        entry_valid = read_cur | write_cur;
+
+        if (vtd_is_last_slpte(slpte, level)) {
+            entry.target_as = &address_space_memory;
+            entry.iova = iova & subpage_mask;
+            /* NOTE: this is only meaningful if entry_valid == true */
+            entry.translated_addr = vtd_get_slpte_addr(slpte);
+            entry.addr_mask = ~subpage_mask;
+            entry.perm = IOMMU_ACCESS_FLAG(read_cur, write_cur);
+            if (!entry_valid && !notify_unmap) {
+                trace_vtd_page_walk_skip_perm(iova, iova_next);
+                goto next;
+            }
+            trace_vtd_page_walk_one(level, entry.iova, entry.translated_addr,
+                                    entry.addr_mask, entry.perm);
+            if (hook_fn) {
+                ret = hook_fn(&entry, private);
+                if (ret < 0) {
+                    return ret;
+                }
+            }
+        } else {
+            if (!entry_valid) {
+                trace_vtd_page_walk_skip_perm(iova, iova_next);
+                goto next;
+            }
+            ret = vtd_page_walk_level(vtd_get_slpte_addr(slpte), iova,
+                                      MIN(iova_next, end), hook_fn, private,
+                                      level - 1, read_cur, write_cur,
+                                      notify_unmap);
+            if (ret < 0) {
+                return ret;
+            }
+        }
+
+next:
+        iova = iova_next;
+    }
+
+    return 0;
+}
+
+/**
+ * vtd_page_walk - walk specific IOVA range, and call the hook
+ *
+ * @ce: context entry to walk upon
+ * @start: IOVA address to start the walk
+ * @end: IOVA range end address (start <= addr < end)
+ * @hook_fn: the hook that to be called for each detected area
+ * @private: private data for the hook function
+ */
+static int vtd_page_walk(VTDContextEntry *ce, uint64_t start, uint64_t end,
+                         vtd_page_walk_hook hook_fn, void *private,
+                         bool notify_unmap)
+{
+    dma_addr_t addr = vtd_get_slpt_base_from_context(ce);
+    uint32_t level = vtd_get_level_from_context_entry(ce);
+
+    if (!vtd_iova_range_check(start, ce)) {
+        return -VTD_FR_ADDR_BEYOND_MGAW;
+    }
+
+    if (!vtd_iova_range_check(end, ce)) {
+        /* Fix end so that it reaches the maximum */
+        end = vtd_iova_limit(ce);
+    }
+
+    return vtd_page_walk_level(addr, start, end, hook_fn, private,
+                               level, true, true, notify_unmap);
+}
+
 /* Map a device to its corresponding domain (context-entry) */
 static int vtd_dev_to_context_entry(IntelIOMMUState *s, uint8_t bus_num,
                                     uint8_t devfn, VTDContextEntry *ce)
@@ -706,12 +838,11 @@ static int vtd_dev_to_context_entry(IntelIOMMUState *s, uint8_t bus_num,
     }
 
     if (!vtd_root_entry_present(&re)) {
-        VTD_DPRINTF(GENERAL, "error: root-entry #%"PRIu8 " is not present",
-                    bus_num);
+        /* Not error - it's okay we don't have root entry. */
+        trace_vtd_re_not_present(bus_num);
         return -VTD_FR_ROOT_ENTRY_P;
     } else if (re.rsvd || (re.val & VTD_ROOT_ENTRY_RSVD)) {
-        VTD_DPRINTF(GENERAL, "error: non-zero reserved field in root-entry "
-                    "hi 0x%"PRIx64 " lo 0x%"PRIx64, re.rsvd, re.val);
+        trace_vtd_re_invalid(re.rsvd, re.val);
         return -VTD_FR_ROOT_ENTRY_RSVD;
     }
 
@@ -721,22 +852,17 @@ static int vtd_dev_to_context_entry(IntelIOMMUState *s, uint8_t bus_num,
     }
 
     if (!vtd_context_entry_present(ce)) {
-        VTD_DPRINTF(GENERAL,
-                    "error: context-entry #%"PRIu8 "(bus #%"PRIu8 ") "
-                    "is not present", devfn, bus_num);
+        /* Not error - it's okay we don't have context entry. */
+        trace_vtd_ce_not_present(bus_num, devfn);
         return -VTD_FR_CONTEXT_ENTRY_P;
     } else if ((ce->hi & VTD_CONTEXT_ENTRY_RSVD_HI) ||
                (ce->lo & VTD_CONTEXT_ENTRY_RSVD_LO)) {
-        VTD_DPRINTF(GENERAL,
-                    "error: non-zero reserved field in context-entry "
-                    "hi 0x%"PRIx64 " lo 0x%"PRIx64, ce->hi, ce->lo);
+        trace_vtd_ce_invalid(ce->hi, ce->lo);
         return -VTD_FR_CONTEXT_ENTRY_RSVD;
     }
     /* Check if the programming of context-entry is valid */
     if (!vtd_is_level_supported(s, vtd_get_level_from_context_entry(ce))) {
-        VTD_DPRINTF(GENERAL, "error: unsupported Address Width value in "
-                    "context-entry hi 0x%"PRIx64 " lo 0x%"PRIx64,
-                    ce->hi, ce->lo);
+        trace_vtd_ce_invalid(ce->hi, ce->lo);
         return -VTD_FR_CONTEXT_ENTRY_INV;
     } else {
         switch (ce->lo & VTD_CONTEXT_ENTRY_TT) {
@@ -745,9 +871,7 @@ static int vtd_dev_to_context_entry(IntelIOMMUState *s, uint8_t bus_num,
         case VTD_CONTEXT_TT_DEV_IOTLB:
             break;
         default:
-            VTD_DPRINTF(GENERAL, "error: unsupported Translation Type in "
-                        "context-entry hi 0x%"PRIx64 " lo 0x%"PRIx64,
-                        ce->hi, ce->lo);
+            trace_vtd_ce_invalid(ce->hi, ce->lo);
             return -VTD_FR_CONTEXT_ENTRY_INV;
         }
     }
@@ -818,34 +942,17 @@ static void vtd_do_iommu_translate(VTDAddressSpace *vtd_as, PCIBus *bus,
     bool writes = true;
     VTDIOTLBEntry *iotlb_entry;
 
-    /* Check if the request is in interrupt address range */
-    if (vtd_is_interrupt_addr(addr)) {
-        if (is_write) {
-            /* FIXME: since we don't know the length of the access here, we
-             * treat Non-DWORD length write requests without PASID as
-             * interrupt requests, too. Withoud interrupt remapping support,
-             * we just use 1:1 mapping.
-             */
-            VTD_DPRINTF(MMU, "write request to interrupt address "
-                        "gpa 0x%"PRIx64, addr);
-            entry->iova = addr & VTD_PAGE_MASK_4K;
-            entry->translated_addr = addr & VTD_PAGE_MASK_4K;
-            entry->addr_mask = ~VTD_PAGE_MASK_4K;
-            entry->perm = IOMMU_WO;
-            return;
-        } else {
-            VTD_DPRINTF(GENERAL, "error: read request from interrupt address "
-                        "gpa 0x%"PRIx64, addr);
-            vtd_report_dmar_fault(s, source_id, addr, VTD_FR_READ, is_write);
-            return;
-        }
-    }
+    /*
+     * We have standalone memory region for interrupt addresses, we
+     * should never receive translation requests in this region.
+     */
+    assert(!vtd_is_interrupt_addr(addr));
+
     /* Try to fetch slpte form IOTLB */
     iotlb_entry = vtd_lookup_iotlb(s, source_id, addr);
     if (iotlb_entry) {
-        VTD_DPRINTF(CACHE, "hit iotlb sid 0x%"PRIx16 " gpa 0x%"PRIx64
-                    " slpte 0x%"PRIx64 " did 0x%"PRIx16, source_id, addr,
-                    iotlb_entry->slpte, iotlb_entry->domain_id);
+        trace_vtd_iotlb_page_hit(source_id, addr, iotlb_entry->slpte,
+                                 iotlb_entry->domain_id);
         slpte = iotlb_entry->slpte;
         reads = iotlb_entry->read_flags;
         writes = iotlb_entry->write_flags;
@@ -854,10 +961,9 @@ static void vtd_do_iommu_translate(VTDAddressSpace *vtd_as, PCIBus *bus,
     }
     /* Try to fetch context-entry from cache first */
     if (cc_entry->context_cache_gen == s->context_cache_gen) {
-        VTD_DPRINTF(CACHE, "hit context-cache bus %d devfn %d "
-                    "(hi %"PRIx64 " lo %"PRIx64 " gen %"PRIu32 ")",
-                    bus_num, devfn, cc_entry->context_entry.hi,
-                    cc_entry->context_entry.lo, cc_entry->context_cache_gen);
+        trace_vtd_iotlb_cc_hit(bus_num, devfn, cc_entry->context_entry.hi,
+                               cc_entry->context_entry.lo,
+                               cc_entry->context_cache_gen);
         ce = cc_entry->context_entry;
         is_fpd_set = ce.lo & VTD_CONTEXT_ENTRY_FPD;
     } else {
@@ -866,30 +972,26 @@ static void vtd_do_iommu_translate(VTDAddressSpace *vtd_as, PCIBus *bus,
         if (ret_fr) {
             ret_fr = -ret_fr;
             if (is_fpd_set && vtd_is_qualified_fault(ret_fr)) {
-                VTD_DPRINTF(FLOG, "fault processing is disabled for DMA "
-                            "requests through this context-entry "
-                            "(with FPD Set)");
+                trace_vtd_fault_disabled();
             } else {
                 vtd_report_dmar_fault(s, source_id, addr, ret_fr, is_write);
             }
             return;
         }
         /* Update context-cache */
-        VTD_DPRINTF(CACHE, "update context-cache bus %d devfn %d "
-                    "(hi %"PRIx64 " lo %"PRIx64 " gen %"PRIu32 "->%"PRIu32 ")",
-                    bus_num, devfn, ce.hi, ce.lo,
-                    cc_entry->context_cache_gen, s->context_cache_gen);
+        trace_vtd_iotlb_cc_update(bus_num, devfn, ce.hi, ce.lo,
+                                  cc_entry->context_cache_gen,
+                                  s->context_cache_gen);
         cc_entry->context_entry = ce;
         cc_entry->context_cache_gen = s->context_cache_gen;
     }
 
-    ret_fr = vtd_gpa_to_slpte(&ce, addr, is_write, &slpte, &level,
-                              &reads, &writes);
+    ret_fr = vtd_iova_to_slpte(&ce, addr, is_write, &slpte, &level,
+                               &reads, &writes);
     if (ret_fr) {
         ret_fr = -ret_fr;
         if (is_fpd_set && vtd_is_qualified_fault(ret_fr)) {
-            VTD_DPRINTF(FLOG, "fault processing is disabled for DMA requests "
-                        "through this context-entry (with FPD Set)");
+            trace_vtd_fault_disabled();
         } else {
             vtd_report_dmar_fault(s, source_id, addr, ret_fr, is_write);
         }
@@ -937,12 +1039,30 @@ static void vtd_interrupt_remap_table_setup(IntelIOMMUState *s)
                 s->intr_root, s->intr_size);
 }
 
+static void vtd_iommu_replay_all(IntelIOMMUState *s)
+{
+    IntelIOMMUNotifierNode *node;
+
+    QLIST_FOREACH(node, &s->notifiers_list, next) {
+        memory_region_iommu_replay_all(&node->vtd_as->iommu);
+    }
+}
+
 static void vtd_context_global_invalidate(IntelIOMMUState *s)
 {
+    trace_vtd_inv_desc_cc_global();
     s->context_cache_gen++;
     if (s->context_cache_gen == VTD_CONTEXT_CACHE_GEN_MAX) {
         vtd_reset_context_cache(s);
     }
+    /*
+     * From VT-d spec 6.5.2.1, a global context entry invalidation
+     * should be followed by a IOTLB global invalidation, so we should
+     * be safe even without this. Hoewever, let's replay the region as
+     * well to be safer, and go back here when we need finer tunes for
+     * VT-d emulation codes.
+     */
+    vtd_iommu_replay_all(s);
 }
 
 
@@ -978,8 +1098,10 @@ static void vtd_context_device_invalidate(IntelIOMMUState *s,
     uint16_t mask;
     VTDBus *vtd_bus;
     VTDAddressSpace *vtd_as;
-    uint16_t devfn;
+    uint8_t bus_n, devfn;
     uint16_t devfn_it;
+
+    trace_vtd_inv_desc_cc_devices(source_id, func_mask);
 
     switch (func_mask & 3) {
     case 0:
@@ -996,17 +1118,27 @@ static void vtd_context_device_invalidate(IntelIOMMUState *s,
         break;
     }
     mask = ~mask;
-    VTD_DPRINTF(INV, "device-selective invalidation source 0x%"PRIx16
-                    " mask %"PRIu16, source_id, mask);
-    vtd_bus = vtd_find_as_from_bus_num(s, VTD_SID_TO_BUS(source_id));
+
+    bus_n = VTD_SID_TO_BUS(source_id);
+    vtd_bus = vtd_find_as_from_bus_num(s, bus_n);
     if (vtd_bus) {
         devfn = VTD_SID_TO_DEVFN(source_id);
         for (devfn_it = 0; devfn_it < X86_IOMMU_PCI_DEVFN_MAX; ++devfn_it) {
             vtd_as = vtd_bus->dev_as[devfn_it];
             if (vtd_as && ((devfn_it & mask) == (devfn & mask))) {
-                VTD_DPRINTF(INV, "invalidate context-cahce of devfn 0x%"PRIx16,
-                            devfn_it);
+                trace_vtd_inv_desc_cc_device(bus_n, VTD_PCI_SLOT(devfn_it),
+                                             VTD_PCI_FUNC(devfn_it));
                 vtd_as->context_cache_entry.context_cache_gen = 0;
+                /*
+                 * So a device is moving out of (or moving into) a
+                 * domain, a replay() suites here to notify all the
+                 * IOMMU_NOTIFIER_MAP registers about this change.
+                 * This won't bring bad even if we have no such
+                 * notifier registered - the IOMMU notification
+                 * framework will skip MAP notifications if that
+                 * happened.
+                 */
+                memory_region_iommu_replay_all(&vtd_as->iommu);
             }
         }
     }
@@ -1046,13 +1178,55 @@ static uint64_t vtd_context_cache_invalidate(IntelIOMMUState *s, uint64_t val)
 
 static void vtd_iotlb_global_invalidate(IntelIOMMUState *s)
 {
+    trace_vtd_iotlb_reset("global invalidation recved");
     vtd_reset_iotlb(s);
+    vtd_iommu_replay_all(s);
 }
 
 static void vtd_iotlb_domain_invalidate(IntelIOMMUState *s, uint16_t domain_id)
 {
+    IntelIOMMUNotifierNode *node;
+    VTDContextEntry ce;
+    VTDAddressSpace *vtd_as;
+
     g_hash_table_foreach_remove(s->iotlb, vtd_hash_remove_by_domain,
                                 &domain_id);
+
+    QLIST_FOREACH(node, &s->notifiers_list, next) {
+        vtd_as = node->vtd_as;
+        if (!vtd_dev_to_context_entry(s, pci_bus_num(vtd_as->bus),
+                                      vtd_as->devfn, &ce) &&
+            domain_id == VTD_CONTEXT_ENTRY_DID(ce.hi)) {
+            memory_region_iommu_replay_all(&vtd_as->iommu);
+        }
+    }
+}
+
+static int vtd_page_invalidate_notify_hook(IOMMUTLBEntry *entry,
+                                           void *private)
+{
+    memory_region_notify_iommu((MemoryRegion *)private, *entry);
+    return 0;
+}
+
+static void vtd_iotlb_page_invalidate_notify(IntelIOMMUState *s,
+                                           uint16_t domain_id, hwaddr addr,
+                                           uint8_t am)
+{
+    IntelIOMMUNotifierNode *node;
+    VTDContextEntry ce;
+    int ret;
+
+    QLIST_FOREACH(node, &(s->notifiers_list), next) {
+        VTDAddressSpace *vtd_as = node->vtd_as;
+        ret = vtd_dev_to_context_entry(s, pci_bus_num(vtd_as->bus),
+                                       vtd_as->devfn, &ce);
+        if (!ret && domain_id == VTD_CONTEXT_ENTRY_DID(ce.hi)) {
+            vtd_page_walk(&ce, addr, addr + (1 << am) * VTD_PAGE_SIZE,
+                          vtd_page_invalidate_notify_hook,
+                          (void *)&vtd_as->iommu, true);
+        }
+    }
 }
 
 static void vtd_iotlb_page_invalidate(IntelIOMMUState *s, uint16_t domain_id,
@@ -1065,6 +1239,7 @@ static void vtd_iotlb_page_invalidate(IntelIOMMUState *s, uint16_t domain_id,
     info.addr = addr;
     info.mask = ~((1 << am) - 1);
     g_hash_table_foreach_remove(s->iotlb, vtd_hash_remove_by_page, &info);
+    vtd_iotlb_page_invalidate_notify(s, domain_id, addr, am);
 }
 
 /* Flush IOTLB
@@ -1186,9 +1361,49 @@ static void vtd_handle_gcmd_sirtp(IntelIOMMUState *s)
     vtd_set_clear_mask_long(s, DMAR_GSTS_REG, 0, VTD_GSTS_IRTPS);
 }
 
+static void vtd_switch_address_space(VTDAddressSpace *as)
+{
+    assert(as);
+
+    trace_vtd_switch_address_space(pci_bus_num(as->bus),
+                                   VTD_PCI_SLOT(as->devfn),
+                                   VTD_PCI_FUNC(as->devfn),
+                                   as->iommu_state->dmar_enabled);
+
+    /* Turn off first then on the other */
+    if (as->iommu_state->dmar_enabled) {
+        memory_region_set_enabled(&as->sys_alias, false);
+        memory_region_set_enabled(&as->iommu, true);
+    } else {
+        memory_region_set_enabled(&as->iommu, false);
+        memory_region_set_enabled(&as->sys_alias, true);
+    }
+}
+
+static void vtd_switch_address_space_all(IntelIOMMUState *s)
+{
+    GHashTableIter iter;
+    VTDBus *vtd_bus;
+    int i;
+
+    g_hash_table_iter_init(&iter, s->vtd_as_by_busptr);
+    while (g_hash_table_iter_next(&iter, NULL, (void **)&vtd_bus)) {
+        for (i = 0; i < X86_IOMMU_PCI_DEVFN_MAX; i++) {
+            if (!vtd_bus->dev_as[i]) {
+                continue;
+            }
+            vtd_switch_address_space(vtd_bus->dev_as[i]);
+        }
+    }
+}
+
 /* Handle Translation Enable/Disable */
 static void vtd_handle_gcmd_te(IntelIOMMUState *s, bool en)
 {
+    if (s->dmar_enabled == en) {
+        return;
+    }
+
     VTD_DPRINTF(CSR, "Translation Enable %s", (en ? "on" : "off"));
 
     if (en) {
@@ -1203,6 +1418,8 @@ static void vtd_handle_gcmd_te(IntelIOMMUState *s, bool en)
         /* Ok - report back to driver */
         vtd_set_clear_mask_long(s, DMAR_GSTS_REG, VTD_GSTS_TES, 0);
     }
+
+    vtd_switch_address_space_all(s);
 }
 
 /* Handle Interrupt Remap Enable/Disable */
@@ -1318,9 +1535,7 @@ static bool vtd_process_wait_desc(IntelIOMMUState *s, VTDInvDesc *inv_desc)
 {
     if ((inv_desc->hi & VTD_INV_DESC_WAIT_RSVD_HI) ||
         (inv_desc->lo & VTD_INV_DESC_WAIT_RSVD_LO)) {
-        VTD_DPRINTF(GENERAL, "error: non-zero reserved field in Invalidation "
-                    "Wait Descriptor hi 0x%"PRIx64 " lo 0x%"PRIx64,
-                    inv_desc->hi, inv_desc->lo);
+        trace_vtd_inv_desc_wait_invalid(inv_desc->hi, inv_desc->lo);
         return false;
     }
     if (inv_desc->lo & VTD_INV_DESC_WAIT_SW) {
@@ -1332,21 +1547,18 @@ static bool vtd_process_wait_desc(IntelIOMMUState *s, VTDInvDesc *inv_desc)
 
         /* FIXME: need to be masked with HAW? */
         dma_addr_t status_addr = inv_desc->hi;
-        VTD_DPRINTF(INV, "status data 0x%x, status addr 0x%"PRIx64,
-                    status_data, status_addr);
+        trace_vtd_inv_desc_wait_sw(status_addr, status_data);
         status_data = cpu_to_le32(status_data);
         if (dma_memory_write(&address_space_memory, status_addr, &status_data,
                              sizeof(status_data))) {
-            VTD_DPRINTF(GENERAL, "error: fail to perform a coherent write");
+            trace_vtd_inv_desc_wait_write_fail(inv_desc->hi, inv_desc->lo);
             return false;
         }
     } else if (inv_desc->lo & VTD_INV_DESC_WAIT_IF) {
         /* Interrupt flag */
-        VTD_DPRINTF(INV, "Invalidation Wait Descriptor interrupt completion");
         vtd_generate_completion_event(s);
     } else {
-        VTD_DPRINTF(GENERAL, "error: invalid Invalidation Wait Descriptor: "
-                    "hi 0x%"PRIx64 " lo 0x%"PRIx64, inv_desc->hi, inv_desc->lo);
+        trace_vtd_inv_desc_wait_invalid(inv_desc->hi, inv_desc->lo);
         return false;
     }
     return true;
@@ -1355,30 +1567,29 @@ static bool vtd_process_wait_desc(IntelIOMMUState *s, VTDInvDesc *inv_desc)
 static bool vtd_process_context_cache_desc(IntelIOMMUState *s,
                                            VTDInvDesc *inv_desc)
 {
+    uint16_t sid, fmask;
+
     if ((inv_desc->lo & VTD_INV_DESC_CC_RSVD) || inv_desc->hi) {
-        VTD_DPRINTF(GENERAL, "error: non-zero reserved field in Context-cache "
-                    "Invalidate Descriptor");
+        trace_vtd_inv_desc_cc_invalid(inv_desc->hi, inv_desc->lo);
         return false;
     }
     switch (inv_desc->lo & VTD_INV_DESC_CC_G) {
     case VTD_INV_DESC_CC_DOMAIN:
-        VTD_DPRINTF(INV, "domain-selective invalidation domain 0x%"PRIx16,
-                    (uint16_t)VTD_INV_DESC_CC_DID(inv_desc->lo));
+        trace_vtd_inv_desc_cc_domain(
+            (uint16_t)VTD_INV_DESC_CC_DID(inv_desc->lo));
         /* Fall through */
     case VTD_INV_DESC_CC_GLOBAL:
-        VTD_DPRINTF(INV, "global invalidation");
         vtd_context_global_invalidate(s);
         break;
 
     case VTD_INV_DESC_CC_DEVICE:
-        vtd_context_device_invalidate(s, VTD_INV_DESC_CC_SID(inv_desc->lo),
-                                      VTD_INV_DESC_CC_FM(inv_desc->lo));
+        sid = VTD_INV_DESC_CC_SID(inv_desc->lo);
+        fmask = VTD_INV_DESC_CC_FM(inv_desc->lo);
+        vtd_context_device_invalidate(s, sid, fmask);
         break;
 
     default:
-        VTD_DPRINTF(GENERAL, "error: invalid granularity in Context-cache "
-                    "Invalidate Descriptor hi 0x%"PRIx64  " lo 0x%"PRIx64,
-                    inv_desc->hi, inv_desc->lo);
+        trace_vtd_inv_desc_cc_invalid(inv_desc->hi, inv_desc->lo);
         return false;
     }
     return true;
@@ -1392,22 +1603,19 @@ static bool vtd_process_iotlb_desc(IntelIOMMUState *s, VTDInvDesc *inv_desc)
 
     if ((inv_desc->lo & VTD_INV_DESC_IOTLB_RSVD_LO) ||
         (inv_desc->hi & VTD_INV_DESC_IOTLB_RSVD_HI)) {
-        VTD_DPRINTF(GENERAL, "error: non-zero reserved field in IOTLB "
-                    "Invalidate Descriptor hi 0x%"PRIx64 " lo 0x%"PRIx64,
-                    inv_desc->hi, inv_desc->lo);
+        trace_vtd_inv_desc_iotlb_invalid(inv_desc->hi, inv_desc->lo);
         return false;
     }
 
     switch (inv_desc->lo & VTD_INV_DESC_IOTLB_G) {
     case VTD_INV_DESC_IOTLB_GLOBAL:
-        VTD_DPRINTF(INV, "global invalidation");
+        trace_vtd_inv_desc_iotlb_global();
         vtd_iotlb_global_invalidate(s);
         break;
 
     case VTD_INV_DESC_IOTLB_DOMAIN:
         domain_id = VTD_INV_DESC_IOTLB_DID(inv_desc->lo);
-        VTD_DPRINTF(INV, "domain-selective invalidation domain 0x%"PRIx16,
-                    domain_id);
+        trace_vtd_inv_desc_iotlb_domain(domain_id);
         vtd_iotlb_domain_invalidate(s, domain_id);
         break;
 
@@ -1415,20 +1623,16 @@ static bool vtd_process_iotlb_desc(IntelIOMMUState *s, VTDInvDesc *inv_desc)
         domain_id = VTD_INV_DESC_IOTLB_DID(inv_desc->lo);
         addr = VTD_INV_DESC_IOTLB_ADDR(inv_desc->hi);
         am = VTD_INV_DESC_IOTLB_AM(inv_desc->hi);
-        VTD_DPRINTF(INV, "page-selective invalidation domain 0x%"PRIx16
-                    " addr 0x%"PRIx64 " mask %"PRIu8, domain_id, addr, am);
+        trace_vtd_inv_desc_iotlb_pages(domain_id, addr, am);
         if (am > VTD_MAMV) {
-            VTD_DPRINTF(GENERAL, "error: supported max address mask value is "
-                        "%"PRIu8, (uint8_t)VTD_MAMV);
+            trace_vtd_inv_desc_iotlb_invalid(inv_desc->hi, inv_desc->lo);
             return false;
         }
         vtd_iotlb_page_invalidate(s, domain_id, addr, am);
         break;
 
     default:
-        VTD_DPRINTF(GENERAL, "error: invalid granularity in IOTLB Invalidate "
-                    "Descriptor hi 0x%"PRIx64 " lo 0x%"PRIx64,
-                    inv_desc->hi, inv_desc->lo);
+        trace_vtd_inv_desc_iotlb_invalid(inv_desc->hi, inv_desc->lo);
         return false;
     }
     return true;
@@ -1485,8 +1689,16 @@ static bool vtd_process_device_iotlb_desc(IntelIOMMUState *s,
         goto done;
     }
 
+    /* According to ATS spec table 2.4:
+     * S = 0, bits 15:12 = xxxx     range size: 4K
+     * S = 1, bits 15:12 = xxx0     range size: 8K
+     * S = 1, bits 15:12 = xx01     range size: 16K
+     * S = 1, bits 15:12 = x011     range size: 32K
+     * S = 1, bits 15:12 = 0111     range size: 64K
+     * ...
+     */
     if (size) {
-        sz = 1 << (ctz64(~(addr | (VTD_PAGE_MASK_4K - 1))) + 1);
+        sz = (VTD_PAGE_SIZE * 2) << cto64(addr >> VTD_PAGE_SHIFT);
         addr &= ~(sz - 1);
     } else {
         sz = VTD_PAGE_SIZE;
@@ -1497,7 +1709,7 @@ static bool vtd_process_device_iotlb_desc(IntelIOMMUState *s,
     entry.iova = addr;
     entry.perm = IOMMU_NONE;
     entry.translated_addr = 0;
-    memory_region_notify_iommu(entry.target_as->root, entry);
+    memory_region_notify_iommu(&vtd_dev_as->iommu, entry);
 
 done:
     return true;
@@ -1519,33 +1731,28 @@ static bool vtd_process_inv_desc(IntelIOMMUState *s)
 
     switch (desc_type) {
     case VTD_INV_DESC_CC:
-        VTD_DPRINTF(INV, "Context-cache Invalidate Descriptor hi 0x%"PRIx64
-                    " lo 0x%"PRIx64, inv_desc.hi, inv_desc.lo);
+        trace_vtd_inv_desc("context-cache", inv_desc.hi, inv_desc.lo);
         if (!vtd_process_context_cache_desc(s, &inv_desc)) {
             return false;
         }
         break;
 
     case VTD_INV_DESC_IOTLB:
-        VTD_DPRINTF(INV, "IOTLB Invalidate Descriptor hi 0x%"PRIx64
-                    " lo 0x%"PRIx64, inv_desc.hi, inv_desc.lo);
+        trace_vtd_inv_desc("iotlb", inv_desc.hi, inv_desc.lo);
         if (!vtd_process_iotlb_desc(s, &inv_desc)) {
             return false;
         }
         break;
 
     case VTD_INV_DESC_WAIT:
-        VTD_DPRINTF(INV, "Invalidation Wait Descriptor hi 0x%"PRIx64
-                    " lo 0x%"PRIx64, inv_desc.hi, inv_desc.lo);
+        trace_vtd_inv_desc("wait", inv_desc.hi, inv_desc.lo);
         if (!vtd_process_wait_desc(s, &inv_desc)) {
             return false;
         }
         break;
 
     case VTD_INV_DESC_IEC:
-        VTD_DPRINTF(INV, "Invalidation Interrupt Entry Cache "
-                    "Descriptor hi 0x%"PRIx64 " lo 0x%"PRIx64,
-                    inv_desc.hi, inv_desc.lo);
+        trace_vtd_inv_desc("iec", inv_desc.hi, inv_desc.lo);
         if (!vtd_process_inv_iec_desc(s, &inv_desc)) {
             return false;
         }
@@ -1560,9 +1767,7 @@ static bool vtd_process_inv_desc(IntelIOMMUState *s)
         break;
 
     default:
-        VTD_DPRINTF(GENERAL, "error: unkonw Invalidation Descriptor type "
-                    "hi 0x%"PRIx64 " lo 0x%"PRIx64 " type %"PRIu8,
-                    inv_desc.hi, inv_desc.lo, desc_type);
+        trace_vtd_inv_desc_invalid(inv_desc.hi, inv_desc.lo);
         return false;
     }
     s->iq_head++;
@@ -2041,7 +2246,7 @@ static IOMMUTLBEntry vtd_iommu_translate(MemoryRegion *iommu, hwaddr addr,
                            is_write, &ret);
     VTD_DPRINTF(MMU,
                 "bus %"PRIu8 " slot %"PRIu8 " func %"PRIu8 " devfn %"PRIu8
-                " gpa 0x%"PRIx64 " hpa 0x%"PRIx64, pci_bus_num(vtd_as->bus),
+                " iova 0x%"PRIx64 " hpa 0x%"PRIx64, pci_bus_num(vtd_as->bus),
                 VTD_PCI_SLOT(vtd_as->devfn), VTD_PCI_FUNC(vtd_as->devfn),
                 vtd_as->devfn, addr, ret.translated_addr);
     return ret;
@@ -2052,14 +2257,32 @@ static void vtd_iommu_notify_flag_changed(MemoryRegion *iommu,
                                           IOMMUNotifierFlag new)
 {
     VTDAddressSpace *vtd_as = container_of(iommu, VTDAddressSpace, iommu);
+    IntelIOMMUState *s = vtd_as->iommu_state;
+    IntelIOMMUNotifierNode *node = NULL;
+    IntelIOMMUNotifierNode *next_node = NULL;
 
-    if (new & IOMMU_NOTIFIER_MAP) {
-        error_report("Device at bus %s addr %02x.%d requires iommu "
-                     "notifier which is currently not supported by "
-                     "intel-iommu emulation",
-                     vtd_as->bus->qbus.name, PCI_SLOT(vtd_as->devfn),
-                     PCI_FUNC(vtd_as->devfn));
+    if (!s->caching_mode && new & IOMMU_NOTIFIER_MAP) {
+        error_report("We need to set cache_mode=1 for intel-iommu to enable "
+                     "device assignment with IOMMU protection.");
         exit(1);
+    }
+
+    if (old == IOMMU_NOTIFIER_NONE) {
+        node = g_malloc0(sizeof(*node));
+        node->vtd_as = vtd_as;
+        QLIST_INSERT_HEAD(&s->notifiers_list, node, next);
+        return;
+    }
+
+    /* update notifier node with new flags */
+    QLIST_FOREACH_SAFE(node, &s->notifiers_list, next, next_node) {
+        if (node->vtd_as == vtd_as) {
+            if (new == IOMMU_NOTIFIER_NONE) {
+                QLIST_REMOVE(node, next);
+                g_free(node);
+            }
+            return;
+        }
     }
 }
 
@@ -2107,6 +2330,7 @@ static Property vtd_properties[] = {
     DEFINE_PROP_ON_OFF_AUTO("eim", IntelIOMMUState, intr_eim,
                             ON_OFF_AUTO_AUTO),
     DEFINE_PROP_BOOL("x-buggy-eim", IntelIOMMUState, buggy_eim, false),
+    DEFINE_PROP_BOOL("caching-mode", IntelIOMMUState, caching_mode, FALSE),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -2435,17 +2659,148 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
         vtd_dev_as->devfn = (uint8_t)devfn;
         vtd_dev_as->iommu_state = s;
         vtd_dev_as->context_cache_entry.context_cache_gen = 0;
+
+        /*
+         * Memory region relationships looks like (Address range shows
+         * only lower 32 bits to make it short in length...):
+         *
+         * |-----------------+-------------------+----------|
+         * | Name            | Address range     | Priority |
+         * |-----------------+-------------------+----------+
+         * | vtd_root        | 00000000-ffffffff |        0 |
+         * |  intel_iommu    | 00000000-ffffffff |        1 |
+         * |  vtd_sys_alias  | 00000000-ffffffff |        1 |
+         * |  intel_iommu_ir | fee00000-feefffff |       64 |
+         * |-----------------+-------------------+----------|
+         *
+         * We enable/disable DMAR by switching enablement for
+         * vtd_sys_alias and intel_iommu regions. IR region is always
+         * enabled.
+         */
         memory_region_init_iommu(&vtd_dev_as->iommu, OBJECT(s),
-                                 &s->iommu_ops, "intel_iommu", UINT64_MAX);
+                                 &s->iommu_ops, "intel_iommu_dmar",
+                                 UINT64_MAX);
+        memory_region_init_alias(&vtd_dev_as->sys_alias, OBJECT(s),
+                                 "vtd_sys_alias", get_system_memory(),
+                                 0, memory_region_size(get_system_memory()));
         memory_region_init_io(&vtd_dev_as->iommu_ir, OBJECT(s),
                               &vtd_mem_ir_ops, s, "intel_iommu_ir",
                               VTD_INTERRUPT_ADDR_SIZE);
-        memory_region_add_subregion(&vtd_dev_as->iommu, VTD_INTERRUPT_ADDR_FIRST,
-                                    &vtd_dev_as->iommu_ir);
-        address_space_init(&vtd_dev_as->as,
-                           &vtd_dev_as->iommu, name);
+        memory_region_init(&vtd_dev_as->root, OBJECT(s),
+                           "vtd_root", UINT64_MAX);
+        memory_region_add_subregion_overlap(&vtd_dev_as->root,
+                                            VTD_INTERRUPT_ADDR_FIRST,
+                                            &vtd_dev_as->iommu_ir, 64);
+        address_space_init(&vtd_dev_as->as, &vtd_dev_as->root, name);
+        memory_region_add_subregion_overlap(&vtd_dev_as->root, 0,
+                                            &vtd_dev_as->sys_alias, 1);
+        memory_region_add_subregion_overlap(&vtd_dev_as->root, 0,
+                                            &vtd_dev_as->iommu, 1);
+        vtd_switch_address_space(vtd_dev_as);
     }
     return vtd_dev_as;
+}
+
+/* Unmap the whole range in the notifier's scope. */
+static void vtd_address_space_unmap(VTDAddressSpace *as, IOMMUNotifier *n)
+{
+    IOMMUTLBEntry entry;
+    hwaddr size;
+    hwaddr start = n->start;
+    hwaddr end = n->end;
+
+    /*
+     * Note: all the codes in this function has a assumption that IOVA
+     * bits are no more than VTD_MGAW bits (which is restricted by
+     * VT-d spec), otherwise we need to consider overflow of 64 bits.
+     */
+
+    if (end > VTD_ADDRESS_SIZE) {
+        /*
+         * Don't need to unmap regions that is bigger than the whole
+         * VT-d supported address space size
+         */
+        end = VTD_ADDRESS_SIZE;
+    }
+
+    assert(start <= end);
+    size = end - start;
+
+    if (ctpop64(size) != 1) {
+        /*
+         * This size cannot format a correct mask. Let's enlarge it to
+         * suite the minimum available mask.
+         */
+        int n = 64 - clz64(size);
+        if (n > VTD_MGAW) {
+            /* should not happen, but in case it happens, limit it */
+            n = VTD_MGAW;
+        }
+        size = 1ULL << n;
+    }
+
+    entry.target_as = &address_space_memory;
+    /* Adjust iova for the size */
+    entry.iova = n->start & ~(size - 1);
+    /* This field is meaningless for unmap */
+    entry.translated_addr = 0;
+    entry.perm = IOMMU_NONE;
+    entry.addr_mask = size - 1;
+
+    trace_vtd_as_unmap_whole(pci_bus_num(as->bus),
+                             VTD_PCI_SLOT(as->devfn),
+                             VTD_PCI_FUNC(as->devfn),
+                             entry.iova, size);
+
+    memory_region_notify_one(n, &entry);
+}
+
+static void vtd_address_space_unmap_all(IntelIOMMUState *s)
+{
+    IntelIOMMUNotifierNode *node;
+    VTDAddressSpace *vtd_as;
+    IOMMUNotifier *n;
+
+    QLIST_FOREACH(node, &s->notifiers_list, next) {
+        vtd_as = node->vtd_as;
+        IOMMU_NOTIFIER_FOREACH(n, &vtd_as->iommu) {
+            vtd_address_space_unmap(vtd_as, n);
+        }
+    }
+}
+
+static int vtd_replay_hook(IOMMUTLBEntry *entry, void *private)
+{
+    memory_region_notify_one((IOMMUNotifier *)private, entry);
+    return 0;
+}
+
+static void vtd_iommu_replay(MemoryRegion *mr, IOMMUNotifier *n)
+{
+    VTDAddressSpace *vtd_as = container_of(mr, VTDAddressSpace, iommu);
+    IntelIOMMUState *s = vtd_as->iommu_state;
+    uint8_t bus_n = pci_bus_num(vtd_as->bus);
+    VTDContextEntry ce;
+
+    /*
+     * The replay can be triggered by either a invalidation or a newly
+     * created entry. No matter what, we release existing mappings
+     * (it means flushing caches for UNMAP-only registers).
+     */
+    vtd_address_space_unmap(vtd_as, n);
+
+    if (vtd_dev_to_context_entry(s, bus_n, vtd_as->devfn, &ce) == 0) {
+        trace_vtd_replay_ce_valid(bus_n, PCI_SLOT(vtd_as->devfn),
+                                  PCI_FUNC(vtd_as->devfn),
+                                  VTD_CONTEXT_ENTRY_DID(ce.hi),
+                                  ce.hi, ce.lo);
+        vtd_page_walk(&ce, 0, ~0ULL, vtd_replay_hook, (void *)n, false);
+    } else {
+        trace_vtd_replay_ce_invalid(bus_n, PCI_SLOT(vtd_as->devfn),
+                                    PCI_FUNC(vtd_as->devfn));
+    }
+
+    return;
 }
 
 /* Do the initialization. It will also be called when reset, so pay
@@ -2462,6 +2817,7 @@ static void vtd_init(IntelIOMMUState *s)
 
     s->iommu_ops.translate = vtd_iommu_translate;
     s->iommu_ops.notify_flag_changed = vtd_iommu_notify_flag_changed;
+    s->iommu_ops.replay = vtd_iommu_replay;
     s->root = 0;
     s->root_extended = false;
     s->dmar_enabled = false;
@@ -2486,6 +2842,10 @@ static void vtd_init(IntelIOMMUState *s)
 
     if (x86_iommu->dt_supported) {
         s->ecap |= VTD_ECAP_DT;
+    }
+
+    if (s->caching_mode) {
+        s->cap |= VTD_CAP_CM;
     }
 
     vtd_reset_context_cache(s);
@@ -2553,6 +2913,11 @@ static void vtd_reset(DeviceState *dev)
 
     VTD_DPRINTF(GENERAL, "");
     vtd_init(s);
+
+    /*
+     * When device reset, throw away all mappings and external caches
+     */
+    vtd_address_space_unmap_all(s);
 }
 
 static AddressSpace *vtd_host_dma_iommu(PCIBus *bus, void *opaque, int devfn)
@@ -2616,6 +2981,7 @@ static void vtd_realize(DeviceState *dev, Error **errp)
         return;
     }
 
+    QLIST_INIT(&s->notifiers_list);
     memset(s->vtd_as_by_bus_num, 0, sizeof(s->vtd_as_by_bus_num));
     memory_region_init_io(&s->csrmem, OBJECT(s), &vtd_mem_ops, s,
                           "intel_iommu", DMAR_REG_SIZE);
