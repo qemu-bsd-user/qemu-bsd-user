@@ -247,7 +247,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_wait6: /* wait6(2) */
-        ret = do_freebsd_wait6(arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_wait6(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
         break;
 
     case TARGET_FREEBSD_NR_exit: /* exit(2) */
@@ -552,6 +552,12 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     case TARGET_FREEBSD_NR_close: /* close(2) */
         ret = do_bsd_close(arg1);
         break;
+
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100502
+    case TARGET_FREEBSD_NR_fdatasync: /* fdatasync(2) */
+        ret = do_bsd_fdatasync(arg1);
+        break;
+#endif
 
     case TARGET_FREEBSD_NR_fsync: /* fsync(2) */
         ret = do_bsd_fsync(arg1);
