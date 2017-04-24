@@ -32,7 +32,7 @@
 #include "qemu/error-report.h"
 #include "qemu/timer.h"
 #include "sysemu/sysemu.h"
-#include "sysemu/kvm.h"
+#include "sysemu/hw_accel.h"
 #include "hw/hw.h"
 #include "sysemu/device_tree.h"
 #include "qapi/qmp/qjson.h"
@@ -47,15 +47,15 @@
 #include "exec/memattrs.h"
 #include "hw/s390x/s390-virtio-ccw.h"
 
-/* #define DEBUG_KVM */
-
-#ifdef DEBUG_KVM
-#define DPRINTF(fmt, ...) \
-    do { fprintf(stderr, fmt, ## __VA_ARGS__); } while (0)
-#else
-#define DPRINTF(fmt, ...) \
-    do { } while (0)
+#ifndef DEBUG_KVM
+#define DEBUG_KVM  0
 #endif
+
+#define DPRINTF(fmt, ...) do {                \
+    if (DEBUG_KVM) {                          \
+        fprintf(stderr, fmt, ## __VA_ARGS__); \
+    }                                         \
+} while (0);
 
 #define kvm_vm_check_mem_attr(s, attr) \
     kvm_vm_check_attr(s, KVM_S390_VM_MEM_CTRL, attr)
@@ -197,7 +197,7 @@ void kvm_s390_cmma_reset(void)
         .attr = KVM_S390_VM_MEM_CLR_CMMA,
     };
 
-    if (!mem_path || !kvm_s390_cmma_available()) {
+    if (mem_path || !kvm_s390_cmma_available()) {
         return;
     }
 
@@ -291,6 +291,11 @@ int kvm_arch_init(MachineState *ms, KVMState *s)
 
     qemu_mutex_init(&qemu_sigp_mutex);
 
+    return 0;
+}
+
+int kvm_arch_irqchip_create(MachineState *ms, KVMState *s)
+{
     return 0;
 }
 
@@ -1859,7 +1864,41 @@ static void unmanageable_intercept(S390CPU *cpu, const char *str, int pswoffset)
                  str, cs->cpu_index, ldq_phys(cs->as, cpu->env.psa + pswoffset),
                  ldq_phys(cs->as, cpu->env.psa + pswoffset + 8));
     s390_cpu_halt(cpu);
-    qemu_system_guest_panicked();
+    qemu_system_guest_panicked(NULL);
+}
+
+/* try to detect pgm check loops */
+static int handle_oper_loop(S390CPU *cpu, struct kvm_run *run)
+{
+    CPUState *cs = CPU(cpu);
+    PSW oldpsw, newpsw;
+
+    cpu_synchronize_state(cs);
+    newpsw.mask = ldq_phys(cs->as, cpu->env.psa +
+                           offsetof(LowCore, program_new_psw));
+    newpsw.addr = ldq_phys(cs->as, cpu->env.psa +
+                           offsetof(LowCore, program_new_psw) + 8);
+    oldpsw.mask  = run->psw_mask;
+    oldpsw.addr  = run->psw_addr;
+    /*
+     * Avoid endless loops of operation exceptions, if the pgm new
+     * PSW will cause a new operation exception.
+     * The heuristic checks if the pgm new psw is within 6 bytes before
+     * the faulting psw address (with same DAT, AS settings) and the
+     * new psw is not a wait psw and the fault was not triggered by
+     * problem state. In that case go into crashed state.
+     */
+
+    if (oldpsw.addr - newpsw.addr <= 6 &&
+        !(newpsw.mask & PSW_MASK_WAIT) &&
+        !(oldpsw.mask & PSW_MASK_PSTATE) &&
+        (newpsw.mask & PSW_MASK_ASC) == (oldpsw.mask & PSW_MASK_ASC) &&
+        (newpsw.mask & PSW_MASK_DAT) == (oldpsw.mask & PSW_MASK_DAT)) {
+        unmanageable_intercept(cpu, "operation exception loop",
+                               offsetof(LowCore, program_new_psw));
+        return EXCP_HALTED;
+    }
+    return 0;
 }
 
 static int handle_intercept(S390CPU *cpu)
@@ -1892,7 +1931,7 @@ static int handle_intercept(S390CPU *cpu)
                 if (is_special_wait_psw(cs)) {
                     qemu_system_shutdown_request();
                 } else {
-                    qemu_system_guest_panicked();
+                    qemu_system_guest_panicked(NULL);
                 }
             }
             r = EXCP_HALTED;
@@ -1909,11 +1948,14 @@ static int handle_intercept(S390CPU *cpu)
             r = EXCP_HALTED;
             break;
         case ICPT_OPEREXC:
-            /* currently only instr 0x0000 after enabled via capability */
+            /* check for break points */
             r = handle_sw_breakpoint(cpu, run);
             if (r == -ENOENT) {
-                enter_pgmcheck(cpu, PGM_OPERATION);
-                r = 0;
+                /* Then check for potential pgm check loops */
+                r = handle_oper_loop(cpu, run);
+                if (r == 0) {
+                    enter_pgmcheck(cpu, PGM_OPERATION);
+                }
             }
             break;
         case ICPT_SOFT_INTERCEPT:
@@ -2096,16 +2138,6 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
 bool kvm_arch_stop_on_emulation_error(CPUState *cpu)
 {
     return true;
-}
-
-int kvm_arch_on_sigbus_vcpu(CPUState *cpu, int code, void *addr)
-{
-    return 1;
-}
-
-int kvm_arch_on_sigbus(int code, void *addr)
-{
-    return 1;
 }
 
 void kvm_s390_io_interrupt(uint16_t subchannel_id,

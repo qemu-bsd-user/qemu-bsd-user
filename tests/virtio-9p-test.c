@@ -80,7 +80,7 @@ static void qvirtio_9p_pci_stop(QVirtIO9P *v9p)
 {
     qvirtqueue_cleanup(v9p->dev->bus, v9p->vq, v9p->qs->alloc);
     qvirtio_pci_device_disable(container_of(v9p->dev, QVirtioPCIDevice, vdev));
-    g_free(v9p->dev);
+    qvirtio_pci_device_free((QVirtioPCIDevice *)v9p->dev);
     qvirtio_9p_stop(v9p);
 }
 
@@ -236,6 +236,16 @@ static void v9fs_req_send(P9Req *req)
     req->t_off = 0;
 }
 
+static const char *rmessage_name(uint8_t id)
+{
+    return
+        id == P9_RLERROR ? "RLERROR" :
+        id == P9_RVERSION ? "RVERSION" :
+        id == P9_RATTACH ? "RATTACH" :
+        id == P9_RWALK ? "RWALK" :
+        "<unknown>";
+}
+
 static void v9fs_req_recv(P9Req *req, uint8_t id)
 {
     QVirtIO9P *v9p = req->v9p;
@@ -246,8 +256,8 @@ static void v9fs_req_recv(P9Req *req, uint8_t id)
         qvirtio_wait_queue_isr(v9p->dev, v9p->vq, 1000 * 1000);
 
         v9fs_memread(req, &hdr, 7);
-        le32_to_cpus(&hdr.size);
-        le16_to_cpus(&hdr.tag);
+        hdr.size = ldl_le_p(&hdr.size);
+        hdr.tag = lduw_le_p(&hdr.tag);
         if (hdr.size >= 7) {
             break;
         }
@@ -258,11 +268,15 @@ static void v9fs_req_recv(P9Req *req, uint8_t id)
     g_assert_cmpint(hdr.size, <=, P9_MAX_SIZE);
     g_assert_cmpint(hdr.tag, ==, req->tag);
 
-    if (hdr.id != id && hdr.id == P9_RLERROR) {
-        uint32_t err;
-        v9fs_uint32_read(req, &err);
-        g_printerr("Received Rlerror (%d) instead of Response %d\n", err, id);
-        g_assert_not_reached();
+    if (hdr.id != id) {
+        g_printerr("Received response %d (%s) instead of %d (%s)\n",
+                   hdr.id, rmessage_name(hdr.id), id, rmessage_name(id));
+
+        if (hdr.id == P9_RLERROR) {
+            uint32_t err;
+            v9fs_uint32_read(req, &err);
+            g_printerr("Rlerror has errno %d (%s)\n", err, strerror(err));
+        }
     }
     g_assert_cmpint(hdr.id, ==, id);
 }

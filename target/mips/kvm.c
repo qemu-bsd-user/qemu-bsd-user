@@ -55,6 +55,11 @@ int kvm_arch_init(MachineState *ms, KVMState *s)
     return 0;
 }
 
+int kvm_arch_irqchip_create(MachineState *ms, KVMState *s)
+{
+    return 0;
+}
+
 int kvm_arch_init_vcpu(CPUState *cs)
 {
     MIPSCPU *cpu = MIPS_CPU(cs);
@@ -173,18 +178,6 @@ bool kvm_arch_stop_on_emulation_error(CPUState *cs)
 {
     DPRINTF("%s\n", __func__);
     return true;
-}
-
-int kvm_arch_on_sigbus_vcpu(CPUState *cs, int code, void *addr)
-{
-    DPRINTF("%s\n", __func__);
-    return 1;
-}
-
-int kvm_arch_on_sigbus(int code, void *addr)
-{
-    DPRINTF("%s\n", __func__);
-    return 1;
 }
 
 void kvm_arch_init_irq_routing(KVMState *s)

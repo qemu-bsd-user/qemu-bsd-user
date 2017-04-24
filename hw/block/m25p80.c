@@ -147,7 +147,7 @@ typedef struct FlashPartInfo {
 #define CFG_DUMMY_CLK_LEN 4
 #define NVCFG_DUMMY_CLK_POS 12
 #define VCFG_DUMMY_CLK_POS 4
-#define EVCFG_OUT_DRIVER_STRENGHT_DEF 7
+#define EVCFG_OUT_DRIVER_STRENGTH_DEF 7
 #define EVCFG_VPP_ACCELERATOR (1 << 3)
 #define EVCFG_RESET_HOLD_ENABLED (1 << 4)
 #define NVCFG_DUAL_IO_MASK (1 << 2)
@@ -747,7 +747,7 @@ static void reset_memory(Flash *s)
                             );
 
         s->enh_volatile_cfg = 0;
-        s->enh_volatile_cfg |= EVCFG_OUT_DRIVER_STRENGHT_DEF;
+        s->enh_volatile_cfg |= EVCFG_OUT_DRIVER_STRENGTH_DEF;
         s->enh_volatile_cfg |= EVCFG_VPP_ACCELERATOR;
         s->enh_volatile_cfg |= EVCFG_RESET_HOLD_ENABLED;
         if (s->nonvolatile_cfg & NVCFG_DUAL_IO_MASK) {
@@ -1215,6 +1215,7 @@ static void m25p80_realize(SSISlave *ss, Error **errp)
 {
     Flash *s = M25P80(ss);
     M25P80Class *mc = M25P80_GET_CLASS(s);
+    int ret;
 
     s->pi = mc->pi;
 
@@ -1222,6 +1223,13 @@ static void m25p80_realize(SSISlave *ss, Error **errp)
     s->dirty_page = -1;
 
     if (s->blk) {
+        uint64_t perm = BLK_PERM_CONSISTENT_READ |
+                        (blk_is_read_only(s->blk) ? 0 : BLK_PERM_WRITE);
+        ret = blk_set_perm(s->blk, perm, BLK_PERM_ALL, errp);
+        if (ret < 0) {
+            return;
+        }
+
         DB_PRINT_L(0, "Binding to IF_MTD drive\n");
         s->storage = blk_blockalign(s->blk, s->size);
 

@@ -24,6 +24,7 @@
 #include "kvm_i386.h"
 #ifndef CONFIG_USER_ONLY
 #include "sysemu/sysemu.h"
+#include "sysemu/hw_accel.h"
 #include "monitor/monitor.h"
 #include "hw/i386/apic_internal.h"
 #endif
@@ -325,6 +326,10 @@ void x86_cpu_dump_local_apic_state(CPUState *cs, FILE *f,
 {
     X86CPU *cpu = X86_CPU(cs);
     APICCommonState *s = APIC_COMMON(cpu->apic_state);
+    if (!s) {
+        cpu_fprintf(f, "local apic state not available\n");
+        return;
+    }
     uint32_t *lvt = s->lvt;
 
     cpu_fprintf(f, "dumping local APIC state for CPU %-2u\n\n",

@@ -76,7 +76,7 @@ static int cpu_load_old(QEMUFile *f, void *opaque, int version_id)
         qemu_get_betls(f, &env->pb[i]);
     for (i = 0; i < 1024; i++)
         qemu_get_betls(f, &env->spr[i]);
-    if (!env->external_htab) {
+    if (!cpu->vhyp) {
         ppc_store_sdr1(env, sdr1);
     }
     qemu_get_be32s(f, &env->vscr);
@@ -105,7 +105,7 @@ static int cpu_load_old(QEMUFile *f, void *opaque, int version_id)
     return 0;
 }
 
-static int get_avr(QEMUFile *f, void *pv, size_t size)
+static int get_avr(QEMUFile *f, void *pv, size_t size, VMStateField *field)
 {
     ppc_avr_t *v = pv;
 
@@ -115,12 +115,14 @@ static int get_avr(QEMUFile *f, void *pv, size_t size)
     return 0;
 }
 
-static void put_avr(QEMUFile *f, void *pv, size_t size)
+static int put_avr(QEMUFile *f, void *pv, size_t size, VMStateField *field,
+                   QJSON *vmdesc)
 {
     ppc_avr_t *v = pv;
 
     qemu_put_be64(f, v->u64[0]);
     qemu_put_be64(f, v->u64[1]);
+    return 0;
 }
 
 static const VMStateInfo vmstate_info_avr = {
@@ -226,8 +228,7 @@ static int cpu_post_load(void *opaque, int version_id)
         env->IBAT[1][i+4] = env->spr[SPR_IBAT4U + 2*i + 1];
     }
 
-    if (!env->external_htab) {
-        /* Restore htab_base and htab_mask variables */
+    if (!cpu->vhyp) {
         ppc_store_sdr1(env, env->spr[SPR_SDR1]);
     }
 
@@ -353,7 +354,7 @@ static const VMStateDescription vmstate_sr = {
 };
 
 #ifdef TARGET_PPC64
-static int get_slbe(QEMUFile *f, void *pv, size_t size)
+static int get_slbe(QEMUFile *f, void *pv, size_t size, VMStateField *field)
 {
     ppc_slb_t *v = pv;
 
@@ -363,12 +364,14 @@ static int get_slbe(QEMUFile *f, void *pv, size_t size)
     return 0;
 }
 
-static void put_slbe(QEMUFile *f, void *pv, size_t size)
+static int put_slbe(QEMUFile *f, void *pv, size_t size, VMStateField *field,
+                    QJSON *vmdesc)
 {
     ppc_slb_t *v = pv;
 
     qemu_put_be64(f, v->esid);
     qemu_put_be64(f, v->vsid);
+    return 0;
 }
 
 static const VMStateInfo vmstate_info_slbe = {

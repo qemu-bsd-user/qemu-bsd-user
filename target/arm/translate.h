@@ -31,6 +31,7 @@ typedef struct DisasContext {
     bool vfp_enabled; /* FP enabled via FPSCR.EN */
     int vec_len;
     int vec_stride;
+    bool v7m_handler_mode;
     /* Immediate value in AArch32 SVC insn; must be set if is_jmp == DISAS_SWI
      * so that top level loop can generate correct syndrome information.
      */
@@ -104,6 +105,20 @@ static inline int default_exception_el(DisasContext *s)
             ? 3 : MAX(1, s->current_el);
 }
 
+static void disas_set_insn_syndrome(DisasContext *s, uint32_t syn)
+{
+    /* We don't need to save all of the syndrome so we mask and shift
+     * out unneeded bits to help the sleb128 encoder do a better job.
+     */
+    syn &= ARM_INSN_START_WORD2_MASK;
+    syn >>= ARM_INSN_START_WORD2_SHIFT;
+
+    /* We check and clear insn_start_idx to catch multiple updates.  */
+    assert(s->insn_start_idx != 0);
+    tcg_set_insn_param(s->insn_start_idx, 2, syn);
+    s->insn_start_idx = 0;
+}
+
 /* target-specific extra values for is_jmp */
 /* These instructions trap after executing, so the A32/T32 decoder must
  * defer them until after the conditional execution state has been updated.
@@ -120,6 +135,10 @@ static inline int default_exception_el(DisasContext *s)
 #define DISAS_HVC 8
 #define DISAS_SMC 9
 #define DISAS_YIELD 10
+/* M profile branch which might be an exception return (and so needs
+ * custom end-of-TB code)
+ */
+#define DISAS_BX_EXCRET 11
 
 #ifdef TARGET_AARCH64
 void a64_translate_init(void);
