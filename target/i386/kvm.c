@@ -23,6 +23,7 @@
 #include "qemu-common.h"
 #include "cpu.h"
 #include "sysemu/sysemu.h"
+#include "sysemu/hw_accel.h"
 #include "sysemu/kvm_int.h"
 #include "kvm_i386.h"
 #include "hyperv.h"
@@ -62,13 +63,6 @@
 /* A 4096-byte buffer can hold the 8-byte kvm_msrs header, plus
  * 255 kvm_msr_entry structs */
 #define MSR_BUF_SIZE 4096
-
-#ifndef BUS_MCEERR_AR
-#define BUS_MCEERR_AR 4
-#endif
-#ifndef BUS_MCEERR_AO
-#define BUS_MCEERR_AO 5
-#endif
 
 const KVMCapabilityInfo kvm_arch_required_capabilities[] = {
     KVM_CAP_INFO(SET_TSS_ADDR),
@@ -272,6 +266,19 @@ static int get_para_features(KVMState *s)
     return features;
 }
 
+static bool host_tsx_blacklisted(void)
+{
+    int family, model, stepping;\
+    char vendor[CPUID_VENDOR_SZ + 1];
+
+    host_vendor_fms(vendor, &family, &model, &stepping);
+
+    /* Check if we are running on a Haswell host known to have broken TSX */
+    return !strcmp(vendor, CPUID_VENDOR_INTEL) &&
+           (family == 6) &&
+           ((model == 63 && stepping < 4) ||
+            model == 60 || model == 69 || model == 70);
+}
 
 /* Returns the value for a specific register on the cpuid entry
  */
@@ -355,6 +362,10 @@ uint32_t kvm_arch_get_supported_cpuid(KVMState *s, uint32_t function,
         }
     } else if (function == 6 && reg == R_EAX) {
         ret |= CPUID_6_EAX_ARAT; /* safe to allow because of emulated APIC */
+    } else if (function == 7 && index == 0 && reg == R_EBX) {
+        if (host_tsx_blacklisted()) {
+            ret &= ~(CPUID_7_0_EBX_RTM | CPUID_7_0_EBX_HLE);
+        }
     } else if (function == 0x80000001 && reg == R_EDX) {
         /* On Intel, kvm returns cpuid according to the Intel spec,
          * so add missing bits according to the AMD spec:
@@ -461,70 +472,38 @@ static void hardware_memory_error(void)
     exit(1);
 }
 
-int kvm_arch_on_sigbus_vcpu(CPUState *c, int code, void *addr)
+void kvm_arch_on_sigbus_vcpu(CPUState *c, int code, void *addr)
 {
     X86CPU *cpu = X86_CPU(c);
     CPUX86State *env = &cpu->env;
     ram_addr_t ram_addr;
     hwaddr paddr;
 
-    if ((env->mcg_cap & MCG_SER_P) && addr
-        && (code == BUS_MCEERR_AR || code == BUS_MCEERR_AO)) {
+    /* If we get an action required MCE, it has been injected by KVM
+     * while the VM was running.  An action optional MCE instead should
+     * be coming from the main thread, which qemu_init_sigbus identifies
+     * as the "early kill" thread.
+     */
+    assert(code == BUS_MCEERR_AR || code == BUS_MCEERR_AO);
+
+    if ((env->mcg_cap & MCG_SER_P) && addr) {
         ram_addr = qemu_ram_addr_from_host(addr);
-        if (ram_addr == RAM_ADDR_INVALID ||
-            !kvm_physical_memory_addr_from_host(c->kvm_state, addr, &paddr)) {
-            fprintf(stderr, "Hardware memory error for memory used by "
-                    "QEMU itself instead of guest system!\n");
-            /* Hope we are lucky for AO MCE */
-            if (code == BUS_MCEERR_AO) {
-                return 0;
-            } else {
-                hardware_memory_error();
-            }
+        if (ram_addr != RAM_ADDR_INVALID &&
+            kvm_physical_memory_addr_from_host(c->kvm_state, addr, &paddr)) {
+            kvm_hwpoison_page_add(ram_addr);
+            kvm_mce_inject(cpu, paddr, code);
+            return;
         }
-        kvm_hwpoison_page_add(ram_addr);
-        kvm_mce_inject(cpu, paddr, code);
-    } else {
-        if (code == BUS_MCEERR_AO) {
-            return 0;
-        } else if (code == BUS_MCEERR_AR) {
-            hardware_memory_error();
-        } else {
-            return 1;
-        }
+
+        fprintf(stderr, "Hardware memory error for memory used by "
+                "QEMU itself instead of guest system!\n");
     }
-    return 0;
-}
 
-int kvm_arch_on_sigbus(int code, void *addr)
-{
-    X86CPU *cpu = X86_CPU(first_cpu);
-
-    if ((cpu->env.mcg_cap & MCG_SER_P) && addr && code == BUS_MCEERR_AO) {
-        ram_addr_t ram_addr;
-        hwaddr paddr;
-
-        /* Hope we are lucky for AO MCE */
-        ram_addr = qemu_ram_addr_from_host(addr);
-        if (ram_addr == RAM_ADDR_INVALID ||
-            !kvm_physical_memory_addr_from_host(first_cpu->kvm_state,
-                                                addr, &paddr)) {
-            fprintf(stderr, "Hardware memory error for memory used by "
-                    "QEMU itself instead of guest system!: %p\n", addr);
-            return 0;
-        }
-        kvm_hwpoison_page_add(ram_addr);
-        kvm_mce_inject(X86_CPU(first_cpu), paddr, code);
-    } else {
-        if (code == BUS_MCEERR_AO) {
-            return 0;
-        } else if (code == BUS_MCEERR_AR) {
-            hardware_memory_error();
-        } else {
-            return 1;
-        }
+    if (code == BUS_MCEERR_AR) {
+        hardware_memory_error();
     }
-    return 0;
+
+    /* Hope we are lucky for AO MCE */
 }
 
 static int kvm_inject_mce_oldstyle(X86CPU *cpu)
@@ -709,6 +688,7 @@ int kvm_arch_init_vcpu(CPUState *cs)
     uint32_t signature[3];
     int kvm_base = KVM_CPUID_SIGNATURE;
     int r;
+    Error *local_err = NULL;
 
     memset(&cpuid_data, 0, sizeof(cpuid_data));
 
@@ -962,26 +942,27 @@ int kvm_arch_init_vcpu(CPUState *cs)
         has_msr_mcg_ext_ctl = has_msr_feature_control = true;
     }
 
-    c = cpuid_find_entry(&cpuid_data.cpuid, 0x80000007, 0);
-    if (c && (c->edx & 1<<8) && invtsc_mig_blocker == NULL) {
-        /* for migration */
-        error_setg(&invtsc_mig_blocker,
-                   "State blocked by non-migratable CPU device"
-                   " (invtsc flag)");
-        migrate_add_blocker(invtsc_mig_blocker);
-        /* for savevm */
-        vmstate_x86_cpu.unmigratable = 1;
-    }
-
-    cpuid_data.cpuid.padding = 0;
-    r = kvm_vcpu_ioctl(cs, KVM_SET_CPUID2, &cpuid_data);
-    if (r) {
-        return r;
+    if (!env->user_tsc_khz) {
+        if ((env->features[FEAT_8000_0007_EDX] & CPUID_APM_INVTSC) &&
+            invtsc_mig_blocker == NULL) {
+            /* for migration */
+            error_setg(&invtsc_mig_blocker,
+                       "State blocked by non-migratable CPU device"
+                       " (invtsc flag)");
+            r = migrate_add_blocker(invtsc_mig_blocker, &local_err);
+            if (local_err) {
+                error_report_err(local_err);
+                error_free(invtsc_mig_blocker);
+                goto fail;
+            }
+            /* for savevm */
+            vmstate_x86_cpu.unmigratable = 1;
+        }
     }
 
     r = kvm_arch_set_tsc_khz(cs);
     if (r < 0) {
-        return r;
+        goto fail;
     }
 
     /* vcpu's TSC frequency is either specified by user, or following
@@ -998,6 +979,36 @@ int kvm_arch_init_vcpu(CPUState *cs)
         }
     }
 
+    if (cpu->vmware_cpuid_freq
+        /* Guests depend on 0x40000000 to detect this feature, so only expose
+         * it if KVM exposes leaf 0x40000000. (Conflicts with Hyper-V) */
+        && cpu->expose_kvm
+        && kvm_base == KVM_CPUID_SIGNATURE
+        /* TSC clock must be stable and known for this feature. */
+        && ((env->features[FEAT_8000_0007_EDX] & CPUID_APM_INVTSC)
+            || env->user_tsc_khz != 0)
+        && env->tsc_khz != 0) {
+
+        c = &cpuid_data.entries[cpuid_i++];
+        c->function = KVM_CPUID_SIGNATURE | 0x10;
+        c->eax = env->tsc_khz;
+        /* LAPIC resolution of 1ns (freq: 1GHz) is hardcoded in KVM's
+         * APIC_BUS_CYCLE_NS */
+        c->ebx = 1000000;
+        c->ecx = c->edx = 0;
+
+        c = cpuid_find_entry(&cpuid_data.cpuid, kvm_base, 0);
+        c->eax = MAX(c->eax, KVM_CPUID_SIGNATURE | 0x10);
+    }
+
+    cpuid_data.cpuid.nent = cpuid_i;
+
+    cpuid_data.cpuid.padding = 0;
+    r = kvm_vcpu_ioctl(cs, KVM_SET_CPUID2, &cpuid_data);
+    if (r) {
+        goto fail;
+    }
+
     if (has_xsave) {
         env->kvm_xsave_buf = qemu_memalign(4096, sizeof(struct kvm_xsave));
     }
@@ -1008,6 +1019,10 @@ int kvm_arch_init_vcpu(CPUState *cs)
     }
 
     return 0;
+
+ fail:
+    migrate_del_blocker(invtsc_mig_blocker);
+    return r;
 }
 
 void kvm_arch_reset_vcpu(X86CPU *cpu)
@@ -1809,6 +1824,12 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
         return ret;
     }
 
+    if (ret < cpu->kvm_msr_buf->nmsrs) {
+        struct kvm_msr_entry *e = &cpu->kvm_msr_buf->entries[ret];
+        error_report("error: failed to set MSR 0x%" PRIx32 " to 0x%" PRIx64,
+                     (uint32_t)e->index, (uint64_t)e->data);
+    }
+
     assert(ret == cpu->kvm_msr_buf->nmsrs);
     return 0;
 }
@@ -2174,6 +2195,12 @@ static int kvm_get_msrs(X86CPU *cpu)
         return ret;
     }
 
+    if (ret < cpu->kvm_msr_buf->nmsrs) {
+        struct kvm_msr_entry *e = &cpu->kvm_msr_buf->entries[ret];
+        error_report("error: failed to get MSR 0x%" PRIx32,
+                     (uint32_t)e->index);
+    }
+
     assert(ret == cpu->kvm_msr_buf->nmsrs);
     /*
      * MTRR masks: Each mask consists of 5 parts
@@ -2494,7 +2521,12 @@ static int kvm_put_vcpu_events(X86CPU *cpu, int level)
             events.smi.pending = 0;
             events.smi.latched_init = 0;
         }
-        events.flags |= KVM_VCPUEVENT_VALID_SMM;
+        /* Stop SMI delivery on old machine types to avoid a reboot
+         * on an inward migration of an old VM.
+         */
+        if (!cpu->kvm_no_smi_migration) {
+            events.flags |= KVM_VCPUEVENT_VALID_SMM;
+        }
     }
 
     if (level >= KVM_PUT_RESET_STATE) {

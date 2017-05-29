@@ -17,7 +17,8 @@ static bool vfp_needed(void *opaque)
     return arm_feature(env, ARM_FEATURE_VFP);
 }
 
-static int get_fpscr(QEMUFile *f, void *opaque, size_t size)
+static int get_fpscr(QEMUFile *f, void *opaque, size_t size,
+                     VMStateField *field)
 {
     ARMCPU *cpu = opaque;
     CPUARMState *env = &cpu->env;
@@ -27,12 +28,14 @@ static int get_fpscr(QEMUFile *f, void *opaque, size_t size)
     return 0;
 }
 
-static void put_fpscr(QEMUFile *f, void *opaque, size_t size)
+static int put_fpscr(QEMUFile *f, void *opaque, size_t size,
+                     VMStateField *field, QJSON *vmdesc)
 {
     ARMCPU *cpu = opaque;
     CPUARMState *env = &cpu->env;
 
     qemu_put_be32(f, vfp_get_fpscr(env));
+    return 0;
 }
 
 static const VMStateInfo vmstate_fpscr = {
@@ -96,15 +99,19 @@ static bool m_needed(void *opaque)
 
 static const VMStateDescription vmstate_m = {
     .name = "cpu/m",
-    .version_id = 1,
-    .minimum_version_id = 1,
+    .version_id = 3,
+    .minimum_version_id = 3,
     .needed = m_needed,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT32(env.v7m.other_sp, ARMCPU),
         VMSTATE_UINT32(env.v7m.vecbase, ARMCPU),
         VMSTATE_UINT32(env.v7m.basepri, ARMCPU),
         VMSTATE_UINT32(env.v7m.control, ARMCPU),
-        VMSTATE_INT32(env.v7m.current_sp, ARMCPU),
+        VMSTATE_UINT32(env.v7m.ccr, ARMCPU),
+        VMSTATE_UINT32(env.v7m.cfsr, ARMCPU),
+        VMSTATE_UINT32(env.v7m.hfsr, ARMCPU),
+        VMSTATE_UINT32(env.v7m.dfsr, ARMCPU),
+        VMSTATE_UINT32(env.v7m.mmfar, ARMCPU),
+        VMSTATE_UINT32(env.v7m.bfar, ARMCPU),
         VMSTATE_INT32(env.v7m.exception, ARMCPU),
         VMSTATE_END_OF_LIST()
     }
@@ -163,7 +170,8 @@ static const VMStateDescription vmstate_pmsav7 = {
     }
 };
 
-static int get_cpsr(QEMUFile *f, void *opaque, size_t size)
+static int get_cpsr(QEMUFile *f, void *opaque, size_t size,
+                    VMStateField *field)
 {
     ARMCPU *cpu = opaque;
     CPUARMState *env = &cpu->env;
@@ -180,7 +188,8 @@ static int get_cpsr(QEMUFile *f, void *opaque, size_t size)
     return 0;
 }
 
-static void put_cpsr(QEMUFile *f, void *opaque, size_t size)
+static int put_cpsr(QEMUFile *f, void *opaque, size_t size,
+                    VMStateField *field, QJSON *vmdesc)
 {
     ARMCPU *cpu = opaque;
     CPUARMState *env = &cpu->env;
@@ -193,12 +202,45 @@ static void put_cpsr(QEMUFile *f, void *opaque, size_t size)
     }
 
     qemu_put_be32(f, val);
+    return 0;
 }
 
 static const VMStateInfo vmstate_cpsr = {
     .name = "cpsr",
     .get = get_cpsr,
     .put = put_cpsr,
+};
+
+static int get_power(QEMUFile *f, void *opaque, size_t size,
+                    VMStateField *field)
+{
+    ARMCPU *cpu = opaque;
+    bool powered_off = qemu_get_byte(f);
+    cpu->power_state = powered_off ? PSCI_OFF : PSCI_ON;
+    return 0;
+}
+
+static int put_power(QEMUFile *f, void *opaque, size_t size,
+                    VMStateField *field, QJSON *vmdesc)
+{
+    ARMCPU *cpu = opaque;
+
+    /* Migration should never happen while we transition power states */
+
+    if (cpu->power_state == PSCI_ON ||
+        cpu->power_state == PSCI_OFF) {
+        bool powered_off = (cpu->power_state == PSCI_OFF) ? true : false;
+        qemu_put_byte(f, powered_off);
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+static const VMStateInfo vmstate_powered_off = {
+    .name = "powered_off",
+    .get = get_power,
+    .put = put_power,
 };
 
 static void cpu_pre_save(void *opaque)
@@ -319,7 +361,14 @@ const VMStateDescription vmstate_arm_cpu = {
         VMSTATE_UINT64(env.exception.vaddress, ARMCPU),
         VMSTATE_TIMER_PTR(gt_timer[GTIMER_PHYS], ARMCPU),
         VMSTATE_TIMER_PTR(gt_timer[GTIMER_VIRT], ARMCPU),
-        VMSTATE_BOOL(powered_off, ARMCPU),
+        {
+            .name = "power_state",
+            .version_id = 0,
+            .size = sizeof(bool),
+            .info = &vmstate_powered_off,
+            .flags = VMS_SINGLE,
+            .offset = 0,
+        },
         VMSTATE_END_OF_LIST()
     },
     .subsections = (const VMStateDescription*[]) {

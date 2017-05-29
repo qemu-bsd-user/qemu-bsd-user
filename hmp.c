@@ -19,6 +19,7 @@
 #include "net/eth.h"
 #include "sysemu/char.h"
 #include "sysemu/block-backend.h"
+#include "qemu/config-file.h"
 #include "qemu/option.h"
 #include "qemu/timer.h"
 #include "qmp-commands.h"
@@ -214,6 +215,9 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
                        info->ram->normal_bytes >> 10);
         monitor_printf(mon, "dirty sync count: %" PRIu64 "\n",
                        info->ram->dirty_sync_count);
+        monitor_printf(mon, "page size: %" PRIu64 " kbytes\n",
+                       info->ram->page_size >> 10);
+
         if (info->ram->dirty_pages_rate) {
             monitor_printf(mon, "dirty pages rate: %" PRIu64 " pages\n",
                            info->ram->dirty_pages_rate);
@@ -264,13 +268,11 @@ void hmp_info_migrate_capabilities(Monitor *mon, const QDict *qdict)
     caps = qmp_query_migrate_capabilities(NULL);
 
     if (caps) {
-        monitor_printf(mon, "capabilities: ");
         for (cap = caps; cap; cap = cap->next) {
-            monitor_printf(mon, "%s: %s ",
+            monitor_printf(mon, "%s: %s\n",
                            MigrationCapability_lookup[cap->value->capability],
                            cap->value->state ? "on" : "off");
         }
-        monitor_printf(mon, "\n");
     }
 
     qapi_free_MigrationCapabilityStatusList(caps);
@@ -283,46 +285,44 @@ void hmp_info_migrate_parameters(Monitor *mon, const QDict *qdict)
     params = qmp_query_migrate_parameters(NULL);
 
     if (params) {
-        monitor_printf(mon, "parameters:");
         assert(params->has_compress_level);
-        monitor_printf(mon, " %s: %" PRId64,
+        monitor_printf(mon, "%s: %" PRId64 "\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_COMPRESS_LEVEL],
             params->compress_level);
         assert(params->has_compress_threads);
-        monitor_printf(mon, " %s: %" PRId64,
+        monitor_printf(mon, "%s: %" PRId64 "\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_COMPRESS_THREADS],
             params->compress_threads);
         assert(params->has_decompress_threads);
-        monitor_printf(mon, " %s: %" PRId64,
+        monitor_printf(mon, "%s: %" PRId64 "\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_DECOMPRESS_THREADS],
             params->decompress_threads);
         assert(params->has_cpu_throttle_initial);
-        monitor_printf(mon, " %s: %" PRId64,
+        monitor_printf(mon, "%s: %" PRId64 "\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_CPU_THROTTLE_INITIAL],
             params->cpu_throttle_initial);
         assert(params->has_cpu_throttle_increment);
-        monitor_printf(mon, " %s: %" PRId64,
+        monitor_printf(mon, "%s: %" PRId64 "\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_CPU_THROTTLE_INCREMENT],
             params->cpu_throttle_increment);
-        monitor_printf(mon, " %s: '%s'",
+        monitor_printf(mon, "%s: '%s'\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_TLS_CREDS],
             params->has_tls_creds ? params->tls_creds : "");
-        monitor_printf(mon, " %s: '%s'",
+        monitor_printf(mon, "%s: '%s'\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_TLS_HOSTNAME],
             params->has_tls_hostname ? params->tls_hostname : "");
         assert(params->has_max_bandwidth);
-        monitor_printf(mon, " %s: %" PRId64 " bytes/second",
+        monitor_printf(mon, "%s: %" PRId64 " bytes/second\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_MAX_BANDWIDTH],
             params->max_bandwidth);
         assert(params->has_downtime_limit);
-        monitor_printf(mon, " %s: %" PRId64 " milliseconds",
+        monitor_printf(mon, "%s: %" PRId64 " milliseconds\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_DOWNTIME_LIMIT],
             params->downtime_limit);
         assert(params->has_x_checkpoint_delay);
-        monitor_printf(mon, " %s: %" PRId64,
+        monitor_printf(mon, "%s: %" PRId64 "\n",
             MigrationParameter_lookup[MIGRATION_PARAMETER_X_CHECKPOINT_DELAY],
             params->x_checkpoint_delay);
-        monitor_printf(mon, "\n");
     }
 
     qapi_free_MigrationParameters(params);
@@ -1013,8 +1013,14 @@ void hmp_memsave(Monitor *mon, const QDict *qdict)
     const char *filename = qdict_get_str(qdict, "filename");
     uint64_t addr = qdict_get_int(qdict, "val");
     Error *err = NULL;
+    int cpu_index = monitor_get_cpu_index();
 
-    qmp_memsave(addr, size, filename, true, monitor_get_cpu_index(), &err);
+    if (cpu_index < 0) {
+        monitor_printf(mon, "No CPU available\n");
+        return;
+    }
+
+    qmp_memsave(addr, size, filename, true, cpu_index, &err);
     hmp_handle_error(mon, &err);
 }
 
@@ -1337,12 +1343,11 @@ void hmp_migrate_set_parameter(Monitor *mon, const QDict *qdict)
 {
     const char *param = qdict_get_str(qdict, "parameter");
     const char *valuestr = qdict_get_str(qdict, "value");
-    int64_t valuebw = 0;
+    uint64_t valuebw = 0;
     long valueint = 0;
-    char *endp;
     Error *err = NULL;
     bool use_int_value = false;
-    int i;
+    int i, ret;
 
     for (i = 0; i < MIGRATION_PARAMETER__MAX; i++) {
         if (strcmp(param, MigrationParameter_lookup[i]) == 0) {
@@ -1378,9 +1383,9 @@ void hmp_migrate_set_parameter(Monitor *mon, const QDict *qdict)
                 break;
             case MIGRATION_PARAMETER_MAX_BANDWIDTH:
                 p.has_max_bandwidth = true;
-                valuebw = qemu_strtosz(valuestr, &endp);
-                if (valuebw < 0 || (size_t)valuebw != valuebw
-                    || *endp != '\0') {
+                ret = qemu_strtosz_MiB(valuestr, NULL, &valuebw);
+                if (ret < 0 || valuebw > INT64_MAX
+                    || (size_t)valuebw != valuebw) {
                     error_setg(&err, "Invalid size %s", valuestr);
                     goto cleanup;
                 }
@@ -1551,6 +1556,7 @@ void hmp_block_set_io_throttle(Monitor *mon, const QDict *qdict)
 {
     Error *err = NULL;
     BlockIOThrottle throttle = {
+        .has_device = true,
         .device = (char *) qdict_get_str(qdict, "device"),
         .bps = qdict_get_int(qdict, "bps"),
         .bps_rd = qdict_get_int(qdict, "bps_rd"),
@@ -2038,13 +2044,17 @@ void hmp_qemu_io(Monitor *mon, const QDict *qdict)
     const char* device = qdict_get_str(qdict, "device");
     const char* command = qdict_get_str(qdict, "command");
     Error *err = NULL;
+    int ret;
 
     blk = blk_by_name(device);
     if (!blk) {
         BlockDriverState *bs = bdrv_lookup_bs(NULL, device, &err);
         if (bs) {
-            blk = local_blk = blk_new();
-            blk_insert_bs(blk, bs);
+            blk = local_blk = blk_new(0, BLK_PERM_ALL);
+            ret = blk_insert_bs(blk, bs, &err);
+            if (ret < 0) {
+                goto fail;
+            }
         } else {
             goto fail;
         }
@@ -2053,6 +2063,31 @@ void hmp_qemu_io(Monitor *mon, const QDict *qdict)
     aio_context = blk_get_aio_context(blk);
     aio_context_acquire(aio_context);
 
+    /*
+     * Notably absent: Proper permission management. This is sad, but it seems
+     * almost impossible to achieve without changing the semantics and thereby
+     * limiting the use cases of the qemu-io HMP command.
+     *
+     * In an ideal world we would unconditionally create a new BlockBackend for
+     * qemuio_command(), but we have commands like 'reopen' and want them to
+     * take effect on the exact BlockBackend whose name the user passed instead
+     * of just on a temporary copy of it.
+     *
+     * Another problem is that deleting the temporary BlockBackend involves
+     * draining all requests on it first, but some qemu-iotests cases want to
+     * issue multiple aio_read/write requests and expect them to complete in
+     * the background while the monitor has already returned.
+     *
+     * This is also what prevents us from saving the original permissions and
+     * restoring them later: We can't revoke permissions until all requests
+     * have completed, and we don't know when that is nor can we really let
+     * anything else run before we have revoken them to avoid race conditions.
+     *
+     * What happens now is that command() in qemu-io-cmds.c can extend the
+     * permissions if necessary for the qemu-io command. And they simply stay
+     * extended, possibly resulting in a read-only guest device keeping write
+     * permissions. Ugly, but it appears to be the lesser evil.
+     */
     qemuio_command(blk, command);
 
     aio_context_release(aio_context);
@@ -2147,10 +2182,15 @@ void hmp_info_iothreads(Monitor *mon, const QDict *qdict)
 {
     IOThreadInfoList *info_list = qmp_query_iothreads(NULL);
     IOThreadInfoList *info;
+    IOThreadInfo *value;
 
     for (info = info_list; info; info = info->next) {
-        monitor_printf(mon, "%s: thread_id=%" PRId64 "\n",
-                       info->value->id, info->value->thread_id);
+        value = info->value;
+        monitor_printf(mon, "%s:\n", value->id);
+        monitor_printf(mon, "  thread_id=%" PRId64 "\n", value->thread_id);
+        monitor_printf(mon, "  poll-max-ns=%" PRId64 "\n", value->poll_max_ns);
+        monitor_printf(mon, "  poll-grow=%" PRId64 "\n", value->poll_grow);
+        monitor_printf(mon, "  poll-shrink=%" PRId64 "\n", value->poll_shrink);
     }
 
     qapi_free_IOThreadInfoList(info_list);
@@ -2563,4 +2603,15 @@ void hmp_hotpluggable_cpus(Monitor *mon, const QDict *qdict)
     }
 
     qapi_free_HotpluggableCPUList(saved);
+}
+
+void hmp_info_vm_generation_id(Monitor *mon, const QDict *qdict)
+{
+    Error *err = NULL;
+    GuidInfo *info = qmp_query_vm_generation_id(&err);
+    if (info) {
+        monitor_printf(mon, "%s\n", info->guid);
+    }
+    hmp_handle_error(mon, &err);
+    qapi_free_GuidInfo(info);
 }

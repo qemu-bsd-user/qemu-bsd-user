@@ -25,6 +25,7 @@
 #include "qemu/osdep.h"
 #include "sysemu/numa.h"
 #include "exec/cpu-common.h"
+#include "exec/ramlist.h"
 #include "qemu/bitmap.h"
 #include "qom/cpu.h"
 #include "qemu/error-report.h"
@@ -227,8 +228,8 @@ static int parse_numa(void *opaque, QemuOpts *opts, Error **errp)
     }
 
     switch (object->type) {
-    case NUMA_OPTIONS_KIND_NODE:
-        numa_node_parse(object->u.node.data, opts, &err);
+    case NUMA_OPTIONS_TYPE_NODE:
+        numa_node_parse(&object->u.node, opts, &err);
         if (err) {
             goto end;
         }
@@ -337,12 +338,12 @@ void parse_numa_opts(MachineClass *mc)
         if (i == nb_numa_nodes) {
             uint64_t usedmem = 0;
 
-            /* On Linux, each node's border has to be 8MB aligned,
-             * the final node gets the rest.
+            /* Align each node according to the alignment
+             * requirements of the machine class
              */
             for (i = 0; i < nb_numa_nodes - 1; i++) {
                 numa_info[i].node_mem = (ram_size / nb_numa_nodes) &
-                                        ~((1 << 23UL) - 1);
+                                        ~((1 << mc->numa_mem_align_shift) - 1);
                 usedmem += numa_info[i].node_mem;
             }
             numa_info[i].node_mem = ram_size - usedmem;
@@ -571,4 +572,32 @@ int numa_get_node_for_cpu(int idx)
         }
     }
     return i;
+}
+
+void ram_block_notifier_add(RAMBlockNotifier *n)
+{
+    QLIST_INSERT_HEAD(&ram_list.ramblock_notifiers, n, next);
+}
+
+void ram_block_notifier_remove(RAMBlockNotifier *n)
+{
+    QLIST_REMOVE(n, next);
+}
+
+void ram_block_notify_add(void *host, size_t size)
+{
+    RAMBlockNotifier *notifier;
+
+    QLIST_FOREACH(notifier, &ram_list.ramblock_notifiers, next) {
+        notifier->ram_block_added(notifier, host, size);
+    }
+}
+
+void ram_block_notify_remove(void *host, size_t size)
+{
+    RAMBlockNotifier *notifier;
+
+    QLIST_FOREACH(notifier, &ram_list.ramblock_notifiers, next) {
+        notifier->ram_block_removed(notifier, host, size);
+    }
 }
