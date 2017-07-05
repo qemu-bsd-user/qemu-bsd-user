@@ -145,9 +145,9 @@ static void disas_set_da_iss(DisasContext *s, TCGMemOp memop, ISSInfo issinfo)
     disas_set_insn_syndrome(s, syn);
 }
 
-static inline ARMMMUIdx get_a32_user_mem_index(DisasContext *s)
+static inline int get_a32_user_mem_index(DisasContext *s)
 {
-    /* Return the mmu_idx to use for A32/T32 "unprivileged load/store"
+    /* Return the core mmu_idx to use for A32/T32 "unprivileged load/store"
      * insns:
      *  if PL2, UNPREDICTABLE (we choose to implement as if PL0)
      *  otherwise, access as if at PL0.
@@ -156,11 +156,15 @@ static inline ARMMMUIdx get_a32_user_mem_index(DisasContext *s)
     case ARMMMUIdx_S1E2:        /* this one is UNPREDICTABLE */
     case ARMMMUIdx_S12NSE0:
     case ARMMMUIdx_S12NSE1:
-        return ARMMMUIdx_S12NSE0;
+        return arm_to_core_mmu_idx(ARMMMUIdx_S12NSE0);
     case ARMMMUIdx_S1E3:
     case ARMMMUIdx_S1SE0:
     case ARMMMUIdx_S1SE1:
-        return ARMMMUIdx_S1SE0;
+        return arm_to_core_mmu_idx(ARMMMUIdx_S1SE0);
+    case ARMMMUIdx_MUser:
+    case ARMMMUIdx_MPriv:
+    case ARMMMUIdx_MNegPri:
+        return arm_to_core_mmu_idx(ARMMMUIdx_MUser);
     case ARMMMUIdx_S2NS:
     default:
         g_assert_not_reached();
@@ -1178,7 +1182,7 @@ static void gen_exception_internal_insn(DisasContext *s, int offset, int excp)
     gen_set_condexec(s);
     gen_set_pc_im(s, s->pc - offset);
     gen_exception_internal(excp);
-    s->is_jmp = DISAS_JUMP;
+    s->is_jmp = DISAS_EXC;
 }
 
 static void gen_exception_insn(DisasContext *s, int offset, int excp,
@@ -1187,14 +1191,14 @@ static void gen_exception_insn(DisasContext *s, int offset, int excp,
     gen_set_condexec(s);
     gen_set_pc_im(s, s->pc - offset);
     gen_exception(excp, syn, target_el);
-    s->is_jmp = DISAS_JUMP;
+    s->is_jmp = DISAS_EXC;
 }
 
 /* Force a TB lookup after an instruction that changes the CPU state.  */
 static inline void gen_lookup_tb(DisasContext *s)
 {
     tcg_gen_movi_i32(cpu_R[15], s->pc & ~1);
-    s->is_jmp = DISAS_JUMP;
+    s->is_jmp = DISAS_EXIT;
 }
 
 static inline void gen_hlt(DisasContext *s, int imm)
@@ -4146,7 +4150,15 @@ static inline bool use_goto_tb(DisasContext *s, target_ulong dest)
 #endif
 }
 
-static inline void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
+static void gen_goto_ptr(void)
+{
+    TCGv addr = tcg_temp_new();
+    tcg_gen_extu_i32_tl(addr, cpu_R[15]);
+    tcg_gen_lookup_and_goto_ptr(addr);
+    tcg_temp_free(addr);
+}
+
+static void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
 {
     if (use_goto_tb(s, dest)) {
         tcg_gen_goto_tb(n);
@@ -4154,7 +4166,7 @@ static inline void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
         tcg_gen_exit_tb((uintptr_t)s->tb + n);
     } else {
         gen_set_pc_im(s, dest);
-        tcg_gen_exit_tb(0);
+        gen_goto_ptr();
     }
 }
 
@@ -11816,7 +11828,7 @@ void gen_intermediate_code(CPUARMState *env, TranslationBlock *tb)
     dc->be_data = ARM_TBFLAG_BE_DATA(tb->flags) ? MO_BE : MO_LE;
     dc->condexec_mask = (ARM_TBFLAG_CONDEXEC(tb->flags) & 0xf) << 1;
     dc->condexec_cond = ARM_TBFLAG_CONDEXEC(tb->flags) >> 4;
-    dc->mmu_idx = ARM_TBFLAG_MMUIDX(tb->flags);
+    dc->mmu_idx = core_to_arm_mmu_idx(env, ARM_TBFLAG_MMUIDX(tb->flags));
     dc->current_el = arm_mmu_idx_to_el(dc->mmu_idx);
 #if !defined(CONFIG_USER_ONLY)
     dc->user = (dc->current_el == 0);
@@ -12087,11 +12099,14 @@ void gen_intermediate_code(CPUARMState *env, TranslationBlock *tb)
             gen_set_pc_im(dc, dc->pc);
             /* fall through */
         case DISAS_JUMP:
+            gen_goto_ptr();
+            break;
         default:
             /* indicate that the hash table must be used to find the next TB */
             tcg_gen_exit_tb(0);
             break;
         case DISAS_TB_JUMP:
+        case DISAS_EXC:
             /* nothing more to generate */
             break;
         case DISAS_WFI:

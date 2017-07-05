@@ -56,10 +56,10 @@ static int block_crypto_probe_generic(QCryptoBlockFormat format,
 
 
 static ssize_t block_crypto_read_func(QCryptoBlock *block,
-                                      void *opaque,
                                       size_t offset,
                                       uint8_t *buf,
                                       size_t buflen,
+                                      void *opaque,
                                       Error **errp)
 {
     BlockDriverState *bs = opaque;
@@ -83,10 +83,10 @@ struct BlockCryptoCreateData {
 
 
 static ssize_t block_crypto_write_func(QCryptoBlock *block,
-                                       void *opaque,
                                        size_t offset,
                                        const uint8_t *buf,
                                        size_t buflen,
+                                       void *opaque,
                                        Error **errp)
 {
     struct BlockCryptoCreateData *data = opaque;
@@ -102,8 +102,8 @@ static ssize_t block_crypto_write_func(QCryptoBlock *block,
 
 
 static ssize_t block_crypto_init_func(QCryptoBlock *block,
-                                      void *opaque,
                                       size_t headerlen,
+                                      void *opaque,
                                       Error **errp)
 {
     struct BlockCryptoCreateData *data = opaque;
@@ -381,7 +381,8 @@ static int block_crypto_create_generic(QCryptoBlockFormat format,
     return ret;
 }
 
-static int block_crypto_truncate(BlockDriverState *bs, int64_t offset)
+static int block_crypto_truncate(BlockDriverState *bs, int64_t offset,
+                                 Error **errp)
 {
     BlockCrypto *crypto = bs->opaque;
     size_t payload_offset =
@@ -389,7 +390,7 @@ static int block_crypto_truncate(BlockDriverState *bs, int64_t offset)
 
     offset += payload_offset;
 
-    return bdrv_truncate(bs->file, offset);
+    return bdrv_truncate(bs->file, offset, errp);
 }
 
 static void block_crypto_close(BlockDriverState *bs)

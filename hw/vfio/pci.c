@@ -1743,10 +1743,13 @@ static int vfio_setup_pcie_cap(VFIOPCIDevice *vdev, int pos, uint8_t size,
                                PCI_EXP_LNKCAP_MLW | PCI_EXP_LNKCAP_SLS);
     }
 
-    pos = pci_add_capability(&vdev->pdev, PCI_CAP_ID_EXP, pos, size);
-    if (pos >= 0) {
-        vdev->pdev.exp.exp_cap = pos;
+    pos = pci_add_capability(&vdev->pdev, PCI_CAP_ID_EXP, pos, size,
+                             errp);
+    if (pos < 0) {
+        return pos;
     }
+
+    vdev->pdev.exp.exp_cap = pos;
 
     return pos;
 }
@@ -1834,14 +1837,14 @@ static int vfio_add_std_cap(VFIOPCIDevice *vdev, uint8_t pos, Error **errp)
     case PCI_CAP_ID_PM:
         vfio_check_pm_reset(vdev, pos);
         vdev->pm_cap = pos;
-        ret = pci_add_capability2(pdev, cap_id, pos, size, errp);
+        ret = pci_add_capability(pdev, cap_id, pos, size, errp);
         break;
     case PCI_CAP_ID_AF:
         vfio_check_af_flr(vdev, pos);
-        ret = pci_add_capability2(pdev, cap_id, pos, size, errp);
+        ret = pci_add_capability(pdev, cap_id, pos, size, errp);
         break;
     default:
-        ret = pci_add_capability2(pdev, cap_id, pos, size, errp);
+        ret = pci_add_capability(pdev, cap_id, pos, size, errp);
         break;
     }
 out:
@@ -2625,8 +2628,8 @@ static void vfio_realize(PCIDevice *pdev, Error **errp)
         if (!(~vdev->host.domain || ~vdev->host.bus ||
               ~vdev->host.slot || ~vdev->host.function)) {
             error_setg(errp, "No provided host device");
-            error_append_hint(errp, "Use -vfio-pci,host=DDDD:BB:DD.F "
-                              "or -vfio-pci,sysfsdev=PATH_TO_DEVICE\n");
+            error_append_hint(errp, "Use -device vfio-pci,host=DDDD:BB:DD.F "
+                              "or -device vfio-pci,sysfsdev=PATH_TO_DEVICE\n");
             return;
         }
         vdev->vbasedev.sysfsdev =
