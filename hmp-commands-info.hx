@@ -100,9 +100,9 @@ ETEXI
 
     {
         .name       = "registers",
-        .args_type  = "",
-        .params     = "",
-        .help       = "show the cpu registers",
+        .args_type  = "cpustate_all:-a",
+        .params     = "[-a]",
+        .help       = "show the cpu registers (-a: all - show register info for all cpus)",
         .cmd        = hmp_info_registers,
     },
 
@@ -785,6 +785,20 @@ STEXI
 @item info dump
 @findex dump
 Display the latest dump status.
+ETEXI
+
+    {
+        .name       = "ramblock",
+        .args_type  = "",
+        .params     = "",
+        .help       = "Display system ramblock information",
+        .cmd        = hmp_info_ramblock,
+    },
+
+STEXI
+@item info ramblock
+@findex ramblock
+Dump all the ramblocks of the system.
 ETEXI
 
     {
