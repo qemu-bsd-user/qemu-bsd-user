@@ -18,6 +18,8 @@
  */
 #include "qemu/osdep.h"
 
+#include <sys/param.h>
+
 #include "qemu.h"
 #include "qemu-common.h"
 #include "translate-all.h"
@@ -154,7 +156,7 @@ static int mmap_frag(abi_ulong real_start,
     if (prot1 == 0) {
         /* no page was there, so we allocate one */
         void *p = mmap(host_start, qemu_host_page_size, prot,
-                       flags | MAP_ANONYMOUS, -1, 0);
+                       flags | ((fd != -1) ? MAP_ANONYMOUS : 0), -1, 0);
         if (p == MAP_FAILED)
             return -1;
         prot1 = prot;
@@ -162,7 +164,7 @@ static int mmap_frag(abi_ulong real_start,
     prot1 &= PAGE_BITS;
 
     prot_new = prot | prot1;
-    if (!(flags & MAP_ANONYMOUS)) {
+    if (fd != -1) {
         /* msync() won't work here, so we return an error if write is
            possible while it is a shared mapping */
         if ((flags & TARGET_BSD_MAP_FLAGMASK) == MAP_SHARED &&
@@ -392,6 +394,10 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     }
 #endif
 
+    if ((flags & MAP_ANONYMOUS) && fd != -1) {
+        errno = EINVAL;
+        goto fail;
+    }
 #ifdef MAP_STACK
     if (flags & MAP_STACK) {
         if ((fd != -1) || ((prot & (PROT_READ | PROT_WRITE)) !=
@@ -401,6 +407,15 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         }
     }
 #endif /* MAP_STACK */
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1200035
+    if ((flags & MAP_GUARD) && (prot != PROT_NONE || fd != -1 ||
+        offset != 0 || (flags & (MAP_SHARED | MAP_PRIVATE | /* MAP_PREFAULT | */ /* MAP_PREFAULT not in mman.h */
+        MAP_PREFAULT_READ | MAP_ANON | MAP_STACK)) != 0)) {
+        errno = EINVAL;
+        goto fail;
+    }
+#endif
+
     if (offset & ~TARGET_PAGE_MASK) {
         errno = EINVAL;
         goto fail;
@@ -438,8 +453,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
        may need to truncate file maps at EOF and add extra anonymous pages
        up to the targets page boundary.  */
 
-    if ((qemu_real_host_page_size < TARGET_PAGE_SIZE)
-        && !(flags & MAP_ANONYMOUS)) {
+    if ((qemu_real_host_page_size < TARGET_PAGE_SIZE) && fd != -1) {
        struct stat sb;
 
        if (fstat (fd, &sb) == -1)
@@ -464,23 +478,13 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         /* Note: we prefer to control the mapping address. It is
            especially important if qemu_host_page_size >
            qemu_real_host_page_size */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1200035
-	if (!(flags & MAP_GUARD))
-        	p = mmap(g2h(start), host_len, prot,
-                 	flags | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-	else /* MAP_GUARD */
-        	p = mmap(g2h(start), host_len, prot,
-                 	flags, -1, 0);
-#else
-       	p = mmap(g2h(start), host_len, prot,
-               	flags | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-#endif
-        if (p == MAP_FAILED) {
+        p = mmap(g2h(start), host_len, prot,
+                 flags | MAP_FIXED | ((fd != -1) ? MAP_ANONYMOUS : 0), -1, 0);
+        if (p == MAP_FAILED)
             goto fail;
-	}
         /* update start so that it points to the file position at 'offset' */
         host_start = (unsigned long)p;
-        if (!(flags & MAP_ANONYMOUS)) {
+        if (fd != -1) {
             p = mmap(g2h(start), len, prot,
                      flags | MAP_FIXED, fd, host_offset);
             if (p == MAP_FAILED) {
@@ -510,7 +514,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
 
         /* worst case: we cannot map the file because the offset is not
            aligned, so we read it */
-        if (!(flags & MAP_ANONYMOUS) &&
+        if (fd != -1 &&
             (offset & ~qemu_host_page_mask) != (start & ~qemu_host_page_mask)) {
             /* msync() won't work here, so we return an error if write is
                possible while it is a shared mapping */
