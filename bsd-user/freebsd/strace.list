@@ -182,6 +182,7 @@
 { TARGET_FREEBSD_NR_freebsd10_pipe, "freebsd10_pipe", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_pipe2, "pipe2", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_poll, "poll", NULL, NULL, NULL },
+{ TARGET_FREEBSD_NR_posix_fallocate, "posix_fallocate", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_pread, "pread", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_preadv, "preadv", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_profil, "profil", NULL, NULL, NULL },
