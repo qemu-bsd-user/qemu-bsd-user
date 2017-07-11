@@ -259,7 +259,7 @@ static inline void target_cpu_loop(CPUSPARCState *env)
             break;
 
         case EXCP_ATOMIC:
-            step_atomic(cs);
+            cpu_exec_step_atomic(cs);
             break;
 
         default:
