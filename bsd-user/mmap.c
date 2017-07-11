@@ -27,7 +27,7 @@
 //#define DEBUG_MMAP
 
 static pthread_mutex_t mmap_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int __thread mmap_lock_count;
+static __thread int mmap_lock_count;
 
 void mmap_lock(void)
 {
@@ -183,9 +183,11 @@ static int mmap_frag(abi_ulong real_start,
         if (prot_new != (prot1 | PROT_WRITE))
             mprotect(host_start, qemu_host_page_size, prot_new);
     } else {
-        /* just update the protection */
         if (prot_new != prot1) {
             mprotect(host_start, qemu_host_page_size, prot_new);
+        }
+        if (prot_new & PROT_WRITE) {
+            memset(g2h(start), 0, end - start);
         }
     }
     return 0;
@@ -453,7 +455,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
        may need to truncate file maps at EOF and add extra anonymous pages
        up to the targets page boundary.  */
 
-    if ((qemu_real_host_page_size < TARGET_PAGE_SIZE) && fd != -1) {
+    if ((qemu_real_host_page_size < qemu_host_page_size) && fd != -1) {
        struct stat sb;
 
        if (fstat (fd, &sb) == -1)
@@ -556,7 +558,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         /* handle the end of the mapping */
         if (end < real_end) {
             ret = mmap_frag(real_end - qemu_host_page_size,
-                            real_end - qemu_host_page_size, real_end,
+                            real_end - qemu_host_page_size, end,
                             prot, flags, fd,
                             offset + real_end - qemu_host_page_size - start);
             if (ret == -1)
