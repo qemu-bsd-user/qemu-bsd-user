@@ -122,7 +122,6 @@ trace-events-subdirs += crypto
 trace-events-subdirs += io
 trace-events-subdirs += migration
 trace-events-subdirs += block
-trace-events-subdirs += backends
 trace-events-subdirs += chardev
 trace-events-subdirs += hw/block
 trace-events-subdirs += hw/block/dataplane
@@ -168,6 +167,7 @@ trace-events-subdirs += linux-user
 trace-events-subdirs += qapi
 trace-events-subdirs += accel/tcg
 trace-events-subdirs += accel/kvm
+trace-events-subdirs += nbd
 
 trace-events-files = $(SRC_PATH)/trace-events $(trace-events-subdirs:%=$(SRC_PATH)/%/trace-events)
 

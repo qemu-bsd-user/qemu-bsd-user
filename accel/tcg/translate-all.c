@@ -504,7 +504,7 @@ static inline PageDesc *page_find(tb_page_addr_t index)
 #elif defined(__powerpc__)
 # define MAX_CODE_GEN_BUFFER_SIZE  (32u * 1024 * 1024)
 #elif defined(__aarch64__)
-# define MAX_CODE_GEN_BUFFER_SIZE  (128ul * 1024 * 1024)
+# define MAX_CODE_GEN_BUFFER_SIZE  (2ul * 1024 * 1024 * 1024)
 #elif defined(__s390x__)
   /* We have a +- 4GB range on the branches; leave some slop.  */
 # define MAX_CODE_GEN_BUFFER_SIZE  (3ul * 1024 * 1024 * 1024)
@@ -1850,11 +1850,6 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     struct qht_stats hst;
 
     tb_lock();
-
-    if (!tcg_enabled()) {
-        cpu_fprintf(f, "TCG not enabled\n");
-        return;
-    }
 
     target_code_size = 0;
     max_target_code_size = 0;
