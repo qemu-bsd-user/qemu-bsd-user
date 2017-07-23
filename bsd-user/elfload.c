@@ -616,7 +616,6 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     unsigned int interpreter_type = INTERPRETER_NONE;
     unsigned char ibcs2_interpreter;
     int i;
-    abi_ulong mapped_addr;
     struct elf_phdr * elf_ppnt;
     struct elf_phdr *elf_phdata;
     abi_ulong elf_bss, k, elf_brk;
@@ -626,7 +625,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     abi_ulong start_code, end_code, start_data, end_data;
     abi_ulong reloc_func_desc = 0;
 #ifdef LOW_ELF_STACK
-    abi_ulong elf_stack;
+    abi_ulong elf_stack = ~((abi_ulong)0UL);
 #endif
     char passed_fileno[6];
 
@@ -1009,11 +1008,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
                and some applications "depend" upon this behavior.
                Since we do not have the power to recompile these, we
                emulate the SVr4 behavior.  Sigh.  */
-            mapped_addr = target_mmap(0, qemu_host_page_size, PROT_READ |
-                    PROT_EXEC, MAP_FIXED | MAP_PRIVATE, -1, 0);
-	    if (mapped_addr == -1) {
-		    return -1;
-	    }
+            target_mmap(0, qemu_host_page_size, PROT_READ | PROT_EXEC,
+                                      MAP_FIXED | MAP_PRIVATE, -1, 0);
     }
 
     info->entry = elf_entry;
