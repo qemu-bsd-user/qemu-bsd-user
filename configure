@@ -375,6 +375,7 @@ libnfs=""
 coroutine=""
 coroutine_pool=""
 debug_stack_usage="no"
+crypto_afalg="no"
 seccomp=""
 glusterfs=""
 glusterfs_xlator_opt="no"
@@ -536,8 +537,24 @@ elif check_define __sun__ ; then
   targetos='SunOS'
 elif check_define __HAIKU__ ; then
   targetos='Haiku'
+elif check_define __FreeBSD__ ; then
+  targetos='FreeBSD'
+elif check_define __FreeBSD_kernel__ && check_define __GLIBC__; then
+  targetos='GNU/kFreeBSD'
+elif check_define __DragonFly__ ; then
+  targetos='DragonFly'
+elif check_define __NetBSD__; then
+  targetos='NetBSD'
+elif check_define __APPLE__; then
+  targetos='Darwin'
+elif check_define _AIX; then
+  targetos='AIX'
 else
-  targetos=$(uname -s)
+  # This is a fatal error, but don't report it yet, because we
+  # might be going to just print the --help text, or it might
+  # be the result of a missing compiler.
+  targetos='bogus'
+  bogus_os='yes'
 fi
 
 # Some host OSes need non-standard checks for which CPU to use.
@@ -730,23 +747,6 @@ SunOS)
   install="${INSTALL-ginstall}"
   ld="gld"
   smbd="${SMBD-/usr/sfw/sbin/smbd}"
-  needs_libsunmath="no"
-  solarisrev=$(uname -r | cut -f2 -d.)
-  if [ "$cpu" = "i386" -o "$cpu" = "x86_64" ] ; then
-    if test "$solarisrev" -le 9 ; then
-      if test -f /opt/SUNWspro/prod/lib/libsunmath.so.1; then
-        needs_libsunmath="yes"
-        QEMU_CFLAGS="-I/opt/SUNWspro/prod/include/cc $QEMU_CFLAGS"
-        LDFLAGS="-L/opt/SUNWspro/prod/lib -R/opt/SUNWspro/prod/lib $LDFLAGS"
-        LIBS="-lsunmath $LIBS"
-      else
-        error_exit "QEMU will not link correctly on Solaris 8/X86 or 9/x86 without" \
-            "libsunmath from the Sun Studio compilers tools, due to a lack of" \
-            "C99 math features in libm.so in Solaris 8/x86 and Solaris 9/x86" \
-            "Studio 11 can be downloaded from www.sun.com."
-      fi
-    fi
-  fi
   if test -f /usr/include/sys/soundcard.h ; then
     audio_drv_list="oss"
   fi
@@ -780,12 +780,6 @@ Linux)
   vhost_vsock="yes"
   QEMU_INCLUDES="-I\$(SRC_PATH)/linux-headers -I$(pwd)/linux-headers $QEMU_INCLUDES"
   supported_os="yes"
-;;
-*)
-  # This is a fatal error, but don't report it yet, because we
-  # might be going to just print the --help text, or it might
-  # be the result of a missing compiler.
-  bogus_os="yes"
 ;;
 esac
 
@@ -1123,6 +1117,10 @@ for opt do
   --enable-coroutine-pool) coroutine_pool="yes"
   ;;
   --enable-debug-stack-usage) debug_stack_usage="yes"
+  ;;
+  --enable-crypto-afalg) crypto_afalg="yes"
+  ;;
+  --disable-crypto-afalg) crypto_afalg="no"
   ;;
   --disable-docs) docs="no"
   ;;
@@ -1518,6 +1516,7 @@ disabled with --disable-FEATURE, default is enabled if available:
   qom-cast-debug  cast debugging support
   tools           build qemu-io, qemu-nbd and qemu-image tools
   vxhs            Veritas HyperScale vDisk backend support
+  crypto-afalg    Linux AF_ALG crypto backend driver
 
 NOTE: The object files are built at the place where configure is launched
 EOF
@@ -1576,7 +1575,7 @@ if test "$bogus_os" = "yes"; then
     # the compiler works (so the results of the check_defines we used
     # to identify the OS are reliable), if we didn't recognize the
     # host OS we should stop now.
-    error_exit "Unrecognized host OS $targetos"
+    error_exit "Unrecognized host OS (uname -s reports '$(uname -s)')"
 fi
 
 gcc_flags="-Wold-style-declaration -Wold-style-definition -Wtype-limits"
@@ -2105,6 +2104,24 @@ EOF
       xen=no
 
     # Xen unstable
+    elif
+        cat > $TMPC <<EOF &&
+#undef XC_WANT_COMPAT_MAP_FOREIGN_API
+#include <xenforeignmemory.h>
+int main(void) {
+  xenforeignmemory_handle *xfmem;
+
+  xfmem = xenforeignmemory_open(0, 0);
+  xenforeignmemory_map2(xfmem, 0, 0, 0, 0, 0, 0, 0);
+
+  return 0;
+}
+EOF
+        compile_prog "" "$xen_libs -lxendevicemodel $xen_stable_libs"
+      then
+      xen_stable_libs="-lxendevicemodel $xen_stable_libs"
+      xen_ctrl_version=41000
+      xen=yes
     elif
         cat > $TMPC <<EOF &&
 #undef XC_WANT_COMPAT_DEVICEMODEL_API
@@ -4834,6 +4851,32 @@ if compile_prog "" "" ; then
     have_af_vsock=yes
 fi
 
+##########################################
+# check for usable AF_ALG environment
+hava_afalg=no
+cat > $TMPC << EOF
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <linux/if_alg.h>
+int main(void) {
+    int sock;
+    sock = socket(AF_ALG, SOCK_SEQPACKET, 0);
+    return sock;
+}
+EOF
+if compile_prog "" "" ; then
+    have_afalg=yes
+fi
+if test "$crypto_afalg" = "yes"
+then
+    if test "$have_afalg" != "yes"
+    then
+	error_exit "AF_ALG requested but could not be detected"
+    fi
+fi
+
+
 #################################################
 # Sparc implicitly links with --relax, which is
 # incompatible with -r, so --no-relax should be
@@ -4915,6 +4958,21 @@ if compile_prog "" "" ; then
 fi
 
 ##########################################
+# check for utmpx.h, it is missing e.g. on OpenBSD
+
+have_utmpx=no
+cat > $TMPC << EOF
+#include <utmpx.h>
+struct utmpx user_info;
+int main(void) {
+    return 0;
+}
+EOF
+if compile_prog "" "" ; then
+    have_utmpx=yes
+fi
+
+##########################################
 # End of CC checks
 # After here, no more $cc or $ld runs
 
@@ -4973,11 +5031,18 @@ qemu_moddir=$libdir$confsuffix
 qemu_datadir=$datadir$confsuffix
 qemu_localedir="$datadir/locale"
 
+# We can only support ivshmem if we have eventfd
+if [ "$eventfd" = "yes" ]; then
+  ivshmem=yes
+fi
+
 tools=""
 if test "$want_tools" = "yes" ; then
   tools="qemu-img\$(EXESUF) qemu-io\$(EXESUF) $tools"
   if [ "$linux" = "yes" -o "$bsd" = "yes" -o "$solaris" = "yes" ] ; then
     tools="qemu-nbd\$(EXESUF) $tools"
+  fi
+  if [ "$ivshmem" = "yes" ]; then
     tools="ivshmem-client\$(EXESUF) ivshmem-server\$(EXESUF) $tools"
   fi
 fi
@@ -5300,6 +5365,7 @@ echo "seccomp support   $seccomp"
 echo "coroutine backend $coroutine"
 echo "coroutine pool    $coroutine_pool"
 echo "debug stack usage $debug_stack_usage"
+echo "crypto afalg      $crypto_afalg"
 echo "GlusterFS support $glusterfs"
 echo "gcov              $gcov_tool"
 echo "gcov enabled      $gcov"
@@ -5434,10 +5500,6 @@ fi
 
 if test "$solaris" = "yes" ; then
   echo "CONFIG_SOLARIS=y" >> $config_host_mak
-  echo "CONFIG_SOLARIS_VERSION=$solarisrev" >> $config_host_mak
-  if test "$needs_libsunmath" = "yes" ; then
-    echo "CONFIG_NEEDS_LIBSUNMATH=y" >> $config_host_mak
-  fi
 fi
 if test "$haiku" = "yes" ; then
   echo "CONFIG_HAIKU=y" >> $config_host_mak
@@ -5811,6 +5873,10 @@ if test "$debug_stack_usage" = "yes" ; then
   echo "CONFIG_DEBUG_STACK_USAGE=y" >> $config_host_mak
 fi
 
+if test "$crypto_afalg" = "yes" ; then
+  echo "CONFIG_AF_ALG=y" >> $config_host_mak
+fi
+
 if test "$open_by_handle_at" = "yes" ; then
   echo "CONFIG_OPEN_BY_HANDLE=y" >> $config_host_mak
 fi
@@ -5957,6 +6023,14 @@ fi
 
 if test "$have_static_assert" = "yes" ; then
   echo "CONFIG_STATIC_ASSERT=y" >> $config_host_mak
+fi
+
+if test "$have_utmpx" = "yes" ; then
+  echo "HAVE_UTMPX=y" >> $config_host_mak
+fi
+
+if test "$ivshmem" = "yes" ; then
+  echo "CONFIG_IVSHMEM=y" >> $config_host_mak
 fi
 
 # Hold two types of flag:
