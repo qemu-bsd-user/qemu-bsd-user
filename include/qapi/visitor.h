@@ -36,7 +36,7 @@
  * QemuOpts, and clone visitors have some implementation limitations;
  * see the documentation for each visitor for more details on what it
  * supports.  Also, see visitor-impl.h for the callback contracts
- * implemented by each visitor, and docs/qapi-code-gen.txt for more
+ * implemented by each visitor, and docs/devel/qapi-code-gen.txt for more
  * about the QAPI code generator.
  *
  * All of the visitors are created via:
@@ -618,10 +618,10 @@ void visit_type_any(Visitor *v, const char *name, QObject **obj, Error **errp);
  * @name expresses the relationship of the null value to its parent
  * container; see the general description of @name above.
  *
- * Unlike all other visit_type_* functions, no obj parameter is
- * needed; rather, this is a witness that an explicit null value is
- * expected rather than any other type.
+ * @obj must be non-NULL.  Input visitors set *@obj to the value;
+ * other visitors ignore *@obj.
  */
-void visit_type_null(Visitor *v, const char *name, Error **errp);
+void visit_type_null(Visitor *v, const char *name, QNull **obj,
+                     Error **errp);
 
 #endif
