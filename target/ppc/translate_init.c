@@ -8428,11 +8428,14 @@ POWERPC_FAMILY(POWER5P)(ObjectClass *oc, void *data)
 static void getset_compat_deprecated(Object *obj, Visitor *v, const char *name,
                                      void *opaque, Error **errp)
 {
+    QNull *null = NULL;
+
     if (!qtest_enabled()) {
         error_report("CPU 'compat' property is deprecated and has no effect; "
                      "use max-cpu-compat machine property instead");
     }
-    visit_type_null(v, name, NULL);
+    visit_type_null(v, name, &null, NULL);
+    QDECREF(null);
 }
 
 static const PropertyInfo ppc_compat_deprecated_propinfo = {
@@ -8837,6 +8840,16 @@ static void init_proc_POWER9(CPUPPCState *env)
     gen_spr_power8_ic(env);
     gen_spr_power8_book4(env);
     gen_spr_power8_rpr(env);
+
+    /* POWER9 Specific registers */
+    spr_register_kvm(env, SPR_TIDR, "TIDR", NULL, NULL,
+                     spr_read_generic, spr_write_generic,
+                     KVM_REG_PPC_TIDR, 0);
+
+    /* FIXME: Filter fields properly based on privilege level */
+    spr_register_kvm_hv(env, SPR_PSSCR, "PSSCR", NULL, NULL, NULL, NULL,
+                        spr_read_generic, spr_write_generic,
+                        KVM_REG_PPC_PSSCR, 0);
 
     /* env variables */
 #if !defined(CONFIG_USER_ONLY)
