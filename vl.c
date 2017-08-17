@@ -1942,7 +1942,9 @@ static void help(int exitcode)
            "ctrl-alt-n      switch to virtual console 'n'\n"
            "ctrl-alt        toggle mouse and keyboard grab\n"
            "\n"
-           "When using -nographic, press 'ctrl-a h' to get some help.\n");
+           "When using -nographic, press 'ctrl-a h' to get some help.\n"
+           "\n"
+           QEMU_HELP_BOTTOM "\n");
 
     exit(exitcode);
 }
@@ -2344,10 +2346,12 @@ static int chardev_init_func(void *opaque, QemuOpts *opts, Error **errp)
 {
     Error *local_err = NULL;
 
-    qemu_chr_new_from_opts(opts, &local_err);
-    if (local_err) {
-        error_report_err(local_err);
-        return -1;
+    if (!qemu_chr_new_from_opts(opts, &local_err)) {
+        if (local_err) {
+            error_report_err(local_err);
+            return -1;
+        }
+        exit(0);
     }
     return 0;
 }
@@ -4119,6 +4123,7 @@ int main(int argc, char **argv, char **envp)
     set_memory_options(&ram_slots, &maxram_size, machine_class);
 
     os_daemonize();
+    rcu_disable_atfork();
 
     if (pid_file && qemu_create_pidfile(pid_file) != 0) {
         error_report("could not acquire pid file: %s", strerror(errno));
@@ -4787,8 +4792,8 @@ int main(int argc, char **argv, char **envp)
     replay_disable_events();
     iothread_stop_all();
 
-    bdrv_close_all();
     pause_all_vcpus();
+    bdrv_close_all();
     res_free();
 
     /* vhost-user must be cleaned up before chardevs.  */

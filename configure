@@ -306,6 +306,7 @@ tcg="yes"
 vhost_net="no"
 vhost_scsi="no"
 vhost_vsock="no"
+vhost_user=""
 kvm="no"
 hax="no"
 rdma=""
@@ -358,6 +359,7 @@ libusb=""
 usb_redir=""
 opengl=""
 opengl_dmabuf="no"
+cpuid_h="no"
 avx2_opt="no"
 zlib="yes"
 lzo=""
@@ -1281,6 +1283,14 @@ for opt do
   ;;
   --enable-vxhs) vxhs="yes"
   ;;
+  --disable-vhost-user) vhost_user="no"
+  ;;
+  --enable-vhost-user)
+      vhost_user="yes"
+      if test "$mingw32" = "yes"; then
+          error_exit "vhost-user isn't available on win32"
+      fi
+  ;;
   *)
       echo "ERROR: unknown option $opt"
       echo "Try '$0 --help' for more information"
@@ -1288,6 +1298,14 @@ for opt do
   ;;
   esac
 done
+
+if test "$vhost_user" = ""; then
+    if test "$mingw32" = "yes"; then
+        vhost_user="no"
+    else
+        vhost_user="yes"
+    fi
+fi
 
 case "$cpu" in
     ppc)
@@ -1517,6 +1535,7 @@ disabled with --disable-FEATURE, default is enabled if available:
   tools           build qemu-io, qemu-nbd and qemu-image tools
   vxhs            Veritas HyperScale vDisk backend support
   crypto-afalg    Linux AF_ALG crypto backend driver
+  vhost-user      vhost-user support
 
 NOTE: The object files are built at the place where configure is launched
 EOF
@@ -1929,24 +1948,6 @@ EOF
   if ! compile_object ; then
     feature_not_found "nptl" "Install glibc and linux kernel headers."
   fi
-fi
-
-##########################################
-# avx2 optimization requirement check
-
-cat > $TMPC << EOF
-#pragma GCC push_options
-#pragma GCC target("avx2")
-#include <cpuid.h>
-#include <immintrin.h>
-static int bar(void *a) {
-    __m256i x = *(__m256i *)a;
-    return _mm256_testz_si256(x, x);
-}
-int main(int argc, char *argv[]) { return bar(argv[0]); }
-EOF
-if compile_object "" ; then
-  avx2_opt="yes"
 fi
 
 #########################################
@@ -4646,7 +4647,6 @@ fi
 ########################################
 # check if cpuid.h is usable.
 
-cpuid_h=no
 cat > $TMPC << EOF
 #include <cpuid.h>
 int main(void) {
@@ -4666,6 +4666,29 @@ int main(void) {
 EOF
 if compile_prog "" "" ; then
     cpuid_h=yes
+fi
+
+##########################################
+# avx2 optimization requirement check
+#
+# There is no point enabling this if cpuid.h is not usable,
+# since we won't be able to select the new routines.
+
+if test $cpuid_h = yes; then
+  cat > $TMPC << EOF
+#pragma GCC push_options
+#pragma GCC target("avx2")
+#include <cpuid.h>
+#include <immintrin.h>
+static int bar(void *a) {
+    __m256i x = *(__m256i *)a;
+    return _mm256_testz_si256(x, x);
+}
+int main(int argc, char *argv[]) { return bar(argv[0]); }
+EOF
+  if compile_object "" ; then
+    avx2_opt="yes"
+  fi
 fi
 
 ########################################
@@ -5343,6 +5366,7 @@ echo "libcap-ng support $cap_ng"
 echo "vhost-net support $vhost_net"
 echo "vhost-scsi support $vhost_scsi"
 echo "vhost-vsock support $vhost_vsock"
+echo "vhost-user support $vhost_user"
 echo "Trace backends    $trace_backends"
 if have_backend "simple"; then
 echo "Trace output file $trace_file-<pid>"
@@ -5752,11 +5776,14 @@ fi
 if test "$vhost_scsi" = "yes" ; then
   echo "CONFIG_VHOST_SCSI=y" >> $config_host_mak
 fi
-if test "$vhost_net" = "yes" ; then
+if test "$vhost_net" = "yes" -a "$vhost_user" = "yes"; then
   echo "CONFIG_VHOST_NET_USED=y" >> $config_host_mak
 fi
 if test "$vhost_vsock" = "yes" ; then
   echo "CONFIG_VHOST_VSOCK=y" >> $config_host_mak
+fi
+if test "$vhost_user" = "yes" ; then
+  echo "CONFIG_VHOST_USER=y" >> $config_host_mak
 fi
 if test "$blobs" = "yes" ; then
   echo "INSTALL_BLOBS=yes" >> $config_host_mak
@@ -6353,7 +6380,9 @@ if supported_kvm_target $target; then
     echo "CONFIG_KVM=y" >> $config_target_mak
     if test "$vhost_net" = "yes" ; then
         echo "CONFIG_VHOST_NET=y" >> $config_target_mak
-        echo "CONFIG_VHOST_NET_TEST_$target_name=y" >> $config_host_mak
+        if test "$vhost_user" = "yes" ; then
+            echo "CONFIG_VHOST_USER_NET_TEST_$target_name=y" >> $config_host_mak
+        fi
     fi
 fi
 if supported_hax_target $target; then

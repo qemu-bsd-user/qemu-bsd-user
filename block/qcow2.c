@@ -2905,7 +2905,7 @@ static int qcow2_create(const char *filename, QemuOpts *opts, Error **errp)
     int version;
     uint64_t refcount_bits;
     int refcount_order;
-    const char *encryptfmt = NULL;
+    char *encryptfmt = NULL;
     Error *local_err = NULL;
     int ret;
 
@@ -2916,14 +2916,14 @@ static int qcow2_create(const char *filename, QemuOpts *opts, Error **errp)
     backing_fmt = qemu_opt_get_del(opts, BLOCK_OPT_BACKING_FMT);
     encryptfmt = qemu_opt_get_del(opts, BLOCK_OPT_ENCRYPT_FORMAT);
     if (encryptfmt) {
-        if (qemu_opt_get_del(opts, BLOCK_OPT_ENCRYPT)) {
+        if (qemu_opt_get(opts, BLOCK_OPT_ENCRYPT)) {
             error_setg(errp, "Options " BLOCK_OPT_ENCRYPT " and "
                        BLOCK_OPT_ENCRYPT_FORMAT " are mutually exclusive");
             ret = -EINVAL;
             goto finish;
         }
     } else if (qemu_opt_get_bool_del(opts, BLOCK_OPT_ENCRYPT, false)) {
-        encryptfmt = "aes";
+        encryptfmt = g_strdup("aes");
     }
     cluster_size = qcow2_opt_get_cluster_size_del(opts, &local_err);
     if (local_err) {
@@ -2983,6 +2983,7 @@ static int qcow2_create(const char *filename, QemuOpts *opts, Error **errp)
 finish:
     g_free(backing_file);
     g_free(backing_fmt);
+    g_free(encryptfmt);
     g_free(buf);
     return ret;
 }
@@ -3281,12 +3282,15 @@ qcow2_co_pwritev_compressed(BlockDriverState *bs, uint64_t offset,
     z_stream strm;
     int ret, out_len;
     uint8_t *buf, *out_buf;
-    uint64_t cluster_offset;
+    int64_t cluster_offset;
 
     if (bytes == 0) {
         /* align end of file to a sector boundary to ease reading with
            sector based I/Os */
         cluster_offset = bdrv_getlength(bs->file->bs);
+        if (cluster_offset < 0) {
+            return cluster_offset;
+        }
         return bdrv_truncate(bs->file, cluster_offset, PREALLOC_MODE_OFF, NULL);
     }
 
@@ -3669,8 +3673,8 @@ static BlockMeasureInfo *qcow2_measure(QemuOpts *opts, BlockDriverState *in_bs,
             for (sector_num = 0;
                  sector_num < ssize / BDRV_SECTOR_SIZE;
                  sector_num += pnum) {
-                int nb_sectors = MAX(ssize / BDRV_SECTOR_SIZE - sector_num,
-                                     INT_MAX);
+                int nb_sectors = MIN(ssize / BDRV_SECTOR_SIZE - sector_num,
+                                     BDRV_REQUEST_MAX_SECTORS);
                 BlockDriverState *file;
                 int64_t ret;
 
@@ -3796,27 +3800,6 @@ static ImageInfoSpecific *qcow2_get_specific_info(BlockDriverState *bs)
 
     return spec_info;
 }
-
-#if 0
-static void dump_refcounts(BlockDriverState *bs)
-{
-    BDRVQcow2State *s = bs->opaque;
-    int64_t nb_clusters, k, k1, size;
-    int refcount;
-
-    size = bdrv_getlength(bs->file->bs);
-    nb_clusters = size_to_clusters(s, size);
-    for(k = 0; k < nb_clusters;) {
-        k1 = k;
-        refcount = get_refcount(bs, k);
-        k++;
-        while (k < nb_clusters && get_refcount(bs, k) == refcount)
-            k++;
-        printf("%" PRId64 ": refcount=%d nb=%" PRId64 "\n", k, refcount,
-               k - k1);
-    }
-}
-#endif
 
 static int qcow2_save_vmstate(BlockDriverState *bs, QEMUIOVector *qiov,
                               int64_t pos)
