@@ -107,8 +107,8 @@ qga-vss-dll-obj-y = qga/
 
 ######################################################################
 # contrib
-ivshmem-client-obj-y = contrib/ivshmem-client/
-ivshmem-server-obj-y = contrib/ivshmem-server/
+ivshmem-client-obj-$(CONFIG_IVSHMEM) = contrib/ivshmem-client/
+ivshmem-server-obj-$(CONFIG_IVSHMEM) = contrib/ivshmem-server/
 libvhost-user-obj-y = contrib/libvhost-user/
 vhost-user-scsi.o-cflags := $(LIBISCSI_CFLAGS)
 vhost-user-scsi.o-libs := $(LIBISCSI_LIBS)
@@ -122,7 +122,6 @@ trace-events-subdirs += crypto
 trace-events-subdirs += io
 trace-events-subdirs += migration
 trace-events-subdirs += block
-trace-events-subdirs += backends
 trace-events-subdirs += chardev
 trace-events-subdirs += hw/block
 trace-events-subdirs += hw/block/dataplane

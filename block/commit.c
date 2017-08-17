@@ -90,7 +90,9 @@ static void commit_complete(BlockJob *job, void *opaque)
 
     /* Make sure overlay_bs and top stay around until bdrv_set_backing_hd() */
     bdrv_ref(top);
-    bdrv_ref(overlay_bs);
+    if (overlay_bs) {
+        bdrv_ref(overlay_bs);
+    }
 
     /* Remove base node parent that still uses BLK_PERM_WRITE/RESIZE before
      * the normal backing chain can be restored. */
@@ -163,7 +165,7 @@ static void coroutine_fn commit_run(void *opaque)
     }
 
     if (base_len < s->common.len) {
-        ret = blk_truncate(s->base, s->common.len, NULL);
+        ret = blk_truncate(s->base, s->common.len, PREALLOC_MODE_OFF, NULL);
         if (ret) {
             goto out;
         }
@@ -521,7 +523,7 @@ int bdrv_commit(BlockDriverState *bs)
      * grow the backing file image if possible.  If not possible,
      * we must return an error */
     if (length > backing_length) {
-        ret = blk_truncate(backing, length, &local_err);
+        ret = blk_truncate(backing, length, PREALLOC_MODE_OFF, &local_err);
         if (ret < 0) {
             error_report_err(local_err);
             goto ro_cleanup;

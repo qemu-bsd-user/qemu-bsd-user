@@ -401,16 +401,16 @@ static void print_block_info(Monitor *mon, BlockInfo *info,
 
     assert(!info || !info->has_inserted || info->inserted == inserted);
 
-    if (info) {
+    if (info && *info->device) {
         monitor_printf(mon, "%s", info->device);
         if (inserted && inserted->has_node_name) {
             monitor_printf(mon, " (%s)", inserted->node_name);
         }
     } else {
-        assert(inserted);
+        assert(info || inserted);
         monitor_printf(mon, "%s",
-                       inserted->has_node_name
-                       ? inserted->node_name
+                       inserted && inserted->has_node_name ? inserted->node_name
+                       : info && info->has_qdev ? info->qdev
                        : "<anonymous>");
     }
 
@@ -425,6 +425,9 @@ static void print_block_info(Monitor *mon, BlockInfo *info,
     }
 
     if (info) {
+        if (info->has_qdev) {
+            monitor_printf(mon, "    Attached to:      %s\n", info->qdev);
+        }
         if (info->has_io_status && info->io_status != BLOCK_DEVICE_IO_STATUS_OK) {
             monitor_printf(mon, "    I/O status:       %s\n",
                            BlockDeviceIoStatus_lookup[info->io_status]);
@@ -600,50 +603,92 @@ void hmp_info_blockstats(Monitor *mon, const QDict *qdict)
     qapi_free_BlockStatsList(stats_list);
 }
 
+/* Helper for hmp_info_vnc_clients, _servers */
+static void hmp_info_VncBasicInfo(Monitor *mon, VncBasicInfo *info,
+                                  const char *name)
+{
+    monitor_printf(mon, "  %s: %s:%s (%s%s)\n",
+                   name,
+                   info->host,
+                   info->service,
+                   NetworkAddressFamily_lookup[info->family],
+                   info->websocket ? " (Websocket)" : "");
+}
+
+/* Helper displaying and auth and crypt info */
+static void hmp_info_vnc_authcrypt(Monitor *mon, const char *indent,
+                                   VncPrimaryAuth auth,
+                                   VncVencryptSubAuth *vencrypt)
+{
+    monitor_printf(mon, "%sAuth: %s (Sub: %s)\n", indent,
+                   VncPrimaryAuth_lookup[auth],
+                   vencrypt ? VncVencryptSubAuth_lookup[*vencrypt] : "none");
+}
+
+static void hmp_info_vnc_clients(Monitor *mon, VncClientInfoList *client)
+{
+    while (client) {
+        VncClientInfo *cinfo = client->value;
+
+        hmp_info_VncBasicInfo(mon, qapi_VncClientInfo_base(cinfo), "Client");
+        monitor_printf(mon, "    x509_dname: %s\n",
+                       cinfo->has_x509_dname ?
+                       cinfo->x509_dname : "none");
+        monitor_printf(mon, "    sasl_username: %s\n",
+                       cinfo->has_sasl_username ?
+                       cinfo->sasl_username : "none");
+
+        client = client->next;
+    }
+}
+
+static void hmp_info_vnc_servers(Monitor *mon, VncServerInfo2List *server)
+{
+    while (server) {
+        VncServerInfo2 *sinfo = server->value;
+        hmp_info_VncBasicInfo(mon, qapi_VncServerInfo2_base(sinfo), "Server");
+        hmp_info_vnc_authcrypt(mon, "    ", sinfo->auth,
+                               sinfo->has_vencrypt ? &sinfo->vencrypt : NULL);
+        server = server->next;
+    }
+}
+
 void hmp_info_vnc(Monitor *mon, const QDict *qdict)
 {
-    VncInfo *info;
+    VncInfo2List *info2l;
     Error *err = NULL;
-    VncClientInfoList *client;
 
-    info = qmp_query_vnc(&err);
+    info2l = qmp_query_vnc_servers(&err);
     if (err) {
         error_report_err(err);
         return;
     }
-
-    if (!info->enabled) {
-        monitor_printf(mon, "Server: disabled\n");
-        goto out;
+    if (!info2l) {
+        monitor_printf(mon, "None\n");
+        return;
     }
 
-    monitor_printf(mon, "Server:\n");
-    if (info->has_host && info->has_service) {
-        monitor_printf(mon, "     address: %s:%s\n", info->host, info->service);
-    }
-    if (info->has_auth) {
-        monitor_printf(mon, "        auth: %s\n", info->auth);
-    }
-
-    if (!info->has_clients || info->clients == NULL) {
-        monitor_printf(mon, "Client: none\n");
-    } else {
-        for (client = info->clients; client; client = client->next) {
-            monitor_printf(mon, "Client:\n");
-            monitor_printf(mon, "     address: %s:%s\n",
-                           client->value->host,
-                           client->value->service);
-            monitor_printf(mon, "  x509_dname: %s\n",
-                           client->value->x509_dname ?
-                           client->value->x509_dname : "none");
-            monitor_printf(mon, "    username: %s\n",
-                           client->value->has_sasl_username ?
-                           client->value->sasl_username : "none");
+    while (info2l) {
+        VncInfo2 *info = info2l->value;
+        monitor_printf(mon, "%s:\n", info->id);
+        hmp_info_vnc_servers(mon, info->server);
+        hmp_info_vnc_clients(mon, info->clients);
+        if (!info->server) {
+            /* The server entry displays its auth, we only
+             * need to display in the case of 'reverse' connections
+             * where there's no server.
+             */
+            hmp_info_vnc_authcrypt(mon, "  ", info->auth,
+                               info->has_vencrypt ? &info->vencrypt : NULL);
         }
+        if (info->has_display) {
+            monitor_printf(mon, "  Display: %s\n", info->display);
+        }
+        info2l = info2l->next;
     }
 
-out:
-    qapi_free_VncInfo(info);
+    qapi_free_VncInfo2List(info2l);
+
 }
 
 #ifdef CONFIG_SPICE
@@ -1088,37 +1133,12 @@ void hmp_ringbuf_read(Monitor *mon, const QDict *qdict)
     g_free(data);
 }
 
-static void hmp_cont_cb(void *opaque, int err)
-{
-    if (!err) {
-        qmp_cont(NULL);
-    }
-}
-
-static bool key_is_missing(const BlockInfo *bdev)
-{
-    return (bdev->inserted && bdev->inserted->encryption_key_missing);
-}
-
 void hmp_cont(Monitor *mon, const QDict *qdict)
 {
-    BlockInfoList *bdev_list, *bdev;
     Error *err = NULL;
-
-    bdev_list = qmp_query_block(NULL);
-    for (bdev = bdev_list; bdev; bdev = bdev->next) {
-        if (key_is_missing(bdev->value)) {
-            monitor_read_block_device_key(mon, bdev->value->device,
-                                          hmp_cont_cb, NULL);
-            goto out;
-        }
-    }
 
     qmp_cont(&err);
     hmp_handle_error(mon, &err);
-
-out:
-    qapi_free_BlockInfoList(bdev_list);
 }
 
 void hmp_system_wakeup(Monitor *mon, const QDict *qdict)
@@ -1741,12 +1761,6 @@ void hmp_change(Monitor *mon, const QDict *qdict)
         qmp_blockdev_change_medium(true, device, false, NULL, target,
                                    !!arg, arg, !!read_only, read_only_mode,
                                    &err);
-        if (err &&
-            error_get_class(err) == ERROR_CLASS_DEVICE_ENCRYPTED) {
-            error_free(err);
-            monitor_read_block_device_key(mon, device, NULL, NULL);
-            return;
-        }
     }
 
     hmp_handle_error(mon, &err);
@@ -2225,6 +2239,40 @@ void hmp_chardev_add(Monitor *mon, const QDict *qdict)
         qemu_chr_new_from_opts(opts, &err);
         qemu_opts_del(opts);
     }
+    hmp_handle_error(mon, &err);
+}
+
+void hmp_chardev_change(Monitor *mon, const QDict *qdict)
+{
+    const char *args = qdict_get_str(qdict, "args");
+    const char *id;
+    Error *err = NULL;
+    ChardevBackend *backend = NULL;
+    ChardevReturn *ret = NULL;
+    QemuOpts *opts = qemu_opts_parse_noisily(qemu_find_opts("chardev"), args,
+                                             true);
+    if (!opts) {
+        error_setg(&err, "Parsing chardev args failed");
+        goto end;
+    }
+
+    id = qdict_get_str(qdict, "id");
+    if (qemu_opts_id(opts)) {
+        error_setg(&err, "Unexpected 'id' parameter");
+        goto end;
+    }
+
+    backend = qemu_chr_parse_opts(opts, &err);
+    if (!backend) {
+        goto end;
+    }
+
+    ret = qmp_chardev_change(id, backend, &err);
+
+end:
+    qapi_free_ChardevReturn(ret);
+    qapi_free_ChardevBackend(backend);
+    qemu_opts_del(opts);
     hmp_handle_error(mon, &err);
 }
 

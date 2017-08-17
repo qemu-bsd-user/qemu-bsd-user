@@ -2431,8 +2431,6 @@
 # Since:  0.14.0
 #
 # Returns:  If successful, nothing
-#           If QEMU was started with an encrypted block device and a key has
-#              not yet been set, DeviceEncrypted.
 #
 # Notes:  This command will succeed if the guest is currently running.  It
 #         will also succeed if the guest is in the "inmigrate" state; in
@@ -2713,8 +2711,7 @@
 #        * This command is stateless, this means that commands that depend
 #          on state information (such as getfd) might not work
 #
-#        * Commands that prompt the user for data (eg. 'cont' when the block
-#          device is encrypted) don't currently work
+#        * Commands that prompt the user for data don't currently work
 #
 # Example:
 #
@@ -3014,16 +3011,10 @@
 # @arg:    If @device is a block device, then this is an optional format to open
 #          the device with.
 #          If @device is 'vnc' and @target is 'password', this is the new VNC
-#          password to set.  If this argument is an empty string, then no future
-#          logins will be allowed.
+#          password to set.  See change-vnc-password for additional notes.
 #
 # Returns: Nothing on success.
 #          If @device is not a valid block device, DeviceNotFound
-#          If the new block device is encrypted, DeviceEncrypted.  Note that
-#          if this error is returned, the device has been opened successfully
-#          and an additional call to @block_passwd is required to set the
-#          device's password.  The behavior of reads and writes to the block
-#          device between when these calls are executed is undefined.
 #
 # Notes:  This interface is deprecated, and it is strongly recommended that you
 #         avoid using it.  For changing block devices, use
@@ -3059,10 +3050,15 @@
 #
 # @name: the type name found in the search
 #
+# @abstract: the type is abstract and can't be directly instantiated.
+#            Omitted if false. (since 2.10)
+#
+# @parent: Name of parent type, if any (since 2.10)
+#
 # Since: 1.1
 ##
 { 'struct': 'ObjectTypeInfo',
-  'data': { 'name': 'str' } }
+  'data': { 'name': 'str', '*abstract': 'bool', '*parent': 'str' } }
 
 ##
 # @qom-list-types:
@@ -5095,6 +5091,46 @@
 ##
 { 'command': 'chardev-add', 'data': {'id'      : 'str',
                                      'backend' : 'ChardevBackend' },
+  'returns': 'ChardevReturn' }
+
+##
+# @chardev-change:
+#
+# Change a character device backend
+#
+# @id: the chardev's ID, must exist
+# @backend: new backend type and parameters
+#
+# Returns: ChardevReturn.
+#
+# Since: 2.10
+#
+# Example:
+#
+# -> { "execute" : "chardev-change",
+#      "arguments" : { "id" : "baz",
+#                      "backend" : { "type" : "pty", "data" : {} } } }
+# <- { "return": { "pty" : "/dev/pty/42" } }
+#
+# -> {"execute" : "chardev-change",
+#     "arguments" : {
+#         "id" : "charchannel2",
+#         "backend" : {
+#             "type" : "socket",
+#             "data" : {
+#                 "addr" : {
+#                     "type" : "unix" ,
+#                     "data" : {
+#                         "path" : "/tmp/charchannel2.socket"
+#                     }
+#                  },
+#                  "server" : true,
+#                  "wait" : false }}}}
+# <- {"return": {}}
+#
+##
+{ 'command': 'chardev-change', 'data': {'id'      : 'str',
+                                        'backend' : 'ChardevBackend' },
   'returns': 'ChardevReturn' }
 
 ##
