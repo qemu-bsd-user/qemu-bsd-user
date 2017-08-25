@@ -457,22 +457,19 @@ static int raw_open_common(BlockDriverState *bs, QDict *options,
     switch (locking) {
     case ON_OFF_AUTO_ON:
         s->use_lock = true;
-#ifndef F_OFD_SETLK
-        fprintf(stderr,
-                "File lock requested but OFD locking syscall is unavailable, "
-                "falling back to POSIX file locks.\n"
-                "Due to the implementation, locks can be lost unexpectedly.\n");
-#endif
+        if (!qemu_has_ofd_lock()) {
+            fprintf(stderr,
+                    "File lock requested but OFD locking syscall is "
+                    "unavailable, falling back to POSIX file locks.\n"
+                    "Due to the implementation, locks can be lost "
+                    "unexpectedly.\n");
+        }
         break;
     case ON_OFF_AUTO_OFF:
         s->use_lock = false;
         break;
     case ON_OFF_AUTO_AUTO:
-#ifdef F_OFD_SETLK
-        s->use_lock = true;
-#else
-        s->use_lock = false;
-#endif
+        s->use_lock = qemu_has_ofd_lock();
         break;
     default:
         abort();
@@ -1339,6 +1336,9 @@ static ssize_t handle_aiocb_write_zeroes(RawPosixAIOData *aiocb)
 #if defined(CONFIG_FALLOCATE) || defined(CONFIG_XFS)
     BDRVRawState *s = aiocb->bs->opaque;
 #endif
+#ifdef CONFIG_FALLOCATE
+    int64_t len;
+#endif
 
     if (aiocb->aio_type & QEMU_AIO_BLKDEV) {
         return handle_aiocb_write_zeroes_block(aiocb);
@@ -1381,7 +1381,10 @@ static ssize_t handle_aiocb_write_zeroes(RawPosixAIOData *aiocb)
 #endif
 
 #ifdef CONFIG_FALLOCATE
-    if (s->has_fallocate && aiocb->aio_offset >= bdrv_getlength(aiocb->bs)) {
+    /* Last resort: we are trying to extend the file with zeroed data. This
+     * can be done via fallocate(fd, 0) */
+    len = bdrv_getlength(aiocb->bs);
+    if (s->has_fallocate && len >= 0 && aiocb->aio_offset >= len) {
         int ret = do_fallocate(s->fd, 0, aiocb->aio_offset, aiocb->aio_nbytes);
         if (ret == 0 || ret != -ENOTSUP) {
             return ret;

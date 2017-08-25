@@ -264,7 +264,6 @@ static inline abi_long do_freebsd_fork(void *cpu_env)
     if (ret == 0) {
         /* child */
         child_flag = 1;
-        rcu_after_fork();
         target_cpu_clone_regs(cpu_env, 0);
     } else {
         /* parent */
@@ -300,7 +299,6 @@ static inline abi_long do_freebsd_rfork(void *cpu_env, abi_long flags)
     if (ret == 0) {
         /* child */
         child_flag = 1;
-        rcu_after_fork();
         target_cpu_clone_regs(cpu_env, 0);
     } else {
         /* parent */
@@ -332,7 +330,6 @@ static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
     if (ret == 0) {
         /* child */
         child_flag = 1;
-        rcu_after_fork();
         target_cpu_clone_regs(cpu_env, 0);
     } else {
         /* parent */
