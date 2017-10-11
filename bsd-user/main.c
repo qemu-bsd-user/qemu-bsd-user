@@ -94,7 +94,6 @@ void fork_start(void)
 
 void fork_end(int child)
 {
-    mmap_fork_end(child);
     if (child) {
         CPUState *cpu, *next_cpu;
         /*
