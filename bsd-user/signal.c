@@ -459,12 +459,12 @@ static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
     }
 }
 
-/* do_sigaltstack() returns target values and errnos.  */
+/* do_sigaltstack() returns target values and errnos. */
 /* compare to kern/kern_sig.c sys_sigaltstack() and kern_sigaltstack() */
 abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
 {
-    int ret = 0;
-    target_stack_t ss, oss, *uss;
+    int ret;
+    target_stack_t oss;
 
     if (uoss_addr) {
         /* Save current signal stack params */
@@ -473,49 +473,52 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
         oss.ss_flags = tswapl(sas_ss_flags(sp));
     }
 
-    if (uss_addr) {
+    if(uss_addr)
+    {
+        target_stack_t *uss;
+        target_stack_t ss;
+        size_t minstacksize = TARGET_MINSIGSTKSZ;
 
-        if (!lock_user_struct(VERIFY_READ, uss, uss_addr, 1) ||
-            __get_user(ss.ss_sp, &uss->ss_sp) ||
-            __get_user(ss.ss_size, &uss->ss_size) ||
-            __get_user(ss.ss_flags, &uss->ss_flags)) {
-            ret = -TARGET_EFAULT;
+	ret = -TARGET_EFAULT;
+        if (!lock_user_struct(VERIFY_READ, uss, uss_addr, 1)) {
             goto out;
         }
+        __get_user(ss.ss_sp, &uss->ss_sp);
+        __get_user(ss.ss_size, &uss->ss_size);
+        __get_user(ss.ss_flags, &uss->ss_flags);
         unlock_user_struct(uss, uss_addr, 0);
 
-        if (on_sig_stack(sp)) {
-            ret = -TARGET_EPERM;
+	ret = -TARGET_EPERM;
+	if (on_sig_stack(sp))
             goto out;
-        }
 
-        if ((ss.ss_flags & ~TARGET_SS_DISABLE) != 0) {
-            ret = -TARGET_EINVAL;
+	ret = -TARGET_EINVAL;
+	if (ss.ss_flags != TARGET_SS_DISABLE
+            && ss.ss_flags != TARGET_SS_ONSTACK
+            && ss.ss_flags != 0)
             goto out;
-        }
 
-        if (!(ss.ss_flags & ~TARGET_SS_DISABLE)) {
-            if (ss.ss_size < TARGET_MINSIGSTKSZ) {
-                ret = -TARGET_ENOMEM;
-                goto out;
-            }
-        } else {
+	if (ss.ss_flags == TARGET_SS_DISABLE) {
             ss.ss_size = 0;
             ss.ss_sp = 0;
-        }
+	} else {
+            ret = -TARGET_ENOMEM;
+            if (ss.ss_size < minstacksize) {
+                goto out;
+            }
+	}
 
         target_sigaltstack_used.ss_sp = ss.ss_sp;
         target_sigaltstack_used.ss_size = ss.ss_size;
     }
 
     if (uoss_addr) {
-        /* Copy out to user saved signal stack params */
-        if (copy_to_user(uoss_addr, &oss, sizeof(oss))) {
-            ret = -TARGET_EFAULT;
+        ret = -TARGET_EFAULT;
+        if (copy_to_user(uoss_addr, &oss, sizeof(oss)))
             goto out;
-        }
     }
 
+    ret = 0;
 out:
     return ret;
 }
