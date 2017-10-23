@@ -1300,7 +1300,7 @@ abi_long freebsd_rw_unlock(abi_ulong target_addr)
     }
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
+#if defined(__FreeBSD_version) && __FreeBSD_version > 1200000
 abi_long
 freebsd_umtx_shm(abi_ulong target_addr, long fflag)
 {
