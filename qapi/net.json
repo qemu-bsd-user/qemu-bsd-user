@@ -265,6 +265,19 @@
     '*poll-us':    'uint32'} }
 
 ##
+# @NetdevPcapOptions:
+#
+# Use ifname as a source to capture
+#
+# @ifname: #required to determine which interface to capture
+#
+# Since: 1.2
+##
+{ 'struct': 'NetdevPcapOptions',
+  'data': {
+    '*ifname':     'str' } }
+
+##
 # @NetdevSocketOptions:
 #
 # Connect the VLAN to a remote VLAN in another QEMU virtual machine using a TCP
@@ -467,7 +480,7 @@
 ##
 { 'enum': 'NetClientDriver',
   'data': [ 'none', 'nic', 'user', 'tap', 'l2tpv3', 'socket', 'vde', 'dump',
-            'bridge', 'hubport', 'netmap', 'vhost-user' ] }
+            'bridge', 'hubport', 'netmap', 'vhost-user', 'pcap' ] }
 
 ##
 # @Netdev:
@@ -497,7 +510,8 @@
     'bridge':   'NetdevBridgeOptions',
     'hubport':  'NetdevHubPortOptions',
     'netmap':   'NetdevNetmapOptions',
-    'vhost-user': 'NetdevVhostUserOptions' } }
+    'vhost-user': 'NetdevVhostUserOptions',
+    'pcap':	'NetdevPcapOptions' } }
 
 ##
 # @NetLegacy:
@@ -528,7 +542,7 @@
 ##
 { 'enum': 'NetLegacyOptionsType',
   'data': ['none', 'nic', 'user', 'tap', 'l2tpv3', 'socket', 'vde',
-           'dump', 'bridge', 'netmap', 'vhost-user'] }
+           'dump', 'bridge', 'netmap', 'vhost-user', 'pcap'] }
 
 ##
 # @NetLegacyOptions:
@@ -551,7 +565,8 @@
     'dump':     'NetdevDumpOptions',
     'bridge':   'NetdevBridgeOptions',
     'netmap':   'NetdevNetmapOptions',
-    'vhost-user': 'NetdevVhostUserOptions' } }
+    'vhost-user': 'NetdevVhostUserOptions',
+    'pcap':	'NetdevPcapOptions' } }
 
 ##
 # @NetFilterDirection:
