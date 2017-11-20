@@ -834,7 +834,7 @@ void *virtqueue_pop(VirtQueue *vq, size_t sz)
     int64_t len;
     VirtIODevice *vdev = vq->vdev;
     VirtQueueElement *elem = NULL;
-    unsigned out_num, in_num;
+    unsigned out_num, in_num, elem_entries;
     hwaddr addr[VIRTQUEUE_MAX_SIZE];
     struct iovec iov[VIRTQUEUE_MAX_SIZE];
     VRingDesc desc;
@@ -852,7 +852,7 @@ void *virtqueue_pop(VirtQueue *vq, size_t sz)
     smp_rmb();
 
     /* When we start there are none of either input nor output. */
-    out_num = in_num = 0;
+    out_num = in_num = elem_entries = 0;
 
     max = vq->vring.num;
 
@@ -922,7 +922,7 @@ void *virtqueue_pop(VirtQueue *vq, size_t sz)
         }
 
         /* If we've got too many, that implies a descriptor loop. */
-        if ((in_num + out_num) > max) {
+        if (++elem_entries > max) {
             virtio_error(vdev, "Looped descriptor");
             goto err_undo_map;
         }
@@ -1025,11 +1025,9 @@ void *qemu_get_virtqueue_element(VirtIODevice *vdev, QEMUFile *f, size_t sz)
 
     /* TODO: teach all callers that this can fail, and return failure instead
      * of asserting here.
-     * When we do, we might be able to re-enable NDEBUG below.
+     * This is just one thing (there are probably more) that must be
+     * fixed before we can allow NDEBUG compilation.
      */
-#ifdef NDEBUG
-#error building with NDEBUG is not supported
-#endif
     assert(ARRAY_SIZE(data.in_addr) >= data.in_num);
     assert(ARRAY_SIZE(data.out_addr) >= data.out_num);
 
@@ -1899,7 +1897,7 @@ static const VMStateDescription vmstate_virtio = {
     }
 };
 
-void virtio_save(VirtIODevice *vdev, QEMUFile *f)
+int virtio_save(VirtIODevice *vdev, QEMUFile *f)
 {
     BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
     VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
@@ -1949,20 +1947,21 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
     }
 
     if (vdc->vmsd) {
-        vmstate_save_state(f, vdc->vmsd, vdev, NULL);
+        int ret = vmstate_save_state(f, vdc->vmsd, vdev, NULL);
+        if (ret) {
+            return ret;
+        }
     }
 
     /* Subsections */
-    vmstate_save_state(f, &vmstate_virtio, vdev, NULL);
+    return vmstate_save_state(f, &vmstate_virtio, vdev, NULL);
 }
 
 /* A wrapper for use as a VMState .put function */
 static int virtio_device_put(QEMUFile *f, void *opaque, size_t size,
                               VMStateField *field, QJSON *vmdesc)
 {
-    virtio_save(VIRTIO_DEVICE(opaque), f);
-
-    return 0;
+    return virtio_save(VIRTIO_DEVICE(opaque), f);
 }
 
 /* A wrapper for use as a VMState .get function */
@@ -2492,6 +2491,7 @@ static void virtio_device_realize(DeviceState *dev, Error **errp)
     virtio_bus_device_plugged(vdev, &err);
     if (err != NULL) {
         error_propagate(errp, err);
+        vdc->unrealize(dev, NULL);
         return;
     }
 

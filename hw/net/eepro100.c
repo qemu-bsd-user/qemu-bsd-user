@@ -132,6 +132,7 @@ typedef struct {
     const char *name;
     const char *desc;
     uint16_t device_id;
+    uint16_t alt_device_id;
     uint8_t revision;
     uint16_t subsystem_vendor_id;
     uint16_t subsystem_id;
@@ -276,6 +277,7 @@ typedef struct {
     /* Quasi static device properties (no need to save them). */
     uint16_t stats_size;
     bool has_extended_tcb_support;
+    bool use_alt_device_id;
 } EEPRO100State;
 
 /* Word indices in EEPROM. */
@@ -774,23 +776,11 @@ static void tx_command(EEPRO100State *s)
     }
     assert(tcb_bytes <= sizeof(buf));
     while (size < tcb_bytes) {
-        uint32_t tx_buffer_address = ldl_le_pci_dma(&s->dev, tbd_address);
-        uint16_t tx_buffer_size = lduw_le_pci_dma(&s->dev, tbd_address + 4);
-#if 0
-        uint16_t tx_buffer_el = lduw_le_pci_dma(&s->dev, tbd_address + 6);
-#endif
-        if (tx_buffer_size == 0) {
-            /* Prevent an endless loop. */
-            logout("loop in %s:%u\n", __FILE__, __LINE__);
-            break;
-        }
-        tbd_address += 8;
         TRACE(RXTX, logout
             ("TBD (simplified mode): buffer address 0x%08x, size 0x%04x\n",
-             tx_buffer_address, tx_buffer_size));
-        tx_buffer_size = MIN(tx_buffer_size, sizeof(buf) - size);
-        pci_dma_read(&s->dev, tx_buffer_address, &buf[size], tx_buffer_size);
-        size += tx_buffer_size;
+             tbd_address, tcb_bytes));
+        pci_dma_read(&s->dev, tbd_address, &buf[size], tcb_bytes);
+        size += tcb_bytes;
     }
     if (tbd_array == 0xffffffff) {
         /* Simplified mode. Was already handled by code above. */
@@ -1867,6 +1857,14 @@ static void e100_nic_realize(PCIDevice *pci_dev, Error **errp)
 
     TRACE(OTHER, logout("\n"));
 
+    /* By default, the i82559a adapter uses the legacy PCI ID (for the
+     * i82557). This allows the PCI ID to be changed to the alternate
+     * i82559 ID if needed.
+     */
+    if (s->use_alt_device_id && strcmp(info->name, "i82559a") == 0) {
+        pci_config_set_device_id(s->dev.config, info->alt_device_id);
+    }
+
     s->device = info->device;
 
     e100_pci_reset(s, &local_err);
@@ -1904,8 +1902,7 @@ static void e100_nic_realize(PCIDevice *pci_dev, Error **errp)
 
     qemu_register_reset(nic_reset, s);
 
-    s->vmstate = g_malloc(sizeof(vmstate_eepro100));
-    memcpy(s->vmstate, &vmstate_eepro100, sizeof(vmstate_eepro100));
+    s->vmstate = g_memdup(&vmstate_eepro100, sizeof(vmstate_eepro100));
     s->vmstate->name = qemu_get_queue(s->nic)->model;
     vmstate_register(&pci_dev->qdev, -1, s->vmstate, s);
 }
@@ -1987,6 +1984,7 @@ static E100PCIDeviceInfo e100_devices[] = {
         .desc = "Intel i82559A Ethernet",
         .device = i82559A,
         .device_id = PCI_DEVICE_ID_INTEL_82557,
+        .alt_device_id = PCI_DEVICE_ID_INTEL_82559,
         .revision = 0x06,
         .stats_size = 80,
         .has_extended_tcb_support = true,
@@ -2080,6 +2078,8 @@ static E100PCIDeviceInfo *eepro100_get_class(EEPRO100State *s)
 
 static Property e100_properties[] = {
     DEFINE_NIC_PROPERTIES(EEPRO100State, conf),
+    DEFINE_PROP_BOOL("x-use-alt-device-id", EEPRO100State, use_alt_device_id,
+                     true),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -2117,6 +2117,10 @@ static void eepro100_register_types(void)
         type_info.class_init = eepro100_class_init;
         type_info.instance_size = sizeof(EEPRO100State);
         type_info.instance_init = eepro100_instance_init;
+        type_info.interfaces = (InterfaceInfo[]) {
+            { INTERFACE_CONVENTIONAL_PCI_DEVICE },
+            { },
+        };
 
         type_register(&type_info);
     }

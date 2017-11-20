@@ -10,6 +10,8 @@
 
 #include "hw/pci/pcie.h"
 
+extern bool pci_available;
+
 /* PCI bus */
 
 #define PCI_DEVFN(slot, func)   ((((slot) & 0x1f) << 3) | ((func) & 0x07))
@@ -68,6 +70,7 @@
 /* Intel (0x8086) */
 #define PCI_DEVICE_ID_INTEL_82551IT      0x1209
 #define PCI_DEVICE_ID_INTEL_82557        0x1229
+#define PCI_DEVICE_ID_INTEL_82559        0x1030
 #define PCI_DEVICE_ID_INTEL_82801IR      0x2922
 
 /* Red Hat / Qumranet (for QEMU) -- see pci-ids.txt */
@@ -98,6 +101,7 @@
 #define PCI_DEVICE_ID_REDHAT_PXB_PCIE    0x000b
 #define PCI_DEVICE_ID_REDHAT_PCIE_RP     0x000c
 #define PCI_DEVICE_ID_REDHAT_XHCI        0x000d
+#define PCI_DEVICE_ID_REDHAT_PCIE_BRIDGE 0x000e
 #define PCI_DEVICE_ID_REDHAT_QXL         0x0100
 
 #define FMT_PCIBUS                      PRIx64
@@ -194,6 +198,12 @@ enum {
      OBJECT_CLASS_CHECK(PCIDeviceClass, (klass), TYPE_PCI_DEVICE)
 #define PCI_DEVICE_GET_CLASS(obj) \
      OBJECT_GET_CLASS(PCIDeviceClass, (obj), TYPE_PCI_DEVICE)
+
+/* Implemented by devices that can be plugged on PCI Express buses */
+#define INTERFACE_PCIE_DEVICE "pci-express-device"
+
+/* Implemented by devices that can be plugged on Conventional PCI buses */
+#define INTERFACE_CONVENTIONAL_PCI_DEVICE "conventional-pci-device"
 
 typedef struct PCIINTxRoute {
     enum {
