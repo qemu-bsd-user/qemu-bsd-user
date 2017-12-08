@@ -1610,23 +1610,15 @@ static int core_dump_filename(const TaskState *ts, char *buf,
     free(base_filename);
     free(filename);
 #else /* ! QEMU_LONG_CORE_FILENAME */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char bname[MAXPATHLEN + 1];
-    char *filename;
+    char *filename, *base_filename;
 
     assert(bufsize >= PATH_MAX);
 
-    filename = basename_r(ts->bprm->filename, bname);
-    (void) snprintf(buf, bufsize, "qemu_%s.core", filename);
-#else /* ! __FreeBSD_version >= 900000 */
-    char *filename;
-
-    assert(bufsize >= PATH_MAX);
-
-    filename = strdup(basename(ts->bprm->filename));
-    (void) snprintf(buf, bufsize, "qemu_%s.core", filename);
+    filename = strdup(ts->bprm->filename);
+    base_filename = strdup(basename(filename));
+    (void) snprintf(buf, bufsize, "qemu_%s.core", base_filename);
+    free(base_filename);
     free(filename);
-#endif /* ! __FreeBSD_version >= 900000 */
 #endif /* ! QEMU_LONG_CORE_FILENAME */
 
     return (0);
