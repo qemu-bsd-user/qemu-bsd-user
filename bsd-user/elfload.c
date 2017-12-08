@@ -1602,12 +1602,11 @@ static int core_dump_filename(const TaskState *ts, char *buf,
     }
 
     filename = strdup(ts->bprm->filename);
-    base_filename = strdup(basename(filename));
+    base_filename = basename(filename);
     (void) strftime(timestamp, sizeof (timestamp), "%Y%m%d-%H%M%S",
             localtime_r(&tv.tv_sec, &tm));
     (void) snprintf(buf, bufsize, "qemu_%s_%s_%d.core",
             base_filename, timestamp, (int)getpid());
-    free(base_filename);
     free(filename);
 #else /* ! QEMU_LONG_CORE_FILENAME */
     char *filename, *base_filename;
@@ -1615,9 +1614,8 @@ static int core_dump_filename(const TaskState *ts, char *buf,
     assert(bufsize >= PATH_MAX);
 
     filename = strdup(ts->bprm->filename);
-    base_filename = strdup(basename(filename));
+    base_filename = basename(filename);
     (void) snprintf(buf, bufsize, "qemu_%s.core", base_filename);
-    free(base_filename);
     free(filename);
 #endif /* ! QEMU_LONG_CORE_FILENAME */
 
