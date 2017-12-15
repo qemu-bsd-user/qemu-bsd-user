@@ -309,7 +309,7 @@
 #define	TARGET_FREEBSD_NR_getresuid	360
 #define	TARGET_FREEBSD_NR_getresgid	361
 #define	TARGET_FREEBSD_NR_kqueue	362
-#define	TARGET_FREEBSD_NR_kevent	363
+#define	TARGET_FREEBSD_NR_freebsd11_kevent	363
 #define	TARGET_FREEBSD_NR_extattr_set_fd	371
 #define	TARGET_FREEBSD_NR_extattr_get_fd	372
 #define	TARGET_FREEBSD_NR_extattr_delete_fd	373
@@ -481,7 +481,8 @@
 #define	TARGET_FREEBSD_NR_getfsstat	557
 #define	TARGET_FREEBSD_NR_fhstatfs	558
 #define	TARGET_FREEBSD_NR_mknodat	559
-#define	TARGET_FREEBSD_NR_MAXSYSCALL	560
+#define	TARGET_FREEBSD_NR_kevent	560
+#define	TARGET_FREEBSD_NR_MAXSYSCALL	561
 
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
