@@ -6,6 +6,7 @@
  * This work is licensed under the terms of the GNU GPL, version 2 or later.
  * See the COPYING file in the top-level directory.
  */
+#include "qemu/osdep.h"
 #include "hw/cpu/core.h"
 #include "hw/ppc/spapr_cpu_core.h"
 #include "target/ppc/cpu.h"
@@ -42,6 +43,13 @@ static void spapr_cpu_reset(void *opaque)
      * is awaken */
     if (cs != first_cpu) {
         env->spr[SPR_LPCR] &= ~pcc->lpcr_pm;
+    }
+
+    /* Set compatibility mode to match the boot CPU, which was either set
+     * by the machine reset code or by CAS. This should never fail.
+     */
+    if (cs != first_cpu) {
+        ppc_set_compat(cpu, POWERPC_CPU(first_cpu)->compat_pvr, &error_abort);
     }
 }
 

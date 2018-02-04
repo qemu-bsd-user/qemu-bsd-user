@@ -6,7 +6,13 @@ BUILD_DIR=$(CURDIR)
 # Before including a proper config-host.mak, assume we are in the source tree
 SRC_PATH=.
 
-UNCHECKED_GOALS := %clean TAGS cscope ctags docker docker-% help
+UNCHECKED_GOALS := %clean TAGS cscope ctags dist \
+    html info pdf txt \
+    help check-help print-% \
+    docker docker-% vm-test vm-build-%
+
+print-%:
+	@echo '$*=$($*)'
 
 # All following code might depend on configuration variables
 ifneq ($(wildcard config-host.mak),)
@@ -50,7 +56,7 @@ ifneq ($(realpath $(SRC_PATH)),$(realpath .))
 ifneq ($(wildcard $(SRC_PATH)/config-host.mak),)
 $(error This is an out of tree build but your source tree ($(SRC_PATH)) \
 seems to have been used for an in-tree build. You can fix this by running \
-"make distclean && rm -rf *-linux-user *-softmmu" in your source tree)
+"$(MAKE) distclean && rm -rf *-linux-user *-softmmu" in your source tree)
 endif
 endif
 
@@ -226,10 +232,22 @@ KEYCODEMAP_GEN = $(SRC_PATH)/ui/keycodemapdb/tools/keymap-gen
 KEYCODEMAP_CSV = $(SRC_PATH)/ui/keycodemapdb/data/keymaps.csv
 
 KEYCODEMAP_FILES = \
+		 ui/input-keymap-atset1-to-qcode.c \
 		 ui/input-keymap-linux-to-qcode.c \
-		 ui/input-keymap-qcode-to-qnum.c \
-		 ui/input-keymap-qnum-to-qcode.c \
+		 ui/input-keymap-qcode-to-atset1.c \
+		 ui/input-keymap-qcode-to-atset2.c \
+		 ui/input-keymap-qcode-to-atset3.c \
 		 ui/input-keymap-qcode-to-linux.c \
+		 ui/input-keymap-qcode-to-qnum.c \
+		 ui/input-keymap-qcode-to-sun.c \
+		 ui/input-keymap-qnum-to-qcode.c \
+		 ui/input-keymap-usb-to-qcode.c \
+		 ui/input-keymap-win32-to-qcode.c \
+		 ui/input-keymap-x11-to-qcode.c \
+		 ui/input-keymap-xorgevdev-to-qcode.c \
+		 ui/input-keymap-xorgkbd-to-qcode.c \
+		 ui/input-keymap-xorgxquartz-to-qcode.c \
+		 ui/input-keymap-xorgxwin-to-qcode.c \
 		 $(NULL)
 
 GENERATED_FILES += $(KEYCODEMAP_FILES)
@@ -274,7 +292,7 @@ else
 DOCS=
 endif
 
-SUBDIR_MAKEFLAGS=$(if $(V),,--no-print-directory) BUILD_DIR=$(BUILD_DIR)
+SUBDIR_MAKEFLAGS=BUILD_DIR=$(BUILD_DIR)
 SUBDIR_DEVICES_MAK=$(patsubst %, %/config-devices.mak, $(TARGET_DIRS))
 SUBDIR_DEVICES_MAK_DEP=$(patsubst %, %-config-devices.mak.d, $(TARGET_DIRS))
 
@@ -304,7 +322,7 @@ endif
 	    else \
 	      echo "WARNING: $@ out of date.";\
 	    fi; \
-	    echo "Run \"make defconfig\" to regenerate."; \
+	    echo "Run \"$(MAKE) defconfig\" to regenerate."; \
 	    rm $@.tmp; \
 	  fi; \
 	 else \
@@ -328,6 +346,7 @@ dummy := $(call unnest-vars,, \
                 ivshmem-server-obj-y \
                 libvhost-user-obj-y \
                 vhost-user-scsi-obj-y \
+                vhost-user-blk-obj-y \
                 qga-vss-dll-obj-y \
                 block-obj-y \
                 block-obj-m \
@@ -559,6 +578,8 @@ ivshmem-server$(EXESUF): $(ivshmem-server-obj-y) $(COMMON_LDADDS)
 endif
 vhost-user-scsi$(EXESUF): $(vhost-user-scsi-obj-y) libvhost-user.a
 	$(call LINK, $^)
+vhost-user-blk$(EXESUF): $(vhost-user-blk-obj-y) libvhost-user.a
+	$(call LINK, $^)
 
 module_block.h: $(SRC_PATH)/scripts/modules/module_block.py config-host.mak
 	$(call quiet-command,$(PYTHON) $< $@ \
@@ -640,7 +661,8 @@ s390-ccw.img s390-netboot.img \
 spapr-rtas.bin slof.bin skiboot.lid \
 palcode-clipper \
 u-boot.e500 \
-qemu_vga.ndrv
+qemu_vga.ndrv \
+hppa-firmware.img
 else
 BLOBS=
 endif
@@ -934,4 +956,4 @@ ifdef QEMU_GA_MSI_ENABLED
 endif
 	@echo  ''
 endif
-	@echo  '  make V=0|1 [targets] 0 => quiet build (default), 1 => verbose build'
+	@echo  '  $(MAKE) V=0|1 [targets] 0 => quiet build (default), 1 => verbose build'

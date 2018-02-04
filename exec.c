@@ -18,8 +18,6 @@
  */
 #include "qemu/osdep.h"
 #include "qapi/error.h"
-#ifndef _WIN32
-#endif
 
 #include "qemu/cutils.h"
 #include "cpu.h"
@@ -51,7 +49,6 @@
 #include "trace-root.h"
 
 #ifdef CONFIG_FALLOCATE_PUNCH_HOLE
-#include <fcntl.h>
 #include <linux/falloc.h>
 #endif
 
@@ -626,6 +623,13 @@ static int cpu_common_post_load(void *opaque, int version_id)
     cpu->interrupt_request &= ~0x01;
     tlb_flush(cpu);
 
+    /* loadvm has just updated the content of RAM, bypassing the
+     * usual mechanisms that ensure we flush TBs for writes to
+     * memory we've translated code from. So we must flush all TBs,
+     * which will now be stale.
+     */
+    tb_flush(cpu);
+
     return 0;
 }
 
@@ -708,9 +712,17 @@ CPUState *qemu_get_cpu(int index)
 }
 
 #if !defined(CONFIG_USER_ONLY)
-void cpu_address_space_init(CPUState *cpu, AddressSpace *as, int asidx)
+void cpu_address_space_init(CPUState *cpu, int asidx,
+                            const char *prefix, MemoryRegion *mr)
 {
     CPUAddressSpace *newas;
+    AddressSpace *as = g_new0(AddressSpace, 1);
+    char *as_name;
+
+    assert(mr);
+    as_name = g_strdup_printf("%s-%d", prefix, cpu->cpu_index);
+    address_space_init(as, mr, as_name);
+    g_free(as_name);
 
     /* Target code should have set num_ases before calling us */
     assert(asidx < cpu->num_ases);
@@ -1600,7 +1612,13 @@ static void *file_ram_alloc(RAMBlock *block,
     void *area;
 
     block->page_size = qemu_fd_getpagesize(fd);
-    block->mr->align = block->page_size;
+    if (block->mr->align % block->page_size) {
+        error_setg(errp, "alignment 0x%" PRIx64
+                   " must be multiples of page size 0x%zx",
+                   block->mr->align, block->page_size);
+        return NULL;
+    }
+    block->mr->align = MAX(block->page_size, block->mr->align);
 #if defined(__s390x__)
     if (kvm_enabled()) {
         block->mr->align = MAX(block->mr->align, QEMU_VMALLOC_ALIGN);
@@ -1655,7 +1673,10 @@ static void *file_ram_alloc(RAMBlock *block,
 }
 #endif
 
-/* Called with the ramlist lock held.  */
+/* Allocate space within the ram_addr_t space that governs the
+ * dirty bitmaps.
+ * Called with the ramlist lock held.
+ */
 static ram_addr_t find_ram_offset(ram_addr_t size)
 {
     RAMBlock *block, *next_block;
@@ -1668,19 +1689,33 @@ static ram_addr_t find_ram_offset(ram_addr_t size)
     }
 
     RAMBLOCK_FOREACH(block) {
-        ram_addr_t end, next = RAM_ADDR_MAX;
+        ram_addr_t candidate, next = RAM_ADDR_MAX;
 
-        end = block->offset + block->max_length;
+        /* Align blocks to start on a 'long' in the bitmap
+         * which makes the bitmap sync'ing take the fast path.
+         */
+        candidate = block->offset + block->max_length;
+        candidate = ROUND_UP(candidate, BITS_PER_LONG << TARGET_PAGE_BITS);
 
+        /* Search for the closest following block
+         * and find the gap.
+         */
         RAMBLOCK_FOREACH(next_block) {
-            if (next_block->offset >= end) {
+            if (next_block->offset >= candidate) {
                 next = MIN(next, next_block->offset);
             }
         }
-        if (next - end >= size && next - end < mingap) {
-            offset = end;
-            mingap = next - end;
+
+        /* If it fits remember our place and remember the size
+         * of gap, but keep going so that we might find a smaller
+         * gap to fill so avoiding fragmentation.
+         */
+        if (next - candidate >= size && next - candidate < mingap) {
+            offset = candidate;
+            mingap = next - candidate;
         }
+
+        trace_find_ram_offset_loop(size, candidate, offset, next, mingap);
     }
 
     if (offset == RAM_ADDR_MAX) {
@@ -1688,6 +1723,8 @@ static ram_addr_t find_ram_offset(ram_addr_t size)
                 (uint64_t)size);
         abort();
     }
+
+    trace_find_ram_offset(size, offset);
 
     return offset;
 }
@@ -2720,6 +2757,37 @@ static uint16_t dummy_section(PhysPageMap *map, FlatView *fv, MemoryRegion *mr)
     return phys_section_add(map, &section);
 }
 
+static void readonly_mem_write(void *opaque, hwaddr addr,
+                               uint64_t val, unsigned size)
+{
+    /* Ignore any write to ROM. */
+}
+
+static bool readonly_mem_accepts(void *opaque, hwaddr addr,
+                                 unsigned size, bool is_write)
+{
+    return is_write;
+}
+
+/* This will only be used for writes, because reads are special cased
+ * to directly access the underlying host ram.
+ */
+static const MemoryRegionOps readonly_mem_ops = {
+    .write = readonly_mem_write,
+    .valid.accepts = readonly_mem_accepts,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+    .valid = {
+        .min_access_size = 1,
+        .max_access_size = 8,
+        .unaligned = false,
+    },
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 8,
+        .unaligned = false,
+    },
+};
+
 MemoryRegion *iotlb_to_region(CPUState *cpu, hwaddr index, MemTxAttrs attrs)
 {
     int asidx = cpu_asidx_from_attrs(cpu, attrs);
@@ -2732,7 +2800,8 @@ MemoryRegion *iotlb_to_region(CPUState *cpu, hwaddr index, MemTxAttrs attrs)
 
 static void io_mem_init(void)
 {
-    memory_region_init_io(&io_mem_rom, NULL, &unassigned_mem_ops, NULL, NULL, UINT64_MAX);
+    memory_region_init_io(&io_mem_rom, NULL, &readonly_mem_ops,
+                          NULL, NULL, UINT64_MAX);
     memory_region_init_io(&io_mem_unassigned, NULL, &unassigned_mem_ops, NULL,
                           NULL, UINT64_MAX);
 
