@@ -80,8 +80,9 @@ typedef void NeonGenWidenFn(TCGv_i64, TCGv_i32);
 typedef void NeonGenTwoSingleOPFn(TCGv_i32, TCGv_i32, TCGv_i32, TCGv_ptr);
 typedef void NeonGenTwoDoubleOPFn(TCGv_i64, TCGv_i64, TCGv_i64, TCGv_ptr);
 typedef void NeonGenOneOpFn(TCGv_i64, TCGv_i64);
-typedef void CryptoTwoOpEnvFn(TCGv_ptr, TCGv_i32, TCGv_i32);
-typedef void CryptoThreeOpEnvFn(TCGv_ptr, TCGv_i32, TCGv_i32, TCGv_i32);
+typedef void CryptoTwoOpFn(TCGv_ptr, TCGv_ptr);
+typedef void CryptoThreeOpIntFn(TCGv_ptr, TCGv_ptr, TCGv_i32);
+typedef void CryptoThreeOpFn(TCGv_ptr, TCGv_ptr, TCGv_ptr);
 
 /* initialize TCG globals.  */
 void a64_translate_init(void)
@@ -163,15 +164,12 @@ void aarch64_cpu_dump_state(CPUState *cs, FILE *f,
 
     if (flags & CPU_DUMP_FPU) {
         int numvfpregs = 32;
-        for (i = 0; i < numvfpregs; i += 2) {
-            uint64_t vlo = float64_val(env->vfp.regs[i * 2]);
-            uint64_t vhi = float64_val(env->vfp.regs[(i * 2) + 1]);
-            cpu_fprintf(f, "q%02d=%016" PRIx64 ":%016" PRIx64 " ",
-                        i, vhi, vlo);
-            vlo = float64_val(env->vfp.regs[(i + 1) * 2]);
-            vhi = float64_val(env->vfp.regs[((i + 1) * 2) + 1]);
-            cpu_fprintf(f, "q%02d=%016" PRIx64 ":%016" PRIx64 "\n",
-                        i + 1, vhi, vlo);
+        for (i = 0; i < numvfpregs; i++) {
+            uint64_t *q = aa64_vfp_qreg(env, i);
+            uint64_t vlo = q[0];
+            uint64_t vhi = q[1];
+            cpu_fprintf(f, "q%02d=%016" PRIx64 ":%016" PRIx64 "%c",
+                        i, vhi, vlo, (i & 1 ? '\n' : ' '));
         }
         cpu_fprintf(f, "FPCR: %08x  FPSR: %08x\n",
                     vfp_get_fpcr(env), vfp_get_fpsr(env));
@@ -400,15 +398,12 @@ static void unallocated_encoding(DisasContext *s)
                       "at pc=%016" PRIx64 "\n",                          \
                       __FILE__, __LINE__, insn, s->pc - 4);              \
         unallocated_encoding(s);                                         \
-    } while (0);
+    } while (0)
 
 static void init_tmp_a64_array(DisasContext *s)
 {
 #ifdef CONFIG_DEBUG_TCG
-    int i;
-    for (i = 0; i < ARRAY_SIZE(s->tmp_a64); i++) {
-        TCGV_UNUSED_I64(s->tmp_a64[i]);
-    }
+    memset(s->tmp_a64, 0, sizeof(s->tmp_a64));
 #endif
     s->tmp_a64_count = 0;
 }
@@ -538,6 +533,21 @@ static inline int vec_reg_offset(DisasContext *s, int regno,
     return offs;
 }
 
+/* Return the offset info CPUARMState of the "whole" vector register Qn.  */
+static inline int vec_full_reg_offset(DisasContext *s, int regno)
+{
+    assert_fp_access_checked(s);
+    return offsetof(CPUARMState, vfp.regs[regno * 2]);
+}
+
+/* Return a newly allocated pointer to the vector register.  */
+static TCGv_ptr vec_full_reg_ptr(DisasContext *s, int regno)
+{
+    TCGv_ptr ret = tcg_temp_new_ptr();
+    tcg_gen_addi_ptr(ret, cpu_env, vec_full_reg_offset(s, regno));
+    return ret;
+}
+
 /* Return the offset into CPUARMState of a slice (from
  * the least significant end) of FP register Qn (ie
  * Dn, Sn, Hn or Bn).
@@ -545,19 +555,13 @@ static inline int vec_reg_offset(DisasContext *s, int regno,
  */
 static inline int fp_reg_offset(DisasContext *s, int regno, TCGMemOp size)
 {
-    int offs = offsetof(CPUARMState, vfp.regs[regno * 2]);
-#ifdef HOST_WORDS_BIGENDIAN
-    offs += (8 - (1 << size));
-#endif
-    assert_fp_access_checked(s);
-    return offs;
+    return vec_reg_offset(s, regno, 0, size);
 }
 
 /* Offset of the high half of the 128 bit vector Qn */
 static inline int fp_reg_hi_offset(DisasContext *s, int regno)
 {
-    assert_fp_access_checked(s);
-    return offsetof(CPUARMState, vfp.regs[regno * 2 + 1]);
+    return vec_reg_offset(s, regno, 1, MO_64);
 }
 
 /* Convenience accessors for reading and writing single and double
@@ -4988,6 +4992,38 @@ static void disas_fp_3src(DisasContext *s, uint32_t insn)
     }
 }
 
+/* The imm8 encodes the sign bit, enough bits to represent an exponent in
+ * the range 01....1xx to 10....0xx, and the most significant 4 bits of
+ * the mantissa; see VFPExpandImm() in the v8 ARM ARM.
+ */
+static uint64_t vfp_expand_imm(int size, uint8_t imm8)
+{
+    uint64_t imm;
+
+    switch (size) {
+    case MO_64:
+        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
+            (extract32(imm8, 6, 1) ? 0x3fc0 : 0x4000) |
+            extract32(imm8, 0, 6);
+        imm <<= 48;
+        break;
+    case MO_32:
+        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
+            (extract32(imm8, 6, 1) ? 0x3e00 : 0x4000) |
+            (extract32(imm8, 0, 6) << 3);
+        imm <<= 16;
+        break;
+    case MO_16:
+        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
+            (extract32(imm8, 6, 1) ? 0x3000 : 0x4000) |
+            (extract32(imm8, 0, 6) << 6);
+        break;
+    default:
+        g_assert_not_reached();
+    }
+    return imm;
+}
+
 /* Floating point immediate
  *   31  30  29 28       24 23  22  21 20        13 12   10 9    5 4    0
  * +---+---+---+-----------+------+---+------------+-------+------+------+
@@ -5011,22 +5047,7 @@ static void disas_fp_imm(DisasContext *s, uint32_t insn)
         return;
     }
 
-    /* The imm8 encodes the sign bit, enough bits to represent
-     * an exponent in the range 01....1xx to 10....0xx,
-     * and the most significant 4 bits of the mantissa; see
-     * VFPExpandImm() in the v8 ARM ARM.
-     */
-    if (is_double) {
-        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
-            (extract32(imm8, 6, 1) ? 0x3fc0 : 0x4000) |
-            extract32(imm8, 0, 6);
-        imm <<= 48;
-    } else {
-        imm = (extract32(imm8, 7, 1) ? 0x8000 : 0) |
-            (extract32(imm8, 6, 1) ? 0x3e00 : 0x4000) |
-            (extract32(imm8, 0, 6) << 3);
-        imm <<= 16;
-    }
+    imm = vfp_expand_imm(MO_32 + is_double, imm8);
 
     tcg_res = tcg_const_i64(imm);
     write_fp_dreg(s, rd, tcg_res);
@@ -6276,7 +6297,7 @@ static void disas_simd_scalar_pairwise(DisasContext *s, uint32_t insn)
             return;
         }
 
-        TCGV_UNUSED_PTR(fpst);
+        fpst = NULL;
         break;
     case 0xc: /* FMAXNMP */
     case 0xd: /* FADDP */
@@ -6371,7 +6392,7 @@ static void disas_simd_scalar_pairwise(DisasContext *s, uint32_t insn)
         tcg_temp_free_i32(tcg_res);
     }
 
-    if (!TCGV_IS_UNUSED_PTR(fpst)) {
+    if (fpst) {
         tcg_temp_free_ptr(fpst);
     }
 }
@@ -6387,7 +6408,7 @@ static void handle_shri_with_rndacc(TCGv_i64 tcg_res, TCGv_i64 tcg_src,
                                     bool is_u, int size, int shift)
 {
     bool extended_result = false;
-    bool round = !TCGV_IS_UNUSED_I64(tcg_rnd);
+    bool round = tcg_rnd != NULL;
     int ext_lshift = 0;
     TCGv_i64 tcg_src_hi;
 
@@ -6533,7 +6554,7 @@ static void handle_scalar_simd_shri(DisasContext *s,
         uint64_t round_const = 1ULL << (shift - 1);
         tcg_round = tcg_const_i64(round_const);
     } else {
-        TCGV_UNUSED_I64(tcg_round);
+        tcg_round = NULL;
     }
 
     tcg_rn = read_fp_dreg(s, rn);
@@ -6649,7 +6670,7 @@ static void handle_vec_simd_sqshrn(DisasContext *s, bool is_scalar, bool is_q,
         uint64_t round_const = 1ULL << (shift - 1);
         tcg_round = tcg_const_i64(round_const);
     } else {
-        TCGV_UNUSED_I64(tcg_round);
+        tcg_round = NULL;
     }
 
     for (i = 0; i < elements; i++) {
@@ -8239,8 +8260,8 @@ static void disas_simd_scalar_two_reg_misc(DisasContext *s, uint32_t insn)
         gen_helper_set_rmode(tcg_rmode, tcg_rmode, cpu_env);
         tcg_fpstatus = get_fpstatus_ptr();
     } else {
-        TCGV_UNUSED_I32(tcg_rmode);
-        TCGV_UNUSED_PTR(tcg_fpstatus);
+        tcg_rmode = NULL;
+        tcg_fpstatus = NULL;
     }
 
     if (size == 3) {
@@ -8360,7 +8381,7 @@ static void handle_vec_simd_shri(DisasContext *s, bool is_q, bool is_u,
         uint64_t round_const = 1ULL << (shift - 1);
         tcg_round = tcg_const_i64(round_const);
     } else {
-        TCGV_UNUSED_I64(tcg_round);
+        tcg_round = NULL;
     }
 
     for (i = 0; i < elements; i++) {
@@ -8502,7 +8523,7 @@ static void handle_vec_simd_shrn(DisasContext *s, bool is_q,
         uint64_t round_const = 1ULL << (shift - 1);
         tcg_round = tcg_const_i64(round_const);
     } else {
-        TCGV_UNUSED_I64(tcg_round);
+        tcg_round = NULL;
     }
 
     for (i = 0; i < elements; i++) {
@@ -9168,7 +9189,7 @@ static void handle_simd_3same_pair(DisasContext *s, int is_q, int u, int opcode,
     if (opcode >= 0x58) {
         fpst = get_fpstatus_ptr();
     } else {
-        TCGV_UNUSED_PTR(fpst);
+        fpst = NULL;
     }
 
     if (!fp_access_check(s)) {
@@ -9305,7 +9326,7 @@ static void handle_simd_3same_pair(DisasContext *s, int is_q, int u, int opcode,
         }
     }
 
-    if (!TCGV_IS_UNUSED_PTR(fpst)) {
+    if (fpst) {
         tcg_temp_free_ptr(fpst);
     }
 }
@@ -10226,13 +10247,13 @@ static void disas_simd_two_reg_misc(DisasContext *s, uint32_t insn)
     if (need_fpstatus) {
         tcg_fpstatus = get_fpstatus_ptr();
     } else {
-        TCGV_UNUSED_PTR(tcg_fpstatus);
+        tcg_fpstatus = NULL;
     }
     if (need_rmode) {
         tcg_rmode = tcg_const_i32(arm_rmode_to_sf(rmode));
         gen_helper_set_rmode(tcg_rmode, tcg_rmode, cpu_env);
     } else {
-        TCGV_UNUSED_I32(tcg_rmode);
+        tcg_rmode = NULL;
     }
 
     if (size == 3) {
@@ -10593,7 +10614,7 @@ static void disas_simd_indexed(DisasContext *s, uint32_t insn)
     if (is_fp) {
         fpst = get_fpstatus_ptr();
     } else {
-        TCGV_UNUSED_PTR(fpst);
+        fpst = NULL;
     }
 
     if (size == 3) {
@@ -10917,7 +10938,7 @@ static void disas_simd_indexed(DisasContext *s, uint32_t insn)
         }
     }
 
-    if (!TCGV_IS_UNUSED_PTR(fpst)) {
+    if (fpst) {
         tcg_temp_free_ptr(fpst);
     }
 }
@@ -10935,8 +10956,9 @@ static void disas_crypto_aes(DisasContext *s, uint32_t insn)
     int rn = extract32(insn, 5, 5);
     int rd = extract32(insn, 0, 5);
     int decrypt;
-    TCGv_i32 tcg_rd_regno, tcg_rn_regno, tcg_decrypt;
-    CryptoThreeOpEnvFn *genfn;
+    TCGv_ptr tcg_rd_ptr, tcg_rn_ptr;
+    TCGv_i32 tcg_decrypt;
+    CryptoThreeOpIntFn *genfn;
 
     if (!arm_dc_feature(s, ARM_FEATURE_V8_AES)
         || size != 0) {
@@ -10970,18 +10992,14 @@ static void disas_crypto_aes(DisasContext *s, uint32_t insn)
         return;
     }
 
-    /* Note that we convert the Vx register indexes into the
-     * index within the vfp.regs[] array, so we can share the
-     * helper with the AArch32 instructions.
-     */
-    tcg_rd_regno = tcg_const_i32(rd << 1);
-    tcg_rn_regno = tcg_const_i32(rn << 1);
+    tcg_rd_ptr = vec_full_reg_ptr(s, rd);
+    tcg_rn_ptr = vec_full_reg_ptr(s, rn);
     tcg_decrypt = tcg_const_i32(decrypt);
 
-    genfn(cpu_env, tcg_rd_regno, tcg_rn_regno, tcg_decrypt);
+    genfn(tcg_rd_ptr, tcg_rn_ptr, tcg_decrypt);
 
-    tcg_temp_free_i32(tcg_rd_regno);
-    tcg_temp_free_i32(tcg_rn_regno);
+    tcg_temp_free_ptr(tcg_rd_ptr);
+    tcg_temp_free_ptr(tcg_rn_ptr);
     tcg_temp_free_i32(tcg_decrypt);
 }
 
@@ -10998,8 +11016,8 @@ static void disas_crypto_three_reg_sha(DisasContext *s, uint32_t insn)
     int rm = extract32(insn, 16, 5);
     int rn = extract32(insn, 5, 5);
     int rd = extract32(insn, 0, 5);
-    CryptoThreeOpEnvFn *genfn;
-    TCGv_i32 tcg_rd_regno, tcg_rn_regno, tcg_rm_regno;
+    CryptoThreeOpFn *genfn;
+    TCGv_ptr tcg_rd_ptr, tcg_rn_ptr, tcg_rm_ptr;
     int feature = ARM_FEATURE_V8_SHA256;
 
     if (size != 0) {
@@ -11038,23 +11056,23 @@ static void disas_crypto_three_reg_sha(DisasContext *s, uint32_t insn)
         return;
     }
 
-    tcg_rd_regno = tcg_const_i32(rd << 1);
-    tcg_rn_regno = tcg_const_i32(rn << 1);
-    tcg_rm_regno = tcg_const_i32(rm << 1);
+    tcg_rd_ptr = vec_full_reg_ptr(s, rd);
+    tcg_rn_ptr = vec_full_reg_ptr(s, rn);
+    tcg_rm_ptr = vec_full_reg_ptr(s, rm);
 
     if (genfn) {
-        genfn(cpu_env, tcg_rd_regno, tcg_rn_regno, tcg_rm_regno);
+        genfn(tcg_rd_ptr, tcg_rn_ptr, tcg_rm_ptr);
     } else {
         TCGv_i32 tcg_opcode = tcg_const_i32(opcode);
 
-        gen_helper_crypto_sha1_3reg(cpu_env, tcg_rd_regno,
-                                    tcg_rn_regno, tcg_rm_regno, tcg_opcode);
+        gen_helper_crypto_sha1_3reg(tcg_rd_ptr, tcg_rn_ptr,
+                                    tcg_rm_ptr, tcg_opcode);
         tcg_temp_free_i32(tcg_opcode);
     }
 
-    tcg_temp_free_i32(tcg_rd_regno);
-    tcg_temp_free_i32(tcg_rn_regno);
-    tcg_temp_free_i32(tcg_rm_regno);
+    tcg_temp_free_ptr(tcg_rd_ptr);
+    tcg_temp_free_ptr(tcg_rn_ptr);
+    tcg_temp_free_ptr(tcg_rm_ptr);
 }
 
 /* Crypto two-reg SHA
@@ -11069,9 +11087,9 @@ static void disas_crypto_two_reg_sha(DisasContext *s, uint32_t insn)
     int opcode = extract32(insn, 12, 5);
     int rn = extract32(insn, 5, 5);
     int rd = extract32(insn, 0, 5);
-    CryptoTwoOpEnvFn *genfn;
+    CryptoTwoOpFn *genfn;
     int feature;
-    TCGv_i32 tcg_rd_regno, tcg_rn_regno;
+    TCGv_ptr tcg_rd_ptr, tcg_rn_ptr;
 
     if (size != 0) {
         unallocated_encoding(s);
@@ -11105,13 +11123,13 @@ static void disas_crypto_two_reg_sha(DisasContext *s, uint32_t insn)
         return;
     }
 
-    tcg_rd_regno = tcg_const_i32(rd << 1);
-    tcg_rn_regno = tcg_const_i32(rn << 1);
+    tcg_rd_ptr = vec_full_reg_ptr(s, rd);
+    tcg_rn_ptr = vec_full_reg_ptr(s, rn);
 
-    genfn(cpu_env, tcg_rd_regno, tcg_rn_regno);
+    genfn(tcg_rd_ptr, tcg_rn_ptr);
 
-    tcg_temp_free_i32(tcg_rd_regno);
-    tcg_temp_free_i32(tcg_rn_regno);
+    tcg_temp_free_ptr(tcg_rd_ptr);
+    tcg_temp_free_ptr(tcg_rn_ptr);
 }
 
 /* C3.6 Data processing - SIMD, inc Crypto
@@ -11293,8 +11311,8 @@ static void aarch64_tr_insn_start(DisasContextBase *dcbase, CPUState *cpu)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
 
-    dc->insn_start_idx = tcg_op_buf_count();
     tcg_gen_insn_start(dc->pc, 0, 0);
+    dc->insn_start = tcg_last_op();
 }
 
 static bool aarch64_tr_breakpoint_check(DisasContextBase *dcbase, CPUState *cpu,

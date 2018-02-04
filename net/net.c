@@ -1290,7 +1290,7 @@ static int net_client_init1(const void *object, bool is_netdev, Error **errp)
         /* Do not add to a vlan if it's a nic with a netdev= parameter. */
         if (netdev->type != NET_CLIENT_DRIVER_NIC ||
             !opts->u.nic.has_netdev) {
-            peer = net_hub_add_port(net->has_vlan ? net->vlan : 0, NULL);
+            peer = net_hub_add_port(net->has_vlan ? net->vlan : 0, NULL, NULL);
         }
 
         if (net->has_vlan && !vlan_warned) {
@@ -1792,13 +1792,6 @@ int net_init_clients(void)
 
 int net_client_parse(QemuOptsList *opts_list, const char *optarg)
 {
-#if defined(CONFIG_SLIRP)
-    int ret;
-    if (net_slirp_parse_legacy(opts_list, optarg, &ret)) {
-        return ret;
-    }
-#endif
-
     if (!qemu_opts_parse_noisily(opts_list, optarg, true)) {
         return -1;
     }
@@ -1808,25 +1801,48 @@ int net_client_parse(QemuOptsList *opts_list, const char *optarg)
 
 /* From FreeBSD */
 /* XXX: optimize */
-unsigned compute_mcast_idx(const uint8_t *ep)
+uint32_t net_crc32(const uint8_t *p, int len)
 {
     uint32_t crc;
     int carry, i, j;
     uint8_t b;
 
     crc = 0xffffffff;
-    for (i = 0; i < 6; i++) {
-        b = *ep++;
+    for (i = 0; i < len; i++) {
+        b = *p++;
         for (j = 0; j < 8; j++) {
             carry = ((crc & 0x80000000L) ? 1 : 0) ^ (b & 0x01);
             crc <<= 1;
             b >>= 1;
             if (carry) {
-                crc = ((crc ^ POLYNOMIAL) | carry);
+                crc = ((crc ^ POLYNOMIAL_BE) | carry);
             }
         }
     }
-    return crc >> 26;
+
+    return crc;
+}
+
+uint32_t net_crc32_le(const uint8_t *p, int len)
+{
+    uint32_t crc;
+    int carry, i, j;
+    uint8_t b;
+
+    crc = 0xffffffff;
+    for (i = 0; i < len; i++) {
+        b = *p++;
+        for (j = 0; j < 8; j++) {
+            carry = (crc & 0x1) ^ (b & 0x01);
+            crc >>= 1;
+            b >>= 1;
+            if (carry) {
+                crc ^= POLYNOMIAL_LE;
+            }
+        }
+    }
+
+    return crc;
 }
 
 QemuOptsList qemu_netdev_opts = {

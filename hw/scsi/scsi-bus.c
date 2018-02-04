@@ -224,6 +224,7 @@ static void scsi_qdev_unrealize(DeviceState *qdev, Error **errp)
 /* handle legacy '-drive if=scsi,...' cmd line args */
 SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockBackend *blk,
                                       int unit, bool removable, int bootindex,
+                                      bool share_rw,
                                       const char *serial, Error **errp)
 {
     const char *driver;
@@ -250,6 +251,12 @@ SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockBackend *blk,
     }
     qdev_prop_set_drive(dev, "drive", blk, &err);
     if (err) {
+        error_propagate(errp, err);
+        object_unparent(OBJECT(dev));
+        return NULL;
+    }
+    object_property_set_bool(OBJECT(dev), share_rw, "share-rw", &err);
+    if (err != NULL) {
         error_propagate(errp, err);
         object_unparent(OBJECT(dev));
         return NULL;
@@ -288,7 +295,7 @@ void scsi_bus_legacy_handle_cmdline(SCSIBus *bus, bool deprecated)
             }
         }
         scsi_bus_legacy_add_drive(bus, blk_by_legacy_dinfo(dinfo),
-                                  unit, false, -1, NULL, &error_fatal);
+                                  unit, false, -1, false, NULL, &error_fatal);
     }
     loc_pop(&loc);
 }
@@ -540,20 +547,8 @@ static int32_t scsi_target_send_command(SCSIRequest *req, uint8_t *buf)
         if (req->lun != 0) {
             const struct SCSISense sense = SENSE_CODE(LUN_NOT_SUPPORTED);
 
-            if (fixed_sense) {
-                r->buf[0] = 0x70;
-                r->buf[2] = sense.key;
-                r->buf[10] = 10;
-                r->buf[12] = sense.asc;
-                r->buf[13] = sense.ascq;
-                r->len = MIN(req->cmd.xfer, SCSI_SENSE_LEN);
-            } else {
-                r->buf[0] = 0x72;
-                r->buf[1] = sense.key;
-                r->buf[2] = sense.asc;
-                r->buf[3] = sense.ascq;
-                r->len = 8;
-            }
+            r->len = scsi_build_sense_buf(r->buf, req->cmd.xfer,
+                                          sense, fixed_sense);
         } else {
             r->len = scsi_device_get_sense(r->req.dev, r->buf,
                                            MIN(req->cmd.xfer, r->buf_len),
