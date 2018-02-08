@@ -277,12 +277,17 @@ static inline abi_long do_bsd_msgctl(int msgid, int target_cmd, abi_long ptr)
     return ret;
 }
 
+struct kern_mymsg {
+    long mtype;
+    char mtext[1];
+};
+
 /* msgsnd(2) */
 static inline abi_long do_bsd_msgsnd(int msqid, abi_long msgp,
         unsigned int msgsz, int msgflg)
 {
     struct target_msgbuf *target_mb;
-    struct mymsg *host_mb;
+    struct kern_mymsg *host_mb;
     abi_long ret;
 
     if (!lock_user_struct(VERIFY_READ, target_mb, msgp, 0)) {
@@ -304,7 +309,7 @@ static inline abi_long do_bsd_msgrcv(int msqid, abi_long msgp,
 {
     struct target_msgbuf *target_mb = NULL;
     char *target_mtext;
-    struct mymsg *host_mb;
+    struct kern_mymsg *host_mb;
     abi_long ret = 0;
 
     if (!lock_user_struct(VERIFY_WRITE, target_mb, msgp, 0)) {
