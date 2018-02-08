@@ -166,7 +166,7 @@ abi_long target_to_host_msqid_ds(struct msqid_ds *host_md,
         return -TARGET_EFAULT;
     }
 
-    memset(host_md, 0, sizeof(struct msqid_ds);
+    memset(host_md, 0, sizeof(struct msqid_ds));
     /* msg_first and msg_last are not used by IPC_SET/IPC_STAT in kernel. */
     host_md->msg_cbytes = tswapal(target_md->msg_cbytes);
     host_md->msg_qnum = tswapal(target_md->msg_qnum);
@@ -193,7 +193,7 @@ abi_long host_to_target_msqid_ds(abi_ulong target_addr,
         return -TARGET_EFAULT;
     }
 
-    memset(target_md, 0, sizeof(struct target_msqid_ds);
+    memset(target_md, 0, sizeof(struct target_msqid_ds));
     /* msg_first and msg_last are not used by IPC_SET/IPC_STAT in kernel. */
     target_md->msg_cbytes = tswapal(host_md->msg_cbytes);
     target_md->msg_qnum = tswapal(host_md->msg_qnum);
