@@ -482,7 +482,10 @@
 #define	TARGET_FREEBSD_NR_fhstatfs	558
 #define	TARGET_FREEBSD_NR_mknodat	559
 #define	TARGET_FREEBSD_NR_kevent	560
-#define	TARGET_FREEBSD_NR_MAXSYSCALL	561
+#define TARGET_FREEBSD_NR_cpuset_getdomain	561
+#define TARGET_FREEBSD_NR_cpuset_setdomain	562
+#define TARGET_FREEBSD_NR_getrandom	563
+#define	TARGET_FREEBSD_NR_MAXSYSCALL	564
 
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
