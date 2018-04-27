@@ -60,7 +60,7 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     get_user_u64(regs->gpr[2], infop->entry + 8);
     regs->gpr[2] += infop->load_addr;
     get_user_u64(regs->gpr[11], infop->entry + 16);
-    regs->gpr[11] += infop->load_addr; 
+    regs->gpr[11] += infop->load_addr;
 
     get_user_u64(infop->entry, infop->entry);
     infop->entry += infop->load_addr;
