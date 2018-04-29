@@ -18,12 +18,12 @@ if [ -n "$2" ]; then
 	sysnr=$2
 fi
 
-echo "/*" > $sysnr 
+echo "/*" > $sysnr
 echo " * This file was generated from $syshdr" >> $sysnr
 echo " */" >> $sysnr
 echo "" >> $sysnr
 
-/usr/bin/sed -e 's:SYS_:TARGET_FREEBSD_NR_:' < $syshdr >> $sysnr 
+/usr/bin/sed -e 's:SYS_:TARGET_FREEBSD_NR_:' < $syshdr >> $sysnr
 
 cat << _EOF >> $sysnr
 /* Legacy system calls. */
