@@ -28,7 +28,7 @@
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
-#define TARGET_CPU_RESET(env)
+#define TARGET_CPU_RESET(cpu)
 
 #ifdef __FreeBSD__
 extern pthread_mutex_t ras_mtx;

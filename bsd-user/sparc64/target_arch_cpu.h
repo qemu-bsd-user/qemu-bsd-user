@@ -23,7 +23,7 @@
 
 #define TARGET_DEFAULT_CPU_MODEL "TI UltraSparc II"
 
-#define TARGET_CPU_RESET(env) cpu_reset(ENV_GET_CPU(env))
+#define TARGET_CPU_RESET(cpu) cpu_reset(cpu)
 
 #define UREG_L0     8
 #define UREG_L1     9

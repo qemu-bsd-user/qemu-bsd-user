@@ -27,7 +27,7 @@
 #define TARGET_DEFAULT_CPU_MODEL "ppc"
 #endif
 
-#define TARGET_CPU_RESET(env)
+#define TARGET_CPU_RESET(cpu)	cpu_reset(cpu)
 
 static inline void target_cpu_set_tls(CPUPPCState *env, target_ulong newtls)
 {

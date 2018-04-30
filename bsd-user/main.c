@@ -418,9 +418,7 @@ int main(int argc, char **argv)
        qemu_host_page_size */
     cpu = cpu_init(cpu_model);
     env = cpu->env_ptr;
-#if defined(TARGET_SPARC) || defined(TARGET_PPC)
-    cpu_reset(cpu);
-#endif
+    TARGET_CPU_RESET(cpu);
     thread_cpu = cpu;
 
     if (getenv("QEMU_STRACE")) {
