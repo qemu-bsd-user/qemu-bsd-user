@@ -252,36 +252,38 @@ static void set_brk(abi_ulong start, abi_ulong end)
    should not be in memory. */
 static void padzero(abi_ulong elf_bss, abi_ulong last_bss)
 {
-        abi_ulong nbyte;
+    abi_ulong nbyte;
 
-        if (elf_bss >= last_bss)
-                return;
+    if (elf_bss >= last_bss)
+        return;
 
-        /* XXX: this is really a hack : if the real host page size is
-           smaller than the target page size, some pages after the end
-           of the file may not be mapped. A better fix would be to
-           patch target_mmap(), but it is more complicated as the file
-           size must be known */
-        if (qemu_real_host_page_size < qemu_host_page_size) {
-            abi_ulong end_addr, end_addr1;
-            end_addr1 = REAL_HOST_PAGE_ALIGN(elf_bss);
-            end_addr = HOST_PAGE_ALIGN(elf_bss);
-            if (end_addr1 < end_addr) {
-                mmap((void *)g2h(end_addr1), end_addr - end_addr1,
-                     PROT_READ|PROT_WRITE|PROT_EXEC,
-                     MAP_FIXED|MAP_PRIVATE|MAP_ANON, -1, 0);
-            }
+    /*
+     * XXX: this is really a hack : if the real host page size is
+     * smaller than the target page size, some pages after the end
+     * of the file may not be mapped. A better fix would be to
+     * patch target_mmap(), but it is more complicated as the file
+     * size must be known.
+     */
+    if (qemu_real_host_page_size < qemu_host_page_size) {
+        abi_ulong end_addr, end_addr1;
+        end_addr1 = REAL_HOST_PAGE_ALIGN(elf_bss);
+        end_addr = HOST_PAGE_ALIGN(elf_bss);
+        if (end_addr1 < end_addr) {
+            mmap((void *)g2h(end_addr1), end_addr - end_addr1,
+                    PROT_READ|PROT_WRITE|PROT_EXEC,
+                    MAP_FIXED|MAP_PRIVATE|MAP_ANON, -1, 0);
         }
+    }
 
-        nbyte = elf_bss & (qemu_host_page_size-1);
-        if (nbyte) {
-            nbyte = qemu_host_page_size - nbyte;
-            do {
-                /* FIXME - what to do if put_user() fails? */
-                put_user_u8(0, elf_bss);
-                elf_bss++;
-            } while (--nbyte);
-        }
+    nbyte = elf_bss & (qemu_host_page_size-1);
+    if (nbyte) {
+        nbyte = qemu_host_page_size - nbyte;
+        do {
+            /* FIXME - what to do if put_user() fails? */
+            put_user_u8(0, elf_bss);
+            elf_bss++;
+        } while (--nbyte);
+    }
 }
 
 static abi_ulong load_elf_interp(struct elfhdr * interp_elf_ex,
