@@ -386,7 +386,7 @@ abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size)
 abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                      int flags, int fd, off_t offset)
 {
-    abi_ulong ret, end, real_start, real_end, retaddr, host_offset, host_len;
+    abi_ulong addr, ret, end, real_start, real_end, retaddr, host_offset, host_len;
 
     mmap_lock();
 #ifdef DEBUG_MMAP
@@ -407,6 +407,10 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             printf("MAP_FIXED ");
         if (flags & MAP_ANONYMOUS)
             printf("MAP_ANON ");
+#ifdef MAP_EXCL
+        if (flags & MAP_EXCL)
+            printf("MAP_EXCL ");
+#endif
 	if (flags & MAP_PRIVATE)
 	    printf("MAP_PRIVATE ");
 	if (flags & MAP_SHARED)
@@ -567,6 +571,15 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             }
             goto the_end;
         }
+#ifdef MAP_EXCL
+        /* Reject the mapping if any page within the range is mapped */
+        if (flags & MAP_EXCL) {
+            for (addr = start; addr < end; addr++) {
+                if (page_get_flags(addr) != 0)
+                    goto fail;
+            }
+        }
+#endif
 
         /* handle the start of the mapping */
         if (start > real_start) {
