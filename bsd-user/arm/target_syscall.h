@@ -31,12 +31,6 @@ struct target_pt_regs {
 #define TARGET_FREEBSD_ARM_GET_TP       3
 
 #define TARGET_HW_MACHINE       "arm"
-#if __ARM_ARCH >= 7
-#define TARGET_HW_MACHINE_ARCH  "armv7"
-#elif __ARM_ARCH == 6
 #define TARGET_HW_MACHINE_ARCH  "armv6"
-#else
-#define TARGET_HW_MACHINE_ARCH  "arm"
-#endif
 
 #endif /* !__ARCH_SYSCALL_H_ */
