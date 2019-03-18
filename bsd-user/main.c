@@ -256,6 +256,7 @@ int main(int argc, char **argv)
     envlist_t *envlist = NULL;
     char *trace_file = NULL;
     bsd_type = HOST_DEFAULT_BSD_TYPE;
+    char * argv0 = NULL;
 
     if (argc <= 1)
         usage();
@@ -368,6 +369,8 @@ int main(int argc, char **argv)
         } else if (!strcmp(r, "trace")) {
             g_free(trace_file);
             trace_file = trace_opt_parse(optarg);
+        } else if (!strcmp(r, "0")) {
+            argv0 = argv[optind++];    
         } else {
             usage();
         }
@@ -393,6 +396,8 @@ int main(int argc, char **argv)
         usage();
     }
     filename = argv[optind];
+    if (argv0)
+        argv[optind] = argv0;
 
     if (!trace_init_backends()) {
         exit(1);
