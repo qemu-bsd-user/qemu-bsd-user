@@ -85,7 +85,7 @@ abi_long t2h_freebsd_cmsg(struct msghdr *msgh,
                &&  cmsg->cmsg_type == SCM_CREDS) {
             printf("XXX %s SCM_CREDS\n", __FUNCTION__);
         } else {
-            gemu_log("Unsupported ancillary data: %d/%d\n",
+            gemu_log("t2h Unsupported ancillary data: %d/%d\n",
                                         cmsg->cmsg_level, cmsg->cmsg_type);
             memcpy(data, target_data, len);
         }
@@ -222,7 +222,7 @@ abi_long h2t_freebsd_cmsg(struct target_msghdr *target_msgh,
             break; // switch (cmsg->cmsg_type)
         default:
         unimplemented:
-            gemu_log("Unsupported ancillary data: %d/%d\n",
+            gemu_log("h2t Unsupported ancillary data: %d/%d\n",
                                         cmsg->cmsg_level, cmsg->cmsg_type);
             memcpy(target_data, data, MIN(len, tgt_len));
             if (tgt_len > len) {
