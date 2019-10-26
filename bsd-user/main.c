@@ -437,7 +437,7 @@ int main(int argc, char **argv)
 
     cpu = cpu_create(cpu_type);
     env = cpu->env_ptr;
-    TARGET_CPU_RESET(cpu);
+    cpu_reset(cpu);
     thread_cpu = cpu;
 
     if (getenv("QEMU_STRACE")) {
