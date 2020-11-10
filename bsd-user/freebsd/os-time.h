@@ -338,7 +338,7 @@ static inline abi_long do_freebsd_ktimer_create(abi_long arg1, abi_long arg2,
     /* args: clockid_t clockid, struct sigevent *sevp, int *timerid */
     abi_long ret;
 
-    struct sigevent host_sevp = { {0}, }, *phost_sevp = NULL;
+    struct sigevent host_sevp = { 0 }, *phost_sevp = NULL;
 
     int clkid = arg1;
     int timer_index = next_free_host_timer();
@@ -450,14 +450,10 @@ static inline abi_long do_freebsd_select(CPUArchState *env, int n,
 	abi_ulong rfd_addr, abi_ulong wfd_addr, abi_ulong efd_addr,
 	abi_ulong target_tv_addr)
 {
-    CPUState *cpu = ENV_GET_CPU(env);
-    TaskState *ts = (TaskState *)cpu->opaque;
     fd_set rfds, wfds, efds;
     fd_set *rfds_ptr, *wfds_ptr, *efds_ptr;
     struct timeval tv, *tvp;
     abi_long ret, error;
-    sigset_t mask, omask;
-
 
     ret = copy_from_user_fdset_ptr(&rfds, &rfds_ptr, rfd_addr, n);
     if (ret != 0) {
