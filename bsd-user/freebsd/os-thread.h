@@ -29,6 +29,18 @@
 int safe_thr_suspend(struct timespec *timeout);
 int safe__umtx_op(void *, int, unsigned long, void *, void *);
 
+#if defined(HOST_WORDS_BIGENDIAN) == defined(TARGET_WORDS_BIGENDIAN) && \
+    (TARGET_ABI_BITS == HOST_LONG_BITS || defined(UMTX_OP__32BIT))
+#define _UMTX_OPTIMIZED
+#if defined(TARGET_ABI32)
+#define QEMU_UMTX_OP(n) (UMTX_OP__32BIT | (n))
+#else
+#define QEMU_UMTX_OP(n) (n)
+#endif /* TARGET_ABI32 */
+#else
+#define QEMU_UMTX_OP(n) (n)
+#endif
+
 static inline abi_long do_freebsd_thr_create(CPUArchState *env,
         abi_ulong target_ctx, abi_ulong target_id, int flags)
 {
@@ -258,23 +270,33 @@ static inline abi_long do_freebsd__umtx_unlock(abi_ulong target_addr)
     return freebsd_unlock_umtx(target_addr, tid);
 }
 
+#define safe_g2h(x) ((x) != 0 ? g2h(x) : NULL)
+
 /* undocumented _umtx_op(void *obj, int op, u_long val, void *uaddr,
                            void *target_time); */
 static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         abi_ulong uaddr, abi_ulong target_time)
 {
     abi_long ret;
+#ifndef _UMTX_OPTIMIZED
     struct _umtx_time ut[2];
     struct timespec ts;
     size_t utsz;
     long tid;
+#endif
 
     switch (op) {
     case TARGET_UMTX_OP_LOCK:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_lock_umtx(obj, 0, uaddr, safe_g2h(target_time));
+#else
         ret = get_errno(thr_self(&tid));
         if (is_error(ret)) {
             return ret;
         }
+
         if (target_time != 0) {
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
@@ -283,18 +305,28 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_lock_umtx(obj, tid, 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_UNLOCK:
+#ifdef _UMTX_OPTIMIZED
+        ret = freebsd_unlock_umtx(obj, 0);
+#else
         ret = get_errno(thr_self(&tid));
         if (is_error(ret)) {
             return ret;
         }
         ret = freebsd_unlock_umtx(obj, tid);
+#endif
         break;
 
     case TARGET_UMTX_OP_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_umtx_wait(obj, val, uaddr, safe_g2h(target_time));
+#else
         if (target_time != 0) {
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
@@ -303,6 +335,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_umtx_wait(obj, tswapal(val), 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_WAKE:
@@ -311,6 +344,11 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         break;
 
     case TARGET_UMTX_OP_MUTEX_LOCK:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_lock_umutex(obj, 0, safe_g2h(target_time), uaddr, 0, val);
+#else
         ret = get_errno(thr_self(&tid));
         if (is_error(ret)) {
             return ret;
@@ -319,29 +357,45 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
                 return ret;
-            ret = freebsd_lock_umutex(obj, tid, ut, utsz, 0);
+            ret = freebsd_lock_umutex(obj, tid, ut, utsz, 0, tswapal(val));
         } else {
-            ret = freebsd_lock_umutex(obj, tid, NULL, 0, 0);
+            ret = freebsd_lock_umutex(obj, tid, NULL, 0, 0, tswapal(val));
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_MUTEX_UNLOCK:
+#ifdef _UMTX_OPTIMIZED
+        ret = freebsd_unlock_umutex(obj, 0);
+#else
         ret = get_errno(thr_self(&tid));
         if (is_error(ret)) {
             return ret;
         }
         ret = freebsd_unlock_umutex(obj, tid);
+#endif
         break;
 
     case TARGET_UMTX_OP_MUTEX_TRYLOCK:
+#ifdef _UMTX_OPTIMIZED
+        ret = freebsd_lock_umutex(obj, 0, NULL, 0, TARGET_UMUTEX_TRY, val);
+#else
         ret = get_errno(thr_self(&tid));
         if (is_error(ret)) {
             return ret;
         }
-        ret = freebsd_lock_umutex(obj, tid, NULL, 0, TARGET_UMUTEX_TRY);
+        ret = freebsd_lock_umutex(obj, tid, NULL, 0, TARGET_UMUTEX_TRY,
+            tswapal(val));
+#endif
         break;
 
     case TARGET_UMTX_OP_MUTEX_WAIT:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_lock_umutex(obj, 0, safe_g2h(target_time), uaddr,
+            TARGET_UMUTEX_WAIT, val);
+#else
         ret = get_errno(thr_self(&tid));
         if (is_error(ret)) {
             return ret;
@@ -350,10 +404,13 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
                 return ret;
-            ret = freebsd_lock_umutex(obj, tid, ut, utsz, TARGET_UMUTEX_WAIT);
+            ret = freebsd_lock_umutex(obj, tid, ut, utsz, TARGET_UMUTEX_WAIT,
+                tswapal(val));
         } else {
-            ret = freebsd_lock_umutex(obj, tid, NULL, 0, TARGET_UMUTEX_WAIT);
+            ret = freebsd_lock_umutex(obj, tid, NULL, 0, TARGET_UMUTEX_WAIT,
+                tswapal(val));
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_MUTEX_WAKE:
@@ -366,6 +423,11 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         break;
 
     case TARGET_UMTX_OP_CV_WAIT:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_cv_wait(obj, uaddr, safe_g2h(target_time), val);
+#else
         /*
          * Initialization of the struct conv is done by
          * bzero'ing everything in userland.
@@ -378,6 +440,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_cv_wait(obj, uaddr, NULL, val);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_CV_SIGNAL:
@@ -403,6 +466,11 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         break;
 
     case TARGET_UMTX_OP_WAIT_UINT:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_umtx_wait_uint(obj, val, uaddr, safe_g2h(target_time));
+#else
         if (!access_ok(VERIFY_READ, obj, sizeof(abi_ulong))) {
             return -TARGET_EFAULT;
         }
@@ -416,9 +484,16 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_umtx_wait_uint(obj, tswap32((uint32_t)val), 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_WAIT_UINT_PRIVATE:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_umtx_wait_uint_private(obj, val, uaddr,
+            safe_g2h(target_time));
+#else
         if (!access_ok(VERIFY_READ, obj, sizeof(abi_ulong))) {
             return -TARGET_EFAULT;
         }
@@ -433,6 +508,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
             ret = freebsd_umtx_wait_uint_private(obj, tswap32((uint32_t)val),
                     0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_WAKE_PRIVATE:
@@ -441,6 +517,11 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         break;
 
     case TARGET_UMTX_OP_RW_RDLOCK:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_rw_rdlock(obj, val, uaddr, safe_g2h(target_time));
+#else
         if (target_time != 0) {
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
@@ -449,9 +530,15 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_rw_rdlock(obj, val, 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_RW_WRLOCK:
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_rw_wrlock(obj, val, uaddr, safe_g2h(target_time));
+#else
         if (target_time != 0) {
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
@@ -460,6 +547,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_rw_wrlock(obj, val, 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_RW_UNLOCK:
@@ -482,6 +570,13 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
 #if __FreeBSD_version > 1100000
     case TARGET_UMTX_OP_SEM2_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(
+            (uaddr > sizeof(struct target_freebsd__umtx_time) ? VERIFY_WRITE :
+            VERIFY_READ), target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_umtx_sem2_wait(obj, uaddr, safe_g2h(target_time));
+#else
         if (target_time != 0) {
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
@@ -501,6 +596,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_umtx_sem2_wait(obj, 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_SEM2_WAKE:
@@ -510,6 +606,11 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
 #endif /* __FreeBSD_version > 1100000 */
     case TARGET_UMTX_OP_SEM_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
+#ifdef _UMTX_OPTIMIZED
+        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
+            return -TARGET_EFAULT;
+        ret = freebsd_umtx_sem_wait(obj, uaddr, safe_g2h(target_time));
+#else
         if (target_time != 0) {
             ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
             if (is_error(ret))
@@ -518,6 +619,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         } else {
             ret = freebsd_umtx_sem_wait(obj, 0, NULL);
         }
+#endif
         break;
 
     case TARGET_UMTX_OP_SEM_WAKE:
