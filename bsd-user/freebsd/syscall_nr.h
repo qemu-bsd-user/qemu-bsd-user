@@ -488,7 +488,7 @@
 /* #define	TARGET_FREEBSD_NR_fhlinkat	566 */
 /* #define	TARGET_FREEBSD_NR_fhreadlink	567 */
 /* #define	TARGET_FREEBSD_NR_funlinkat	568 */
-/* #define	TARGET_FREEBSD_NR_copy_file_range	569 */
+#define	TARGET_FREEBSD_NR_copy_file_range	569
 #define	TARGET_FREEBSD_NR___sysctlbyname	570
 #define	TARGET_FREEBSD_NR_shm_open2	571
 #define	TARGET_FREEBSD_NR_shm_rename	572
