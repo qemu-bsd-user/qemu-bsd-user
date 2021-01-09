@@ -484,11 +484,11 @@
 #define	TARGET_FREEBSD_NR_cpuset_setdomain	562
 #define	TARGET_FREEBSD_NR_getrandom	563
 #define	TARGET_FREEBSD_NR___sysctlbyname	570
-#define	TARGET_FREEBSD_NR_shm_open2     571
-#define	TARGET_FREEBSD_NR_shm_rename    572
-/* #define	TARGET_FREEBSD_NR_sigfastblock  573 */
-#define	TARGET_FREEBSD_NR___realpathat  574
-#define	TARGET_FREEBSD_NR_close_range   575
+#define	TARGET_FREEBSD_NR_shm_open2	571
+#define	TARGET_FREEBSD_NR_shm_rename	572
+/* #define	TARGET_FREEBSD_NR_sigfastblock	573 */
+#define	TARGET_FREEBSD_NR___realpathat	574
+#define	TARGET_FREEBSD_NR_close_range	575
 #define	TARGET_FREEBSD_NR_MAXSYSCALL	576
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
