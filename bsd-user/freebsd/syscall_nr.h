@@ -483,13 +483,23 @@
 #define	TARGET_FREEBSD_NR_cpuset_getdomain	561
 #define	TARGET_FREEBSD_NR_cpuset_setdomain	562
 #define	TARGET_FREEBSD_NR_getrandom	563
+/* #define	TARGET_FREEBSD_NR_getfhat	564 */
+/* #define	TARGET_FREEBSD_NR_fhlink	565 */
+/* #define	TARGET_FREEBSD_NR_fhlinkat	566 */
+/* #define	TARGET_FREEBSD_NR_fhreadlink	567 */
+/* #define	TARGET_FREEBSD_NR_funlinkat	568 */
+/* #define	TARGET_FREEBSD_NR_copy_file_range	569 */
 #define	TARGET_FREEBSD_NR___sysctlbyname	570
 #define	TARGET_FREEBSD_NR_shm_open2	571
 #define	TARGET_FREEBSD_NR_shm_rename	572
 /* #define	TARGET_FREEBSD_NR_sigfastblock	573 */
 #define	TARGET_FREEBSD_NR___realpathat	574
 #define	TARGET_FREEBSD_NR_close_range	575
-#define	TARGET_FREEBSD_NR_MAXSYSCALL	576
+/* #define	TARGET_FREEBSD_NR_rpctls_syscall	576 */
+/* #define	TARGET_FREEBSD_NR___specialfd	577 */
+/* #define	TARGET_FREEBSD_NR_aio_writev	578 */
+/* #define	TARGET_FREEBSD_NR_aio_readv		579 */
+#define	TARGET_FREEBSD_NR_MAXSYSCALL	580
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
 #define	TARGET_FREEBSD_NR_killpg	146
