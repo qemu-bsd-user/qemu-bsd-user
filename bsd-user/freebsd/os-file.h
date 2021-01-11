@@ -24,10 +24,18 @@
 #define _WANT_FREEBSD11_STATFS
 #define _WANT_FREEBSD11_DIRENT
 #include <sys/stat.h>
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
+#include <sys/specialfd.h>
+#endif
+
 #include <aio.h>
 #include <unistd.h>
 
 #include "qemu-os.h"
+
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
+int __sys___specialfd(int, const void *, size_t);
+#endif
 
 /*
  * Asynchronous I/O.
@@ -195,6 +203,35 @@ static inline abi_long do_freebsd_copy_file_range(int infd,
         *(off_t *)g2h(inofftp) = tswap64(inoff);
     if (outofftp != 0)
         *(off_t *)g2h(outofftp) = tswap64(outoff);
+    return ret;
+}
+#endif /* __FreeBSD_version >= 1300037 */
+
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
+
+static inline abi_long do_freebsd___specialfd(int type, abi_ulong req,
+    size_t len)
+{
+    abi_long ret;
+
+    ret = -TARGET_EINVAL;
+    switch (type) {
+    case TARGET_SPECIALFD_EVENT: {
+        struct specialfd_eventfd evfd;
+        struct target_specialfd_eventfd *target_eventfd;
+
+        if (!lock_user_struct(VERIFY_READ, target_eventfd, req, 0)) {
+            return -TARGET_EFAULT;
+        }
+
+        evfd.initval = tswap32(target_eventfd->initval);
+        evfd.flags = tswap32(target_eventfd->flags);
+        ret = get_errno(__sys___specialfd(type, &evfd, sizeof(evfd)));
+        unlock_user_struct(target_eventfd, req, 0);
+        break;
+    }
+    }
+
     return ret;
 }
 #endif /* __FreeBSD_version >= 1300037 */
