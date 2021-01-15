@@ -636,8 +636,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
 
 #ifndef __FreeBSD__
     bprm->p = copy_elf_strings(1, &bprm->filename, bprm->page, bprm->p);
-    bprm->p = copy_elf_strings(bprm->envc,bprm->envp,bprm->page,bprm->p);
-    bprm->p = copy_elf_strings(bprm->argc,bprm->argv,bprm->page,bprm->p);
+    bprm->p = copy_elf_strings(bprm->envc, bprm->envp, bprm->page, bprm->p);
+    bprm->p = copy_elf_strings(bprm->argc, bprm->argv, bprm->page, bprm->p);
     if (!bprm->p) {
         retval = -E2BIG;
     }
@@ -739,7 +739,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
             if (retval >= 0) {
                 retval = lseek(interpreter_fd, 0, SEEK_SET);
                 if(retval >= 0) {
-                    retval = read(interpreter_fd,bprm->buf,128);
+                    retval = read(interpreter_fd, bprm->buf, 128);
                 }
             }
             if (retval >= 0) {
@@ -769,7 +769,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
         }
 
         if (interp_elf_ex.e_ident[0] != 0x7f ||
-                strncmp((char *)&interp_elf_ex.e_ident[1], "ELF",3) != 0) {
+                strncmp((char *)&interp_elf_ex.e_ident[1], "ELF", 3) != 0) {
             interpreter_type &= ~INTERPRETER_ELF;
         }
 
@@ -792,7 +792,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
             passed_p = passed_fileno;
 
             if (elf_interpreter) {
-                bprm->p = copy_elf_strings(1,&passed_p,bprm->page,bprm->p);
+                bprm->p = copy_elf_strings(1, &passed_p, bprm->page, bprm->p);
                 bprm->argc++;
             }
         }
