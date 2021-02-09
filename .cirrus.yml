@@ -1,5 +1,4 @@
 env:
-  CIRRUS_CLONE_DEPTH: 1
   ARCH: amd64
   COMMON_CONFIG: "--localstatedir=/var --extra-ldflags=-L/usr/local/lib --extra-cflags=-I/usr/local/include --disable-libssh2 --target-list=i386-bsd-user,sparc-bsd-user,arm-bsd-user,mips-bsd-user,mipsel-bsd-user,ppc-bsd-user,x86_64-bsd-user,riscv64-bsd-user,sparc64-bsd-user,mips64-bsd-user,mips64el-bsd-user,ppc64-bsd-user,aarch64-bsd-user --prefix=/usr/local --cc=cc --enable-docs --disable-linux-user --disable-linux-aio --disable-kvm --disable-xen --smbd=/usr/local/sbin/smbd --enable-debug --enable-debug-info --static --disable-sdl --disable-gtk --disable-vte --disable-gnutls --disable-vnc --disable-curl --disable-opengl --disable-usb-redir --disable-pcap --disable-docs --disable-tools --disable-system --disable-guest-agent --disable-capstone"
   MAKEFLAGS: "-j3"
@@ -16,9 +15,9 @@ task:
     - name: 12.2-STABLE
       freebsd_instance:
         image_family: freebsd-12-2-snap
-    - name: 12.1-RELEASE
+    - name: 12.2-RELEASE
       freebsd_instance:
-        image_family: freebsd-12-1
+        image_family: freebsd-12-2
     - name: 11.4-RELEASE
       freebsd_instance:
         image_family: freebsd-11-4
