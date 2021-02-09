@@ -141,7 +141,7 @@ abi_ulong loader_build_argptr(int envc, int argc, abi_ulong sp,
     return sp;
 }
 
-static int is_there(const char *candidate)
+static bool is_there(const char *candidate)
 {
     struct stat fin;
 
@@ -149,30 +149,17 @@ static int is_there(const char *candidate)
     if (access(candidate, X_OK) == 0 && stat(candidate, &fin) == 0 &&
             S_ISREG(fin.st_mode) && (getuid() != 0 ||
                 (fin.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0)) {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
-static int find_in_path(char *path, const char *filename, char *retpath,
+static bool find_in_path(char *path, const char *filename, char *retpath,
         size_t rpsize)
 {
     const char *d;
-    int found;
 
-    if (strchr(filename, '/') != NULL) {
-        if (is_there(filename)) {
-                if (!realpath(filename, retpath)) {
-                    return -1;
-                }
-                return 0;
-        } else {
-            return -1;
-        }
-    }
-
-    found = 0;
     while ((d = strsep(&path, ":")) != NULL) {
         if (*d == '\0') {
             d = ".";
@@ -181,11 +168,10 @@ static int find_in_path(char *path, const char *filename, char *retpath,
             continue;
         }
         if (is_there((const char *)retpath)) {
-            found = 1;
-            break;
+            return true;
         }
     }
-    return found;
+    return false;
 }
 
 int loader_exec(const char *filename, char **argv, char **envp,
@@ -193,45 +179,39 @@ int loader_exec(const char *filename, char **argv, char **envp,
              struct bsd_binprm *bprm)
 {
     char *p, *path = NULL, fullpath[PATH_MAX];
-    const char *execname = NULL;
-    int retval, i, found;
+    int retval, i;
 
     bprm->p = TARGET_PAGE_SIZE * MAX_ARG_PAGES; /* -sizeof(unsigned int); */
     for (i=0 ; i<MAX_ARG_PAGES ; i++)       /* clear page-table */
             bprm->page[i] = NULL;
 
-    /* Find target executable in path, if not already an absolute path. */
-    p = getenv("PATH");
-    if (p != NULL) {
+    if (strchr(filename, '/') != NULL) {
+        if (!is_there(filename)) {
+            return -1;
+        }
+        retval = open(filename, O_RDONLY);
+        bprm->fullpath = NULL;
+    } else {
+        p = getenv("PATH");
+        if (p == NULL) {
+            return -1;
+        }
+
         path = g_strdup(p);
         if (path == NULL) {
             fprintf(stderr, "Out of memory\n");
             return -1;
         }
-        execname = realpath(filename, NULL);
-        if (execname == NULL) {
-            execname = g_strdup(filename);
-        }
-        found = find_in_path(path, execname, fullpath, sizeof(fullpath));
-        /* Absolute path specified but not found? */
-        if (found == -1) {
+
+        if (!find_in_path(path, filename, fullpath, sizeof(fullpath))) {
             return -1;
         }
-        if (found) {
-            retval = open(fullpath, O_RDONLY);
-            bprm->fullpath = g_strdup(fullpath);
-        } else {
-            retval = open(execname, O_RDONLY);
-            bprm->fullpath = g_strdup(execname);
-        }
-        if (execname) {
-            g_free((void *)execname);
-        }
+        retval = open(fullpath, O_RDONLY);
+        bprm->fullpath = g_strdup(fullpath);
+
         g_free(path);
-    } else {
-        retval = open(filename, O_RDONLY);
-        bprm->fullpath = NULL;
     }
+
     if (retval < 0) {
         return retval;
     }
