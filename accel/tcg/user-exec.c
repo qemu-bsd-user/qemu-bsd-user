@@ -275,12 +275,11 @@ int cpu_signal_handler(int host_signum, void *pinfo,
     pc = PC_sig(uc);
     return handle_cpu_signal(pc, info,
 #if defined(__FreeBSD__) || defined(__DragonFly__)
-                             (TRAP_sig(uc) == 0xe ||
-                              TRAP_sig(uc) == 0xc) ?
+                             TRAP_sig(uc) == 0xc
 #else
-                             TRAP_sig(uc) == 0xe ?
+                             TRAP_sig(uc) == 0xe
 #endif
-                             (ERROR_sig(uc) >> 1) & 1 : 0,
+                             ? (ERROR_sig(uc) >> 1) & 1 : 0,
                              &MASK_sig(uc));
 }
 
