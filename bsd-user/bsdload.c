@@ -186,11 +186,16 @@ int loader_exec(const char *filename, char **argv, char **envp,
             bprm->page[i] = NULL;
 
     if (strchr(filename, '/') != NULL) {
-        if (!is_there(filename)) {
+        path = realpath(filename, fullpath);
+        if (path == NULL) {
+            /* Failed to resolve. */
             return -1;
         }
-        retval = open(filename, O_RDONLY);
-        bprm->fullpath = NULL;
+        if (!is_there(path)) {
+            return -1;
+        }
+        retval = open(path, O_RDONLY);
+        bprm->fullpath = g_strdup(path);
     } else {
         p = getenv("PATH");
         if (p == NULL) {
@@ -212,6 +217,11 @@ int loader_exec(const char *filename, char **argv, char **envp,
         g_free(path);
     }
 
+    /* bprm->fullpath must be populated. */
+    if (bprm->fullpath == NULL) {
+        fprintf(stderr, "Out of memory\n");
+        return -1;
+    }
     if (retval < 0) {
         return retval;
     }
