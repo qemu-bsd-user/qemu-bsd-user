@@ -346,6 +346,8 @@ static IOCTLEntry ioctl_entries[] = {
     { TARGET_ ## cmd, cmd, #cmd, access, 0, { __VA_ARGS__ } },
 #define IOCTL_SPECIAL(cmd, access, dofn, ...) \
     { TARGET_ ## cmd, cmd, #cmd, access, dofn, { __VA_ARGS__ } },
+#define IOCTL_SPECIAL_UNIMPL(cmd, access, dofn, ...) \
+    { TARGET_ ## cmd, 0, #cmd, access, dofn, { __VA_ARGS__ } },
 #include "os-ioctl-cmds.h"
     { 0, 0 },
 };
