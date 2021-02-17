@@ -82,6 +82,21 @@ struct target_sockaddr_storage {
 #define TARGET_LOGNAMELEN           17
 #define TARGET_LOGINCLASSLEN        17
 
+#define	TARGET_KF_TYPE_NONE	0
+#define	TARGET_KF_TYPE_VNODE	1
+#define	TARGET_KF_TYPE_SOCKET	2
+#define	TARGET_KF_TYPE_PIPE	3
+#define	TARGET_KF_TYPE_FIFO	4
+#define	TARGET_KF_TYPE_KQUEUE	5
+#define	TARGET_KF_TYPE_CRYPTO	6
+#define	TARGET_KF_TYPE_MQUEUE	7
+#define	TARGET_KF_TYPE_SHM	8
+#define	TARGET_KF_TYPE_SEM	9
+#define	TARGET_KF_TYPE_PTS	10
+#define	TARGET_KF_TYPE_PROCDESC	11
+#define	TARGET_KF_TYPE_DEV	12
+#define	TARGET_KF_TYPE_UNKNOWN	255
+
 struct target_kinfo_proc {
     int32_t     ki_structsize;      /* size of this structure */
     int32_t     ki_layout;          /* reserved: layout identifier */
