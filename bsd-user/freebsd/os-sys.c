@@ -333,9 +333,9 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     switch(type) {
-    case KF_TYPE_FIFO:
-    case KF_TYPE_SHM:
-    case KF_TYPE_VNODE:
+    case TARGET_KF_TYPE_FIFO:
+    case TARGET_KF_TYPE_SHM:
+    case TARGET_KF_TYPE_VNODE:
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
         __put_user(hkif->kf_un.kf_file.kf_file_type,
                 &tkif->kf_un.kf_file.kf_file_type);
@@ -366,7 +366,7 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
                 &tkif->kf_un.kf_file.kf_file_mode);
         break;
 
-    case KF_TYPE_SOCKET:
+    case TARGET_KF_TYPE_SOCKET:
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
         __put_user(hkif->kf_un.kf_sock.kf_sock_domain0,
                 &tkif->kf_un.kf_sock.kf_sock_domain0);
@@ -395,7 +395,7 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
                 &tkif->kf_un.kf_sock.kf_sock_rcv_sb_state);
         break;
 
-    case KF_TYPE_PIPE:
+    case TARGET_KF_TYPE_PIPE:
         __put_user(hkif->kf_un.kf_pipe.kf_pipe_addr,
                 &tkif->kf_un.kf_pipe.kf_pipe_addr);
         __put_user(hkif->kf_un.kf_pipe.kf_pipe_peer,
@@ -404,14 +404,14 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
                 &tkif->kf_un.kf_pipe.kf_pipe_buffer_cnt);
         break;
 
-    case KF_TYPE_SEM:
+    case TARGET_KF_TYPE_SEM:
         __put_user(hkif->kf_un.kf_sem.kf_sem_value,
                 &tkif->kf_un.kf_sem.kf_sem_value);
         __put_user(hkif->kf_un.kf_sem.kf_sem_mode,
                 &tkif->kf_un.kf_sem.kf_sem_mode);
         break;
 
-    case KF_TYPE_PTS:
+    case TARGET_KF_TYPE_PTS:
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
         __put_user(hkif->kf_un.kf_pts.kf_pts_dev_freebsd11,
                 &tkif->kf_un.kf_pts.kf_pts_dev_freebsd11);
@@ -423,16 +423,16 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
 #endif
         break;
 
-    case KF_TYPE_PROCDESC:
+    case TARGET_KF_TYPE_PROCDESC:
         __put_user(hkif->kf_un.kf_proc.kf_pid,
                 &tkif->kf_un.kf_proc.kf_pid);
         break;
 
 
-    case KF_TYPE_KQUEUE:
-    case KF_TYPE_MQUEUE:
-    case KF_TYPE_NONE:
-    case KF_TYPE_UNKNOWN:
+    case TARGET_KF_TYPE_KQUEUE:
+    case TARGET_KF_TYPE_MQUEUE:
+    case TARGET_KF_TYPE_NONE:
+    case TARGET_KF_TYPE_UNKNOWN:
     default:
         /* Do nothing. */
         break;
