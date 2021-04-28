@@ -1,5 +1,5 @@
-#ifndef BSD_USER_ARCH_SYSCALL_H_
-#define BSD_USER_ARCH_SYSCALL_H_
+#ifndef __ARCH_SYSCALL_H_
+#define __ARCH_SYSCALL_H_
 
 struct target_pt_regs {
     abi_long uregs[17];
@@ -33,4 +33,4 @@ struct target_pt_regs {
 #define TARGET_HW_MACHINE       "arm"
 #define TARGET_HW_MACHINE_ARCH  "armv6"
 
-#endif /* !BSD_USER_ARCH_SYSCALL_H_ */
+#endif /* !__ARCH_SYSCALL_H_ */
