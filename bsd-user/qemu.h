@@ -17,12 +17,29 @@
 #ifndef QEMU_H
 #define QEMU_H
 
+#include <sys/param.h>
 
+int qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right);
+
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
+#define BSD_HAVE_INO64
+#endif
+
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1200033
+#define BSD_HAVE_KEVENT64
+#endif
+
+/* needed for fprintf() debug function */
+#include <stdio.h>
+#include "qemu/osdep.h"
 #include "cpu.h"
 #include "exec/cpu_ldst.h"
+#include "exec/exec-all.h"
+#include "trace/trace-bsd_user.h"
 
 #undef DEBUG_REMAP
 #ifdef DEBUG_REMAP
+#include <stdio.h>
 #endif /* DEBUG_REMAP */
 
 #include "exec/user/abitypes.h"
@@ -34,22 +51,23 @@ enum BSDType {
 };
 extern enum BSDType bsd_type;
 
+#include "exec/user/thunk.h"
+#include "target_arch.h"
 #include "syscall_defs.h"
 #include "target_syscall.h"
-#include "target_signal.h"
+#include "target_os_vmparam.h"
+#include "target_os_signal.h"
+#include "hostdep.h"
 #include "exec/gdbstub.h"
 
-#if defined(CONFIG_USE_NPTL)
 #define THREAD __thread
-#else
-#define THREAD
-#endif
 
 /* This struct is used to hold certain information about the image.
  * Basically, it replicates in user space what would be certain
  * task_struct fields in the kernel
  */
 struct image_info {
+    abi_ulong load_bias;
     abi_ulong load_addr;
     abi_ulong start_code;
     abi_ulong end_code;
@@ -64,21 +82,22 @@ struct image_info {
     abi_ulong entry;
     abi_ulong code_offset;
     abi_ulong data_offset;
-    int       personality;
+    abi_ulong arg_start;
+    abi_ulong arg_end;
 };
 
 #define MAX_SIGQUEUE_SIZE 1024
 
-struct sigqueue {
-    struct sigqueue *next;
-    //target_siginfo_t info;
+struct qemu_sigqueue {
+    struct qemu_sigqueue *next;
+    target_siginfo_t info;
 };
 
 struct emulated_sigtable {
     int pending; /* true if signal is pending */
-    struct sigqueue *first;
-    struct sigqueue info; /* in order to always have memory for the
-                             first signal, we put it here */
+    struct qemu_sigqueue *first;
+    struct qemu_sigqueue info; /* in order to always have memory for the
+                                  first signal, we put it here */
 };
 
 /* NOTE: we force a big alignment so that the stack stored after is
@@ -88,54 +107,79 @@ typedef struct TaskState {
 
     struct TaskState *next;
     int used; /* non zero if used */
+#ifdef TARGET_ARM
+    int swi_errno;
+#endif
+#if defined(TARGET_ARM) || defined(TARGET_M68K) || defined(TARGET_UNICORE32)
+    /* Extra fields for semihosted binaries. */
+    uint32_t heap_base;
+    uint32_t heap_limit;
+    uint32_t stack_base;
+#endif
     struct image_info *info;
+    struct bsd_binprm *bprm;
 
     struct emulated_sigtable sigtab[TARGET_NSIG];
-    struct sigqueue sigqueue_table[MAX_SIGQUEUE_SIZE]; /* siginfo queue */
-    struct sigqueue *first_free; /* first free siginfo queue entry */
+    struct qemu_sigqueue sigqueue_table[MAX_SIGQUEUE_SIZE]; /* siginfo queue */
+    struct qemu_sigqueue *first_free; /* first free siginfo queue entry */
     int signal_pending; /* non zero if a signal may be pending */
+    bool in_sigsuspend;
+    sigset_t signal_mask;
+    sigset_t sigsuspend_mask;
 
-    uint8_t stack[];
+    uint8_t stack[0];
 } __attribute__((aligned(16))) TaskState;
 
 void init_task_state(TaskState *ts);
+void stop_all_tasks(void);
+extern const char *interp_prefix;
 extern const char *qemu_uname_release;
-extern unsigned long mmap_min_addr;
 
 /* ??? See if we can avoid exposing so much of the loader internals.  */
 /*
- * MAX_ARG_PAGES defines the number of pages allocated for arguments
- * and envelope for the new program. 32 should suffice, this gives
- * a maximum env+arg of 128kB w/4KB pages!
+ * TARGET_ARG_MAX defines the number of bytes allocated for arguments
+ * and envelope for the new program. 256k should suffice for a reasonable
+ * maxiumum env+arg in 32-bit environments, bump it up to 512k for !ILP32
+ * platforms.
  */
-#define MAX_ARG_PAGES 32
+#if TARGET_ABI_BITS > 32
+#define TARGET_ARG_MAX (512 * 1024)
+#else
+#define TARGET_ARG_MAX (256 * 1024)
+#endif
+#define MAX_ARG_PAGES (TARGET_ARG_MAX / TARGET_PAGE_SIZE)
 
 /*
  * This structure is used to hold the arguments that are
  * used when loading binaries.
  */
-struct linux_binprm {
+struct bsd_binprm {
         char buf[128];
         void *page[MAX_ARG_PAGES];
         abi_ulong p;
+        abi_ulong stringp;
         int fd;
         int e_uid, e_gid;
         int argc, envc;
         char **argv;
         char **envp;
-        char * filename;        /* Name of binary */
+        char *filename;         /* (Given) Name of binary */
+        char *fullpath;         /* Full path of binary */
+        int (*core_dump)(int, CPUArchState *);
 };
 
 void do_init_thread(struct target_pt_regs *regs, struct image_info *infop);
 abi_ulong loader_build_argptr(int envc, int argc, abi_ulong sp,
-                              abi_ulong stringp, int push_ptr);
-int loader_exec(const char * filename, char ** argv, char ** envp,
-             struct target_pt_regs * regs, struct image_info *infop);
+                              abi_ulong stringp);
+int loader_exec(const char *filename, char **argv, char **envp,
+             struct target_pt_regs *regs, struct image_info *infop,
+             struct bsd_binprm *bprm);
 
-int load_elf_binary(struct linux_binprm * bprm, struct target_pt_regs * regs,
-                    struct image_info * info);
-int load_flt_binary(struct linux_binprm * bprm, struct target_pt_regs * regs,
-                    struct image_info * info);
+int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
+                    struct image_info *info);
+int load_flt_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
+                    struct image_info *info);
+int is_target_elf_binary(int fd);
 
 abi_long memcpy_to_target(abi_ulong dest, const void *src,
                           unsigned long len);
@@ -188,50 +232,198 @@ print_openbsd_syscall(int num,
                       abi_long arg1, abi_long arg2, abi_long arg3,
                       abi_long arg4, abi_long arg5, abi_long arg6);
 void print_openbsd_syscall_ret(int num, abi_long ret);
+/**
+ * print_taken_signal:
+ * @target_signum: target signal being taken
+ * @tinfo: target_siginfo_t which will be passed to the guest for the signal
+ *
+ * Print strace output indicating that this signal is being taken by the guest,
+ * in a format similar to:
+ * --- SIGSEGV {si_signo=SIGSEGV, si_code=SI_KERNEL, si_addr=0} ---
+ */
+void print_taken_signal(int target_signum, const target_siginfo_t *tinfo);
 extern int do_strace;
 
 /* signal.c */
 void process_pending_signals(CPUArchState *cpu_env);
 void signal_init(void);
-//int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info);
-//void host_to_target_siginfo(target_siginfo_t *tinfo, const siginfo_t *info);
-//void target_to_host_siginfo(siginfo_t *info, const target_siginfo_t *tinfo);
-long do_sigreturn(CPUArchState *env);
-long do_rt_sigreturn(CPUArchState *env);
+int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info);
+void host_to_target_siginfo(target_siginfo_t *tinfo, const siginfo_t *info);
+void target_to_host_siginfo(siginfo_t *info, const target_siginfo_t *tinfo);
+abi_long target_to_host_sigevent(struct sigevent *host_sevp, abi_ulong target_addr);
+int target_to_host_signal(int sig);
+int host_to_target_signal(int sig);
+void host_to_target_sigset(target_sigset_t *d, const sigset_t *s);
+void target_to_host_sigset(sigset_t *d, const target_sigset_t *s);
+long do_sigreturn(CPUArchState *env, abi_ulong addr);
 abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp);
+int do_sigaction(int sig, const struct target_sigaction *act,
+                struct target_sigaction *oact);
+void QEMU_NORETURN force_sig(int target_sig);
+/**
+ * block_signals: block all signals while handling this guest syscall
+ *
+ * Block all signals, and arrange that the signal mask is returned to
+ * its correct value for the guest before we resume execution of guest code.
+ * If this function returns non-zero, then the caller should immediately
+ * return -TARGET_ERESTARTSYS to the main loop, which will take the pending
+ * signal and restart execution of the syscall.
+ * If block_signals() returns zero, then the caller can continue with
+ * emulation of the system call knowing that no signals can be taken
+ * (and therefore that no race conditions will result).
+ * This should only be called once, because if it is called a second time
+ * it will always return non-zero. (Think of it like a mutex that can't
+ * be recursively locked.)
+ * Signals will be unblocked again by process_pending_signals().
+ *
+ * Return value: non-zero if there was a pending signal, zero if not.
+ */
+int block_signals(void); /* Returns non zero if signal pending */
 
 /* mmap.c */
 int target_mprotect(abi_ulong start, abi_ulong len, int prot);
 abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
-                     int flags, int fd, abi_ulong offset);
+                     int flags, int fd, off_t offset);
 int target_munmap(abi_ulong start, abi_ulong len);
 abi_long target_mremap(abi_ulong old_addr, abi_ulong old_size,
                        abi_ulong new_size, unsigned long flags,
                        abi_ulong new_addr);
 int target_msync(abi_ulong start, abi_ulong len, int flags);
 extern unsigned long last_brk;
+extern abi_ulong mmap_next_start;
+abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size);
 void mmap_fork_start(void);
 void mmap_fork_end(int child);
 
 /* main.c */
-extern unsigned long x86_stack_size;
+extern unsigned long target_maxtsiz;
+extern unsigned long target_dfldsiz;
+extern unsigned long target_maxdsiz;
+extern unsigned long target_dflssiz;
+extern unsigned long target_maxssiz;
+extern unsigned long target_sgrowsiz;
+extern char qemu_proc_pathname[];
+
+/* syscall.c */
+abi_long get_errno(abi_long ret);
+int is_error(abi_long ret);
+int host_to_target_errno(int err);
+
+/* os-proc.c */
+abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
+        abi_ulong guest_envp, int do_fexec);
+abi_long do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2,
+        abi_ulong arg3, abi_ulong arg4, abi_ulong arg5, abi_ulong arg6);
+
+/* os-sys.c */
+struct target_kinfo_proc;
+struct target_kinfo_file;
+struct target_kinfo_vmentry;
+abi_long do_sysctl_kern_getprocs(int op, int arg, size_t olen,
+        struct target_kinfo_proc *tki, size_t *tlen);
+abi_long do_sysctl_kern_proc_filedesc(int pid, size_t olen,
+        struct target_kinfo_file *tkif, size_t *tlen);
+abi_long do_sysctl_kern_proc_vmmap(int pid, size_t olen,
+        struct target_kinfo_vmentry *tkve, size_t *tlen);
+abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
+        abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp, abi_ulong newlen);
+abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
+        int32_t namelen, abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp,
+        abi_ulong newlen);
+abi_long do_freebsd_sysarch(void *cpu_env, abi_long arg1, abi_long arg2);
+
+/* os-thread.c */
+extern pthread_mutex_t *new_freebsd_thread_lock_ptr;
+extern pthread_mutex_t *freebsd_umtx_wait_lck_ptr;
+void *new_freebsd_thread_start(void *arg);
+abi_long freebsd_lock_umtx(abi_ulong target_addr, abi_long tid,
+        size_t tsz, void *t);
+abi_long freebsd_unlock_umtx(abi_ulong target_addr, abi_long id);
+abi_long freebsd_umtx_wait(abi_ulong targ_addr, abi_ulong id,
+        size_t tsz, void *t);
+abi_long freebsd_umtx_wake(abi_ulong target_addr, uint32_t n_wake);
+abi_long freebsd_umtx_mutex_wake(abi_ulong target_addr, abi_long val);
+abi_long freebsd_umtx_wait_uint(abi_ulong obj, uint32_t val, size_t tsz,
+        void *t);
+abi_long freebsd_umtx_wait_uint_private(abi_ulong obj, uint32_t val,
+        size_t tsz, void *t);
+abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val);
+#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
+abi_long freebsd_umtx_nwake_private(abi_ulong obj, uint32_t val);
+abi_long freebsd_umtx_mutex_wake2(abi_ulong obj, uint32_t val);
+#if __FreeBSD_version > 1100000
+abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t tsz, void *t);
+abi_long freebsd_umtx_sem2_wake(abi_ulong obj);
+#endif /* __FreeBSD_version > 1100000 */
+#endif /* __FreeBSD_version > 900000 */
+abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t tsz, void *t);
+abi_long freebsd_umtx_sem_wake(abi_ulong obj);
+abi_long freebsd_lock_umutex(abi_ulong target_addr, uint32_t id,
+        void *ts, size_t tsz, int mode, abi_ulong val);
+abi_long freebsd_unlock_umutex(abi_ulong target_addr, uint32_t id);
+abi_long freebsd_cv_wait(abi_ulong target_ucond_addr,
+                abi_ulong target_umtx_addr, struct timespec *ts, int wflags);
+abi_long freebsd_cv_signal(abi_ulong target_ucond_addr);
+abi_long freebsd_cv_broadcast(abi_ulong target_ucond_addr);
+abi_long freebsd_rw_rdlock(abi_ulong target_addr, long fflag,
+        size_t tsz, void *t);
+abi_long freebsd_rw_wrlock(abi_ulong target_addr, long fflag,
+        size_t tsz, void *t);
+abi_long freebsd_rw_unlock(abi_ulong target_addr);
+#if defined(__FreeBSD_version) && __FreeBSD_version > 1200000
+abi_long freebsd_umtx_shm(abi_ulong target_addr, long fflag);
+abi_long freebsd_umtx_robust_list(abi_ulong target_addr, size_t rbsize);
+#endif /* __FreeBSD_version > 1200000 */
 
 /* user access */
 
-#define VERIFY_READ  PAGE_READ
-#define VERIFY_WRITE (PAGE_READ | PAGE_WRITE)
+#define VERIFY_READ 0
+#define VERIFY_WRITE 1 /* implies read access */
 
-static inline bool access_ok(int type, abi_ulong addr, abi_ulong size)
+static inline int access_ok(int type, abi_ulong addr, abi_ulong size)
 {
-    return page_check_range((target_ulong)addr, size, type) == 0;
+    return page_check_range((target_ulong)addr, size,
+                            (type == VERIFY_READ) ? PAGE_READ : (PAGE_READ | PAGE_WRITE)) == 0;
 }
 
 /* NOTE __get_user and __put_user use host pointers and don't check access. */
 /* These are usually used to access struct data members once the
  * struct has been locked - usually with lock_user_struct().
  */
+
+/*
+ * Tricky points:
+ * - Use __builtin_choose_expr to avoid type promotion from ?:,
+ * - Invalid sizes result in a compile time error stemming from
+ *   the fact that abort has no parameters.
+ * - It's easier to use the endian-specific unaligned load/store
+ *   functions than host-endian unaligned load/store plus tswapN.
+ * - The pragmas are necessary only to silence a clang false-positive
+ *   warning: see https://bugs.llvm.org/show_bug.cgi?id=39113 .
+ * - We have to disable -Wpragmas warnings to avoid a complaint about
+ *   an unknown warning type from older compilers that don't know about
+ *   -Waddress-of-packed-member.
+ * - gcc has bugs in its _Pragma() support in some versions, eg
+ *   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83256 -- so we only
+ *   include the warning-suppression pragmas for clang
+ */
+#ifdef __clang__
+#define PRAGMA_DISABLE_PACKED_WARNING                                   \
+    _Pragma("GCC diagnostic push");                                     \
+    _Pragma("GCC diagnostic ignored \"-Wpragmas\"");                    \
+    _Pragma("GCC diagnostic ignored \"-Waddress-of-packed-member\"")
+
+#define PRAGMA_REENABLE_PACKED_WARNING          \
+    _Pragma("GCC diagnostic pop")
+
+#else
+#define PRAGMA_DISABLE_PACKED_WARNING
+#define PRAGMA_REENABLE_PACKED_WARNING
+#endif
+
 #define __put_user(x, hptr)\
 ({\
+    PRAGMA_DISABLE_PACKED_WARNING;\
     int size = sizeof(*hptr);\
     switch (size) {\
     case 1:\
@@ -249,11 +441,13 @@ static inline bool access_ok(int type, abi_ulong addr, abi_ulong size)
     default:\
         abort();\
     }\
+    PRAGMA_REENABLE_PACKED_WARNING;\
     0;\
 })
 
 #define __get_user(x, hptr) \
 ({\
+    PRAGMA_DISABLE_PACKED_WARNING;\
     int size = sizeof(*hptr);\
     switch (size) {\
     case 1:\
@@ -273,6 +467,7 @@ static inline bool access_ok(int type, abi_ulong addr, abi_ulong size)
         x = 0;\
         abort();\
     }\
+    PRAGMA_REENABLE_PACKED_WARNING;\
     0;\
 })
 
@@ -404,8 +599,180 @@ static inline void *lock_user_string(abi_ulong guest_addr)
 #define unlock_user_struct(host_ptr, guest_addr, copy)          \
     unlock_user(host_ptr, guest_addr, (copy) ? sizeof(*host_ptr) : 0)
 
-#if defined(CONFIG_USE_NPTL)
+#if TARGET_ABI_BITS == 32
+static inline uint64_t
+target_arg64(uint32_t word0, uint32_t word1)
+{
+#ifdef TARGET_WORDS_BIGENDIAN
+    return ((uint64_t)word0 << 32) | word1;
+#else
+    return ((uint64_t)word1 << 32) | word0;
+#endif
+}
+#else /* TARGET_ABI_BITS != 32 */
+static inline uint64_t
+target_arg64(uint64_t word0, uint64_t word1)
+{
+    return word0;
+}
+#endif /* TARGET_ABI_BITS != 32 */
+
+/* ARM EABI and MIPS expect 64bit types aligned even on pairs of registers */
+#ifdef TARGET_ARM
+static inline int
+regpairs_aligned(void *cpu_env) {
+    return ((((CPUARMState *)cpu_env)->eabi) == 1);
+}
+#elif defined(TARGET_MIPS) && TARGET_ABI_BITS == 32
+static inline int regpairs_aligned(void *cpu_env)
+{
+    return 1;
+}
+#elif defined(TARGET_PPC) && TARGET_ABI_BITS == 32
+static inline int regpairs_aligned(void *cpu_env)
+{
+    return 1;
+}
+#else
+static inline int regpairs_aligned(void *cpu_env)
+{
+    return 0;
+}
+#endif
+
 #include <pthread.h>
+
+/* safe_syscall.S */
+
+/**
+ * safe_syscall:
+ * @int number: number of system call to make
+ * ...: arguments to the system call
+ *
+ * Call a system call if guest signal not pending.
+ * This has the same API as the libc syscall() function, except that it
+ * may return -1 with errno == TARGET_ERESTARTSYS if a signal was pending.
+ *
+ * Returns: the system call result, or -1 with an error code in errno
+ * (Errnos are host errnos; we rely on TARGET_ERESTARTSYS not clashing
+ * with any of the host errno values.)
+ */
+
+/* A guide to using safe_syscall() to handle interactions between guest
+ * syscalls and guest signals:
+ *
+ * Guest syscalls come in two flavours:
+ *
+ * (1) Non-interruptible syscalls
+ *
+ * These are guest syscalls that never get interrupted by signals and
+ * so never return EINTR. They can be implemented straightforwardly in
+ * QEMU: just make sure that if the implementation code has to make any
+ * blocking calls that those calls are retried if they return EINTR.
+ * It's also OK to implement these with safe_syscall, though it will be
+ * a little less efficient if a signal is delivered at the 'wrong' moment.
+ *
+ * Some non-interruptible syscalls need to be handled using block_signals()
+ * to block signals for the duration of the syscall. This mainly applies
+ * to code which needs to modify the data structures used by the
+ * host_signal_handler() function and the functions it calls, including
+ * all syscalls which change the thread's signal mask.
+ *
+ * (2) Interruptible syscalls
+ *
+ * These are guest syscalls that can be interrupted by signals and
+ * for which we need to either return EINTR or arrange for the guest
+ * syscall to be restarted. This category includes both syscalls which
+ * always restart (and in the kernel return -ERESTARTNOINTR), ones
+ * which only restart if there is no handler (kernel returns -ERESTARTNOHAND
+ * or -ERESTART_RESTARTBLOCK), and the most common kind which restart
+ * if the handler was registered with SA_RESTART (kernel returns
+ * -ERESTARTSYS). System calls which are only interruptible in some
+ * situations (like 'open') also need to be handled this way.
+ *
+ * Here it is important that the host syscall is made
+ * via this safe_syscall() function, and *not* via the host libc.
+ * If the host libc is used then the implementation will appear to work
+ * most of the time, but there will be a race condition where a
+ * signal could arrive just before we make the host syscall inside libc,
+ * and then then guest syscall will not correctly be interrupted.
+ * Instead the implementation of the guest syscall can use the safe_syscall
+ * function but otherwise just return the result or errno in the usual
+ * way; the main loop code will take care of restarting the syscall
+ * if appropriate.
+ *
+ * (If the implementation needs to make multiple host syscalls this is
+ * OK; any which might really block must be via safe_syscall(); for those
+ * which are only technically blocking (ie which we know in practice won't
+ * stay in the host kernel indefinitely) it's OK to use libc if necessary.
+ * You must be able to cope with backing out correctly if some safe_syscall
+ * you make in the implementation returns either -TARGET_ERESTARTSYS or
+ * EINTR though.)
+ *
+ * block_signals() cannot be used for interruptible syscalls.
+ *
+ *
+ * How and why the safe_syscall implementation works:
+ *
+ * The basic setup is that we make the host syscall via a known
+ * section of host native assembly. If a signal occurs, our signal
+ * handler checks the interrupted host PC against the addresse of that
+ * known section. If the PC is before or at the address of the syscall
+ * instruction then we change the PC to point at a "return
+ * -TARGET_ERESTARTSYS" code path instead, and then exit the signal handler
+ * (causing the safe_syscall() call to immediately return that value).
+ * Then in the main.c loop if we see this magic return value we adjust
+ * the guest PC to wind it back to before the system call, and invoke
+ * the guest signal handler as usual.
+ *
+ * This winding-back will happen in two cases:
+ * (1) signal came in just before we took the host syscall (a race);
+ *   in this case we'll take the guest signal and have another go
+ *   at the syscall afterwards, and this is indistinguishable for the
+ *   guest from the timing having been different such that the guest
+ *   signal really did win the race
+ * (2) signal came in while the host syscall was blocking, and the
+ *   host kernel decided the syscall should be restarted;
+ *   in this case we want to restart the guest syscall also, and so
+ *   rewinding is the right thing. (Note that "restart" semantics mean
+ *   "first call the signal handler, then reattempt the syscall".)
+ * The other situation to consider is when a signal came in while the
+ * host syscall was blocking, and the host kernel decided that the syscall
+ * should not be restarted; in this case QEMU's host signal handler will
+ * be invoked with the PC pointing just after the syscall instruction,
+ * with registers indicating an EINTR return; the special code in the
+ * handler will not kick in, and we will return EINTR to the guest as
+ * we should.
+ *
+ * Notice that we can leave the host kernel to make the decision for
+ * us about whether to do a restart of the syscall or not; we do not
+ * need to check SA_RESTART flags in QEMU or distinguish the various
+ * kinds of restartability.
+ */
+#ifdef HAVE_SAFE_SYSCALL
+/* The core part of this function is implemented in assembly */
+extern long safe_syscall_base(int *pending, long number, ...);
+
+#define safe_syscall(...)                                               \
+    ({                                                                  \
+        long ret_;                                                      \
+        int *psp_ = &((TaskState *)thread_cpu->opaque)->signal_pending; \
+        ret_ = safe_syscall_base(psp_, __VA_ARGS__);                    \
+        if (is_error(ret_)) {                                           \
+            errno = -ret_;                                              \
+            ret_ = -1;                                                  \
+        }                                                               \
+        ret_;                                                           \
+    })
+
+#else
+
+/* Fallback for architectures which don't yet provide a safe-syscall assembly
+ * fragment; note that this is racy!
+ * This should go away when all host architectures have been updated.
+ */
+#define safe_syscall syscall
+
 #endif
 
 #endif /* QEMU_H */
