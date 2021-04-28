@@ -1,0 +1,9 @@
+bsd_user_ss.add(files(
+  'os-extattr.c',
+  'os-proc.c',
+  'os-socket.c',
+  'os-stat.c',
+  'os-sys.c',
+  'os-thread.c',
+  'os-time.c',
+))
