@@ -610,6 +610,7 @@ int main(int argc, char **argv)
     const char *log_mask = NULL;
     struct target_pt_regs regs1, *regs = &regs1;
     struct image_info info1, *info = &info1;
+    struct bsd_binprm bprm;
     TaskState ts1, *ts = &ts1;
     CPUArchState *env;
     CPUState *cpu;
@@ -766,6 +767,9 @@ int main(int argc, char **argv)
     /* Zero out regs */
     memset(regs, 0, sizeof(struct target_pt_regs));
 
+    /* Zero bsd params */
+    memset(&bprm, 0, sizeof(bprm));
+
     /* Zero out image_info */
     memset(info, 0, sizeof(struct image_info));
 
@@ -841,7 +845,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if (loader_exec(filename, argv + optind, target_environ, regs, info) != 0) {
+    if (loader_exec(filename, argv+optind, target_environ, regs, info,
+                    &bprm) != 0) {
         printf("Error loading %s\n", filename);
         _exit(1);
     }
