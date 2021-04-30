@@ -18,4 +18,5 @@ bsd_user_ss.add(files(
 subdir(targetos)
 elf = cc.find_library('elf', required: true)
 procstat = cc.find_library('procstat', required: true)
-bsd_user_ss.add(elf, procstat)
+kvm = cc.find_library('kvm', required: true)
+bsd_user_ss.add(elf, procstat, kvm)
