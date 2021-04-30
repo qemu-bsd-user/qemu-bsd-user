@@ -66,10 +66,12 @@ static int load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr,
 abi_ulong target_stksiz;
 abi_ulong target_stkbas;
 
+#ifndef __FreeBSD__
 static inline void memcpy_fromfs(void *to, const void *from, unsigned long n)
 {
     memcpy(to, from, n);
 }
+#endif
 
 #ifdef BSWAP_NEEDED
 static void bswap_ehdr(struct elfhdr *ehdr)
