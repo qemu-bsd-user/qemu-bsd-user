@@ -186,13 +186,15 @@ static inline abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
 
     mcp->mc_flags |= TARGET_MC_FP_VALID;
     for (i = 0; i < 32; i++) {
-//XXX FIXME XXX        mcp->mc_fpreg[i] = tswapal(regs->fpr[i]);
+        uint64_t *fpr = cpu_fpr_ptr(regs, i);
+        mcp->mc_fpreg[i] = tswapal(*fpr);
     }
     mcp->mc_fpreg[32] = tswapal(regs->fpscr);
 
     mcp->mc_flags |= TARGET_MC_AV_VALID;
     for (i = 0; i < 32*2; i++) {
-//XXX FIXME XXX        mcp->mc_avec[i] = tswapal(regs->avr[i/2].u64[i%2]);
+        uint64_t *fpr = cpu_fpr_ptr(regs, i);
+        mcp->mc_fpreg[i] = tswapal(*fpr);
     }
     mcp->mc_av[0] = tswapal(regs->vscr);
     mcp->mc_av[1] = tswapal(regs->spr[SPR_VRSAVE]);
@@ -244,7 +246,8 @@ static inline abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
     if (mcp->mc_flags & TARGET_MC_FP_VALID) {
         /* restore fpu context if we have used it before */
         for (i = 0; i < 32; i++) {
-//XXX FIXME XXX            regs->fpr[i] = tswapal(mcp->mc_fpreg[i]);
+            uint64_t *fpr = cpu_fpr_ptr(regs, i);
+            *fpr = tswapal(mcp->mc_fpreg[i]);
         }
         regs->fpscr = tswapal(mcp->mc_fpreg[32]);
     }
@@ -252,7 +255,9 @@ static inline abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
     if (mcp->mc_flags & TARGET_MC_AV_VALID) {
         /* restore altivec context if we have used it before */
         for (i = 0; i < 32*2; i++) {
-//XXX FIXME XXX            regs->avr[i/2].u64[i%2] = tswapal(mcp->mc_avec[i]);
+            ppc_avr_t *avr = cpu_avr_ptr(regs, i/2);
+            /* XXX verify that this is still sane */
+            avr->u64[i%2] = tswapal(mcp->mc_avec[i]);
         }
         regs->vscr = tswapal(mcp->mc_av[0]);
         regs->spr[SPR_VRSAVE] = tswapal(mcp->mc_av[1]);
