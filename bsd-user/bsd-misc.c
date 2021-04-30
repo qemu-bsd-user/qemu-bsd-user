@@ -17,6 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _WANT_SEMUN
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>

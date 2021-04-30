@@ -22,6 +22,7 @@
 #define _WANT_FREEBSD11_STATFS
 #define _WANT_FREEBSD11_DIRENT
 #define _WANT_KERNEL_ERRNO
+#define _WANT_SEMUN
 #include "qemu/osdep.h"
 #include "qemu/cutils.h"
 #include "qemu/path.h"
