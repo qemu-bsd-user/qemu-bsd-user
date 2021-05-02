@@ -402,7 +402,8 @@ struct target_kinfo_vmentry {
 	uint16_t kve_vn_mode;			/* File mode. */
 	uint16_t kve_status;			/* Status flags. */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-#if __FreeBSD_version >= 1400009
+#if (__FreeBSD_version >= 1300501 && __FreeBSD_version < 1400000) || \
+    __FreeBSD_version >= 1400009
 	union {
 		uint64_t _kve_vn_fsid;		/* dev_t of vnode location */
 		uint64_t _kve_obj;		/* handle of anon obj */
