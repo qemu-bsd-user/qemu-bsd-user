@@ -2053,7 +2053,7 @@ static int elf_core_dump(int signr, CPUArchState *env)
      *
      * See kern/imgact_elf.c  __elfN(corehdr)().
      */
-    fill_elf_header(&elf, segs + 1, ELF_MACHINE, 0);
+    fill_elf_header(&elf, segs + 1, ELF_MACHINE, ts->info->elf_flags);
     if (dump_write(fd, &elf, sizeof (elf)) != 0)
         goto out;
 
