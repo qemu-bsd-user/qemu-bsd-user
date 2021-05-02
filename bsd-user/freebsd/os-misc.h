@@ -646,7 +646,7 @@ static inline abi_long do_freebsd_shm_rename(abi_ulong fromptr, abi_ulong toptr,
 }
 #endif /* __FreeBSD_version >= 1300049 */
 
-#if defined(HAVE_GETRANDOM)
+#if defined(CONFIG_GETRANDOM)
 static inline abi_long do_freebsd_getrandom(abi_ulong buf, abi_ulong buflen,
         abi_ulong flags)
 {
