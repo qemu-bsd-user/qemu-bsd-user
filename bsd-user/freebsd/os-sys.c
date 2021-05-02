@@ -1139,12 +1139,12 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 
     /* Handle some arch/emulator dependent sysctl()'s here. */
     switch (snamep[0]) {
-#if defined(TARGET_PPC)
+#if defined(TARGET_PPC) || defined(TARGET_PPC64)
     case CTL_MACHDEP:
         switch (snamep[1]) {
-        case 1:    /* This should be documented elsewhere. */
-            holdlen = sizeof(abi_ulong);
-            (*(abi_ulong *)holdp) = tswapal(env->dcache_line_size);
+        case 1:    /* CPU_CACHELINE */
+            holdlen = sizeof(uint32_t);
+            (*(uint32_t *)holdp) = tswap32(env->dcache_line_size);
             ret = 0;
             goto out;
         }
