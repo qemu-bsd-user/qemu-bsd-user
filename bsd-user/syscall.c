@@ -1855,7 +1855,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_obreak(arg1);
         break;
 
-#if defined(HAVE_GETRANDOM)
+#if defined(CONFIG_GETRANDOM)
     case TARGET_FREEBSD_NR_getrandom:
         ret = do_freebsd_getrandom(arg1, arg2, arg3);
         break;
