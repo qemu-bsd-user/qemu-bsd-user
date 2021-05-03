@@ -65,3 +65,16 @@ int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, uint32_t val)
 {
     return -1;
 }
+
+bool bsd_ppc_is_elfv1(CPUPPCState *env)
+{
+#if defined(TARGET_PPC64)
+    CPUState *cpu = env_cpu(env);
+    struct TaskState *ts = (struct TaskState *)cpu->opaque;
+    struct image_info *infop = ts->info;
+
+    return ((infop->elf_flags & 0x3) < 2);
+#else
+    return 0;
+#endif
+}
