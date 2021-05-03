@@ -301,7 +301,15 @@ int cpu_signal_handler(int host_signum, void *pinfo,
     pc = EIP_sig(uc);
     trapno = TRAP_sig(uc);
     return handle_cpu_signal(pc, info,
-                             trapno == 0xe ? (ERROR_sig(uc) >> 1) & 1 : 0,
+#ifdef __FreeBSD__
+                             /*
+                              * FreeBSD returns its own hardware independent trap numbers here.
+                              */
+                             trapno == T_PAGEFLT ?
+#else
+                             trapno == 0xe ?
+#endif
+                             (ERROR_sig(uc) >> 1) & 1 : 0,
                              &MASK_sig(uc));
 }
 
@@ -346,7 +354,12 @@ int cpu_signal_handler(int host_signum, void *pinfo,
 
     pc = PC_sig(uc);
     return handle_cpu_signal(pc, info,
-                             TRAP_sig(uc) == 0xe ? (ERROR_sig(uc) >> 1) & 1 : 0,
+#ifdef __FreeBSD__
+                             TRAP_sig(uc) == T_PAGEFLT ?
+#else
+                             TRAP_sig(uc) == 0xe ?
+#endif
+                             (ERROR_sig(uc) >> 1) & 1 : 0,
                              &MASK_sig(uc));
 }
 
