@@ -30,7 +30,7 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
      * powerpc/include/param.h (STACKLIGN() macro)
      */
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-    sp = ((u_int)(stack_base + stack_size) - 48) & ~0x1f;
+    sp = ((abi_ulong)(stack_base + stack_size) - 48) & ~0x1f;
 #else
     sp = ((u_int)(stack_base + stack_size) - 8) & ~0x1f;
 #endif
