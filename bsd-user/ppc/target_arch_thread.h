@@ -41,9 +41,16 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
     regs->gpr[3] = arg;
     /* srr0 = start function entry */
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-    get_user_ual(regs->nip, entry);
-    get_user_ual(regs->gpr[2], entry + sizeof(abi_ulong));
-    get_user_ual(regs->gpr[11], entry + 2 * sizeof(abi_ulong));
+    if (bsd_ppc_is_elfv1(regs)) {
+        /* ELFv1: Initialize TOC and environment from function descriptor. */
+        get_user_ual(regs->nip, entry);
+        get_user_ual(regs->gpr[2], entry + sizeof(abi_ulong));
+        get_user_ual(regs->gpr[11], entry + 2 * sizeof(abi_ulong));
+    } else {
+        /* ELFv2: entry point copied to GPR 12. */
+        regs->nip = entry;
+        regs->gpr[12] = entry;
+    }
 #else
     regs->nip = entry;
 #endif
@@ -57,13 +64,21 @@ static inline void target_thread_init(struct target_pt_regs *regs,
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
     regs->gpr[1] = -roundup(-stack + 48, 16);
-    get_user_u64(regs->gpr[2], infop->entry + 8);
-    regs->gpr[2] += infop->load_addr;
-    get_user_u64(regs->gpr[11], infop->entry + 16);
-    regs->gpr[11] += infop->load_addr;
 
-    get_user_u64(infop->entry, infop->entry);
-    infop->entry += infop->load_addr;
+    if ((infop->elf_flags & 0x3) < 2) {
+        /* ELFv1: Initialize registers from function descriptor. */
+        get_user_u64(regs->gpr[2], infop->entry + 8);
+        regs->gpr[2] += infop->load_addr;
+        get_user_u64(regs->gpr[11], infop->entry + 16);
+        regs->gpr[11] += infop->load_addr;
+
+        get_user_u64(infop->entry, infop->entry);
+        /* Value was the base entry address, so relocate. */
+        infop->entry += infop->load_addr;
+    } else {
+        /* ELFv2: Set function entry point register. */
+        regs->gpr[12] = infop->entry;
+    }
 #else
     regs->gpr[1] = -roundup(-stack + 8, 16);
 #endif
