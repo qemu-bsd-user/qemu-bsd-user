@@ -302,9 +302,11 @@ int cpu_signal_handler(int host_signum, void *pinfo,
     pc = EIP_sig(uc);
     trapno = TRAP_sig(uc);
     return handle_cpu_signal(pc, info,
-#ifdef __FreeBSD__
+#ifdef T_PAGEFLT
                              /*
-                              * FreeBSD returns its own hardware independent trap numbers here.
+                              * All the BSDs return T_PAGEFLT for a page fault
+                              * (thought the value differs). Linux returns the Intel
+                              * page fault code of 0xe with no define for it.
                               */
                              trapno == T_PAGEFLT ?
 #else
@@ -355,7 +357,12 @@ int cpu_signal_handler(int host_signum, void *pinfo,
 
     pc = PC_sig(uc);
     return handle_cpu_signal(pc, info,
-#ifdef __FreeBSD__
+#ifdef T_PAGEFLT
+                             /*
+                              * All the BSDs return T_PAGEFLT for a page fault
+                              * (thought the value differs). Linux returns the Intel
+                              * page fault code of 0xe with no define for it.
+                              */
                              TRAP_sig(uc) == T_PAGEFLT ?
 #else
                              TRAP_sig(uc) == 0xe ?
