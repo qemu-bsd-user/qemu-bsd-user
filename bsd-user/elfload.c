@@ -777,6 +777,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     setup_arg_pages(bprm, info, &bprm->p, &bprm->stringp);
     info->start_stack = bprm->p;
 
+    info->elf_flags = elf_ex.e_flags;
+
     error = load_elf_sections(&elf_ex, elf_phdata, bprm->fd, et_dyn_addr,
         &load_addr);
     for (i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {

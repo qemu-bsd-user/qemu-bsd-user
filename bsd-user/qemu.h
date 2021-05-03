@@ -84,6 +84,7 @@ struct image_info {
     abi_ulong data_offset;
     abi_ulong arg_start;
     abi_ulong arg_end;
+    uint32_t  elf_flags;
 };
 
 #define MAX_SIGQUEUE_SIZE 1024
