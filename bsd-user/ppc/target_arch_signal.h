@@ -20,6 +20,8 @@
 
 #include "cpu.h"
 
+extern bool bsd_ppc_is_elfv1(CPUPPCState *env);
+
 #define TARGET_INSN_SIZE     4  /* powerpc instruction size */
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
@@ -131,6 +133,18 @@ set_sigtramp_args(CPUPPCState *regs, int sig, struct target_sigframe *frame,
     regs->lr = ka->_sa_handler;
     regs->nip = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
 
+#if defined(TARGET_PPC64)
+    /*
+     * If running under ELFv2, we adjust our entry point so we land on the
+     * ELFv2 entry point instead of the ELFv1 entry point.
+     *
+     * See the trampoline code at bsd-user/ppc/target_arch_sigtramp.h.
+     */
+
+    if (!bsd_ppc_is_elfv1(regs)) {
+        regs->nip += 16;
+    }
+#endif
     return 0;
 }
 
