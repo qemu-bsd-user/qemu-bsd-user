@@ -24,14 +24,9 @@
 #include <sys/ioccom.h>
 #include <sys/ioctl.h>
 #include <sys/sockio.h>
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/_termios.h>
-#else
-#include <sys/termios.h>
-#endif
 #include <sys/ttycom.h>
 #include <sys/filio.h>
-#include <sys/socket.h> /* needed for FreeBSD 8.4 */
 
 #include <crypto/cryptodev.h>
 
