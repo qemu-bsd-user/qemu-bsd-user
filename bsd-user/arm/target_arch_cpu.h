@@ -30,13 +30,6 @@
 
 #define TARGET_CPU_RESET(cpu)
 
-#ifdef __FreeBSD__
-extern pthread_mutex_t ras_mtx;
-extern pthread_cond_t ras_cond;
-extern pthread_t ras_thread;
-extern bool ras_thread_set;
-#endif
-
 static inline void target_cpu_init(CPUARMState *env,
         struct target_pt_regs *regs)
 {
@@ -249,51 +242,6 @@ static inline void target_cpu_loop(CPUARMState *env)
         case EXCP_DATA_ABORT:
             /* See arm/arm/trap.c data_abort_handler() */
             addr = env->exception.vaddress;
-#ifdef __FreeBSD__
-            if (addr == 0xffff1000) { /* ARM_TP_ADDRESS */
-                unsigned int insn;
-                int rd;
-
-                get_user_u32(insn, env->regs[15]);
-                /* Assume it is always either a load of a store, bogus, but probably good enough */
-                rd = (insn >> 12) & 0xf;
-                if (insn & (1 << 20)) {
-                    /* Load */
-	            env->regs[rd] = target_cpu_get_tls(env);
-                } else {
-                    /* Store */
-                    target_cpu_set_tls(env, env->regs[rd]);
-                }
-		env->regs[15] += 4;
-                break;
-
-
-            } else if (addr == 0xffff1004 || addr == 0xffff1008) { /* ARM_RAS_START || ARM_RAS_END */
-                int rd;
-                unsigned int insn;
-
-                get_user_u32(insn, env->regs[15]);
-                rd = (insn >> 12) & 0xf;
-
-                if (!(insn & (1 << 20)) && addr == 0xffff1004) {
-                    /* Store */
-                    pthread_mutex_lock(&ras_mtx);
-                    while (ras_thread_set && !pthread_equal(pthread_self(), ras_thread))
-                        pthread_cond_wait(&ras_cond, &ras_mtx);
-                    if (env->regs[rd] == 0) {
-                        ras_thread_set = 0;
-                        pthread_cond_signal(&ras_cond);
-                    } else {
-                        ras_thread_set = 1;
-			ras_thread = pthread_self();
-                    }
-                    pthread_mutex_unlock(&ras_mtx);
-                }
-		env->regs[15] += 4;
-
-		break;
-            }
-#endif
         do_segv:
             {
                 info.si_signo = TARGET_SIGSEGV;
