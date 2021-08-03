@@ -1772,11 +1772,7 @@ static abi_long fill_kiproc(TaskState *ts, pid_t pid,
         g_free(tkip);
 
     /* Fix up some to be the target values. */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
     strncpy(tkip->ki_tdname, basename(bprm->argv[0]), TARGET_TDNAMLEN);
-#else
-    strncpy(tkip->ki_ocomm, basename(bprm->argv[0]), TARGET_TDNAMLEN);
-#endif
     strncpy(tkip->ki_comm, basename(bprm->argv[0]), TARGET_COMMLEN);
 #if TARGET_ABI_BITS == 32
     strncpy(tkip->ki_emul, "FreeBSD ELF32", TARGET_KI_EMULNAMELEN);
