@@ -20,10 +20,7 @@
 #ifndef __HOST_OS_H_
 #define __HOST_OS_H_
 
-#include <stdio.h>
 #include <sys/sysctl.h>
-
-#include "qemu.h"
 
 #define HOST_DEFAULT_BSD_TYPE target_freebsd
 

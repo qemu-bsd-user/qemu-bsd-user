@@ -19,8 +19,6 @@
 #ifndef __HOST_OS_H_
 #define __HOST_OS_H_
 
-#include "qemu.h"
-
 #define HOST_DEFAULT_BSD_TYPE target_netbsd
 
 static inline void save_proc_pathname(char *argv0)
