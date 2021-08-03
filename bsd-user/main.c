@@ -47,12 +47,6 @@
 #include "host_os.h"
 #include "target_arch_cpu.h"
 
-#ifdef __FreeBSD__
-pthread_mutex_t ras_mtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t ras_cond = PTHREAD_COND_INITIALIZER;
-pthread_t ras_thread;
-bool ras_thread_set = false;
-#endif
 int singlestep;
 static const char *cpu_model;
 static const char *cpu_type;
