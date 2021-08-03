@@ -300,13 +300,13 @@ void mmap_fork_start(void);
 void mmap_fork_end(int child);
 
 /* main.c */
+extern char qemu_proc_pathname[];
 extern unsigned long target_maxtsiz;
 extern unsigned long target_dfldsiz;
 extern unsigned long target_maxdsiz;
 extern unsigned long target_dflssiz;
 extern unsigned long target_maxssiz;
 extern unsigned long target_sgrowsiz;
-extern char qemu_proc_pathname[];
 
 /* syscall.c */
 abi_long get_errno(abi_long ret);

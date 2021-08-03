@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/sysctl.h>
 
 #include "qemu/osdep.h"
 #include "qemu/units.h"
@@ -44,7 +45,7 @@
 #include "exec/log.h"
 #include "trace/control.h"
 
-#include "host_os.h"
+#include "host-os.h"
 #include "target_arch_cpu.h"
 
 int singlestep;
@@ -75,6 +76,7 @@ unsigned long reserved_va;
 const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
 const char *qemu_uname_release;
 enum BSDType bsd_type;
+char qemu_proc_pathname[PATH_MAX];  /* full path to exeutable */
 
 unsigned long target_maxtsiz = TARGET_MAXTSIZ;   /* max text size */
 unsigned long target_dfldsiz = TARGET_DFLDSIZ;   /* initial data size limit */
@@ -82,8 +84,6 @@ unsigned long target_maxdsiz = TARGET_MAXDSIZ;   /* max data size */
 unsigned long target_dflssiz = TARGET_DFLSSIZ;   /* initial data size limit */
 unsigned long target_maxssiz = TARGET_MAXSSIZ;   /* max stack size */
 unsigned long target_sgrowsiz = TARGET_SGROWSIZ; /* amount to grow stack */
-
-char qemu_proc_pathname[PATH_MAX];  /* full path to exeutable */
 
 /* Helper routines for implementing atomic operations. */
 
@@ -256,6 +256,22 @@ adjust_ssize(void)
     rl.rlim_max = target_maxssiz;
     rl.rlim_cur = target_dflssiz;
     setrlimit(RLIMIT_STACK, &rl);
+}
+
+static void save_proc_pathname(char *argv0)
+{
+    int mib[4];
+    size_t len;
+
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_PATHNAME;
+    mib[3] = -1;
+
+    len = PATH_MAX;
+    if (sysctl(mib, 4, qemu_proc_pathname, &len, NULL, 0)) {
+        perror("sysctl");
+    }
 }
 
 int main(int argc, char **argv)

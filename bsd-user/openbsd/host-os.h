@@ -1,5 +1,5 @@
 /*
- *  FreeBSD host dependent code and definitions
+ *  OpenBSD host dependent code and definitions
  *
  *  Copyright (c) 2013 Stacey D. Son
  *
@@ -20,24 +20,6 @@
 #ifndef __HOST_OS_H_
 #define __HOST_OS_H_
 
-#include <sys/sysctl.h>
-
-#define HOST_DEFAULT_BSD_TYPE target_freebsd
-
-static inline void save_proc_pathname(char *argv0)
-{
-    int mib[4];
-    size_t len;
-
-    mib[0] = CTL_KERN;
-    mib[1] = KERN_PROC;
-    mib[2] = KERN_PROC_PATHNAME;
-    mib[3] = -1;
-
-    len = PATH_MAX;
-    if (sysctl(mib, 4, qemu_proc_pathname, &len, NULL, 0)) {
-        perror("sysctl");
-    }
-}
+#define HOST_DEFAULT_BSD_TYPE target_openbsd
 
 #endif /*!__HOST_OS_H_ */

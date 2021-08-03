@@ -1,5 +1,5 @@
 /*
- *  OpenBSD host dependent code and definitions
+ *  FreeBSD host dependent code and definitions
  *
  *  Copyright (c) 2013 Stacey D. Son
  *
@@ -20,11 +20,6 @@
 #ifndef __HOST_OS_H_
 #define __HOST_OS_H_
 
-#define HOST_DEFAULT_BSD_TYPE target_openbsd
-
-static inline void save_proc_pathname(char *argv0)
-{
-    /* XXX */
-}
+#define HOST_DEFAULT_BSD_TYPE target_freebsd
 
 #endif /*!__HOST_OS_H_ */
