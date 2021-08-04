@@ -29,8 +29,6 @@ int qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right);
 #define BSD_HAVE_KEVENT64
 #endif
 
-/* needed for fprintf() debug function */
-#include <stdio.h>
 #include "qemu/osdep.h"
 #include "cpu.h"
 #include "exec/cpu_ldst.h"
