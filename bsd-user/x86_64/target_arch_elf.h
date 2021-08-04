@@ -30,27 +30,4 @@
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE       4096
 
-/* XXX */
-#ifndef __FreeBSD__
-#define ELF_PLATFORM target_elf_get_platform()
-
-static const char *target_elf_get_platform(void)
-{
-    static char elf_platform[] = "i386";
-    int family = (thread_env->cpuid_version >> 8) & 0xff;
-    if (family > 6)
-        family = 6;
-    if (family >= 3)
-        elf_platform[1] = '0' + family;
-    return elf_platform;
-}
-
-#define ELF_HWCAP target_elf_get_hwcap()
-
-static uint32_t target_elf_get_hwcap(void)
-{
-    return thread_env->features[FEAT_1_EDX];
-}
-#endif /* ! __FreeBSD__ */
-
 #endif /* _TARGET_ARCH_ELF_H_ */
