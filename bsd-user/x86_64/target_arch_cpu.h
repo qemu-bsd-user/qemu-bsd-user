@@ -30,6 +30,9 @@ static inline void target_cpu_init(CPUX86State *env,
 {
     uint64_t *gdt_table;
 
+    env->cr[0] = CR0_PG_MASK | CR0_WP_MASK | CR0_PE_MASK;
+    env->hflags |= HF_PE_MASK | HF_CPL_MASK;
+
     /* enable 64 bit mode if possible */
     if (!(env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_LM)) {
         fprintf(stderr, "The selected x86 CPU does not support 64 bit mode\n");
