@@ -32,6 +32,10 @@ static inline void target_cpu_init(CPUX86State *env,
 
     env->cr[0] = CR0_PG_MASK | CR0_WP_MASK | CR0_PE_MASK;
     env->hflags |= HF_PE_MASK | HF_CPL_MASK;
+    if (env->features[FEAT_1_EDX] & CPUID_SSE) {
+        env->cr[4] |= CR4_OSFXSR_MASK;
+        env->hflags |= HF_OSFXSR_MASK;
+    }
 
     /* enable 64 bit mode if possible */
     if (!(env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_LM)) {
