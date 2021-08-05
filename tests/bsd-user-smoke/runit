@@ -1,0 +1,28 @@
+#!/bin/sh
+
+src=$1
+build=$2
+
+doit() {
+	local a=$1 q=$2
+
+	echo Hello World > foo1
+	$build/qemu-$q $src/h.$a > foo2 || die "cmd failed: $build/qemu-$q $src/h.$a"
+	cmp foo1 foo2 || die "Hello World expected"
+	rm foo1 foo2
+}
+
+die() {
+	echo $1
+	exit 1
+}
+
+doit aarch64 aarch64
+doit armv7 arm
+doit i386 i386
+doit mips mips
+doit mipsel mipsel
+doit mips64 mips64
+doit powerpc ppc
+doit powerpc64 ppc64
+doit riscv64 riscv64
