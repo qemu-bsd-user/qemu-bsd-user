@@ -24,13 +24,6 @@
 #include "qemu-common.h"
 
 //#define DEBUG_MMAP
-#ifndef	MAP_ALIGNMENT_MASK
-#define	MAP_ALIGNMENT_MASK	0
-#endif
-#ifndef	MAP_ALIGNMENT_SHIFT
-/* Nop */
-#define	MAP_ALIGNMENT_SHIFT	0
-#endif
 
 static pthread_mutex_t mmap_mutex = PTHREAD_MUTEX_INITIALIZER;
 static __thread int mmap_lock_count;
