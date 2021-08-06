@@ -467,12 +467,12 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     }
 
     /* When mapping files into a memory area larger than the file, accesses
-       to pages beyond the file size will cause a SIGBUS. 
+       to pages beyond the file size will cause a SIGBUS.
 
        For example, if mmaping a file of 100 bytes on a host with 4K pages
        emulating a target with 8K pages, the target expects to be able to
        access the first 8K. But the host will trap us on any access beyond
-       4K.  
+       4K.
 
        When emulating a target with a larger page-size than the hosts, we
        may need to truncate file maps at EOF and add extra anonymous pages
