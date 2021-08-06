@@ -1,6 +1,7 @@
 /*
  *  ELF loading code
  *
+ *  Copyright (c) 2013 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -37,13 +38,8 @@ static size_t target_auxents_sz;   /* Size of AUX entries including AT_NULL */
 #include "target_os_thread.h"
 #include "target_os_user.h"
 
-#ifndef ELF_NOTE_ROUNDSIZE
 #define ELF_NOTE_ROUNDSIZE  4
-#endif
-
-#ifndef ELF_MACHINE
 #define ELF_MACHINE ELF_ARCH
-#endif
 
 #define TARGET_NT_PRSTATUS              1       /* Process status. */
 #define TARGET_NT_FPREGSET              2       /* Floating point registers. */
@@ -66,12 +62,10 @@ static int load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr,
 abi_ulong target_stksiz;
 abi_ulong target_stkbas;
 
-#ifndef __FreeBSD__
 static inline void memcpy_fromfs(void *to, const void *from, unsigned long n)
 {
     memcpy(to, from, n);
 }
-#endif
 
 #ifdef BSWAP_NEEDED
 static void bswap_ehdr(struct elfhdr *ehdr)
@@ -150,7 +144,6 @@ static void bswap_note(struct elf_note *en) { }
 
 #endif /* ! BSWAP_NEEDED */
 
-#ifndef __FreeBSD__
 /*
  * 'copy_elf_strings()' copies argument/envelope strings from user
  * memory to free pages in kernel mem. These are in a format ready
@@ -173,10 +166,12 @@ static abi_ulong copy_elf_strings(int argc, char **argv, void **page,
             exit(-1);
         }
         tmp1 = tmp;
-        while (*tmp++);
+        while (*tmp++) {
+            continue;
+        }
         len = tmp - tmp1;
         if (p < len) {  /* this shouldn't happen - 128kB */
-                return 0;
+            return 0;
         }
         while (len) {
             --p; --tmp; --len;
@@ -186,14 +181,14 @@ static abi_ulong copy_elf_strings(int argc, char **argv, void **page,
                 if (!pag) {
                     pag = g_try_malloc0(TARGET_PAGE_SIZE);
                     page[p / TARGET_PAGE_SIZE] = pag;
-                    if (!pag)
+                    if (!pag) {
                         return 0;
+                    }
                 }
             }
             if (len == 0 || offset == 0) {
                 *(pag + offset) = *tmp;
-            }
-            else {
+            } else {
               int bytes_to_copy = (len > offset) ? offset : len;
               tmp -= bytes_to_copy;
               p -= bytes_to_copy;
@@ -205,7 +200,6 @@ static abi_ulong copy_elf_strings(int argc, char **argv, void **page,
     }
     return p;
 }
-#endif
 
 static void setup_arg_pages(struct bsd_binprm *bprm, struct image_info *info,
                             abi_ulong *stackp, abi_ulong *stringp)
@@ -213,8 +207,9 @@ static void setup_arg_pages(struct bsd_binprm *bprm, struct image_info *info,
     abi_ulong stack_base, size;
     abi_long addr;
 
-    /* Create enough stack to hold everything.  If we don't use
-     * it for args, we'll use it for something else...
+    /*
+     * Create enough stack to hold everything.  If we don't use it for args,
+     * we'll use it for something else...
      */
     size = target_dflssiz;
     stack_base = TARGET_USRSTACK - size;
@@ -241,8 +236,9 @@ static void set_brk(abi_ulong start, abi_ulong end)
     /* page-align the start and end addresses... */
     start = HOST_PAGE_ALIGN(start);
     end = HOST_PAGE_ALIGN(end);
-    if (end <= start)
+    if (end <= start) {
         return;
+    }
     if (target_mmap(start, end - start, PROT_READ | PROT_WRITE | PROT_EXEC,
         MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0) == -1) {
         perror("cannot mmap brk");
@@ -251,15 +247,18 @@ static void set_brk(abi_ulong start, abi_ulong end)
 }
 
 
-/* We need to explicitly zero any fractional pages after the data
-   section (i.e. bss).  This would contain the junk from the file that
-   should not be in memory. */
+/*
+ * We need to explicitly zero any fractional pages after the data
+ * section (i.e. bss).  This would contain the junk from the file that
+ * should not be in memory.
+ */
 static void padzero(abi_ulong elf_bss, abi_ulong last_bss)
 {
     abi_ulong nbyte;
 
-    if (elf_bss >= last_bss)
+    if (elf_bss >= last_bss) {
         return;
+    }
 
     /*
      * XXX: this is really a hack : if the real host page size is
@@ -274,12 +273,12 @@ static void padzero(abi_ulong elf_bss, abi_ulong last_bss)
         end_addr = HOST_PAGE_ALIGN(elf_bss);
         if (end_addr1 < end_addr) {
             mmap((void *)g2h_untagged(end_addr1), end_addr - end_addr1,
-                    PROT_READ|PROT_WRITE|PROT_EXEC,
-                    MAP_FIXED|MAP_PRIVATE|MAP_ANON, -1, 0);
+                 PROT_READ | PROT_WRITE | PROT_EXEC,
+                 MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0);
         }
     }
 
-    nbyte = elf_bss & (qemu_host_page_size-1);
+    nbyte = elf_bss & (qemu_host_page_size - 1);
     if (nbyte) {
         nbyte = qemu_host_page_size - nbyte;
         do {
@@ -291,7 +290,8 @@ static void padzero(abi_ulong elf_bss, abi_ulong last_bss)
 }
 
 static abi_ulong load_elf_interp(struct elfhdr *interp_elf_ex,
-                                 int interpreter_fd, abi_ulong *interp_load_addr)
+                                 int interpreter_fd,
+                                 abi_ulong *interp_load_addr)
 {
     struct elf_phdr *elf_phdata  =  NULL;
     abi_ulong rbase;
@@ -309,14 +309,16 @@ static abi_ulong load_elf_interp(struct elfhdr *interp_elf_ex,
 
 
     /* Now read in all of the header information */
-    if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > TARGET_PAGE_SIZE)
+    if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > TARGET_PAGE_SIZE) {
         return ~(abi_ulong)0UL;
+    }
 
     elf_phdata =  (struct elf_phdr *) malloc(sizeof(struct elf_phdr) *
             interp_elf_ex->e_phnum);
 
-    if (!elf_phdata)
+    if (!elf_phdata) {
         return ~((abi_ulong)0UL);
+    }
 
     /*
      * If the size of this structure has changed, then punt, since
@@ -328,14 +330,14 @@ static abi_ulong load_elf_interp(struct elfhdr *interp_elf_ex,
     }
 
     retval = lseek(interpreter_fd, interp_elf_ex->e_phoff, SEEK_SET);
-    if(retval >= 0) {
+    if (retval >= 0) {
         retval = read(interpreter_fd, (char *) elf_phdata,
                 sizeof(struct elf_phdr) * interp_elf_ex->e_phnum);
     }
     if (retval < 0) {
         perror("load_elf_interp");
         exit(-1);
-        free (elf_phdata);
+        free(elf_phdata);
         return retval;
     }
     bswap_phdr(elf_phdata, interp_elf_ex->e_phnum);
@@ -421,16 +423,17 @@ static void load_symbols(struct elfhdr *hdr, int fd)
 
     lseek(fd, hdr->e_shoff, SEEK_SET);
     for (i = 0; i < hdr->e_shnum; i++) {
-        if (read(fd, &sechdr, sizeof(sechdr)) != sizeof(sechdr))
+        if (read(fd, &sechdr, sizeof(sechdr)) != sizeof(sechdr)) {
             return;
+        }
         bswap_shdr(&sechdr, 1);
         if (sechdr.sh_type == SHT_SYMTAB) {
             symtab = sechdr;
-            lseek(fd, hdr->e_shoff
-                  + sizeof(sechdr) * sechdr.sh_link, SEEK_SET);
-            if (read(fd, &strtab, sizeof(strtab))
-                != sizeof(strtab))
+            lseek(fd, hdr->e_shoff + sizeof(sechdr) * sechdr.sh_link,
+                  SEEK_SET);
+            if (read(fd, &strtab, sizeof(strtab)) != sizeof(strtab)) {
                 return;
+            }
             bswap_shdr(&strtab, 1);
             goto found;
         }
@@ -482,10 +485,12 @@ found:
         i++;
     }
 
-     /* Attempt to free the storage associated with the local symbols
-        that we threw away.  Whether or not this has any effect on the
-        memory allocation depends on the malloc implementation and how
-        many symbols we managed to discard. */
+     /*
+      * Attempt to free the storage associated with the local symbols
+      * that we threw away.  Whether or not this has any effect on the
+      * memory allocation depends on the malloc implementation and how
+      * many symbols we managed to discard.
+      */
     new_syms = realloc(syms, nsyms * sizeof(*syms));
     if (new_syms == NULL) {
         free(s);
@@ -549,7 +554,8 @@ load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr, int fd,
     int i;
     bool first;
 
-    /* Now we do a little grungy work by mmaping the ELF image into
+    /*
+     * Now we do a little grungy work by mmaping the ELF image into
      * the correct location in memory.  At this point, we assume that
      * the image should be loaded at fixed address, not at a variable
      * address.
@@ -560,12 +566,19 @@ load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr, int fd,
         abi_ulong error;
 
         /* XXX Skip memsz == 0. */
-        if (elf_ppnt->p_type != PT_LOAD)
+        if (elf_ppnt->p_type != PT_LOAD) {
             continue;
+        }
 
-        if (elf_ppnt->p_flags & PF_R) elf_prot |= PROT_READ;
-        if (elf_ppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
-        if (elf_ppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
+        if (elf_ppnt->p_flags & PF_R) {
+            elf_prot |= PROT_READ;
+        }
+        if (elf_ppnt->p_flags & PF_W) {
+            elf_prot |= PROT_WRITE;
+        }
+        if (elf_ppnt->p_flags & PF_X) {
+            elf_prot |= PROT_EXEC;
+        }
 
         error = target_mmap(TARGET_ELF_PAGESTART(rbase + elf_ppnt->p_vaddr),
                             (elf_ppnt->p_filesz +
@@ -598,9 +611,10 @@ load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr, int fd,
         }
     }
 
-    if (baddrp != NULL)
+    if (baddrp != NULL) {
         *baddrp = baddr;
-    return (0);
+    }
+    return 0;
 }
 
 int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
@@ -629,17 +643,15 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
             return -ENOEXEC;
     }
 
-#ifndef __FreeBSD__
     bprm->p = copy_elf_strings(1, &bprm->filename, bprm->page, bprm->p);
     bprm->p = copy_elf_strings(bprm->envc, bprm->envp, bprm->page, bprm->p);
     bprm->p = copy_elf_strings(bprm->argc, bprm->argv, bprm->page, bprm->p);
     if (!bprm->p) {
         retval = -E2BIG;
     }
-#endif /* ! __FreeBSD__ */
 
     /* Now read in all of the header information */
-    elf_phdata = (struct elf_phdr *)malloc(elf_ex.e_phentsize*elf_ex.e_phnum);
+    elf_phdata = (struct elf_phdr *)malloc(elf_ex.e_phentsize * elf_ex.e_phnum);
     if (elf_phdata == NULL) {
         return -ENOMEM;
     }
@@ -664,17 +676,9 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
 
 
     elf_interpreter = NULL;
-#if 0
-    start_code = ~((abi_ulong)0UL);
-    end_code = 0;
-    start_data = 0;
-    end_data = 0;
-#endif
-
     for (i = 0; i < elf_ex.e_phnum; i++) {
         if (elf_ppnt->p_type == PT_INTERP) {
-            if (elf_interpreter != NULL)
-            {
+            if (elf_interpreter != NULL) {
                 free(elf_phdata);
                 free(elf_interpreter);
                 close(bprm->fd);
@@ -701,8 +705,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
                 retval = open(path(elf_interpreter), O_RDONLY);
                 if (retval >= 0) {
                     interpreter_fd = retval;
-                }
-                else {
+                } else {
                     perror(elf_interpreter);
                     exit(-1);
                     /* retval = -errno; */
@@ -716,7 +719,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
                 }
             }
             if (retval >= 0) {
-                interp_elf_ex = *((struct elfhdr *) bprm->buf); /* elf exec-header */
+                interp_elf_ex = *((struct elfhdr *) bprm->buf);
             }
             if (retval < 0) {
                 perror("load_elf_binary3");
@@ -741,12 +744,13 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
         }
     }
 
-    /* OK, we are done with that, now set up the arg stuff,
-       and then start this sucker up */
-
+    /*
+     * OK, we are done with that, now set up the arg stuff, and then start this
+     * sucker up
+     */
     if (!bprm->p) {
         free(elf_interpreter);
-        free (elf_phdata);
+        free(elf_phdata);
         close(bprm->fd);
         return -E2BIG;
     }
@@ -761,18 +765,22 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     /* XXX Join this with PT_INTERP search? */
     baddr = 0;
     for (i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
-        if (elf_ppnt->p_type != PT_LOAD)
+        if (elf_ppnt->p_type != PT_LOAD) {
             continue;
+        }
         baddr = elf_ppnt->p_vaddr;
         break;
     }
 
     et_dyn_addr = 0;
-    if (elf_ex.e_type == ET_DYN && baddr == 0)
+    if (elf_ex.e_type == ET_DYN && baddr == 0) {
         et_dyn_addr = ELF_ET_DYN_LOAD_ADDR;
+    }
 
-    /* Do this so that we can load the interpreter, if need be.  We will
-       change some of these later */
+    /*
+     * Do this so that we can load the interpreter, if need be.  We will
+     * change some of these later
+     */
     info->rss = 0;
     setup_arg_pages(bprm, info, &bprm->p, &bprm->stringp);
     info->start_stack = bprm->p;
@@ -815,8 +823,9 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
 
     free(elf_phdata);
 
-    if (qemu_log_enabled())
+    if (qemu_log_enabled()) {
         load_symbols(&elf_ex, bprm->fd);
+    }
 
     close(bprm->fd);
 
@@ -830,24 +839,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
                     info);
     info->load_addr = reloc_func_desc;
     info->start_brk = info->brk = elf_brk;
-#if 0
-    info->end_code = end_code;
-    info->start_code = start_code;
-    info->start_data = start_data;
-    info->end_data = end_data;
-#endif
     info->start_stack = bprm->p;
-    info->load_bias = 0; //load_bias;
-
-#if 0
-    printf("(start_brk) 0x" TARGET_FMT_lx "\n" , info->start_brk);
-    printf("(end_code) 0x" TARGET_FMT_lx "\n" , info->end_code);
-    printf("(start_code) 0x" TARGET_FMT_lx "\n" , info->start_code);
-    printf("(start_data) 0x" TARGET_FMT_lx "\n" , info->start_data);
-    printf("(end_data) 0x" TARGET_FMT_lx "\n" , info->end_data);
-    printf("(start_stack) 0x" TARGET_FMT_lx "\n" , info->start_stack);
-    printf("(brk) 0x" TARGET_FMT_lx "\n" , info->brk);
-#endif
+    info->load_bias = 0;
 
     info->entry = elf_entry;
 
@@ -924,8 +917,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
 typedef struct target_prpsinfo {
     int32_t     pr_version;     /* Version number of struct (1) */
     abi_ulong   pr_psinfosz;    /* sizeof(prpsinfo_t) (1) */
-    char        pr_fname[TARGET_PRFNAMESZ+1]; /* Command name + NULL (1) */
-    char        pr_psargs[TARGET_PRARGSZ+1];  /* Arguments + NULL (1) */
+    char        pr_fname[TARGET_PRFNAMESZ + 1]; /* Command name + NULL (1) */
+    char        pr_psargs[TARGET_PRARGSZ + 1];  /* Arguments + NULL (1) */
 } target_prpsinfo_t;
 
 #ifdef BSWAP_NEEDED
@@ -948,8 +941,9 @@ static abi_long fill_prpsinfo(TaskState *ts, target_prpsinfo_t **prpsinfo)
     target_prpsinfo_t *pr;
 
     pr = g_malloc0(sizeof(*pr));
-    if (pr == NULL)
-        return (-ENOMEM);
+    if (pr == NULL) {
+        return -ENOMEM;
+    }
     *prpsinfo = pr;
     pr->pr_version = 1;
     pr->pr_psinfosz = sizeof(target_prpsinfo_t);
@@ -957,18 +951,20 @@ static abi_long fill_prpsinfo(TaskState *ts, target_prpsinfo_t **prpsinfo)
     strncpy(pr->pr_fname, bprm->filename, TARGET_PRFNAMESZ);
     p = pr->pr_psargs;
     sz = TARGET_PRARGSZ;
-    for(i = 0; i < argc; i++) {
+    for (i = 0; i < argc; i++) {
         strncpy(p, argv[i], sz);
         len = strlen(argv[i]);
         p += len;
         sz -= len;
-        if (sz >= 0)
+        if (sz >= 0) {
             break;
+        }
         strncat(p, " ", sz);
         p += 1;
         sz -= 1;
-        if (sz >= 0)
+        if (sz >= 0) {
             break;
+        }
     }
 
     bswap_prpsinfo(pr);
@@ -1042,11 +1038,6 @@ static abi_long fill_prstatus(CPUArchState *env,
 {
     abi_long ret;
 
-    /*
-    prstatus = g_malloc0(sizeof (struct target_prstatus));
-    if (prstatus == NULL)
-        return -TARGET_ENOMEM;
-        */
     prstatus->pr_version = TARGET_PRSTATUS_VERSION;
     prstatus->pr_statussz = sizeof(target_prstatus_t);
     prstatus->pr_gregsetsz = sizeof(target_reg_t);
@@ -1066,34 +1057,10 @@ static abi_long fill_prstatus(CPUArchState *env,
 static abi_long fill_fpregs(TaskState *ts, target_fpreg_t *fpregs)
 {
     /* XXX Need to add support for FP Regs. */
-    memset(fpregs, 0, sizeof (*fpregs));
+    memset(fpregs, 0, sizeof(*fpregs));
 
     return 0;
 }
-
-#if 0
-static abi_long fill_umask(pid_t pid, unsigned short *maskp)
-{
-    abi_long ret;
-    int mib[4];
-    size_t len;
-
-    *maskp = 0;
-    mib[0] = CTL_KERN;
-    mib[1] = KERN_PROC;
-    mib[2] = KERN_PROC_UMASK;
-    mib[3] = pid;
-    len = sizeof(*maskp);
-    ret = get_errno(sysctl(mib, 4, maskp, &len, NULL, 0));
-    if (is_error(ret) && errno != ESRCH && errno != EPERM) {
-        warn("sysctl: kern.proc.umask: %d", pid);
-        return ret;
-    } else {
-        *maskp = tswap16(*maskp);
-        return (0);
-    }
-}
-#endif
 
 static gid_t *alloc_groups(size_t *gidset_sz)
 {
@@ -1101,27 +1068,30 @@ static gid_t *alloc_groups(size_t *gidset_sz)
     size_t sz = num * sizeof(gid_t);
     gid_t *gs = g_malloc0(sz);
 
-    if (gs == NULL)
+    if (gs == NULL) {
         return NULL;
+    }
 
-    if ((num = getgroups(num, gs)) == -1) {
+    num = getgroups(num, gs);
+    if (num == -1) {
         g_free(gs);
         return NULL;
     }
     *gidset_sz = num * sizeof(gid_t);
 
-    return (gs);
+    return gs;
 }
 
 static abi_long fill_groups(gid_t *gs, size_t *sz)
 {
 #ifdef BSWAP_NEEDED
-    int i, num = *sz / sizeof (*gs);
+    int i, num = *sz / sizeof(*gs);
 
-    for(i = 0; i < num; i++)
+    for (i = 0; i < num; i++) {
         gs[i] = tswap32(gs[i]);
+    }
 #endif /* BSWAP_NEEDED */
-    return (0);
+    return 0;
 }
 
 #ifdef BSWAP_NEEDED
@@ -1143,7 +1113,7 @@ static abi_long fill_rlimits(struct rlimit *rlimits)
     abi_long ret;
     int i;
 
-    for(i = 0; i < RLIM_NLIMITS; i++) {
+    for (i = 0; i < RLIM_NLIMITS; i++) {
         ret = get_errno(getrlimit(i, &rlimits[i]));
         if (is_error(ret)) {
             warn("getrlimit");
@@ -1306,32 +1276,35 @@ static struct mm_struct *vma_init(void)
 {
     struct mm_struct *mm;
 
-    if ((mm = g_malloc(sizeof (*mm))) == NULL)
-        return (NULL);
+    mm = g_malloc(sizeof(*mm));
+    if (mm == NULL) {
+        return NULL;
+    }
 
     mm->mm_count = 0;
     QTAILQ_INIT(&mm->mm_mmap);
 
-    return (mm);
+    return mm;
 }
 
 static struct vm_area_struct *vma_first(const struct mm_struct *mm)
 {
 
-    return (QTAILQ_FIRST(&mm->mm_mmap));
+    return QTAILQ_FIRST(&mm->mm_mmap);
 }
 
 static struct vm_area_struct *vma_next(struct vm_area_struct *vma)
 {
 
-    return (QTAILQ_NEXT(vma, vma_link));
+    return QTAILQ_NEXT(vma, vma_link);
 }
 
 static void vma_delete(struct mm_struct *mm)
 {
     struct vm_area_struct *vma;
 
-    while ((vma = vma_first(mm)) != NULL) {
+    while (vma_first(mm) != NULL) {
+        vma = vma_first(mm);
         QTAILQ_REMOVE(&mm->mm_mmap, vma, vma_link);
         g_free(vma);
     }
@@ -1343,8 +1316,10 @@ static int vma_add_mapping(struct mm_struct *mm, target_ulong start,
 {
     struct vm_area_struct *vma;
 
-    if ((vma = g_malloc0(sizeof (*vma))) == NULL)
-        return (-1);
+    vma = g_malloc0(sizeof(*vma));
+    if (vma == NULL) {
+        return -1;
+    }
 
     vma->vma_start = start;
     vma->vma_end = end;
@@ -1353,13 +1328,13 @@ static int vma_add_mapping(struct mm_struct *mm, target_ulong start,
     QTAILQ_INSERT_TAIL(&mm->mm_mmap, vma, vma_link);
     mm->mm_count++;
 
-    return (0);
+    return 0;
 }
 
 static int vma_get_mapping_count(const struct mm_struct *mm)
 {
 
-    return (mm->mm_count);
+    return mm->mm_count;
 }
 
 /*
@@ -1369,8 +1344,9 @@ static abi_ulong vma_dump_size(const struct vm_area_struct *vma)
 {
 
     /* if we cannot even read the first page, skip it */
-    if (!access_ok(VERIFY_READ, vma->vma_start, TARGET_PAGE_SIZE))
-        return (0);
+    if (!access_ok(VERIFY_READ, vma->vma_start, TARGET_PAGE_SIZE)) {
+        return 0;
+    }
 
     /*
      * Usually we don't dump executable pages as they contain
@@ -1383,7 +1359,7 @@ static abi_ulong vma_dump_size(const struct vm_area_struct *vma)
     if (vma->vma_flags & PROT_EXEC) {
         char page[TARGET_PAGE_SIZE];
 
-        copy_from_user(page, vma->vma_start, sizeof (page));
+        copy_from_user(page, vma->vma_start, sizeof(page));
         if ((page[EI_MAG0] == ELFMAG0) &&
             (page[EI_MAG1] == ELFMAG1) &&
             (page[EI_MAG2] == ELFMAG2) &&
@@ -1392,11 +1368,11 @@ static abi_ulong vma_dump_size(const struct vm_area_struct *vma)
              * Mappings are possibly from ELF binary.  Don't dump
              * them.
              */
-            return (0);
+            return 0;
         }
     }
 
-    return (vma->vma_end - vma->vma_start);
+    return vma->vma_end - vma->vma_start;
 }
 
 static int vma_walker(void *priv, target_ulong start, target_ulong end,
@@ -1405,7 +1381,7 @@ static int vma_walker(void *priv, target_ulong start, target_ulong end,
     struct mm_struct *mm = (struct mm_struct *)priv;
 
     vma_add_mapping(mm, start, end, flags);
-    return (0);
+    return 0;
 }
 
 
@@ -1435,12 +1411,12 @@ static int core_dump_filename(const TaskState *ts, char *buf,
     if (gettimeofday(&tv, NULL) < 0) {
         (void) fprintf(stderr, "unable to get current timestamp: %s",
                 strerror(errno));
-        return (-1);
+        return -1;
     }
 
     filename = strdup(ts->bprm->filename);
     base_filename = basename(filename);
-    (void) strftime(timestamp, sizeof (timestamp), "%Y%m%d-%H%M%S",
+    (void) strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S",
             localtime_r(&tv.tv_sec, &tm));
     (void) snprintf(buf, bufsize, "qemu_%s_%s_%d.core",
             base_filename, timestamp, (int)getpid());
@@ -1456,7 +1432,7 @@ static int core_dump_filename(const TaskState *ts, char *buf,
     free(filename);
 #endif /* ! QEMU_LONG_CORE_FILENAME */
 
-    return (0);
+    return 0;
 }
 
 
@@ -1485,7 +1461,6 @@ static void fill_elf_header(struct elfhdr *elf, int segs, uint16_t machine,
     elf->e_flags = flags;
     elf->e_ehsize = sizeof(struct elfhdr);
     elf->e_phentsize = sizeof(struct elf_phdr);
-    // elf->e_shentsize = sizeof(struct elf_phdr);
     elf->e_phnum = segs;
     elf->e_shstrndx = SHN_UNDEF;
 
@@ -1515,17 +1490,17 @@ static void fill_note(struct memelfnote *note, const char *name, int type,
     namesz = strlen(name) + 1;
     note->name = name;
     note->namesz = namesz;
-    note->namesz_rounded = roundup2(namesz, sizeof (int32_t));
+    note->namesz_rounded = roundup2(namesz, sizeof(int32_t));
     note->type = type;
     note->addsize = tswap32(addsize);
 
     if (addsize) {
         note->datasz = sz;
         note->datasz_rounded =
-            roundup2((sz + sizeof(uint32_t)), sizeof (int32_t));
+            roundup2((sz + sizeof(uint32_t)), sizeof(int32_t));
     } else {
         note->datasz = sz;
-        note->datasz_rounded = roundup2(sz, sizeof (int32_t));
+        note->datasz_rounded = roundup2(sz, sizeof(int32_t));
     }
     note->data = data;
 
@@ -1533,7 +1508,7 @@ static void fill_note(struct memelfnote *note, const char *name, int type,
      * We calculate rounded up note size here as specified by
      * ELF document.
      */
-    note->notesz = sizeof (struct elf_note) +
+    note->notesz = sizeof(struct elf_note) +
         note->namesz_rounded + note->datasz_rounded;
 }
 
@@ -1545,7 +1520,7 @@ static void fill_note(struct memelfnote *note, const char *name, int type,
 static void init_note_info(struct elf_note_info *info)
 {
 
-    memset(info, 0, sizeof (*info));
+    memset(info, 0, sizeof(*info));
     QTAILQ_INIT(&info->thread_list);
 }
 
@@ -1553,42 +1528,28 @@ static void free_note_info(struct elf_note_info *info)
 {
     struct elf_thread_status *ets;
 
-    if (info->prpsinfo)
-        g_free(info->prpsinfo);
-
-    if (info->prstatus)
-        g_free(info->prstatus);
-    if (info->fpregs)
-        g_free(info->fpregs);
-    if (info->thrmisc)
-        g_free(info->thrmisc);
+    g_free(info->prpsinfo);
+    g_free(info->prstatus);
+    g_free(info->fpregs);
+    g_free(info->thrmisc);
 
     while (!QTAILQ_EMPTY(&info->thread_list)) {
         ets = QTAILQ_FIRST(&info->thread_list);
         QTAILQ_REMOVE(&info->thread_list, ets, ets_link);
         if (ets) {
-            if (ets->prstatus)
-                g_free(ets->prstatus);
-            if (ets->fpregs)
-                g_free(ets->fpregs);
-            if (ets->thrmisc)
-                g_free(ets->thrmisc);
+            g_free(ets->prstatus);
+            g_free(ets->fpregs);
+            g_free(ets->thrmisc);
             g_free(ets);
         }
     }
 
-    if (info->kiproc)
-        g_free(info->kiproc);
-    if (info->kifiles)
-        g_free(info->kifiles);
-    if (info->kivmentries)
-        g_free(info->kivmentries);
-    if (info->groups)
-        g_free(info->groups);
-    if (info->rlimits)
-        g_free(info->rlimits);
-    if (info->auxv)
-        g_free(info->auxv);
+    g_free(info->kiproc);
+    g_free(info->kifiles);
+    g_free(info->kivmentries);
+    g_free(info->groups);
+    g_free(info->rlimits);
+    g_free(info->auxv);
 }
 
 static int dump_write(int fd, const void *ptr, size_t size)
@@ -1600,7 +1561,8 @@ static int dump_write(int fd, const void *ptr, size_t size)
 
     bytes_written = 0;
     getrlimit(RLIMIT_CORE, &dumpsize);
-    if ((pos = lseek(fd, 0, SEEK_CUR))==-1) {
+    pos = lseek(fd, 0, SEEK_CUR);
+    if (pos == -1) {
         if (errno == ESPIPE) { /* not a seekable stream */
             bytes_left = size;
         } else {
@@ -1612,7 +1574,7 @@ static int dump_write(int fd, const void *ptr, size_t size)
         } else if (dumpsize.rlim_cur == RLIM_INFINITY) {
             bytes_left = size;
         } else {
-            size_t limit_left=dumpsize.rlim_cur - pos;
+            size_t limit_left = dumpsize.rlim_cur - pos;
             bytes_left = limit_left >= size ? size : limit_left ;
         }
     }
@@ -1624,17 +1586,18 @@ static int dump_write(int fd, const void *ptr, size_t size)
     do {
         bytes_written = write(fd, bufp, bytes_left);
         if (bytes_written < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
                 continue;
-            return (-1);
+            }
+            return -1;
         } else if (bytes_written == 0) { /* eof */
-            return (-1);
+            return -1;
         }
         bufp += bytes_written;
         bytes_left -= bytes_written;
     } while (bytes_left > 0);
 
-    return (0);
+    return 0;
 }
 
 
@@ -1646,30 +1609,25 @@ static int write_note(struct memelfnote *men, int fd)
     en.n_descsz = men->datasz_rounded;
     en.n_type = men->type;
 
-#if 0
-    printf("n_type=%d n_namesz=%ld n_descsz=%ld\n",
-            en.n_type, (long)en.n_namesz, (long)en.n_descsz);
-#endif
-
     bswap_note(&en);
 
     if (dump_write(fd, &en, sizeof(en)) != 0) {
-        return (-1);
+        return -1;
     }
     if (dump_write(fd, men->name, men->namesz_rounded) != 0) {
-        return (-1);
+        return -1;
     }
 
     if (men->addsize)
-        if (dump_write(fd, &men->addsize, sizeof (uint32_t)) != 0) {
-            return (-1);
+        if (dump_write(fd, &men->addsize, sizeof(uint32_t)) != 0) {
+            return -1;
         }
 
     if (dump_write(fd, men->data, men->datasz) != 0) {
-        return (-1);
+        return -1;
     }
 
-    return (0);
+    return 0;
 }
 
 static int write_note_info(struct elf_note_info *info, int fd)
@@ -1678,21 +1636,26 @@ static int write_note_info(struct elf_note_info *info, int fd)
     int i, error = 0;
 
     /* write prpsinfo, prstatus, fpregs, and thrmisc */
-    for (i = 0; i < 4; i++)
-        if ((error = write_note(&info->notes[i], fd)) != 0) {
-            return (error);
+    for (i = 0; i < 4; i++) {
+        error = write_note(&info->notes[i], fd);
+        if (error != 0) {
+            return error;
         }
+    }
 
     /* write prstatus, fpregset, & thrmisc for each additional thread */
     QTAILQ_FOREACH(ets, &info->thread_list, ets_link) {
-        if ((error = write_note(&ets->notes[0], fd)) != 0) {
-            return (error);
+        error = write_note(&ets->notes[0], fd);
+        if (error != 0) {
+            return error;
         }
-        if ((error = write_note(&ets->notes[1], fd)) != 0) {
-            return (error);
+        error = write_note(&ets->notes[1], fd);
+        if (error != 0) {
+            return error;
         }
-        if ((error = write_note(&ets->notes[2], fd)) != 0) {
-            return (error);
+        error = write_note(&ets->notes[2], fd);
+        if (error != 0) {
+            return error;
         }
     }
 
@@ -1700,18 +1663,20 @@ static int write_note_info(struct elf_note_info *info, int fd)
      * write kiproc, kifiles, kivmmap, groups, umask, rlimits, osrel,
      * psstrings, and auxv.
      */
-    for (i = 4; i < info->numnote; i++)
-        if ((error = write_note(&info->notes[i], fd)) != 0) {
-            return (error);
+    for (i = 4; i < info->numnote; i++) {
+        error = write_note(&info->notes[i], fd);
+        if (error != 0) {
+            return error;
         }
+    }
 
-    return (0);
+    return 0;
 }
 
 static size_t note_size(const struct memelfnote *note)
 {
 
-    return (note->notesz);
+    return note->notesz;
 }
 
 static abi_long fill_thread_info(struct elf_note_info *info, int signr,
@@ -1721,21 +1686,22 @@ static abi_long fill_thread_info(struct elf_note_info *info, int signr,
     TaskState *ts = (TaskState *)cpu->opaque;
     struct elf_thread_status *ets;
 
-    ets = g_malloc0(sizeof (*ets));
-    if (ets == NULL)
-        return (-TARGET_ENOMEM);
+    ets = g_malloc0(sizeof(*ets));
+    if (ets == NULL) {
+        return -TARGET_ENOMEM;
+    }
     ets->num_notes = 3;
 
-    ets->prstatus = g_malloc0(sizeof (struct target_prstatus));
+    ets->prstatus = g_malloc0(sizeof(struct target_prstatus));
     if (ets->prstatus == NULL) {
         return -TARGET_ENOMEM;
     }
     fill_prstatus(env, ets->prstatus, signr);
     fill_note(&ets->notes[0], "FreeBSD", TARGET_NT_PRSTATUS,
-            sizeof (struct target_prstatus), &ets->prstatus, 0);
+            sizeof(struct target_prstatus), &ets->prstatus, 0);
 
 
-    ets->fpregs = g_malloc0(sizeof (*ets->fpregs));
+    ets->fpregs = g_malloc0(sizeof(*ets->fpregs));
     if (ets->fpregs == NULL) {
         return -TARGET_ENOMEM;
     }
@@ -1743,7 +1709,7 @@ static abi_long fill_thread_info(struct elf_note_info *info, int signr,
     fill_note(&ets->notes[1], "FreeBSD", TARGET_NT_FPREGSET,
             sizeof(*ets->fpregs), ets->fpregs, 0);
 
-    ets->thrmisc = g_malloc0(sizeof (*ets->thrmisc));
+    ets->thrmisc = g_malloc0(sizeof(*ets->thrmisc));
     if (ets->thrmisc == NULL) {
         return -TARGET_ENOMEM;
     }
@@ -1756,20 +1722,21 @@ static abi_long fill_thread_info(struct elf_note_info *info, int signr,
     info->notes_size += (note_size(&ets->notes[0]) +
         note_size(&ets->notes[1]) + note_size(&ets->notes[2]));
 
-    return (0);
+    return 0;
 }
 
 static abi_long fill_kiproc(TaskState *ts, pid_t pid,
         struct target_kinfo_proc *tkip)
 {
     abi_long ret;
-    size_t len = sizeof (*tkip);
+    size_t len = sizeof(*tkip);
     struct bsd_binprm *bprm = ts->bprm;
 
     ret = do_sysctl_kern_getprocs(KERN_PROC_PID, pid, len, tkip, &len);
 
-    if (is_error(ret))
+    if (is_error(ret)) {
         g_free(tkip);
+    }
 
     /* Fix up some to be the target values. */
     strncpy(tkip->ki_tdname, basename(bprm->argv[0]), TARGET_TDNAMLEN);
@@ -1795,18 +1762,14 @@ static abi_long fill_auxv(void *auxv, size_t *sz)
 
     *sz = target_auxents_sz;
 
-    return (copy_from_user(auxv, target_auxents, target_auxents_sz));
+    return copy_from_user(auxv, target_auxents, target_auxents_sz);
 }
 
 static abi_long fill_psstrings(abi_ulong *psstrings)
 {
 
-#if defined(TARGET_PS_STRINGS)
     *psstrings = tswapal(TARGET_PS_STRINGS);
-#else
-#   warning "TARGET_PS_STRINGS is not defined."
-    *psstrings = 0;
-#endif
+
     return 0;
 }
 
@@ -1820,7 +1783,7 @@ static int fill_note_info(struct elf_note_info *info,
     int i, err, numnotes = 0;
     pid_t pid = getpid();
 
-    info->notes = g_malloc0(MAXNUMNOTES * sizeof (struct memelfnote));
+    info->notes = g_malloc0(MAXNUMNOTES * sizeof(struct memelfnote));
     if (info->notes == NULL) {
         err = ENOMEM;
         goto edone;
@@ -1832,28 +1795,30 @@ static int fill_note_info(struct elf_note_info *info,
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_prpsinfo(ts, &info->prpsinfo)) != 0) {
+    err = fill_prpsinfo(ts, &info->prpsinfo);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PRPSINFO,
-            sizeof (*info->prpsinfo), info->prpsinfo, 0);
+            sizeof(*info->prpsinfo), info->prpsinfo, 0);
 
     /* prstatus, fpregs, and thrmisc for main thread. */
 
     /* NT_PRSTATUS */
-    info->prstatus = g_malloc0(sizeof (struct target_prstatus));
+    info->prstatus = g_malloc0(sizeof(struct target_prstatus));
     if (info->prstatus == NULL) {
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_prstatus(env, info->prstatus, signr)) != 0) {
+    err = fill_prstatus(env, info->prstatus, signr);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PRSTATUS,
-            sizeof (struct target_prstatus), info->prstatus, 0);
+            sizeof(struct target_prstatus), info->prstatus, 0);
 
     /* NT_FPREGSET */
-    info->fpregs = g_malloc0(sizeof (*info->fpregs));
+    info->fpregs = g_malloc0(sizeof(*info->fpregs));
     if (info->fpregs == NULL) {
         err = -TARGET_ENOMEM;
         goto edone;
@@ -1863,7 +1828,7 @@ static int fill_note_info(struct elf_note_info *info,
             sizeof(*info->fpregs), info->fpregs, 0);
 
     /* NT_THRMISC */
-    info->thrmisc = g_malloc0(sizeof (*info->thrmisc));
+    info->thrmisc = g_malloc0(sizeof(*info->thrmisc));
     if (info->thrmisc == NULL) {
         err = -TARGET_ENOMEM;
         goto edone;
@@ -1873,17 +1838,18 @@ static int fill_note_info(struct elf_note_info *info,
             sizeof(*info->thrmisc), info->thrmisc, 0);
 
     /* NT_PROCSTAT_PROC */
-    info->kiproc = g_malloc0(sizeof (*info->kiproc));
+    info->kiproc = g_malloc0(sizeof(*info->kiproc));
     if (info->kiproc == NULL) {
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_kiproc(ts, pid, info->kiproc)) != 0) {
+    err = fill_kiproc(ts, pid, info->kiproc);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_PROC,
-            sizeof (*info->kiproc), info->kiproc,
-            sizeof (struct target_kinfo_proc));
+            sizeof(*info->kiproc), info->kiproc,
+            sizeof(struct target_kinfo_proc));
 
     /* NT_PROCSTAT_FILES */
     info->kifiles = alloc_kifiles(pid, &info->kifiles_sz);
@@ -1891,12 +1857,13 @@ static int fill_note_info(struct elf_note_info *info,
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_kifiles(pid, info->kifiles, &info->kifiles_sz)) != 0) {
+    err = fill_kifiles(pid, info->kifiles, &info->kifiles_sz);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_FILES,
             info->kifiles_sz, info->kifiles,
-            sizeof (struct target_kinfo_file));
+            sizeof(struct target_kinfo_file));
 
     /* NT_PROCSTAT_VMMAP */
     info->kivmentries = alloc_kivmentries(pid, &info->kivmentries_sz);
@@ -1904,13 +1871,13 @@ static int fill_note_info(struct elf_note_info *info,
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_kivmentries(pid, info->kivmentries,
-                    &info->kivmentries_sz)) != 0) {
+    err = fill_kivmentries(pid, info->kivmentries, &info->kivmentries_sz);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_VMMAP,
             info->kivmentries_sz, info->kivmentries,
-            sizeof (struct target_kinfo_vmentry));
+            sizeof(struct target_kinfo_vmentry));
 
     /* NT_PROCSTAT_GROUPS */
     info->groups = alloc_groups(&info->groups_sz);
@@ -1918,50 +1885,44 @@ static int fill_note_info(struct elf_note_info *info,
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_groups(info->groups, &info->groups_sz)) != 0) {
+    err = fill_groups(info->groups, &info->groups_sz);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_GROUPS,
             info->groups_sz, info->groups,
-            sizeof (uint32_t));
-
-#if 0
-    /* NT_PROCSTAT_UMASK */
-    if ((err = fill_umask(pid, &info->umask)) != 0) {
-        goto edone;
-    }
-    fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_UMASK,
-            /* sizeof (info->umask) */ sizeof (uint16_t), &info->umask,
-            sizeof (uint16_t));
-#endif
+            sizeof(uint32_t));
 
     /* NT_PROCSTAT_RLIMIT */
     info->rlimits = g_malloc0(RLIM_NLIMITS * sizeof(struct rlimit));
     if (info->rlimits == NULL) {
-        return (-TARGET_ENOMEM);
+        return -TARGET_ENOMEM;
     }
-    if ((err = fill_rlimits(info->rlimits)) != 0) {
+    err = fill_rlimits(info->rlimits);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_RLIMIT,
             sizeof(struct rlimit) * RLIM_NLIMITS, info->rlimits,
-            sizeof (struct rlimit) * RLIM_NLIMITS);
+            sizeof(struct rlimit) * RLIM_NLIMITS);
 
     /* NT_PROCSTAT_OSREL */
-    if ((err = fill_osreldate(&info->osreldate)) != 0) {
+    err = fill_osreldate(&info->osreldate);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_OSREL,
-            sizeof (info->osreldate), &info->osreldate,
-            sizeof (int32_t));
+            sizeof(info->osreldate), &info->osreldate,
+            sizeof(int32_t));
 
     /* NT_PROCSTAT_PSSTRINGS */
-    if ((err = fill_psstrings(&info->psstrings)) != 0) {
+    err = fill_psstrings(&info->psstrings);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_PSSTRINGS,
-            sizeof (info->psstrings), &info->psstrings,
-            sizeof (abi_ulong));
+            sizeof(info->psstrings), &info->psstrings,
+            sizeof(abi_ulong));
 
     /* NT_PROCSTAT_AUXV */
     info->auxv = g_malloc0(target_auxents_sz);
@@ -1969,12 +1930,13 @@ static int fill_note_info(struct elf_note_info *info,
         err = -TARGET_ENOMEM;
         goto edone;
     }
-    if ((err = fill_auxv(info->auxv, &info->auxv_sz)) != 0) {
+    err = fill_auxv(info->auxv, &info->auxv_sz);
+    if (err != 0) {
         goto edone;
     }
     fill_note(&info->notes[numnotes++], "FreeBSD", TARGET_NT_PROCSTAT_AUXV,
             info->auxv_sz, info->auxv,
-            sizeof (struct target_elf_auxinfo));
+            sizeof(struct target_elf_auxinfo));
 
     assert(numnotes <= MAXNUMNOTES);
     info->numnote = numnotes;
@@ -1989,19 +1951,19 @@ static int fill_note_info(struct elf_note_info *info,
         if (cpu == thread_cpu) {
             continue;
         }
-        if ((err = fill_thread_info(info, signr,
-                        (CPUArchState *)cpu->env_ptr)) != 0) {
+        err = fill_thread_info(info, signr, (CPUArchState *)cpu->env_ptr);
+        if (err != 0) {
             cpu_list_unlock();
             goto edone;
         }
     }
     cpu_list_unlock();
 
-    return (0);
+    return 0;
 
 edone:
     free_note_info(info);
-    return (err);
+    return err;
 }
 
 static int elf_core_dump(int signr, CPUArchState *env)
@@ -2023,23 +1985,29 @@ static int elf_core_dump(int signr, CPUArchState *env)
 
     errno = 0;
     getrlimit(RLIMIT_CORE, &dumpsize);
-    if (dumpsize.rlim_cur == 0)
+    if (dumpsize.rlim_cur == 0) {
         return 0;
+    }
 
-    if (core_dump_filename(ts, corefile, sizeof (corefile)) < 0)
+    if (core_dump_filename(ts, corefile, sizeof(corefile)) < 0) {
         return -(errno);
+    }
 
-    if ((fd = open(corefile, O_WRONLY | O_CREAT,
-                    S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)) < 0)
+    fd = open(corefile, O_WRONLY | O_CREAT,
+              S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd < 0) {
         return -(errno);
+    }
 
     /*
      * Walk through target process memory mappings and
      * set up structure containing this information.  After
      * this point vma_xxx functions can be used.
      */
-    if ((mm = vma_init()) == NULL)
+    mm = vma_init();
+    if (mm == NULL) {
         goto out;
+    }
 
     walk_memory_regions(mm, vma_walker);
     segs = vma_get_mapping_count(mm);
@@ -2051,8 +2019,9 @@ static int elf_core_dump(int signr, CPUArchState *env)
      * See kern/imgact_elf.c  __elfN(corehdr)().
      */
     fill_elf_header(&elf, segs + 1, ELF_MACHINE, ts->info->elf_flags);
-    if (dump_write(fd, &elf, sizeof (elf)) != 0)
+    if (dump_write(fd, &elf, sizeof(elf)) != 0) {
         goto out;
+    }
 
     /*
      * Construct the note segment and write it out.
@@ -2061,14 +2030,14 @@ static int elf_core_dump(int signr, CPUArchState *env)
         goto out;
     }
 
-    offset += sizeof (elf);                             /* elf header */
-    offset += (segs + 1) * sizeof (struct elf_phdr);    /* program headers */
+    offset += sizeof(elf);                             /* elf header */
+    offset += (segs + 1) * sizeof(struct elf_phdr);    /* program headers */
 
     /* Write out notes program header. */
     fill_elf_note_phdr(&phdr, info.notes_size, offset);
 
     offset += info.notes_size;
-    if (dump_write(fd, &phdr, sizeof (phdr)) != 0) {
+    if (dump_write(fd, &phdr, sizeof(phdr)) != 0) {
         goto out;
     }
 
@@ -2085,7 +2054,7 @@ static int elf_core_dump(int signr, CPUArchState *env)
      * See cb_put_phdr() in sys/kern/imgact_ef.c
      */
     for (vma = vma_first(mm); vma != NULL; vma = vma_next(vma)) {
-        (void) memset(&phdr, 0, sizeof (phdr));
+        (void) memset(&phdr, 0, sizeof(phdr));
 
         phdr.p_type = PT_LOAD;
         phdr.p_offset = offset;
@@ -2095,27 +2064,31 @@ static int elf_core_dump(int signr, CPUArchState *env)
         offset += phdr.p_filesz;
         phdr.p_memsz = vma->vma_end - vma->vma_start;
         phdr.p_flags = vma->vma_flags & PROT_READ ? PF_R : 0;
-        if (vma->vma_flags & PROT_WRITE)
+        if (vma->vma_flags & PROT_WRITE) {
             phdr.p_flags |= PF_W;
-        if (vma->vma_flags & PROT_EXEC)
+        }
+        if (vma->vma_flags & PROT_EXEC) {
             phdr.p_flags |= PF_X;
+        }
         phdr.p_align = ELF_EXEC_PAGESIZE;  /* or PAGE_SIZE? */
 
         bswap_phdr(&phdr, 1);
-        dump_write(fd, &phdr, sizeof (phdr));
+        dump_write(fd, &phdr, sizeof(phdr));
     }
 
     /*
      * Next write notes just after program headers.
      */
-    if (write_note_info(&info, fd) < 0)
+    if (write_note_info(&info, fd) < 0) {
         goto out;
+    }
 
     /*
      * Align data to page boundary.
      */
-    if (lseek(fd, data_offset, SEEK_SET) != data_offset)
+    if (lseek(fd, data_offset, SEEK_SET) != data_offset) {
         goto out;
+    }
 
     /*
      * Finally, dump the process memory into the corefile as well.
@@ -2135,28 +2108,31 @@ static int elf_core_dump(int signr, CPUArchState *env)
              * Read in page from target process memory and
              * write it to coredump file.
              */
-            error = copy_from_user(page, addr, sizeof (page));
+            error = copy_from_user(page, addr, sizeof(page));
             if (error != 0) {
                 (void) fprintf(stderr, "unable to dump " TARGET_ABI_FMT_lx "\n",
                         addr);
                 errno = -error;
                 goto out;
             }
-            if (dump_write(fd, page, TARGET_PAGE_SIZE) < 0)
+            if (dump_write(fd, page, TARGET_PAGE_SIZE) < 0) {
                 goto out;
+            }
         }
     }
     errno = 0;
 
 out:
-    if (mm != NULL)
+    if (mm != NULL) {
         vma_delete(mm);
+    }
 
-    (void) close(fd);
+    (void)close(fd);
 
-    if (errno != 0)
-        return (-errno);
-    return (0);
+    if (errno != 0) {
+        return -errno;
+    }
+    return 0;
 }
 
 #endif /* USE_ELF_CORE_DUMP */
