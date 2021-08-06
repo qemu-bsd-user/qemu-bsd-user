@@ -19,12 +19,6 @@
 
 #include "qemu/osdep.h"
 
-#include <err.h>
-#include <libgen.h>
-#include <sys/mman.h>
-#include <sys/sysctl.h>
-#include <sys/resource.h>
-
 #include "qemu.h"
 #include "disas/disas.h"
 #include "qemu/path.h"
@@ -38,29 +32,14 @@ static size_t target_auxents_sz;   /* Size of AUX entries including AT_NULL */
 #include "target_os_thread.h"
 #include "target_os_user.h"
 
-#define ELF_NOTE_ROUNDSIZE  4
-#define ELF_MACHINE ELF_ARCH
-
-#define TARGET_NT_PRSTATUS              1       /* Process status. */
-#define TARGET_NT_FPREGSET              2       /* Floating point registers. */
-#define TARGET_NT_PRPSINFO              3       /* Process state info. */
-#define TARGET_NT_THRMISC               7       /* Thread miscellaneous info. */
-#define TARGET_NT_PROCSTAT_PROC         8       /* Procstat proc data. */
-#define TARGET_NT_PROCSTAT_FILES        9       /* Procstat files data. */
-#define TARGET_NT_PROCSTAT_VMMAP       10       /* Procstat vmmap data. */
-#define TARGET_NT_PROCSTAT_GROUPS      11       /* Procstat groups data. */
-#define TARGET_NT_PROCSTAT_UMASK       12       /* Procstat umask data. */
-#define TARGET_NT_PROCSTAT_RLIMIT      13       /* Procstat rlimit data. */
-#define TARGET_NT_PROCSTAT_OSREL       14       /* Procstat osreldate data. */
-#define TARGET_NT_PROCSTAT_PSSTRINGS   15       /* Procstat ps_strings data. */
-#define TARGET_NT_PROCSTAT_AUXV        16       /* Procstat auxv data. */
-
-static int elf_core_dump(int signr, CPUArchState *env);
-static int load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr,
-    int fd, abi_ulong rbase, abi_ulong *baddrp);
-
 abi_ulong target_stksiz;
 abi_ulong target_stkbas;
+
+#ifdef USE_ELF_CORE_DUMP
+static int elf_core_dump(int signr, CPUArchState *env);
+#endif
+static int load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr,
+    int fd, abi_ulong rbase, abi_ulong *baddrp);
 
 static inline void memcpy_fromfs(void *to, const void *from, unsigned long n)
 {
@@ -853,7 +832,36 @@ int load_elf_binary(struct bsd_binprm *bprm, struct target_pt_regs *regs,
     return 0;
 }
 
+void do_init_thread(struct target_pt_regs *regs, struct image_info *infop)
+{
+
+    target_thread_init(regs, infop);
+}
+
 #ifdef USE_ELF_CORE_DUMP
+#include <err.h>
+#include <libgen.h>
+#include <sys/mman.h>
+#include <sys/sysctl.h>
+#include <sys/resource.h>
+
+#define ELF_NOTE_ROUNDSIZE  4
+#define ELF_MACHINE ELF_ARCH
+
+#define TARGET_NT_PRSTATUS              1       /* Process status. */
+#define TARGET_NT_FPREGSET              2       /* Floating point registers. */
+#define TARGET_NT_PRPSINFO              3       /* Process state info. */
+#define TARGET_NT_THRMISC               7       /* Thread miscellaneous info. */
+#define TARGET_NT_PROCSTAT_PROC         8       /* Procstat proc data. */
+#define TARGET_NT_PROCSTAT_FILES        9       /* Procstat files data. */
+#define TARGET_NT_PROCSTAT_VMMAP       10       /* Procstat vmmap data. */
+#define TARGET_NT_PROCSTAT_GROUPS      11       /* Procstat groups data. */
+#define TARGET_NT_PROCSTAT_UMASK       12       /* Procstat umask data. */
+#define TARGET_NT_PROCSTAT_RLIMIT      13       /* Procstat rlimit data. */
+#define TARGET_NT_PROCSTAT_OSREL       14       /* Procstat osreldate data. */
+#define TARGET_NT_PROCSTAT_PSSTRINGS   15       /* Procstat ps_strings data. */
+#define TARGET_NT_PROCSTAT_AUXV        16       /* Procstat auxv data. */
+
 /*
  * Write out ELF coredump.
  *
@@ -2136,9 +2144,3 @@ out:
 }
 
 #endif /* USE_ELF_CORE_DUMP */
-
-void do_init_thread(struct target_pt_regs *regs, struct image_info *infop)
-{
-
-    target_thread_init(regs, infop);
-}
