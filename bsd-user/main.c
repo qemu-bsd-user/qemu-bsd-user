@@ -290,7 +290,6 @@ int main(int argc, char **argv)
     const char *gdbstub_port = 0;
     char **target_environ, **wrk;
     envlist_t *envlist = NULL;
-    char *trace_file = NULL;
     bsd_type = HOST_DEFAULT_BSD_TYPE;
     char * argv0 = NULL;
 
@@ -413,7 +412,6 @@ int main(int argc, char **argv)
         } else if (!strcmp(r, "strace")) {
             do_strace = 1;
         } else if (!strcmp(r, "trace")) {
-            g_free(trace_file);
             trace_opt_parse(optarg);
         } else if (!strcmp(r, "0")) {
             argv0 = argv[optind++];    
