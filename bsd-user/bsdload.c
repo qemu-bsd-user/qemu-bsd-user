@@ -144,30 +144,11 @@ static bool is_there(const char *candidate)
     return false;
 }
 
-static bool find_in_path(char *path, const char *filename, char *retpath,
-                         size_t rpsize)
-{
-    const char *d;
-
-    while ((d = strsep(&path, ":")) != NULL) {
-        if (*d == '\0') {
-            d = ".";
-        }
-        if (snprintf(retpath, rpsize, "%s/%s", d, filename) >= (int)rpsize) {
-            continue;
-        }
-        if (is_there((const char *)retpath)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 int loader_exec(const char *filename, char **argv, char **envp,
                 struct target_pt_regs *regs, struct image_info *infop,
                 struct bsd_binprm *bprm)
 {
-    char *p, *path = NULL, fullpath[PATH_MAX];
+    char *path, fullpath[PATH_MAX];
     int retval, i;
 
     bprm->p = TARGET_PAGE_SIZE * MAX_ARG_PAGES;
@@ -184,38 +165,20 @@ int loader_exec(const char *filename, char **argv, char **envp,
         if (!is_there(path)) {
             return -1;
         }
-        retval = open(path, O_RDONLY);
-        bprm->fullpath = g_strdup(path);
     } else {
-        p = getenv("PATH");
-        if (p == NULL) {
-            return -1;
-        }
-
-        path = g_strdup(p);
+        path = g_find_program_in_path(filename);
         if (path == NULL) {
-            fprintf(stderr, "Out of memory\n");
             return -1;
         }
-
-        if (!find_in_path(path, filename, fullpath, sizeof(fullpath))) {
-            return -1;
-        }
-        retval = open(fullpath, O_RDONLY);
-        bprm->fullpath = g_strdup(fullpath);
-
-        g_free(path);
     }
 
-    /* bprm->fullpath must be populated. */
-    if (bprm->fullpath == NULL) {
-        fprintf(stderr, "Out of memory\n");
-        return -1;
-    }
+    retval = open(path, O_RDONLY);
     if (retval < 0) {
+        g_free(path);
         return retval;
     }
 
+    bprm->fullpath = path;
     bprm->fd = retval;
     bprm->filename = (char *)filename;
     bprm->argc = count(argv);
