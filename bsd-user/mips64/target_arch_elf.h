@@ -31,6 +31,9 @@
 #endif
 #define ELF_ARCH    EM_MIPS
 
+/* Note: FreeBSD does not implement hwcap nor hwcap2 on mips */
+#define ELF_HWCAP 0
+
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE        4096
 
