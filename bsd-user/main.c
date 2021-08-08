@@ -218,9 +218,11 @@ CPUArchState *cpu_copy(CPUArchState *env)
 
     memcpy(new_env, env, sizeof(CPUArchState));
 
-    /* Clone all break/watchpoints.
-       Note: Once we support ptrace with hw-debug register access, make sure
-       BP_CPU break/watchpoints are handled correctly on clone. */
+    /*
+     * Clone all break/watchpoints.
+     * Note: Once we support ptrace with hw-debug register access, make sure
+     * BP_CPU break/watchpoints are handled correctly on clone.
+     */
     QTAILQ_INIT(&cpu->breakpoints);
     QTAILQ_INIT(&cpu->watchpoints);
     QTAILQ_FOREACH(bp, &cpu->breakpoints, entry) {
@@ -268,7 +270,7 @@ static void save_proc_pathname(char *argv0)
     mib[2] = KERN_PROC_PATHNAME;
     mib[3] = -1;
 
-    len = PATH_MAX;
+    len = sizeof(qemu_proc_pathname);
     if (sysctl(mib, 4, qemu_proc_pathname, &len, NULL, 0)) {
         perror("sysctl");
     }
@@ -287,7 +289,7 @@ int main(int argc, char **argv)
     CPUState *cpu;
     int optind, rv;
     const char *r;
-    const char *gdbstub_port = 0;
+    const char *gdbstub = NULL;
     char **target_environ, **wrk;
     envlist_t *envlist = NULL;
     bsd_type = HOST_DEFAULT_BSD_TYPE;
@@ -376,7 +378,7 @@ int main(int argc, char **argv)
                 exit(1);
             }
         } else if (!strcmp(r, "g")) {
-            gdbstub_port = argv[optind++];
+            gdbstub = g_strdup(argv[optind++]);
         } else if (!strcmp(r, "r")) {
             qemu_uname_release = argv[optind++];
         } else if (!strcmp(r, "cpu")) {
@@ -414,7 +416,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(r, "trace")) {
             trace_opt_parse(optarg);
         } else if (!strcmp(r, "0")) {
-            argv0 = argv[optind++];    
+            argv0 = argv[optind++];
         } else {
             usage();
         }
@@ -544,8 +546,8 @@ int main(int argc, char **argv)
 
     target_cpu_init(env, regs);
 
-    if (gdbstub_port) {
-        gdbserver_start (gdbstub_port);
+    if (gdbstub) {
+        gdbserver_start(gdbstub);
         gdb_handlesig(cpu, 0);
     }
     cpu_loop(env);
