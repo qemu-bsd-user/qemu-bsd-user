@@ -28,6 +28,20 @@
 #define ELF_DATA    ELFDATA2LSB
 #define ELF_ARCH    EM_RISCV
 
+/*
+ * Note: FreeBSD returns things a litle differently than this, but this is as
+ * close we have in the emulator. The FreeBSD/riscv64 kernel (in identcpu.c)
+ * returns the common bits set in each of the CPUs' ISA strings. Also, unlike
+ * linux, we don't mask out specific bits.
+ */
+#define ELF_HWCAP get_elf_hwcap()
+static uint32_t get_elf_hwcap(void)
+{
+    RISCVCPU *cpu = RISCV_CPU(thread_cpu);
+
+    return cpu->env.misa;
+}
+
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE        4096
 
