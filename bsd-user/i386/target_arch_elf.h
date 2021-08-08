@@ -21,11 +21,10 @@
 
 #define ELF_START_MMAP 0x80000000
 #define ELF_ET_DYN_LOAD_ADDR    0x01001000
-#define elf_check_arch(x) ( ((x) == EM_386) || ((x) == EM_486) )
+#define elf_check_arch(x) (((x) == EM_386) || ((x) == EM_486))
 
-/*
- * These are used to set parameters in the core dumps.
- */
+#define ELF_HWCAP 0
+
 #define ELF_CLASS       ELFCLASS32
 #define ELF_DATA        ELFDATA2LSB
 #define ELF_ARCH        EM_386

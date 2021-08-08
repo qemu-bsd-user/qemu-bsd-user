@@ -23,6 +23,8 @@
 #define ELF_ET_DYN_LOAD_ADDR    0x01021000
 #define elf_check_arch(x) ( ((x) == ELF_ARCH) )
 
+#define ELF_HWCAP 0
+
 #define ELF_CLASS      ELFCLASS64
 #define ELF_DATA       ELFDATA2LSB
 #define ELF_ARCH       EM_X86_64
