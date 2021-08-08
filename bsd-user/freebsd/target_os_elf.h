@@ -38,10 +38,6 @@
 #define ELF_PLATFORM (NULL)
 #endif
 
-#ifndef ELF_HWCAP
-#define ELF_HWCAP 0
-#endif
-
 /* XXX Look at the other conflicting AT_* values. */
 #define FREEBSD_AT_NCPUS     19
 #define FREEBSD_AT_HWCAP     25
@@ -115,18 +111,11 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
         NEW_AUX_ENT(FREEBSD_AT_NCPUS, (abi_ulong)bsd_get_ncpu());
         NEW_AUX_ENT(AT_ENTRY, load_bias + exec->e_entry);
         features = ELF_HWCAP;
-#if defined(TARGET_ARM) && !defined(TARGET_AARCH64)
-        {
-#ifdef ARM_FEATURE_VFP3 /* XXX FIXME XXX */
-            ARMCPU *cpu = ARM_CPU(thread_cpu);
-            if (arm_feature(&cpu->env, ARM_FEATURE_VFP3))
-                features |= ARM_HWCAP_ARM_VFPv3;
-            if (arm_feature(&cpu->env, ARM_FEATURE_VFP4))
-                features |= ARM_HWCAP_ARM_VFPv4;
-#endif
-        }
-#endif
         NEW_AUX_ENT(FREEBSD_AT_HWCAP, features);
+#ifdef ELF_HWCAP2
+        features = ELF_HWCAP2;
+        NEW_AUX_ENT(FREEBSD_AT_HWCAP2, features);
+#endif
 #ifndef TARGET_PPC
         NEW_AUX_ENT(AT_UID, (abi_ulong)getuid());
         NEW_AUX_ENT(AT_EUID, (abi_ulong)geteuid());
