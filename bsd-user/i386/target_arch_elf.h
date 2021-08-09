@@ -23,7 +23,7 @@
 #define ELF_ET_DYN_LOAD_ADDR    0x01001000
 #define elf_check_arch(x) (((x) == EM_386) || ((x) == EM_486))
 
-#define ELF_HWCAP 0
+#define ELF_HWCAP       0 /* FreeBSD doesn't do AT_HWCAP{,2} on x86 */
 
 #define ELF_CLASS       ELFCLASS32
 #define ELF_DATA        ELFDATA2LSB
