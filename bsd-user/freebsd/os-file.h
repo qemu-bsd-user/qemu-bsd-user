@@ -160,7 +160,7 @@ static inline abi_long do_bsd_chflagsat(__unused int fd,
 
 #endif /* !  __FreeBSD_version >= 1000000 */
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300091
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1201522
 /* close_range(2) */
 static inline abi_long do_freebsd_close_range(unsigned int lowfd,
     unsigned int highfd, int flags)
@@ -169,7 +169,7 @@ static inline abi_long do_freebsd_close_range(unsigned int lowfd,
     return (close_range(lowfd, highfd, flags));
 }
 
-#endif /* __FreeBSD_version >= 1300091 */
+#endif /* __FreeBSD_version >= 1201522 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300037
 ssize_t safe_copy_file_range(int, off_t *, int, off_t *, size_t, unsigned int);
