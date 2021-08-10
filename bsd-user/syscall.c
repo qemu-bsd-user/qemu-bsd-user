@@ -632,7 +632,7 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_closefrom(arg1);
         break;
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300091
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1201522
     case TARGET_FREEBSD_NR_close_range: /* close_range(2) */
         ret = do_freebsd_close_range(arg1, arg2, arg3);
         break;
