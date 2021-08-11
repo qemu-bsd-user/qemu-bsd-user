@@ -22,12 +22,12 @@
 #include "cpu.h"
 
 /* compare to i386/include/vmparam.h */
-#define TARGET_MAXTSIZ  (128UL*1024*1024)   /* max text size */
-#define TARGET_DFLDSIZ  (128UL*1024*1024)   /* initial data size limit */
-#define TARGET_MAXDSIZ  (512UL*1024*1024)   /* max data size */
-#define TARGET_DFLSSIZ  (8UL*1024*1024)     /* initial stack size limit */
-#define TARGET_MAXSSIZ  (64UL*1024*1024)    /* max stack size */
-#define TARGET_SGROWSIZ (128UL*1024)        /* amount to grow stack */
+#define TARGET_MAXTSIZ  (128 * MiB)             /* max text size */
+#define TARGET_DFLDSIZ  (128 * MiB)             /* initial data size limit */
+#define TARGET_MAXDSIZ  (512 * MiB)             /* max data size */
+#define TARGET_DFLSSIZ  (8 * MiB)               /* initial stack size limit */
+#define TARGET_MAXSSIZ  (64 * MiB)              /* max stack size */
+#define TARGET_SGROWSIZ (128 * KiB)             /* amount to grow stack */
 
 #define TARGET_RESERVED_VA 0xf7000000
 
