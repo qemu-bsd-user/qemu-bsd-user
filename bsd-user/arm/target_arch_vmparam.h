@@ -22,17 +22,17 @@
 #include "cpu.h"
 
 /* compare to sys/arm/include/vmparam.h */
-#define TARGET_MAXTSIZ      (64UL*1024*1024)   /* max text size */
-#define TARGET_DFLDSIZ      (128UL*1024*1024)   /* initial data size limit */
-#define TARGET_MAXDSIZ      (512UL*1024*1024)    /* max data size */
-#define TARGET_DFLSSIZ      (4UL*1024*1024)     /* initial stack size limit */
-#define TARGET_MAXSSIZ      (64UL*1024*1024)    /* max stack size */
-#define TARGET_SGROWSIZ     (128UL*1024)        /* amount to grow stack */
+#define TARGET_MAXTSIZ      (64 * MiB)           /* max text size */
+#define TARGET_DFLDSIZ      (128 * MiB)          /* initial data size limit */
+#define TARGET_MAXDSIZ      (512 * MiB)          /* max data size */
+#define TARGET_DFLSSIZ      (4 * MiB)            /* initial stack size limit */
+#define TARGET_MAXSSIZ      (64 * MiB)           /* max stack size */
+#define TARGET_SGROWSIZ     (128 * KiB)          /* amount to grow stack */
 
 #define TARGET_RESERVED_VA  0xf7000000
 
                 /* KERNBASE - 512 MB */
-#define TARGET_VM_MAXUSER_ADDRESS   (0xc0000000 - (512 * 1024 * 1024))
+#define TARGET_VM_MAXUSER_ADDRESS   (0xc0000000 - (512 * MiB))
 #define TARGET_USRSTACK             TARGET_VM_MAXUSER_ADDRESS
 
 static inline abi_ulong get_sp_from_cpustate(CPUARMState *state)

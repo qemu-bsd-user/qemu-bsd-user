@@ -23,12 +23,12 @@
 #include "cpu.h"
 
 /* Compare with riscv/include/vmparam.h */
-#define TARGET_MAXTSIZ      (1*1024UL*1024*1024)   /* max text size */
-#define TARGET_DFLDSIZ      (128UL*1024*1024)   /* initial data size limit */
-#define TARGET_MAXDSIZ      (1*1024UL*1024*1024)    /* max data size */
-#define TARGET_DFLSSIZ      (128UL*1024*1024)     /* initial stack size limit */
-#define TARGET_MAXSSIZ      (1*1024UL*1024*1024)    /* max stack size */
-#define TARGET_SGROWSIZ     (128UL*1024)        /* amount to grow stack */
+#define TARGET_MAXTSIZ      (1 * GiB)           /* max text size */
+#define TARGET_DFLDSIZ      (128 * MiB)         /* initial data size limit */
+#define TARGET_MAXDSIZ      (1 * GiB)           /* max data size */
+#define TARGET_DFLSSIZ      (128 * MiB)         /* initial stack size limit */
+#define TARGET_MAXSSIZ      (1 * GiB)           /* max stack size */
+#define TARGET_SGROWSIZ     (128 * KiB)         /* amount to grow stack */
 
 #define TARGET_VM_MINUSER_ADDRESS   (0x0000000000000000UL)
 #define TARGET_VM_MAXUSER_ADDRESS   (0x0000004000000000UL)

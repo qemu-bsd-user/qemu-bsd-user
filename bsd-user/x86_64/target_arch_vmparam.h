@@ -22,12 +22,12 @@
 #include "cpu.h"
 
 /* compare to amd64/include/vmparam.h */
-#define TARGET_MAXTSIZ  (128UL*1024*1024)   /* max text size */
-#define TARGET_DFLDSIZ  (32768UL*1024*1024) /* initial data size limit */
-#define TARGET_MAXDSIZ  (32768UL*1024*1024) /* max data size */
-#define TARGET_DFLSSIZ  (8UL*1024*1024)     /* initial stack size limit */
-#define TARGET_MAXSSIZ  (512UL*1024*1024)   /* max stack size */
-#define TARGET_SGROWSIZ (128UL*1024)        /* amount to grow stack */
+#define TARGET_MAXTSIZ  (128 * MiB)             /* max text size */
+#define TARGET_DFLDSIZ  (32 * GiB)              /* initial data size limit */
+#define TARGET_MAXDSIZ  (32 * GiB)              /* max data size */
+#define TARGET_DFLSSIZ  (8 * MiB)               /* initial stack size limit */
+#define TARGET_MAXSSIZ  (512 * MiB)             /* max stack size */
+#define TARGET_SGROWSIZ (128 * KiB)             /* amount to grow stack */
 
 #define TARGET_VM_MAXUSER_ADDRESS   (0x00007fffff000000UL)
 
