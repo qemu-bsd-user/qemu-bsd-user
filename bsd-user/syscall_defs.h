@@ -205,7 +205,7 @@ struct target_freebsd_timespec {
 #if !defined(TARGET_I386) && TARGET_ABI_BITS == 32
     abi_long _pad;
 #endif
-} __packed;
+};
 
 #define TARGET_CPUCLOCK_WHICH_PID   0
 #define TARGET_CPUCLOCK_WHICH_TID   1
@@ -223,7 +223,7 @@ struct target_freebsd_timeval {
 #if !defined(TARGET_I386) && TARGET_ABI_BITS == 32
     abi_long _pad;
 #endif
-} __packed;
+};
 
 /* compare to sys/timex.h */
 struct target_freebsd_ntptimeval {
