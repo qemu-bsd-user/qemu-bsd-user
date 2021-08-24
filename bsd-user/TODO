@@ -1,0 +1,18 @@
+1. Look at reorganizing the .h mess
+2. Look at strdup vs g_strdup
+3. command line parsing mess
+4. convert to qemu_log_mask or tracepoints.
+5. Look at target_arch_reg.h and see if we can eliminate what looks like needless duplication.
+6. better stack layout?
+> +    /*
+> +     * Deviate from FreeBSD stack layout: force stack to new page here
+> +     * so that signal trampoline is not sharing the page with user stack
+> +     * frames. This is actively harmful in qemu as it marks pages with
+> +     * code it translated as read-only, which is somewhat problematic
+> +     * for user trying to use the stack as intended.
+> +     */
+
+A decent short-term solution.
+
+I'll draw your attention to my vdso patch set for linux-user:
+https://patchew.org/QEMU/20210706234932.356913-1-richard.henderson@linaro.org/
