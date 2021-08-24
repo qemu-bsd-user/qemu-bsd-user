@@ -283,7 +283,7 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulon
     flags = MAP_ANONYMOUS|MAP_PRIVATE;
 #ifdef MAP_ALIGNED
     if (alignment != 0)
-		flags |= MAP_ALIGNED(alignment);
+	flags |= MAP_ALIGNED(alignment);
 #else
     /* XXX TODO */
 #endif
@@ -401,15 +401,15 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         if (flags & MAP_EXCL)
             printf("MAP_EXCL ");
 #endif
-	if (flags & MAP_PRIVATE)
-	    printf("MAP_PRIVATE ");
-	if (flags & MAP_SHARED)
-	    printf("MAP_SHARED ");
-	if (flags & MAP_NOCORE)
-	    printf("MAP_NOCORE ");
+        if (flags & MAP_PRIVATE)
+            printf("MAP_PRIVATE ");
+        if (flags & MAP_SHARED)
+            printf("MAP_SHARED ");
+        if (flags & MAP_NOCORE)
+            printf("MAP_NOCORE ");
 #ifdef MAP_STACK
-	if (flags & MAP_STACK)
-	    printf("MAP_STACK ");
+        if (flags & MAP_STACK)
+            printf("MAP_STACK ");
 #endif
         printf("fd=%d offset=0x%llx\n", fd, offset);
     }
@@ -528,11 +528,11 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         end = start + len;
         real_end = HOST_PAGE_ALIGN(end);
 
-	/*
-	 * Test if requested memory area fits target address space
-	 * It can fail only on 64-bit host with 32-bit target.
-	 * On any other target/host host mmap() handles this error correctly.
-	 */
+        /*
+         * Test if requested memory area fits target address space
+         * It can fail only on 64-bit host with 32-bit target.
+         * On any other target/host host mmap() handles this error correctly.
+         */
 #if TARGET_ABI_BITS == 32 && HOST_LONG_BITS == 64
         if ((unsigned long)start + len - 1 > (abi_ulong) -1) {
             errno = EINVAL;
