@@ -34,7 +34,7 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm, abi_ulong *p,
         *p = stack_base;
     }
     if (stringp) {
-	*stringp = stack_base;
+        *stringp = stack_base;
     }
 
     for (i = 0; i < MAX_ARG_PAGES; i++) {
