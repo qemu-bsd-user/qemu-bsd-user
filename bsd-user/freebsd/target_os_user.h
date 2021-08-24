@@ -82,20 +82,20 @@ struct target_sockaddr_storage {
 #define TARGET_LOGNAMELEN           17
 #define TARGET_LOGINCLASSLEN        17
 
-#define	TARGET_KF_TYPE_NONE	0
-#define	TARGET_KF_TYPE_VNODE	1
-#define	TARGET_KF_TYPE_SOCKET	2
-#define	TARGET_KF_TYPE_PIPE	3
-#define	TARGET_KF_TYPE_FIFO	4
-#define	TARGET_KF_TYPE_KQUEUE	5
-#define	TARGET_KF_TYPE_CRYPTO	6
-#define	TARGET_KF_TYPE_MQUEUE	7
-#define	TARGET_KF_TYPE_SHM	8
-#define	TARGET_KF_TYPE_SEM	9
-#define	TARGET_KF_TYPE_PTS	10
-#define	TARGET_KF_TYPE_PROCDESC	11
-#define	TARGET_KF_TYPE_DEV	12
-#define	TARGET_KF_TYPE_UNKNOWN	255
+#define TARGET_KF_TYPE_NONE         0
+#define TARGET_KF_TYPE_VNODE        1
+#define TARGET_KF_TYPE_SOCKET       2
+#define TARGET_KF_TYPE_PIPE         3
+#define TARGET_KF_TYPE_FIFO         4
+#define TARGET_KF_TYPE_KQUEUE       5
+#define TARGET_KF_TYPE_CRYPTO       6
+#define TARGET_KF_TYPE_MQUEUE       7
+#define TARGET_KF_TYPE_SHM          8
+#define TARGET_KF_TYPE_SEM          9
+#define TARGET_KF_TYPE_PTS          10
+#define TARGET_KF_TYPE_PROCDESC     11
+#define TARGET_KF_TYPE_DEV          12
+#define TARGET_KF_TYPE_UNKNOWN      255
 
 struct target_kinfo_proc {
     int32_t     ki_structsize;      /* size of this structure */
@@ -193,7 +193,7 @@ struct target_kinfo_proc {
 #endif /* ! __FreeBSD_version >= 900000 */
     int32_t     ki_spareints[TARGET_KI_NSPARE_INT]; /* spare room for growth */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-	uint64_t ki_tdev;		/* controlling tty dev */
+ uint64_t ki_tdev;  /* controlling tty dev */
 #endif
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     int32_t     ki_oncpu;           /* Which cpu we are on */
@@ -229,201 +229,201 @@ struct target_kinfo_proc {
 };
 
 struct target_kinfo_file {
-	int32_t		kf_structsize;		/* Variable size of record. */
-	int32_t		kf_type;		/* Descriptor type. */
-	int32_t		kf_fd;			/* Array index. */
-	int32_t		kf_ref_count;		/* Reference count. */
-	int32_t		kf_flags;		/* Flags. */
-	int32_t		kf_pad0;		/* Round to 64 bit alignment. */
-	int64_t		kf_offset;		/* Seek location. */
+    int32_t  kf_structsize;  /* Variable size of record. */
+    int32_t  kf_type;  /* Descriptor type. */
+    int32_t  kf_fd;   /* Array index. */
+    int32_t  kf_ref_count;  /* Reference count. */
+    int32_t  kf_flags;  /* Flags. */
+    int32_t  kf_pad0;  /* Round to 64 bit alignment. */
+    int64_t  kf_offset;  /* Seek location. */
 #if defined(__FreeBSD_version) && __FreeBSD_version < 1200031
-	int32_t		kf_vnode_type;		/* Vnode type. */
-	int32_t		kf_sock_domain;		/* Socket domain. */
-	int32_t		kf_sock_type;		/* Socket type. */
-	int32_t		kf_sock_protocol;	/* Socket protocol. */
-	struct target_sockaddr_storage kf_sa_local;	/* Socket address. */
-	struct target_sockaddr_storage	kf_sa_peer;	/* Peer address. */
+    int32_t  kf_vnode_type;  /* Vnode type. */
+    int32_t  kf_sock_domain;  /* Socket domain. */
+    int32_t  kf_sock_type;  /* Socket type. */
+    int32_t  kf_sock_protocol; /* Socket protocol. */
+    struct target_sockaddr_storage kf_sa_local; /* Socket address. */
+    struct target_sockaddr_storage kf_sa_peer; /* Peer address. */
 #endif
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-	union {
-		struct {
+    union {
+        struct {
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-			uint32_t	kf_spareint;
-			/* Socket domain. */
-			int		kf_sock_domain0;
-			/* Socket type. */
-			int		kf_sock_type0;
-			/* Socket protocol. */
-			int		kf_sock_protocol0;
-			/* Socket address. */
-			struct sockaddr_storage kf_sa_local;
-			/* Peer address. */
-			struct sockaddr_storage	kf_sa_peer;
+            uint32_t kf_spareint;
+            /* Socket domain. */
+            int  kf_sock_domain0;
+            /* Socket type. */
+            int  kf_sock_type0;
+            /* Socket protocol. */
+            int  kf_sock_protocol0;
+            /* Socket address. */
+            struct sockaddr_storage kf_sa_local;
+            /* Peer address. */
+            struct sockaddr_storage kf_sa_peer;
 #endif
-			/* Address of so_pcb. */
-			uint64_t	kf_sock_pcb;
-			/* Address of inp_ppcb. */
-			uint64_t	kf_sock_inpcb;
-			/* Address of unp_conn. */
-			uint64_t	kf_sock_unpconn;
-			/* Send buffer state. */
-			uint16_t	kf_sock_snd_sb_state;
-			/* Receive buffer state. */
-			uint16_t	kf_sock_rcv_sb_state;
-			/* Round to 64 bit alignment. */
-			uint32_t	kf_sock_pad0;
-		} kf_sock;
-		struct {
+            /* Address of so_pcb. */
+            uint64_t kf_sock_pcb;
+            /* Address of inp_ppcb. */
+            uint64_t kf_sock_inpcb;
+            /* Address of unp_conn. */
+            uint64_t kf_sock_unpconn;
+            /* Send buffer state. */
+            uint16_t kf_sock_snd_sb_state;
+            /* Receive buffer state. */
+            uint16_t kf_sock_rcv_sb_state;
+            /* Round to 64 bit alignment. */
+            uint32_t kf_sock_pad0;
+        } kf_sock;
+        struct {
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-			/* Vnode type. */
-			int		kf_file_type;
-			/* Space for future use */
-			int		kf_spareint[3];
-			uint64_t	kf_spareint64[30];
-			/* Vnode filesystem id. */
-			uint64_t	kf_file_fsid;
-			/* File device. */
-			uint64_t	kf_file_rdev;
-			/* Global file id. */
-			uint64_t	kf_file_fileid;
-			/* File size. */
-			uint64_t	kf_file_size;
-			/* Vnode filesystem id, FreeBSD 11 compat. */
-			uint32_t	kf_file_fsid_freebsd11;
-			/* File device, FreeBSD 11 compat. */
-			uint32_t	kf_file_rdev_freebsd11;
+            /* Vnode type. */
+            int  kf_file_type;
+            /* Space for future use */
+            int  kf_spareint[3];
+            uint64_t kf_spareint64[30];
+            /* Vnode filesystem id. */
+            uint64_t kf_file_fsid;
+            /* File device. */
+            uint64_t kf_file_rdev;
+            /* Global file id. */
+            uint64_t kf_file_fileid;
+            /* File size. */
+            uint64_t kf_file_size;
+            /* Vnode filesystem id, FreeBSD 11 compat. */
+            uint32_t kf_file_fsid_freebsd11;
+            /* File device, FreeBSD 11 compat. */
+            uint32_t kf_file_rdev_freebsd11;
 #else
-			/* Global file id. */
-			uint64_t	kf_file_fileid;
-			/* File size. */
-			uint64_t	kf_file_size;
-			/* Vnode filesystem id. */
-			uint32_t	kf_file_fsid;
-			/* File device. */
-			uint32_t	kf_file_rdev;
+            /* Global file id. */
+            uint64_t kf_file_fileid;
+            /* File size. */
+            uint64_t kf_file_size;
+            /* Vnode filesystem id. */
+            uint32_t kf_file_fsid;
+            /* File device. */
+            uint32_t kf_file_rdev;
 #endif
-			/* File mode. */
-			uint16_t	kf_file_mode;
-			/* Round to 64 bit alignment. */
-			uint16_t	kf_file_pad0;
-			uint32_t	kf_file_pad1;
-		} kf_file;
-		struct {
+            /* File mode. */
+            uint16_t kf_file_mode;
+            /* Round to 64 bit alignment. */
+            uint16_t kf_file_pad0;
+            uint32_t kf_file_pad1;
+        } kf_file;
+        struct {
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-			uint32_t	kf_spareint[4];
-			uint64_t	kf_spareint64[32];
+            uint32_t kf_spareint[4];
+            uint64_t kf_spareint64[32];
 #endif
-			uint32_t	kf_sem_value;
-			uint16_t	kf_sem_mode;
-		} kf_sem;
-		struct {
+            uint32_t kf_sem_value;
+            uint16_t kf_sem_mode;
+        } kf_sem;
+        struct {
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-			uint32_t	kf_spareint[4];
-			uint64_t	kf_spareint64[32];
+            uint32_t kf_spareint[4];
+            uint64_t kf_spareint64[32];
 #endif
-			uint64_t	kf_pipe_addr;
-			uint64_t	kf_pipe_peer;
-			uint32_t	kf_pipe_buffer_cnt;
-			/* Round to 64 bit alignment. */
-			uint32_t	kf_pipe_pad0[3];
-		} kf_pipe;
-		struct {
+            uint64_t kf_pipe_addr;
+            uint64_t kf_pipe_peer;
+            uint32_t kf_pipe_buffer_cnt;
+            /* Round to 64 bit alignment. */
+            uint32_t kf_pipe_pad0[3];
+        } kf_pipe;
+        struct {
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-			uint32_t	kf_spareint[4];
-			uint64_t	kf_spareint64[32];
-			uint32_t	kf_pts_dev_freebsd11;
-			uint32_t	kf_pts_pad0;
-			uint64_t	kf_pts_dev;
-			/* Round to 64 bit alignment. */
-			uint32_t	kf_pts_pad1[4];
+            uint32_t kf_spareint[4];
+            uint64_t kf_spareint64[32];
+            uint32_t kf_pts_dev_freebsd11;
+            uint32_t kf_pts_pad0;
+            uint64_t kf_pts_dev;
+            /* Round to 64 bit alignment. */
+            uint32_t kf_pts_pad1[4];
 #else
-			uint32_t	kf_pts_dev;
-			/* Round to 64 bit alignment. */
-			uint32_t	kf_pts_pad0[7];
+            uint32_t kf_pts_dev;
+            /* Round to 64 bit alignment. */
+            uint32_t kf_pts_pad0[7];
 #endif
-		} kf_pts;
-		struct {
+        } kf_pts;
+        struct {
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-			uint32_t	kf_spareint[4];
-			uint64_t	kf_spareint64[32];
+            uint32_t kf_spareint[4];
+            uint64_t kf_spareint64[32];
 #endif
-			int32_t		kf_pid;
-		} kf_proc;
-	} kf_un;
-	uint16_t	kf_status;		/* Status flags. */
-	uint16_t	kf_pad1;		/* Round to 32 bit alignment. */
-	int32_t		_kf_ispare0;		/* Space for more stuff. */
+            int32_t  kf_pid;
+        } kf_proc;
+    } kf_un;
+    uint16_t kf_status;  /* Status flags. */
+    uint16_t kf_pad1;  /* Round to 32 bit alignment. */
+    int32_t  _kf_ispare0;  /* Space for more stuff. */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
-	target_cap_rights_t	kf_cap_rights;	/* Capability rights. */
-	uint64_t	_kf_cap_spare;	/* Space for future cap_rights_t. */
+    target_cap_rights_t kf_cap_rights; /* Capability rights. */
+    uint64_t _kf_cap_spare; /* Space for future cap_rights_t. */
 #else /* ! __FreeBSD_version >= 1000000 */
-	uint64_t        kf_cap_rights;
-	int		_kf_ispare[4];
+    uint64_t        kf_cap_rights;
+    int  _kf_ispare[4];
 #endif /* ! __FreeBSD_version >= 1000000 */
 
 #else /* ! __FreeBSD_version >= 900000 */
-	int		_kf_ispare[16];
+    int  _kf_ispare[16];
 #endif /* ! __FreeBSD_version >= 900000 */
-	/* Truncated before copyout in sysctl */
-	char		kf_path[PATH_MAX];	/* Path to file, if any. */
+    /* Truncated before copyout in sysctl */
+    char  kf_path[PATH_MAX]; /* Path to file, if any. */
 };
 
 struct target_kinfo_vmentry {
-	int32_t	 kve_structsize;		/* Variable size of record. */
-	int32_t	 kve_type;			/* Type of map entry. */
-	uint64_t kve_start;			/* Starting address. */
-	uint64_t kve_end;			/* Finishing address. */
-	uint64_t kve_offset;			/* Mapping offset in object */
+    int32_t  kve_structsize;  /* Variable size of record. */
+    int32_t  kve_type;   /* Type of map entry. */
+    uint64_t kve_start;   /* Starting address. */
+    uint64_t kve_end;   /* Finishing address. */
+    uint64_t kve_offset;   /* Mapping offset in object */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-	uint64_t kve_vn_fileid;			/* inode number if vnode */
+    uint64_t kve_vn_fileid;   /* inode number if vnode */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-	uint32_t kve_vn_fsid_freebsd11;		/* dev_t of vnode location */
+    uint32_t kve_vn_fsid_freebsd11;  /* dev_t of vnode location */
 #else
-	uint32_t kve_vn_fsid;			/* dev_t of vnode location */
+    uint32_t kve_vn_fsid;   /* dev_t of vnode location */
 #endif
 #else /* !  __FreeBSD_version >= 900000 */
-	uint64_t kve_fileid;			/* inode number if vnode */
-	uint32_t kve_fsid;			/* dev_t of vnode location */
+    uint64_t kve_fileid;   /* inode number if vnode */
+    uint32_t kve_fsid;   /* dev_t of vnode location */
 #endif /* !  __FreeBSD_version >= 900000 */
-	int32_t	 kve_flags;			/* Flags on map entry. */
-	int32_t	 kve_resident;			/* Number of resident pages. */
-	int32_t	 kve_private_resident;		/* Number of private pages. */
-	int32_t	 kve_protection;		/* Protection bitmask. */
-	int32_t	 kve_ref_count;			/* VM obj ref count. */
-	int32_t	 kve_shadow_count;		/* VM obj shadow count. */
+    int32_t  kve_flags;   /* Flags on map entry. */
+    int32_t  kve_resident;   /* Number of resident pages. */
+    int32_t  kve_private_resident;  /* Number of private pages. */
+    int32_t  kve_protection;  /* Protection bitmask. */
+    int32_t  kve_ref_count;   /* VM obj ref count. */
+    int32_t  kve_shadow_count;  /* VM obj shadow count. */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-	int32_t	 kve_vn_type;			/* Vnode type. */
-	uint64_t kve_vn_size;			/* File size. */
+    int32_t  kve_vn_type;   /* Vnode type. */
+    uint64_t kve_vn_size;   /* File size. */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-	uint32_t kve_vn_rdev_freebsd11;		/* Device id if device. */
+    uint32_t kve_vn_rdev_freebsd11;  /* Device id if device. */
 #else
-	uint32_t kve_vn_rdev;			/* Device id if device. */
+    uint32_t kve_vn_rdev;   /* Device id if device. */
 #endif
-	uint16_t kve_vn_mode;			/* File mode. */
-	uint16_t kve_status;			/* Status flags. */
+    uint16_t kve_vn_mode;   /* File mode. */
+    uint16_t kve_status;   /* Status flags. */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
-#if (__FreeBSD_version >= 1300501 && __FreeBSD_version < 1400000) || \
+#if (__FreeBSD_version >= 1300501 && __FreeBSD_version < 1400000) ||    \
     __FreeBSD_version >= 1400009
-	union {
-		uint64_t _kve_vn_fsid;		/* dev_t of vnode location */
-		uint64_t _kve_obj;		/* handle of anon obj */
-	} kve_type_spec;
-#define	kve_vn_fsid	kve_type_spec._kve_vn_fsid
-#define	kve_obj		kve_type_spec._kve_obj
+    union {
+        uint64_t _kve_vn_fsid;  /* dev_t of vnode location */
+        uint64_t _kve_obj;  /* handle of anon obj */
+    } kve_type_spec;
+#define kve_vn_fsid kve_type_spec._kve_vn_fsid
+#define kve_obj  kve_type_spec._kve_obj
 #else
-	uint64_t kve_vn_fsid;			/* dev_t of vnode location */
+    uint64_t kve_vn_fsid;   /* dev_t of vnode location */
 #endif
-	uint64_t kve_vn_rdev;			/* Device id if device. */
-	int	 _kve_ispare[8];		/* Space for more stuff. */
+    uint64_t kve_vn_rdev;   /* Device id if device. */
+    int  _kve_ispare[8];  /* Space for more stuff. */
 #else
-	int32_t	 _kve_ispare[12];		/* Space for more stuff. */
+    int32_t  _kve_ispare[12];  /* Space for more stuff. */
 #endif
 #else /* !  __FreeBSD_version >= 900000 */
-	int	 _kve_pad0;
-	int32_t	 _kve_ispare[16];		/* Space for more stuff. */
+    int  _kve_pad0;
+    int32_t  _kve_ispare[16];  /* Space for more stuff. */
 #endif /* !  __FreeBSD_version >= 900000 */
-	/* Truncated before copyout in sysctl */
-	char	 kve_path[PATH_MAX];		/* Path to VM obj, if any. */
+    /* Truncated before copyout in sysctl */
+    char  kve_path[PATH_MAX];  /* Path to VM obj, if any. */
 };
 
 #endif /* ! _TARGET_OS_USER_H_ */
