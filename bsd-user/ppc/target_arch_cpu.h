@@ -32,7 +32,7 @@
 #define TARGET_DEFAULT_CPU_MODEL "ppc"
 #endif
 
-#define TARGET_CPU_RESET(cpu)	cpu_reset(cpu)
+#define TARGET_CPU_RESET(cpu) cpu_reset(cpu)
 
 static inline void target_cpu_set_tls(CPUPPCState *env, target_ulong newtls)
 {
@@ -51,7 +51,7 @@ static inline void target_cpu_init(CPUPPCState *env,
     int i;
 
 #ifdef TARGET_PPC64
-	env->msr |= (target_ulong)1 << MSR_SF;
+    env->msr |= (target_ulong)1 << MSR_SF;
 #endif
     for (i = 0; i < 32; i++) {
         env->gpr[i] = regs->gpr[i];
@@ -72,7 +72,7 @@ static inline void target_cpu_loop(CPUPPCState *env)
         cpu_exec_start(cs);
         trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
-	process_queued_cpu_work(cs);
+        process_queued_cpu_work(cs);
 
         arch_interrupt = true;
         switch(trapnr) {

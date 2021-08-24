@@ -57,7 +57,7 @@ static inline void target_cpu_loop(CPUARMState *env)
         cpu_exec_start(cs);
         trapnr = cpu_exec(cs);
         cpu_exec_end(cs);
-	process_queued_cpu_work(cs);
+        process_queued_cpu_work(cs);
 
         switch (trapnr) {
         case EXCP_SWI:
@@ -117,7 +117,7 @@ static inline void target_cpu_loop(CPUARMState *env)
             pstate_write(env, pstate);
             break;
 
-		case EXCP_INTERRUPT:
+        case EXCP_INTERRUPT:
             /* Just indicate that signals should be handle ASAP. */
             break;
 
@@ -130,8 +130,8 @@ static inline void target_cpu_loop(CPUARMState *env)
             break;
 
 
-	case EXCP_PREFETCH_ABORT:
-	case EXCP_DATA_ABORT:
+        case EXCP_PREFETCH_ABORT:
+        case EXCP_DATA_ABORT:
             info.si_signo = TARGET_SIGSEGV;
             info.si_errno = 0;
             /* XXX: check env->error_code */
@@ -140,7 +140,7 @@ static inline void target_cpu_loop(CPUARMState *env)
             queue_signal(env, info.si_signo, &info);
             break;
 
-	case EXCP_DEBUG:
+        case EXCP_DEBUG:
         case EXCP_BKPT:
             info.si_signo = TARGET_SIGTRAP;
             info.si_errno = 0;
