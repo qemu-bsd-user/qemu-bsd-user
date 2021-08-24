@@ -31,6 +31,7 @@ int qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right);
 
 #include "qemu/osdep.h"
 #include "cpu.h"
+#include "qemu/units.h"
 #include "exec/cpu_ldst.h"
 #include "exec/exec-all.h"
 #include "trace/trace-bsd_user.h"
