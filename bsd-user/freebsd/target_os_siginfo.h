@@ -133,13 +133,13 @@ struct target_sigevent {
 #define TARGET_BUS_OBJERR   (3)
 
 /* SIGFPE codes */
-#define TARGET_FPE_INTOVF	(1)	/* Integer overflow.			*/
-#define TARGET_FPE_INTDIV	(2)	/* Integer divide by zero.		*/
-#define TARGET_FPE_FLTDIV	(3)	/* Floating point divide by zero.	*/
-#define TARGET_FPE_FLTOVF	(4)	/* Floating point overflow.		*/
-#define TARGET_FPE_FLTUND	(5)	/* Floating point underflow.		*/
-#define TARGET_FPE_FLTRES	(6)	/* Floating point inexact result.	*/
-#define TARGET_FPE_FLTINV	(7)	/* Invalid floating point operation.	*/
-#define TARGET_FPE_FLTSUB	(8)	/* Subscript out of range.		*/
+#define TARGET_FPE_INTOVF   (1) /* Integer overflow. */
+#define TARGET_FPE_INTDIV   (2) /* Integer divide by zero. */
+#define TARGET_FPE_FLTDIV   (3) /* Floating point divide by zero. */
+#define TARGET_FPE_FLTOVF   (4) /* Floating point overflow. */
+#define TARGET_FPE_FLTUND   (5) /* Floating point underflow. */
+#define TARGET_FPE_FLTRES   (6) /* Floating point inexact result. */
+#define TARGET_FPE_FLTINV   (7) /* Invalid floating point operation. */
+#define TARGET_FPE_FLTSUB   (8) /* Subscript out of range. */
 
 #endif /* !_TARGET_OS_SIGINFO_H_ */
