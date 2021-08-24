@@ -1,5 +1,5 @@
 /*
- *  sys/user.h definitions 
+ *  sys/user.h definitions
  *
  *  Copyright (c) 2015 Stacey D. Son (sson at FreeBSD)
  *
