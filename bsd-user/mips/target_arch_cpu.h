@@ -53,10 +53,10 @@ static inline void target_cpu_loop(CPUMIPSState *env)
     unsigned int syscall_num;
 
     for (;;) {
-	cpu_exec_start(cs);
+        cpu_exec_start(cs);
         trapnr = cpu_exec(cs);
-	cpu_exec_end(cs);
-	process_queued_cpu_work(cs);
+        cpu_exec_end(cs);
+        process_queued_cpu_work(cs);
         switch (trapnr) {
         case EXCP_SYSCALL: /* syscall exception */
             if (bsd_type == target_freebsd) {
@@ -65,19 +65,19 @@ static inline void target_cpu_loop(CPUMIPSState *env)
                 if (syscall_num >= TARGET_FREEBSD_NR_MAXSYSCALL) {
                     ret = -TARGET_ENOSYS;
                 } else {
-		    abi_ulong arg4 = 0, arg5 = 0, arg6 = 0, arg7 =0;
-		    abi_ulong sp_reg = env->active_tc.gpr[29];
+                    abi_ulong arg4 = 0, arg5 = 0, arg6 = 0, arg7 =0;
+                    abi_ulong sp_reg = env->active_tc.gpr[29];
 
 # ifdef TARGET_ABI_MIPSO32
-		    get_user_ual(arg4, sp_reg + 16);
-		    get_user_ual(arg5, sp_reg + 20);
-		    get_user_ual(arg6, sp_reg + 24);
-		    get_user_ual(arg7, sp_reg + 28);
+                    get_user_ual(arg4, sp_reg + 16);
+                    get_user_ual(arg5, sp_reg + 20);
+                    get_user_ual(arg6, sp_reg + 24);
+                    get_user_ual(arg7, sp_reg + 28);
 #else
-		    arg4 = env->active_tc.gpr[12]; /* t4/arg4 */
-		    arg5 = env->active_tc.gpr[13]; /* t5/arg5 */
-		    arg6 = env->active_tc.gpr[14]; /* t6/arg6 */
-		    arg7 = env->active_tc.gpr[15]; /* t7/arg7 */
+                    arg4 = env->active_tc.gpr[12]; /* t4/arg4 */
+                    arg5 = env->active_tc.gpr[13]; /* t5/arg5 */
+                    arg6 = env->active_tc.gpr[14]; /* t6/arg6 */
+                    arg7 = env->active_tc.gpr[15]; /* t7/arg7 */
 #endif
                     /* mips(32) uses regs 4-7,12-15 for args */
                     if (TARGET_FREEBSD_NR___syscall == syscall_num ||
@@ -88,10 +88,10 @@ static inline void target_cpu_loop(CPUMIPSState *env)
                                 env->active_tc.gpr[5], /* a1/arg0 */
                                 env->active_tc.gpr[6], /* a2/arg1 */
                                 env->active_tc.gpr[7], /* a3/arg2 */
-				arg4,
-				arg5,
-				arg6,
-				arg7,
+                                arg4,
+                                arg5,
+                                arg6,
+                                arg7,
                                 0  /* no arg7 */
                                 );
                     } else {
@@ -102,10 +102,10 @@ static inline void target_cpu_loop(CPUMIPSState *env)
                                 env->active_tc.gpr[5], /* a1/arg1 */
                                 env->active_tc.gpr[6], /* a2/arg2 */
                                 env->active_tc.gpr[7], /* a3/arg3 */
-				arg4,
-				arg5,
-				arg6,
-				arg7
+                                arg4,
+                                arg5,
+                                arg6,
+                                arg7
                                 );
                     }
                 }
