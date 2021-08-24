@@ -58,7 +58,6 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
     /* Save some space for ps_strings. */
     p -= sizeof(struct target_ps_strings);
 
-#ifdef TARGET_SZSIGCODE
     /* Add machine depedent sigcode. */
     p -= TARGET_SZSIGCODE;
     if (setup_sigtramp(p, (unsigned)offsetof(struct target_sigframe, sf_uc),
@@ -66,7 +65,6 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
         errno = EFAULT;
         return -1;
     }
-#endif
     if (bprm->fullpath) {
         execpath_len = strlen(bprm->fullpath) + 1;
         p -= roundup(execpath_len, sizeof(abi_ulong));
