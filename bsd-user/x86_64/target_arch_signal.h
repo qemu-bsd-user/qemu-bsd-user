@@ -21,7 +21,7 @@
 #include "cpu.h"
 
 /* Size of the signal trampolin code placed on the stack. */
-/* #define TARGET_SZSIGCODE    (0) */   /* XXX to be added */
+#define TARGET_SZSIGCODE    0
 
 /* compare to  x86/include/_limits.h */
 #define TARGET_MINSIGSTKSZ  (512 * 4)               /* min sig stack size */
@@ -63,8 +63,8 @@ static inline abi_long set_sigtramp_args(CPUX86State *regs,
         int sig, struct target_sigframe *frame, abi_ulong frame_addr,
         struct target_sigaction *ka)
 {
-    /* XXX */
-    return -TARGET_EOPNOTSUPP;
+    /* XXX return -TARGET_EOPNOTSUPP; */
+    return 0;
 }
 
 /* Compare to amd64/amd64/machdep.c get_mcontext() */
