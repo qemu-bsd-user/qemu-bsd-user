@@ -33,6 +33,6 @@ extern abi_ulong target_stkbas;
 extern abi_ulong target_stksiz;
 
 #define TARGET_PS_STRINGS  ((target_stkbas + target_stksiz) - \
-		sizeof(struct target_ps_strings))
+                            sizeof(struct target_ps_strings))
 
 #endif /* !TARGET_OS_VMPARAM_H_ */
