@@ -291,7 +291,7 @@ struct target_freebsd_kevent {
 /*
  *  sys/resource.h
  */
-#if defined(__FreeBSD__) 
+#if defined(__FreeBSD__)
 #define TARGET_RLIM_INFINITY    RLIM_INFINITY
 #else
 #define TARGET_RLIM_INFINITY    ((abi_ulong)-1)
