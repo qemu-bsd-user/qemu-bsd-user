@@ -76,7 +76,7 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
         int size;
         const int n = sizeof(elf_addr_t);
 
-	target_auxents_sz = 0;
+        target_auxents_sz = 0;
         sp = p;
         /*
          * Force 16 byte _final_ alignment here for generality.
@@ -121,7 +121,7 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
         NEW_AUX_ENT(AT_GID, (abi_ulong) getgid());
         NEW_AUX_ENT(AT_EGID, (abi_ulong) getegid());
 #endif
-	target_auxents = sp; /* Note where the aux entries are in the target */
+        target_auxents = sp; /* Note where the aux entries are in the target */
 #ifdef ARCH_DLINFO
         /*
          * ARCH_DLINFO must come last so platform specific code can enforce
