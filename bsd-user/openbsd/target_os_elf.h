@@ -56,14 +56,14 @@
 /* Necessary parameters */
 #define TARGET_ELF_EXEC_PAGESIZE TARGET_PAGE_SIZE
 #define TARGET_ELF_PAGESTART(_v) ((_v) & \
-        ~(unsigned long)(TARGET_ELF_EXEC_PAGESIZE-1))
-#define TARGET_ELF_PAGEOFFSET(_v) ((_v) & (TARGET_ELF_EXEC_PAGESIZE-1))
+        ~(unsigned long)(TARGET_ELF_EXEC_PAGESIZE - 1))
+#define TARGET_ELF_PAGEOFFSET(_v) ((_v) & (TARGET_ELF_EXEC_PAGESIZE - 1))
 
 #define DLINFO_ITEMS 12
 
 static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
                                           abi_ulong stringp,
-                                          struct elfhdr * exec,
+                                          struct elfhdr *exec,
                                           abi_ulong load_addr,
                                           abi_ulong load_bias,
                                           abi_ulong interp_load_addr,
@@ -88,45 +88,48 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
         /*
          * Force 16 byte _final_ alignment here for generality.
          */
-        sp = sp &~ (abi_ulong)15;
+        sp = sp & ~(abi_ulong)15;
         size = (DLINFO_ITEMS + 1) * 2;
-        if (k_platform)
-          size += 2;
+        if (k_platform) {
+            size += 2;
+        }
 #ifdef DLINFO_ARCH_ITEMS
         size += DLINFO_ARCH_ITEMS * 2;
 #endif
         size += envc + argc + 2;
         size += 1;                        /* argc itself */
         size *= n;
-        if (size & 15)
+        if (size & 15) {
             sp -= 16 - (size & 15);
+        }
 
-        /* This is correct because Linux defines
-         * elf_addr_t as Elf32_Off / Elf64_Off
+        /*
+         * OpenBSD defines elf_addr_t as Elf32_Off / Elf64_Off
          */
 #define NEW_AUX_ENT(id, val) do {               \
             sp -= n; put_user_ual(val, sp);     \
             sp -= n; put_user_ual(id, sp);      \
-          } while(0)
+          } while (0)
 
-        NEW_AUX_ENT (AT_NULL, 0);
+        NEW_AUX_ENT(AT_NULL, 0);
 
         /* There must be exactly DLINFO_ITEMS entries here.  */
         NEW_AUX_ENT(AT_PHDR, (abi_ulong)(load_addr + exec->e_phoff));
-        NEW_AUX_ENT(AT_PHENT, (abi_ulong)(sizeof (struct elf_phdr)));
+        NEW_AUX_ENT(AT_PHENT, (abi_ulong)(sizeof(struct elf_phdr)));
         NEW_AUX_ENT(AT_PHNUM, (abi_ulong)(exec->e_phnum));
         NEW_AUX_ENT(AT_PAGESZ, (abi_ulong)(TARGET_PAGE_SIZE));
         NEW_AUX_ENT(AT_BASE, (abi_ulong)(interp_load_addr));
         NEW_AUX_ENT(AT_FLAGS, (abi_ulong)0);
         NEW_AUX_ENT(AT_ENTRY, load_bias + exec->e_entry);
-        NEW_AUX_ENT(AT_UID, (abi_ulong) getuid());
-        NEW_AUX_ENT(AT_EUID, (abi_ulong) geteuid());
-        NEW_AUX_ENT(AT_GID, (abi_ulong) getgid());
-        NEW_AUX_ENT(AT_EGID, (abi_ulong) getegid());
-        NEW_AUX_ENT(AT_HWCAP, (abi_ulong) ELF_HWCAP);
-        NEW_AUX_ENT(AT_CLKTCK, (abi_ulong) sysconf(_SC_CLK_TCK));
-        if (k_platform)
+        NEW_AUX_ENT(AT_UID, (abi_ulong)getuid());
+        NEW_AUX_ENT(AT_EUID, (abi_ulong)geteuid());
+        NEW_AUX_ENT(AT_GID, (abi_ulong)getgid());
+        NEW_AUX_ENT(AT_EGID, (abi_ulong)getegid());
+        NEW_AUX_ENT(AT_HWCAP, (abi_ulong)ELF_HWCAP);
+        NEW_AUX_ENT(AT_CLKTCK, (abi_ulong)sysconf(_SC_CLK_TCK));
+        if (k_platform) {
             NEW_AUX_ENT(AT_PLATFORM, u_platform);
+        }
 #ifdef ARCH_DLINFO
         /*
          * ARCH_DLINFO must come last so platform specific code can enforce
