@@ -313,7 +313,7 @@ int main(int argc, char **argv)
     char **target_environ, **wrk;
     envlist_t *envlist = NULL;
     bsd_type = HOST_DEFAULT_BSD_TYPE;
-    char * argv0 = NULL;
+    char *argv0 = NULL;
 
     adjust_ssize();
 
