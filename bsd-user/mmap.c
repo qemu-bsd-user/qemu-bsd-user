@@ -201,9 +201,12 @@ abi_ulong mmap_next_start = TASK_UNMAPPED_BASE;
 
 unsigned long last_brk;
 
-/* Subroutine of mmap_find_vma, used when we have pre-allocated a chunk
-   of guest address space.  */
-static abi_ulong mmap_find_vma_reserved(abi_ulong start, abi_ulong size, abi_ulong alignment)
+/*
+ * Subroutine of mmap_find_vma, used when we have pre-allocated a chunk of guest
+ * address space.
+ */
+static abi_ulong mmap_find_vma_reserved(abi_ulong start, abi_ulong size,
+                                        abi_ulong alignment)
 {
     abi_ulong addr;
     abi_ulong end_addr;
@@ -245,8 +248,9 @@ static abi_ulong mmap_find_vma_reserved(abi_ulong start, abi_ulong size, abi_ulo
         mmap_next_start = addr;
     }
     /* addr is sufficiently low to align it up */
-    if (alignment != 0)
+    if (alignment != 0) {
         addr = (addr + alignment) & ~(alignment - 1);
+    }
     return addr;
 }
 
@@ -256,7 +260,8 @@ static abi_ulong mmap_find_vma_reserved(abi_ulong start, abi_ulong size, abi_ulo
  * It must be called with mmap_lock() held.
  * Return -1 if error.
  */
-static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulong alignment)
+static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size,
+                                       abi_ulong alignment)
 {
     void *ptr, *prev;
     abi_ulong addr;
@@ -280,10 +285,11 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulon
     addr = start;
     wrapped = repeat = 0;
     prev = 0;
-    flags = MAP_ANONYMOUS|MAP_PRIVATE;
+    flags = MAP_ANONYMOUS | MAP_PRIVATE;
 #ifdef MAP_ALIGNED
-    if (alignment != 0)
+    if (alignment != 0) {
 	flags |= MAP_ALIGNED(alignment);
+    }
 #else
     /* XXX TODO */
 #endif
@@ -304,8 +310,10 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulon
             return (abi_ulong)-1;
         }
 
-        /* Count the number of sequential returns of the same address.
-           This is used to modify the search algorithm below.  */
+        /*
+         * Count the number of sequential returns of the same address.
+         * This is used to modify the search algorithm below.
+         */
         repeat = (ptr == prev ? repeat + 1 : 0);
 
         if (h2g_valid(ptr + size - 1)) {
@@ -322,14 +330,18 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulon
             /* The address is not properly aligned for the target.  */
             switch (repeat) {
             case 0:
-                /* Assume the result that the kernel gave us is the
-                   first with enough free space, so start again at the
-                   next higher target page.  */
+                /*
+                 * Assume the result that the kernel gave us is the
+                 * first with enough free space, so start again at the
+                 * next higher target page.
+                 */
                 addr = TARGET_PAGE_ALIGN(addr);
                 break;
             case 1:
-                /* Sometimes the kernel decides to perform the allocation
-                   at the top end of memory instead.  */
+                /*
+                 * Sometimes the kernel decides to perform the allocation
+                 * at the top end of memory instead.
+                 */
                 addr &= TARGET_PAGE_MASK;
                 break;
             case 2:
@@ -342,8 +354,10 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulon
                 break;
             }
         } else {
-            /* Since the result the kernel gave didn't fit, start
-               again at low memory.  If any repetition, fail.  */
+            /*
+             * Since the result the kernel gave didn't fit, start
+             * again at low memory.  If any repetition, fail.
+             */
             addr = (repeat ? -1 : 0);
         }
 
@@ -358,8 +372,10 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size, abi_ulon
                 return (abi_ulong)-1;
             }
             wrapped = 1;
-            /* Don't actually use 0 when wrapping, instead indicate
-               that we'd truly like an allocation in low memory.  */
+            /*
+             * Don't actually use 0 when wrapping, instead indicate
+             * that we'd truly like an allocation in low memory.
+             */
             addr = TARGET_PAGE_SIZE;
         } else if (wrapped && addr >= start) {
             return (abi_ulong)-1;
@@ -438,10 +454,10 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         }
     }
 #endif /* MAP_STACK */
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1200035
+#ifdef MAP_GUARD
     if ((flags & MAP_GUARD) && (prot != PROT_NONE || fd != -1 ||
         offset != 0 || (flags & (MAP_SHARED | MAP_PRIVATE |
-	/* MAP_PREFAULT | */ /* MAP_PREFAULT not in mman.h */
+        /* MAP_PREFAULT | */ /* MAP_PREFAULT not in mman.h */
         MAP_PREFAULT_READ | MAP_ANON | MAP_STACK)) != 0)) {
         errno = EINVAL;
         goto fail;
@@ -502,9 +518,11 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
 
         /* Are we trying to create a map beyond EOF?.  */
         if (offset + len > sb.st_size) {
-            /* If so, truncate the file map at eof aligned with
-               the hosts real pagesize. Additional anonymous maps
-               will be created beyond EOF.  */
+            /*
+             * If so, truncate the file map at eof aligned with
+             * the hosts real pagesize. Additional anonymous maps
+             * will be created beyond EOF.
+             */
             len = REAL_HOST_PAGE_ALIGN(sb.st_size - offset);
         }
     }
@@ -675,8 +693,9 @@ static void mmap_reserve(abi_ulong start, abi_ulong size)
             }
             end = real_end;
         }
-        if (prot != 0)
+        if (prot != 0) {
             real_start += qemu_host_page_size;
+        }
     }
     if (end < real_end) {
         prot = 0;

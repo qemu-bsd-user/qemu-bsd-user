@@ -69,8 +69,10 @@ bool have_guest_base;
 # if HOST_LONG_BITS > TARGET_VIRT_ADDR_SPACE_BITS
 #  if TARGET_VIRT_ADDR_SPACE_BITS == 32 && \
       (TARGET_LONG_BITS == 32 || defined(TARGET_ABI32))
-/* There are a number of places where we assign reserved_va to a variable
-   of type abi_ulong and expect it to fit.  Avoid the last page.  */
+/*
+ * There are a number of places where we assign reserved_va to a variable
+ * of type abi_ulong and expect it to fit.  Avoid the last page.
+ */
 #   define MAX_RESERVED_VA  (0xfffffffful & TARGET_PAGE_MASK)
 #  else
 #   define MAX_RESERVED_VA  (1ul << TARGET_VIRT_ADDR_SPACE_BITS)
