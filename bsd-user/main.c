@@ -267,8 +267,9 @@ adjust_ssize(void)
 {
     struct rlimit rl;
 
-    if (getrlimit(RLIMIT_STACK, &rl) != 0)
+    if (getrlimit(RLIMIT_STACK, &rl) != 0) {
         return;
+    }
 
     target_maxssiz = MIN(target_maxssiz, rl.rlim_max);
     target_dflssiz = MIN(MAX(target_dflssiz, rl.rlim_cur), target_maxssiz);
