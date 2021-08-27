@@ -64,7 +64,7 @@ static inline void target_cpu_init(CPUX86State *env,
     env->idt.limit = 511;
 
     env->idt.base = target_mmap(0, sizeof(uint64_t) * (env->idt.limit + 1),
-        PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+        PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     bsd_x86_64_set_idt_base(env->idt.base);
     bsd_x86_64_set_idt(0, 0);
     bsd_x86_64_set_idt(1, 0);
@@ -90,7 +90,7 @@ static inline void target_cpu_init(CPUX86State *env,
 
     /* segment setup */
     env->gdt.base = target_mmap(0, sizeof(uint64_t) * TARGET_GDT_ENTRIES,
-            PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+            PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     env->gdt.limit = sizeof(uint64_t) * TARGET_GDT_ENTRIES - 1;
     gdt_table = g2h_untagged(env->gdt.base);
 
@@ -233,8 +233,9 @@ static inline void target_cpu_loop(CPUX86State *env)
 
 static inline void target_cpu_clone_regs(CPUX86State *env, target_ulong newsp)
 {
-    if (newsp)
+    if (newsp) {
         env->regs[R_ESP] = newsp;
+    }
     env->regs[R_EAX] = 0;
 }
 
