@@ -460,8 +460,9 @@ int main(int argc, char **argv)
         usage();
     }
     filename = argv[optind];
-    if (argv0)
+    if (argv0) {
         argv[optind] = argv0;
+    }
 
     if (!trace_init_backends()) {
         exit(1);
