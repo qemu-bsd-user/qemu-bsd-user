@@ -105,15 +105,16 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
         stringspace += strlen(bprm->envp[i]) + 1;
     }
     if (stringspace > TARGET_ARG_MAX) {
-       errno = ENOMEM;
-       return -1;
+        errno = ENOMEM;
+        return -1;
     }
     /* Make room for the argv and envp strings */
     destp = rounddown(p - stringspace, sizeof(abi_ulong));
     p = argvp = destp - (bprm->argc + bprm->envc + 2) * sizeof(abi_ulong);
     /* Remember the strings pointer */
-    if (stringp)
+    if (stringp) {
         *stringp = destp;
+    }
     /*
      * Add argv strings.  Note that the argv[] vectors are added by
      * loader_build_argptr()
@@ -171,7 +172,7 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
     }
 
     if (ret_addr) {
-       *ret_addr = p;
+        *ret_addr = p;
     }
 
     return 0;
