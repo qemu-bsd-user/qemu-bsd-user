@@ -90,7 +90,8 @@ struct target_sigevent {
     union {
         abi_int _threadid;
 
-        /* The kernel (and thus QEMU) never looks at these;
+        /*
+         * The kernel (and thus QEMU) never looks at these;
          * they're only used as part of the ABI between a
          * userspace program and libc.
          */
@@ -120,8 +121,7 @@ struct target_sigevent {
 
 /* SIGSEGV si_codes */
 #define TARGET_SEGV_MAPERR  (1) /* address not mapped to object */
-#define TARGET_SEGV_ACCERR  (2) /* invalid permissions for mapped
-                                           object */
+#define TARGET_SEGV_ACCERR  (2) /* invalid permissions for mapped object */
 
 /* SIGTRAP si_codes */
 #define TARGET_TRAP_BRKPT   (1) /* process beakpoint */

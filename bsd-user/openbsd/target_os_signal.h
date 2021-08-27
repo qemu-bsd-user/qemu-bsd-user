@@ -26,8 +26,7 @@
 #define TARGET_SIGCONT 19      /* continue a stopped process */
 #define TARGET_SIGCHLD 20      /* to parent on child stop or exit */
 #define TARGET_SIGTTIN 21      /* to readers pgrp upon background tty read */
-#define TARGET_SIGTTOU 22      /* like TTIN for output if
-                                  (tp->t_local&LTOSTOP) */
+#define TARGET_SIGTTOU 22      /* like TTIN for out if (tp->t_local&LTOSTOP) */
 #define TARGET_SIGIO   23      /* input/output possible signal */
 #define TARGET_SIGXCPU 24      /* exceeded CPU time limit */
 #define TARGET_SIGXFSZ 25      /* exceeded file size limit */
