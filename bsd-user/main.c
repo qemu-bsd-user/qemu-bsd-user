@@ -517,7 +517,8 @@ int main(int argc, char **argv)
      */
     guest_base = HOST_PAGE_ALIGN(guest_base);
 
-    if (loader_exec(filename, argv+optind, target_environ, regs, info, &bprm)) {
+    if (loader_exec(filename, argv + optind, target_environ, regs, info,
+                    &bprm) != 0) {
         printf("Error loading %s\n", filename);
         _exit(1);
     }
