@@ -387,29 +387,39 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                prot & PROT_READ ? 'r' : '-',
                prot & PROT_WRITE ? 'w' : '-',
                prot & PROT_EXEC ? 'x' : '-');
-        if (flags & MAP_ALIGNMENT_MASK)
-            printf ("MAP_ALIGNED(%u) ", (flags & MAP_ALIGNMENT_MASK) >> MAP_ALIGNMENT_SHIFT);
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1200035
-        if (flags & MAP_GUARD)
+        if (flags & MAP_ALIGNMENT_MASK) {
+            printf("MAP_ALIGNED(%u) ", (flags & MAP_ALIGNMENT_MASK) >>
+                   MAP_ALIGNMENT_SHIFT);
+        }
+#ifdef MAP_GUARD
+        if (flags & MAP_GUARD) {
             printf("MAP_GUARD ");
+        }
 #endif
-        if (flags & MAP_FIXED)
+        if (flags & MAP_FIXED) {
             printf("MAP_FIXED ");
-        if (flags & MAP_ANONYMOUS)
+        }
+        if (flags & MAP_ANONYMOUS) {
             printf("MAP_ANON ");
+        }
 #ifdef MAP_EXCL
-        if (flags & MAP_EXCL)
+        if (flags & MAP_EXCL) {
             printf("MAP_EXCL ");
+        }
 #endif
-        if (flags & MAP_PRIVATE)
+        if (flags & MAP_PRIVATE) {
             printf("MAP_PRIVATE ");
-        if (flags & MAP_SHARED)
+        }
+        if (flags & MAP_SHARED) {
             printf("MAP_SHARED ");
-        if (flags & MAP_NOCORE)
+        }
+        if (flags & MAP_NOCORE) {
             printf("MAP_NOCORE ");
+        }
 #ifdef MAP_STACK
-        if (flags & MAP_STACK)
+        if (flags & MAP_STACK) {
             printf("MAP_STACK ");
+        }
 #endif
         printf("fd=%d offset=0x%llx\n", fd, offset);
     }
