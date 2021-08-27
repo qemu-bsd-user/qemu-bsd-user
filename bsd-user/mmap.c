@@ -440,7 +440,8 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
 #endif /* MAP_STACK */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200035
     if ((flags & MAP_GUARD) && (prot != PROT_NONE || fd != -1 ||
-        offset != 0 || (flags & (MAP_SHARED | MAP_PRIVATE | /* MAP_PREFAULT | */ /* MAP_PREFAULT not in mman.h */
+        offset != 0 || (flags & (MAP_SHARED | MAP_PRIVATE |
+	/* MAP_PREFAULT | */ /* MAP_PREFAULT not in mman.h */
         MAP_PREFAULT_READ | MAP_ANON | MAP_STACK)) != 0)) {
         errno = EINVAL;
         goto fail;
@@ -460,8 +461,10 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     real_start = start & qemu_host_page_mask;
     host_offset = offset & qemu_host_page_mask;
 
-    /* If the user is asking for the kernel to find a location, do that
-       before we truncate the length for mapping files below.  */
+    /*
+     * If the user is asking for the kernel to find a location, do that
+     * before we truncate the length for mapping files below.
+     */
     if (!(flags & MAP_FIXED)) {
         host_len = len + offset - host_offset;
         host_len = HOST_PAGE_ALIGN(host_len);
@@ -476,17 +479,19 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         }
     }
 
-    /* When mapping files into a memory area larger than the file, accesses
-       to pages beyond the file size will cause a SIGBUS.
-
-       For example, if mmaping a file of 100 bytes on a host with 4K pages
-       emulating a target with 8K pages, the target expects to be able to
-       access the first 8K. But the host will trap us on any access beyond
-       4K.
-
-       When emulating a target with a larger page-size than the hosts, we
-       may need to truncate file maps at EOF and add extra anonymous pages
-       up to the targets page boundary.  */
+    /*
+     * When mapping files into a memory area larger than the file, accesses
+     * to pages beyond the file size will cause a SIGBUS.
+     *
+     * For example, if mmaping a file of 100 bytes on a host with 4K pages
+     * emulating a target with 8K pages, the target expects to be able to
+     * access the first 8K. But the host will trap us on any access beyond
+     * 4K.
+     *
+     * When emulating a target with a larger page-size than the hosts, we
+     * may need to truncate file maps at EOF and add extra anonymous pages
+     * up to the targets page boundary.
+     */
 
     if ((qemu_real_host_page_size < qemu_host_page_size) && fd != -1) {
         struct stat sb;
@@ -511,9 +516,11 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         host_len = len + offset - host_offset;
         host_len = HOST_PAGE_ALIGN(host_len);
 
-        /* Note: we prefer to control the mapping address. It is
-           especially important if qemu_host_page_size >
-           qemu_real_host_page_size */
+        /*
+         * Note: we prefer to control the mapping address. It is
+         * especially important if qemu_host_page_size >
+         * qemu_real_host_page_size
+         */
         p = mmap(g2h_untagged(start), host_len, prot,
                  flags | MAP_FIXED | ((fd != -1) ? MAP_ANONYMOUS : 0), -1, 0);
         if (p == MAP_FAILED)
@@ -550,12 +557,16 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         }
 #endif
 
-        /* worst case: we cannot map the file because the offset is not
-           aligned, so we read it */
+        /*
+         * worst case: we cannot map the file because the offset is not
+         * aligned, so we read it
+         */
         if (fd != -1 &&
             (offset & ~qemu_host_page_mask) != (start & ~qemu_host_page_mask)) {
-            /* msync() won't work here, so we return an error if write is
-               possible while it is a shared mapping */
+            /*
+             * msync() won't work here, so we return an error if write is
+             * possible while it is a shared mapping
+             */
             if ((flags & TARGET_BSD_MAP_FLAGMASK) == MAP_SHARED &&
                 (prot & PROT_WRITE)) {
                 errno = EINVAL;
@@ -672,8 +683,9 @@ static void mmap_reserve(abi_ulong start, abi_ulong size)
         for (addr = end; addr < real_end; addr += TARGET_PAGE_SIZE) {
             prot |= page_get_flags(addr);
         }
-        if (prot != 0)
+        if (prot != 0) {
             real_end -= qemu_host_page_size;
+        }
     }
     if (real_start != real_end) {
         mmap(g2h_untagged(real_start), real_end - real_start, PROT_NONE,
