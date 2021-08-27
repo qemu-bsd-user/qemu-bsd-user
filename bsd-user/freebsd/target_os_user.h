@@ -155,8 +155,7 @@ struct target_kinfo_proc {
     uint64_t    ki_runtime;         /* Real time in microsec */
 
     struct  target_freebsd_timeval ki_start;  /* starting time */
-    struct  target_freebsd_timeval ki_childtime; /* time used by process
-                                                    children */
+    struct  target_freebsd_timeval ki_childtime; /* time used by process children */
 
     abi_long    ki_flag;            /* P_* flags */
     abi_long    ki_kiflag;          /* KI_* flags (below) */
@@ -173,17 +172,17 @@ struct target_kinfo_proc {
     u_char      ki_lastcpu;         /* Last cpu we were on */
 #endif /* ! __FreeBSD_version >= 1100000 */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char        ki_tdname[TARGET_TDNAMLEN+1];  /* thread name */
+    char        ki_tdname[TARGET_TDNAMLEN + 1];  /* thread name */
 #else
-    char        ki_ocomm[TARGET_TDNAMLEN+1];   /* thread name */
+    char        ki_ocomm[TARGET_TDNAMLEN + 1];   /* thread name */
 #endif /* ! __FreeBSD_version >= 900000 */
-    char        ki_wmesg[TARGET_WMESGLEN+1];   /* wchan message */
-    char        ki_login[TARGET_LOGNAMELEN+1]; /* setlogin name */
-    char        ki_lockname[TARGET_LOCKNAMELEN+1]; /* lock name */
-    char        ki_comm[TARGET_COMMLEN+1];     /* command name */
-    char        ki_emul[TARGET_KI_EMULNAMELEN+1];  /* emulation name */
+    char        ki_wmesg[TARGET_WMESGLEN + 1];   /* wchan message */
+    char        ki_login[TARGET_LOGNAMELEN + 1]; /* setlogin name */
+    char        ki_lockname[TARGET_LOCKNAMELEN + 1]; /* lock name */
+    char        ki_comm[TARGET_COMMLEN + 1];     /* command name */
+    char        ki_emul[TARGET_KI_EMULNAMELEN + 1];  /* emulation name */
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
-    char        ki_loginclass[TARGET_LOGINCLASSLEN+1]; /* login class */
+    char        ki_loginclass[TARGET_LOGINCLASSLEN + 1]; /* login class */
 #endif /* ! __FreeBSD_version >= 900000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 900000
@@ -213,8 +212,7 @@ struct target_kinfo_proc {
     struct  target_priority ki_pri; /* process priority */
     struct  target_freebsd_rusage ki_rusage;  /* process rusage statistics */
         /* XXX - most fields in ki_rusage_ch are not (yet) filled in */
-    struct  target_freebsd_rusage ki_rusage_ch; /* rusage of children
-                                                   processes */
+    struct  target_freebsd_rusage ki_rusage_ch; /* rusage of children processes */
 
 
     abi_ulong   ki_pcb;             /* kernel virtual addr of pcb */
