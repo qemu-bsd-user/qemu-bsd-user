@@ -75,7 +75,8 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
         }
     }
     /* Add canary for SSP. */
-    qemu_guest_getrandom_nofail(canary, sizeof(canary));
+//    qemu_guest_getrandom_nofail(canary, sizeof(canary));
+    arc4random_buf(canary, sizeof(canary));
     p -= roundup(sizeof(canary), sizeof(abi_ulong));
     if (memcpy_to_target(p, canary, sizeof(canary))) {
         errno = EFAULT;
