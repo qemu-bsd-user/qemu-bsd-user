@@ -635,7 +635,6 @@ GNU/kFreeBSD)
 ;;
 FreeBSD)
   bsd="yes"
-  bsd_user="yes"
   make="${MAKE-gmake}"
   # needed for kinfo_getvmmap(3) in libutil.h
 ;;
@@ -678,6 +677,12 @@ Linux)
   vhost_user=${default_feature:-yes}
 ;;
 esac
+
+if [ "$bsd" = "yes" ] ; then
+  if [ "$darwin" != "yes" ] ; then
+    bsd_user="yes"
+  fi
+fi
 
 : ${make=${MAKE-make}}
 

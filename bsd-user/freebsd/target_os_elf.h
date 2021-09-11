@@ -22,7 +22,7 @@
 #include "target_arch_elf.h"
 #include "elf.h"
 
-#define bsd_get_ncpu() 1 /* until we pull in bsd-proc.[hc] */
+#include "bsd-proc.h"
 
 /* this flag is uneffective under linux too, should be deleted */
 #ifndef MAP_DENYWRITE
@@ -116,10 +116,12 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
         features = ELF_HWCAP2;
         NEW_AUX_ENT(FREEBSD_AT_HWCAP2, features);
 #endif
+#ifndef TARGET_PPC
         NEW_AUX_ENT(AT_UID, (abi_ulong)getuid());
         NEW_AUX_ENT(AT_EUID, (abi_ulong)geteuid());
         NEW_AUX_ENT(AT_GID, (abi_ulong)getgid());
         NEW_AUX_ENT(AT_EGID, (abi_ulong)getegid());
+#endif
         target_auxents = sp; /* Note where the aux entries are in the target */
 #ifdef ARCH_DLINFO
         /*

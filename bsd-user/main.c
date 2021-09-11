@@ -24,7 +24,6 @@
 #include <sys/sysctl.h>
 
 #include "qemu/osdep.h"
-#include "qemu-common.h"
 #include "qemu/units.h"
 #include "qemu/accel.h"
 #include "sysemu/tcg.h"
@@ -33,8 +32,8 @@
 
 #include "qapi/error.h"
 #include "qemu.h"
+#include "qemu-common.h"
 #include "qemu/config-file.h"
-#include "qemu/error-report.h"
 #include "qemu/path.h"
 #include "qemu/help_option.h"
 #include "qemu/module.h"
@@ -45,14 +44,20 @@
 #include "qemu/cutils.h"
 #include "exec/log.h"
 #include "trace/control.h"
-#include "crypto/init.h"
-#include "qemu/guest-random.h"
 
 #include "host-os.h"
 #include "target_arch_cpu.h"
 
+#ifdef __FreeBSD__
+pthread_mutex_t ras_mtx = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t ras_cond = PTHREAD_COND_INITIALIZER;
+pthread_t ras_thread;
+bool ras_thread_set = false;
+#endif
 int singlestep;
 uintptr_t guest_base;
+static const char *cpu_model;
+static const char *cpu_type;
 bool have_guest_base;
 /*
  * When running 32-on-64 we should make sure we can fit all of the possible
@@ -94,7 +99,7 @@ unsigned long reserved_va = MAX_RESERVED_VA;
 unsigned long reserved_va;
 #endif
 
-static const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
+const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
 const char *qemu_uname_release;
 enum BSDType bsd_type;
 char qemu_proc_pathname[PATH_MAX];  /* full path to exeutable */
@@ -226,6 +231,36 @@ void init_task_state(TaskState *ts)
     ts->sigqueue_table[i].next = NULL;
 }
 
+CPUArchState *cpu_copy(CPUArchState *env)
+{
+    CPUState *cpu = env_cpu(env);
+    CPUState *new_cpu = cpu_create(cpu_type);
+    CPUArchState *new_env = new_cpu->env_ptr;
+    CPUBreakpoint *bp;
+    CPUWatchpoint *wp;
+
+    /* Reset non arch specific state */
+    cpu_reset(new_cpu);
+
+    memcpy(new_env, env, sizeof(CPUArchState));
+
+    /*
+     * Clone all break/watchpoints.
+     * Note: Once we support ptrace with hw-debug register access, make sure
+     * BP_CPU break/watchpoints are handled correctly on clone.
+     */
+    QTAILQ_INIT(&cpu->breakpoints);
+    QTAILQ_INIT(&cpu->watchpoints);
+    QTAILQ_FOREACH(bp, &cpu->breakpoints, entry) {
+        cpu_breakpoint_insert(new_cpu, bp->pc, bp->flags, NULL);
+    }
+    QTAILQ_FOREACH(wp, &cpu->watchpoints, entry) {
+        cpu_watchpoint_insert(new_cpu, wp->vaddr, wp->len, wp->flags, NULL);
+    }
+
+    return new_env;
+}
+
 void gemu_log(const char *fmt, ...)
 {
     va_list ap;
@@ -271,11 +306,8 @@ static void save_proc_pathname(char *argv0)
 int main(int argc, char **argv)
 {
     const char *filename;
-    const char *cpu_model;
-    const char *cpu_type;
     const char *log_file = NULL;
     const char *log_mask = NULL;
-    const char *seed_optarg = NULL;
     struct target_pt_regs regs1, *regs = &regs1;
     struct image_info info1, *info = &info1;
     struct bsd_binprm bprm;
@@ -298,7 +330,6 @@ int main(int argc, char **argv)
 
     save_proc_pathname(argv[0]);
 
-    error_init(argv[0]);
     module_call_init(MODULE_INIT_TRACE);
     qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
@@ -405,8 +436,6 @@ int main(int argc, char **argv)
                 usage();
             }
             optind++;
-        } else if (!strcmp(r, "seed")) {
-            seed_optarg = optarg;
         } else if (!strcmp(r, "singlestep")) {
             singlestep = 1;
         } else if (!strcmp(r, "strace")) {
@@ -421,8 +450,10 @@ int main(int argc, char **argv)
     }
 
     /* init debug */
-    qemu_log_needs_buffers();
-    qemu_set_log_filename(log_file, &error_fatal);
+    if (log_file) {
+        qemu_log_needs_buffers();
+        qemu_set_log_filename(log_file, &error_fatal);
+    }
     if (log_mask) {
         int mask;
 
@@ -472,6 +503,7 @@ int main(int argc, char **argv)
         accel_init_interfaces(ac);
         ac->init_machine(NULL);
     }
+
     cpu = cpu_create(cpu_type);
     env = cpu->env_ptr;
     cpu_reset(cpu);
@@ -486,19 +518,6 @@ int main(int argc, char **argv)
 
     if (reserved_va) {
             mmap_next_start = reserved_va;
-    }
-
-    {
-        Error *err = NULL;
-        if (seed_optarg != NULL) {
-            qemu_guest_random_seed_main(seed_optarg, &err);
-        } else {
-            qcrypto_init(&err);
-        }
-        if (err) {
-            error_reportf_err(err, "cannot initialize crypto: ");
-            exit(1);
-        }
     }
 
     /*

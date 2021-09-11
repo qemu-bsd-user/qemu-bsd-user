@@ -18,6 +18,8 @@
  */
 #include "qemu/osdep.h"
 
+#include <sys/param.h>
+
 #include "qemu.h"
 #include "qemu-common.h"
 
@@ -95,8 +97,7 @@ int target_mprotect(abi_ulong start, abi_ulong len, int prot)
             }
             end = host_end;
         }
-        ret = mprotect(g2h_untagged(host_start),
-                       qemu_host_page_size, prot1 & PAGE_BITS);
+        ret = mprotect(g2h_untagged(host_start), qemu_host_page_size, prot1 & PAGE_BITS);
         if (ret != 0)
             goto error;
         host_start += qemu_host_page_size;
@@ -106,8 +107,8 @@ int target_mprotect(abi_ulong start, abi_ulong len, int prot)
         for (addr = end; addr < host_end; addr += TARGET_PAGE_SIZE) {
             prot1 |= page_get_flags(addr);
         }
-        ret = mprotect(g2h_untagged(host_end - qemu_host_page_size),
-                       qemu_host_page_size, prot1 & PAGE_BITS);
+        ret = mprotect(g2h_untagged(host_end - qemu_host_page_size), qemu_host_page_size,
+                       prot1 & PAGE_BITS);
         if (ret != 0)
             goto error;
         host_end -= qemu_host_page_size;
@@ -302,7 +303,7 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size,
     prev = 0;
     flags = MAP_ANON | MAP_PRIVATE;
     if (alignment != 0) {
-        flags |= MAP_ALIGNED(alignment);
+	flags |= MAP_ALIGNED(alignment);
     }
 
     for (;; prev = ptr) {
@@ -403,7 +404,7 @@ abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size)
 abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                      int flags, int fd, off_t offset)
 {
-    abi_ulong ret, end, real_start, real_end, retaddr, host_offset, host_len;
+    abi_ulong addr, ret, end, real_start, real_end, retaddr, host_offset, host_len;
 
     mmap_lock();
     if (qemu_loglevel_mask(CPU_LOG_PAGE)) {
@@ -595,7 +596,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                 goto fail;
             }
             retaddr = target_mmap(start, len, prot | PROT_WRITE,
-                                  MAP_FIXED | MAP_PRIVATE | MAP_ANON,
+                                  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
                                   -1, 0);
             if (retaddr == -1)
                 goto fail;
@@ -608,6 +609,15 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             }
             goto the_end;
         }
+#ifdef MAP_EXCL
+        /* Reject the mapping if any page within the range is mapped */
+        if (flags & MAP_EXCL) {
+            for (addr = start; addr < end; addr++) {
+                if (page_get_flags(addr) != 0)
+                    goto fail;
+            }
+        }
+#endif
 
         /* Reject the mapping if any page within the range is mapped */
         if ((flags & MAP_EXCL) && page_check_range(start, len, 0) < 0) {
@@ -646,7 +656,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         if (real_start < real_end) {
             void *p;
             unsigned long offset1;
-            if (flags & MAP_ANON)
+            if (flags & MAP_ANONYMOUS)
                 offset1 = 0;
             else
                 offset1 = offset + real_start - start;
