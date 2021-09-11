@@ -61,7 +61,7 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
 
     /* Add machine depedent sigcode. */
     p -= TARGET_SZSIGCODE;
-    if (setup_sigtramp(p, (unsigned)offsetof(struct target_sigframe, sf_uc),
+    if (TARGET_SZSIGCODE > 0 && setup_sigtramp(p, (unsigned)offsetof(struct target_sigframe, sf_uc),
             TARGET_FREEBSD_NR_sigreturn)) {
         errno = EFAULT;
         return -1;
@@ -75,7 +75,8 @@ static inline int setup_initial_stack(struct bsd_binprm *bprm,
         }
     }
     /* Add canary for SSP. */
-    qemu_guest_getrandom_nofail(canary, sizeof(canary));
+//    qemu_guest_getrandom_nofail(canary, sizeof(canary));
+    arc4random_buf(canary, sizeof(canary));
     p -= roundup(sizeof(canary), sizeof(abi_ulong));
     if (memcpy_to_target(p, canary, sizeof(canary))) {
         errno = EFAULT;

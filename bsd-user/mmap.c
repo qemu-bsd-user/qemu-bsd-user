@@ -18,6 +18,8 @@
  */
 #include "qemu/osdep.h"
 
+#include <sys/param.h>
+
 #include "qemu.h"
 #include "qemu-common.h"
 
@@ -100,8 +102,7 @@ int target_mprotect(abi_ulong start, abi_ulong len, int prot)
             }
             end = host_end;
         }
-        ret = mprotect(g2h_untagged(host_start),
-                       qemu_host_page_size, prot1 & PAGE_BITS);
+        ret = mprotect(g2h_untagged(host_start), qemu_host_page_size, prot1 & PAGE_BITS);
         if (ret != 0)
             goto error;
         host_start += qemu_host_page_size;
@@ -111,8 +112,8 @@ int target_mprotect(abi_ulong start, abi_ulong len, int prot)
         for (addr = end; addr < host_end; addr += TARGET_PAGE_SIZE) {
             prot1 |= page_get_flags(addr);
         }
-        ret = mprotect(g2h_untagged(host_end - qemu_host_page_size),
-                       qemu_host_page_size, prot1 & PAGE_BITS);
+        ret = mprotect(g2h_untagged(host_end - qemu_host_page_size), qemu_host_page_size,
+                       prot1 & PAGE_BITS);
         if (ret != 0)
             goto error;
         host_end -= qemu_host_page_size;
@@ -154,7 +155,7 @@ static int mmap_frag(abi_ulong real_start,
     if (prot1 == 0) {
         /* no page was there, so we allocate one */
         void *p = mmap(host_start, qemu_host_page_size, prot,
-                       flags | MAP_ANON, -1, 0);
+                       flags | ((fd != -1) ? MAP_ANONYMOUS : 0), -1, 0);
         if (p == MAP_FAILED)
             return -1;
         prot1 = prot;
@@ -162,7 +163,7 @@ static int mmap_frag(abi_ulong real_start,
     prot1 &= PAGE_BITS;
 
     prot_new = prot | prot1;
-    if (!(flags & MAP_ANON)) {
+    if (fd != -1) {
         /* msync() won't work here, so we return an error if write is
            possible while it is a shared mapping */
         if ((flags & TARGET_BSD_MAP_FLAGMASK) == MAP_SHARED &&
@@ -174,15 +175,18 @@ static int mmap_frag(abi_ulong real_start,
             mprotect(host_start, qemu_host_page_size, prot1 | PROT_WRITE);
 
         /* read the corresponding file data */
-        pread(fd, g2h_untagged(start), end - start, offset);
+        if (pread(fd, g2h_untagged(start), end - start, offset) == -1)
+            return -1;
 
         /* put final protection */
         if (prot_new != (prot1 | PROT_WRITE))
             mprotect(host_start, qemu_host_page_size, prot_new);
     } else {
-        /* just update the protection */
         if (prot_new != prot1) {
             mprotect(host_start, qemu_host_page_size, prot_new);
+        }
+        if (prot_new & PROT_WRITE) {
+            memset(g2h_untagged(start), 0, end - start);
         }
     }
     return 0;
@@ -284,7 +288,7 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size,
     flags = MAP_ANONYMOUS | MAP_PRIVATE;
 #ifdef MAP_ALIGNED
     if (alignment != 0) {
-        flags |= MAP_ALIGNED(alignment);
+	flags |= MAP_ALIGNED(alignment);
     }
 #else
     /* XXX TODO */
@@ -388,7 +392,7 @@ abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size)
 abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                      int flags, int fd, off_t offset)
 {
-    abi_ulong ret, end, real_start, real_end, retaddr, host_offset, host_len;
+    abi_ulong addr, ret, end, real_start, real_end, retaddr, host_offset, host_len;
 
     mmap_lock();
 #ifdef DEBUG_MMAP
@@ -400,10 +404,10 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                prot & PROT_WRITE ? 'w' : '-',
                prot & PROT_EXEC ? 'x' : '-');
         if (flags & MAP_ALIGNMENT_MASK) {
-            printf("MAP_ALIGNED(%u) ", (flags & MAP_ALIGNMENT_MASK)
-                    >> MAP_ALIGNMENT_SHIFT);
+            printf("MAP_ALIGNED(%u) ", (flags & MAP_ALIGNMENT_MASK) >>
+                   MAP_ALIGNMENT_SHIFT);
         }
-#if MAP_GUARD
+#ifdef MAP_GUARD
         if (flags & MAP_GUARD) {
             printf("MAP_GUARD ");
         }
@@ -575,7 +579,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
          * worst case: we cannot map the file because the offset is not
          * aligned, so we read it
          */
-        if (!(flags & MAP_ANON) &&
+        if (fd != -1 &&
             (offset & ~qemu_host_page_mask) != (start & ~qemu_host_page_mask)) {
             /*
              * msync() won't work here, so we return an error if write is
@@ -587,20 +591,27 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                 goto fail;
             }
             retaddr = target_mmap(start, len, prot | PROT_WRITE,
-                                  MAP_FIXED | MAP_PRIVATE | MAP_ANON,
+                                  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
                                   -1, 0);
             if (retaddr == -1)
                 goto fail;
-            pread(fd, g2h_untagged(start), len, offset);
+            if (pread(fd, g2h_untagged(start), len, offset) == -1)
+                goto fail;
             if (!(prot & PROT_WRITE)) {
                 ret = target_mprotect(start, len, prot);
-                if (ret != 0) {
-                    start = ret;
-                    goto the_end;
-                }
+                assert(ret == 0);
             }
             goto the_end;
         }
+#ifdef MAP_EXCL
+        /* Reject the mapping if any page within the range is mapped */
+        if (flags & MAP_EXCL) {
+            for (addr = start; addr < end; addr++) {
+                if (page_get_flags(addr) != 0)
+                    goto fail;
+            }
+        }
+#endif
 
         /* handle the start of the mapping */
         if (start > real_start) {
@@ -633,7 +644,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         if (real_start < real_end) {
             void *p;
             unsigned long offset1;
-            if (flags & MAP_ANON)
+            if (flags & MAP_ANONYMOUS)
                 offset1 = 0;
             else
                 offset1 = offset + real_start - start;

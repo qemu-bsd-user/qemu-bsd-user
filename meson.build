@@ -2090,6 +2090,7 @@ trace_events_subdirs = [
   'util',
 ]
 if have_user
+  trace_events_subdirs += [ 'bsd-user' ]
   trace_events_subdirs += [ 'linux-user' ]
 endif
 if have_block
@@ -2298,7 +2299,7 @@ subdir('ebpf')
 
 common_ss.add(libbpf)
 
-bsd_user_ss.add(files('gdbstub.c'))
+bsd_user_ss.add(files('gdbstub.c', 'thunk.c'))
 specific_ss.add_all(when: 'CONFIG_BSD_USER', if_true: bsd_user_ss)
 
 linux_user_ss.add(files('gdbstub.c', 'thunk.c'))
@@ -2573,6 +2574,7 @@ foreach target : target_dirs
     if 'CONFIG_BSD_USER' in config_target
       base_dir = 'bsd-user'
       target_inc += include_directories('bsd-user/' / targetos)
+      target_inc += include_directories('bsd-user/host/' / config_host['ARCH'])
       dir = base_dir / abi
       arch_srcs += files(dir / 'target_arch_cpu.c')
     endif
