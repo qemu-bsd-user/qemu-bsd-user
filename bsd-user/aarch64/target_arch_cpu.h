@@ -21,8 +21,11 @@
 
 #include "target_arch.h"
 
-// #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#ifdef AARCH_DEBUG
+#define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#else
 #define DEBUG_PRINTF(...)
+#endif
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
@@ -175,8 +178,9 @@ static inline void target_cpu_loop(CPUARMState *env)
 /* See arm64/arm64/vm_machdep.c cpu_fork() */
 static inline void target_cpu_clone_regs(CPUARMState *env, target_ulong newsp)
 {
-    if (newsp)
+    if (newsp) {
         env->xregs[31] = newsp;
+    }
     env->regs[0] = 0;
     env->regs[1] = 0;
     pstate_write(env, 0);

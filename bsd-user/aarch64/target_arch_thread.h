@@ -56,15 +56,6 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     regs->regs[0] = infop->start_stack;
     regs->pc = infop->entry &  ~0x3ULL;
     regs->sp = stack & ~(16 - 1);
-
-#if 0
-    if (bsd_type == target_freebsd) {
-        regs->ARM_lr = infop->entry & 0xfffffffe;
-    }
-    /* FIXME - what to for failure of get_user()? */
-    get_user_ual(regs->ARM_r2, stack + 8); /* envp */
-    get_user_ual(regs->ARM_r1, stack + 4); /* envp */
-#endif
 }
 
 #endif /* !_TARGET_ARCH_THREAD_H_ */

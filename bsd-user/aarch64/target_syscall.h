@@ -16,8 +16,8 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __ARCH_SYSCALL_H_
-#define __ARCH_SYSCALL_H_
+#ifndef _TARGET_ARCH_SYSCALL_H_
+#define _TARGET_ARCH_SYSCALL_H_
 
 /*
  * The aarch64 registers are named:
@@ -54,4 +54,4 @@ struct target_pt_regs {
 #define TARGET_HW_MACHINE       "arm64"
 #define TARGET_HW_MACHINE_ARCH  "aarch64"
 
-#endif /* !__ARCH_SYSCALL_H_ */
+#endif /* !_TARGET_ARCH_SYSCALL_H_ */

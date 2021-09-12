@@ -42,8 +42,9 @@ static inline void target_copy_regs(target_reg_t *regs, CPUARMState *env)
 {
     int i;
 
-    for (i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++) {
         regs->x[i] = tswapreg(env->xregs[i]);
+    }
     regs->lr = tswapreg(env->xregs[30]);
     regs->sp = tswapreg(env->xregs[31]);
     regs->elr = tswapreg(env->pc);

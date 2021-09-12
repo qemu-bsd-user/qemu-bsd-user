@@ -53,7 +53,7 @@ struct target_gpregs {
     uint64_t    gp_sp;
     uint64_t    gp_elr;
     uint32_t    gp_spsr;
-    uint32_t	gp_pad;
+    uint32_t    gp_pad;
 };
 
 struct target_fpregs {
@@ -61,7 +61,7 @@ struct target_fpregs {
     uint32_t    fp_sr;
     uint32_t    fp_cr;
     uint32_t    fp_flags;
-    uint32_t	fp_pad;
+    uint32_t    fp_pad;
 };
 
 struct target__mcontext {
@@ -69,8 +69,8 @@ struct target__mcontext {
     struct target_fpregs mc_fpregs;
     uint32_t    mc_flags;
 #define TARGET_MC_FP_VALID  0x1
-    uint32_t	mc_pad;
-    uint64_t	mc_spare[8];
+    uint32_t    mc_pad;
+    uint64_t    mc_spare[8];
 };
 
 typedef struct target__mcontext target_mcontext_t;
@@ -148,8 +148,9 @@ static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
         gr[0] = tswap64(regs->xregs[0]);
     }
 
-    for (i = 1; i < 30; i++)
+    for (i = 1; i < 30; i++) {
         gr[i] = tswap64(regs->xregs[i]);
+    }
 
     mcp->mc_gpregs.gp_sp = tswap64(regs->xregs[TARGET_REG_SP]);
     mcp->mc_gpregs.gp_lr = tswap64(regs->xregs[TARGET_REG_LR]);
@@ -167,8 +168,9 @@ static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
     int err = 0, i;
     const uint64_t *gr = mcp->mc_gpregs.gp_x;
 
-    for (i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++) {
         regs->xregs[i] = tswap64(gr[i]);
+    }
 
     regs->xregs[TARGET_REG_SP] = tswap64(mcp->mc_gpregs.gp_sp);
     regs->xregs[TARGET_REG_LR] = tswap64(mcp->mc_gpregs.gp_lr);
