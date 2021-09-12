@@ -16,16 +16,17 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
- 
+
 #ifndef _TARGET_ARCH_THREAD_H_
 #define _TARGET_ARCH_THREAD_H_
 
 /* Compare with cpu_set_upcall() in riscv/riscv/vm_machdep.c */
-static inline void target_thread_set_upcall(CPURISCVState *regs, abi_ulong entry,
-    abi_ulong arg, abi_ulong stack_base, abi_ulong stack_size)
+static inline void target_thread_set_upcall(CPURISCVState *regs,
+    abi_ulong entry, abi_ulong arg, abi_ulong stack_base,
+    abi_ulong stack_size)
 {
     abi_ulong sp;
-    
+
     sp = (abi_ulong)((stack_base + stack_size) -
         sizeof(struct target_trapframe)) & ~(16 - 1);
 
@@ -36,7 +37,7 @@ static inline void target_thread_set_upcall(CPURISCVState *regs, abi_ulong entry
 
 /* Compare with exec_setregs() in riscv/riscv/machdep.c */
 static inline void target_thread_init(struct target_pt_regs *regs,
-        struct image_info *infop)
+    struct image_info *infop)
 {
     regs->sepc = infop->entry & ~0x03;
     regs->regs[xRA] = infop->entry & ~0x03;

@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __ARCH_SYSCALL_H_
-#define __ARCH_SYSCALL_H_
+#ifndef _TARGET_ARCH_SYSCALL_H_
+#define _TARGET_ARCH_SYSCALL_H_
 
 /*
  * struct target_pt_regs defines the way the registers are stored on the stack

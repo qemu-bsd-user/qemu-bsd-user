@@ -31,9 +31,10 @@ static inline void target_cpu_init(CPURISCVState *env,
         struct target_pt_regs *regs)
 {
     int i;
-    
-    for (i = 0; i < 32; i++)
+
+    for (i = 0; i < 32; i++) {
         env->gpr[i] = regs->regs[i];
+    }
 
     env->pc = regs->sepc;
 }
@@ -55,7 +56,7 @@ static inline void target_cpu_loop(CPURISCVState *env)
         info.si_signo = 0;
         info.si_errno = 0;
         info.si_addr = 0;
-        
+
         switch (trapnr) {
         case EXCP_INTERRUPT:
             /* just indicate that signals should be handled asap */
@@ -93,8 +94,11 @@ static inline void target_cpu_loop(CPURISCVState *env)
                             env->gpr[xA7]  /* a7 */
                             );
                 }
-                
-                /* Compare to cpu_set_syscall_retval() in riscv/riscv/vm_machdep.c */
+
+                /*
+                 * Compare to cpu_set_syscall_retval() in
+                 * riscv/riscv/vm_machdep.c
+                 */
                 if (ret >= 0) {
                     env->gpr[xA0] = ret; /* a0 */
                     env->gpr[5] = 0;     /* t0 */
