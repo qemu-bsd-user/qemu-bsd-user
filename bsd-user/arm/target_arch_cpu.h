@@ -100,53 +100,24 @@ static inline void target_cpu_loop(CPUARMState *env)
         case EXCP_SWI:
         case EXCP_BKPT:
             {
-                unsigned int insn;
-#ifdef FREEBSD_ARM_OABI
-                env->eabi = 0;
-#else
-                env->eabi = 1;
-#endif
+                env->eabi = 1; /* FreeBSD is eabi only now */
                 /*
                  * system call
                  * See arm/arm/trap.c cpu_fetch_syscall_args()
                  */
                 if (trapnr == EXCP_BKPT) {
                     if (env->thumb) {
-                        if (env->eabi) {
-                            n = env->regs[7];
-                        } else {
-                            /* FIXME - what to do if get_user() fails? */
-                            get_user_u16(insn, env->regs[15]);
-                            n = insn & 0xff;
-                        }
+                        n = env->regs[7];
                         env->regs[15] += 2;
                     } else {
-                        if (env->eabi) {
-                            n = env->regs[7];
-                        } else {
-                            /* FIXME - what to do if get_user() fails? */
-                            get_user_u32(insn, env->regs[15]);
-                            n = (insn & 0xf) | ((insn >> 4) & 0xff0);
-                        }
+                        n = env->regs[7];
                         env->regs[15] += 4;
                     }
                 } else { /* trapnr != EXCP_BKPT */
                     if (env->thumb) {
-                        if (env->eabi) {
-                            n = env->regs[7];
-                        } else {
-                            /* FIXME - what to do if get_user() fails? */
-                            get_user_u16(insn, env->regs[15] - 2);
-                            n = insn & 0xff;
-                        }
+                        n = env->regs[7];
                     } else {
-                        if (env->eabi) {
-                            n = env->regs[7];
-                        } else {
-                            /* FIXME - what to do if get_user() fails? */
-                            get_user_u32(insn, env->regs[15] - 4);
-                            n = insn & 0xffffff;
-                        }
+                        n = env->regs[7];
                     }
                 }
                 DEBUG_PRINTF("AVANT CALL %d\n", n);
@@ -171,11 +142,7 @@ static inline void target_cpu_loop(CPUARMState *env)
                         get_user_s32(arg7, params);
                         arg8 = 0;
                     } else if (syscall_nr == TARGET_FREEBSD_NR___syscall) {
-#ifdef TARGET_WORDS_BIGENDIAN
-                        syscall_nr = env->regs[1];
-#else
                         syscall_nr = env->regs[0];
-#endif
                         arg1 = env->regs[2];
                         arg2 = env->regs[3];
                         get_user_s32(arg3, params);
@@ -206,7 +173,6 @@ static inline void target_cpu_loop(CPUARMState *env)
                      * Compare to arm/arm/vm_machdep.c
                      * cpu_set_syscall_retval()
                      */
-                    /* XXX armeb may need some extra magic here */
                     if (-TARGET_EJUSTRETURN == ret) {
                         /*
                          * Returning from a successful sigreturn syscall.
@@ -227,8 +193,7 @@ static inline void target_cpu_loop(CPUARMState *env)
                         env->regs[0] = ret; /* XXX need to handle lseek()? */
                         /* env->regs[1] = 0; */
                     }
-                } /* else if (bsd_type == target_openbsd)... */
-                else {
+                } else {
                     fprintf(stderr, "qemu: bsd_type (= %d) syscall "
                             "not supported\n", bsd_type);
                 }
