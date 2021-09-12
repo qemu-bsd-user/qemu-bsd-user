@@ -77,11 +77,7 @@ static inline void target_cpu_loop(CPUARMState *env)
                 arg7 = env->xregs[7];
                 arg8 = 0;
             } else if (code == TARGET_FREEBSD_NR___syscall) {
-#ifdef TARGET_WORDS_BIGENDIAN
-                code = env->xregs[1];
-#else
                 code = env->xregs[0];
-#endif
                 arg1 = env->xregs[2];
                 arg2 = env->xregs[3];
                 arg3 = env->xregs[4];
