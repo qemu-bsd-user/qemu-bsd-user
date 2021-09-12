@@ -22,7 +22,7 @@
 #define ELF_START_MMAP 0x80000000
 #define ELF_ET_DYN_LOAD_ADDR    0x500000
 
-#define elf_check_arch(x) ( (x) == EM_ARM )
+#define elf_check_arch(x) ((x) == EM_ARM)
 
 #define ELF_CLASS       ELFCLASS32
 #ifdef TARGET_WORDS_BIGENDIAN
@@ -35,8 +35,7 @@
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE       4096
 
-enum
-{
+enum {
     ARM_HWCAP_ARM_SWP       = 1 << 0,
     ARM_HWCAP_ARM_HALF      = 1 << 1,
     ARM_HWCAP_ARM_THUMB     = 1 << 2,
@@ -129,6 +128,5 @@ static uint32_t get_elf_hwcap2(void)
 
 #undef GET_FEATURE
 #undef GET_FEATURE_ID
-
 
 #endif /* _TARGET_ARCH_ELF_H_ */

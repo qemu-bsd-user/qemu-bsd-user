@@ -47,8 +47,9 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     abi_long stack = infop->start_stack;
     memset(regs, 0, sizeof(*regs));
     regs->ARM_cpsr = 0x10;
-    if (infop->entry & 1)
-      regs->ARM_cpsr |= CPSR_T;
+    if (infop->entry & 1) {
+        regs->ARM_cpsr |= CPSR_T;
+    }
     regs->ARM_pc = infop->entry & 0xfffffffe;
     regs->ARM_sp = infop->start_stack;
     if (bsd_type == target_freebsd) {
