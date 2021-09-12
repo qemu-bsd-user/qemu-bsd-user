@@ -16,7 +16,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
- 
+
 #ifndef _TARGET_ARCH_SIGNAL_H_
 #define _TARGET_ARCH_SIGNAL_H_
 
@@ -163,8 +163,8 @@ static inline abi_long get_mcontext(CPURISCVState *regs, target_mcontext_t *mcp,
     mcp->mc_gpregs.gp_a[7] = tswap64(regs->gpr[17]);
 
     if (flags & TARGET_MC_GET_CLEAR_RET) {
-        mcp->mc_gpregs.gp_a[0] = 0; /* a0 */        
-        mcp->mc_gpregs.gp_a[1] = 0; /* a1 */        
+        mcp->mc_gpregs.gp_a[0] = 0; /* a0 */
+        mcp->mc_gpregs.gp_a[1] = 0; /* a1 */
         mcp->mc_gpregs.gp_t[0] = 0; /* clear syscall error */
     }
 

@@ -19,7 +19,7 @@
 
 #include "target_arch.h"
 
-#define TP_OFFSET	16
+#define TP_OFFSET       16
 
 /* Compare with cpu_set_user_tls() in riscv/riscv/vm_machdep.c */
 void target_cpu_set_tls(CPURISCVState *env, target_ulong newtls)
