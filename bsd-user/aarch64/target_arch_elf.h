@@ -25,11 +25,7 @@
 #define elf_check_arch(x) ((x) == EM_AARCH64)
 
 #define ELF_CLASS       ELFCLASS64
-#ifdef TARGET_WORDS_BIGENDIAN
-#define ELF_DATA        ELFDATA2MSB
-#else
 #define ELF_DATA        ELFDATA2LSB
-#endif
 #define ELF_ARCH        EM_AARCH64
 
 #define USE_ELF_CORE_DUMP
