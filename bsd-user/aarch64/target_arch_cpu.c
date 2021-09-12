@@ -30,5 +30,5 @@ void target_cpu_set_tls(CPUARMState *env, target_ulong newtls)
 target_ulong target_cpu_get_tls(CPUARMState *env)
 {
 
-    return (env->cp15.tpidr_el[0]);
+    return env->cp15.tpidr_el[0];
 }

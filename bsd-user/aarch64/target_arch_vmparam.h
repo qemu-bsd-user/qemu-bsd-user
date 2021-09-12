@@ -44,15 +44,12 @@
 
 
 /* compare to sys/arm64/include/vmparam.h */
-#define TARGET_MAXTSIZ      (1 * GiB)               /* max text size */
-#define TARGET_DFLDSIZ      (128 * MiB)             /* initial data size limit */
-#define TARGET_MAXDSIZ      (1 * GiB)               /* max data size */
-#define TARGET_DFLSSIZ      (128 * MiB)             /* initial stack size limit */
-#define TARGET_MAXSSIZ      (1 * GiB)               /* max stack size */
-#define TARGET_SGROWSIZ     (128 * KiB)             /* amount to grow stack */
-
-// XXX RESERVED_VA really needs to be fixed and used correctly.
-// #define TARGET_RESERVED_VA  0xf7000000
+#define TARGET_MAXTSIZ      (1 * GiB)           /* max text size */
+#define TARGET_DFLDSIZ      (128 * MiB)         /* initial data size limit */
+#define TARGET_MAXDSIZ      (1 * GiB)           /* max data size */
+#define TARGET_DFLSSIZ      (128 * MiB)         /* initial stack size limit */
+#define TARGET_MAXSSIZ      (1 * GiB)           /* max stack size */
+#define TARGET_SGROWSIZ     (128 * KiB)         /* amount to grow stack */
 
                 /* KERNBASE - 512 MB */
 #define TARGET_VM_MAXUSER_ADDRESS   (0x00007fffff000000ULL - (512 * MiB))
