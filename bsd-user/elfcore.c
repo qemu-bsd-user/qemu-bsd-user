@@ -428,7 +428,7 @@ struct elf_note_info {
     target_fpreg_t              *fpregs;        /* NT_FPREGSET */
     target_thrmisc_t            *thrmisc;       /* NT_THRMISC */
 
-    QTAILQ_HEAD(thread_list_head, elf_thread_status) thread_list;
+    QTAILQ_HEAD(, elf_thread_status) thread_list;
 
     struct target_kinfo_proc    *kiproc;        /* NT_PROCSTAT_PROC */
     struct target_kinfo_file    *kifiles;       /* NT_PROCSTAT_FILES */
@@ -636,11 +636,7 @@ static void fill_elf_header(struct elfhdr *elf, int segs, uint16_t machine,
     elf->e_ident[EI_CLASS] = ELF_CLASS;
     elf->e_ident[EI_DATA] = ELF_DATA;
     elf->e_ident[EI_VERSION] = EV_CURRENT;
-#ifdef __FreeBSD__
     elf->e_ident[EI_OSABI] = ELFOSABI_FREEBSD;
-#else
-    elf->e_ident[EI_OSABI] = ELF_OSABI;
-#endif /* ! __FreeBSD__ */
     elf->e_type = ET_CORE;
     elf->e_machine = machine;
     elf->e_version = EV_CURRENT;
