@@ -2,7 +2,6 @@
  *  FreeBSD arm register structures
  *
  *  Copyright (c) 2015 Stacey Son
- *  All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,7 +24,7 @@
 typedef struct target_reg {
     uint32_t        r[13];
     uint32_t        r_sp;
-    uint32_t	    r_lr;
+    uint32_t        r_lr;
     uint32_t        r_pc;
     uint32_t        r_cpsr;
 } target_reg_t;
@@ -47,8 +46,9 @@ static inline void target_copy_regs(target_reg_t *regs, const CPUARMState *env)
 {
     int i;
 
-    for (i = 0; i < 13; i++)
+    for (i = 0; i < 13; i++) {
         regs->r[i] = tswapreg(env->regs[i + 1]);
+    }
     regs->r_sp = tswapreg(env->regs[13]);
     regs->r_lr = tswapreg(env->regs[14]);
     regs->r_pc = tswapreg(env->regs[15]);

@@ -1,7 +1,7 @@
 /*
  *  arm cpu init and loop
  *
- *  Olivier Houchard
+ *  Copyright (c) 2013 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,8 +23,11 @@
 
 #include "target_arch.h"
 
-// #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#ifdef ARM_DEBUG
+#define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#else
 #define DEBUG_PRINTF(...)
+#endif
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
@@ -82,7 +85,7 @@ static inline void target_cpu_loop(CPUARMState *env)
                     get_user_u32(opcode, env->regs[15]);
 
                     /* Check the opcode with CP handlers we may have. */
-                    rc = EmulateAll(opcode, &ts-fpa, env);
+                    rc = EmulateAll(opcode, &ts->fpa, env);
 #endif /* NOT_YET */
                     if (rc == 0) {
                         /* illegal instruction */
@@ -279,8 +282,9 @@ static inline void target_cpu_loop(CPUARMState *env)
 
 static inline void target_cpu_clone_regs(CPUARMState *env, target_ulong newsp)
 {
-    if (newsp)
+    if (newsp) {
         env->regs[13] = newsp;
+    }
     env->regs[0] = 0;
 }
 

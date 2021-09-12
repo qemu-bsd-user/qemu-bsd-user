@@ -1,6 +1,8 @@
 /*
  *  arm cpu related code
  *
+ *  Copyright (c) 2013 Stacey D. Son
+ *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
@@ -30,7 +32,8 @@ void target_cpu_set_tls(CPUARMState *env, target_ulong newtls)
 
 target_ulong target_cpu_get_tls(CPUARMState *env)
 {
-    if (access_secure_reg(env))
-        return (env->cp15.tpidruro_s);
-    return (env->cp15.tpidrro_el[0]);
+    if (access_secure_reg(env)) {
+        return env->cp15.tpidruro_s;
+    }
+    return env->cp15.tpidrro_el[0];
 }
