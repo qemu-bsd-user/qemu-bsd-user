@@ -447,7 +447,7 @@ void check_invalid_mmaps(void)
 
     /* Attempt to map a over length page.  */
     addr = mmap(NULL, -4, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    fprintf(stdout, "%s addr=%p", __func__, (void *)addr);
+    fprintf(stdout, "%s addr=%p errno=%d", __func__, (void *)addr, errno);
     fail_unless(addr == MAP_FAILED);
     fail_unless(errno == ENOMEM);
 
