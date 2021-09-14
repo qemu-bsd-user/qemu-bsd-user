@@ -1,4 +1,10 @@
+#ifdef __FreeBSD__
+#include <sys/syscall.h>
+#define __NR_exit SYS_exit
+#define __NR_write SYS_write
+#else
 #include <asm/unistd.h>
+#endif
 
 static inline void exit(int status)
 {
