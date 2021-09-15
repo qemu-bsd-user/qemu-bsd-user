@@ -70,6 +70,8 @@ struct image_info {
     abi_ulong data_offset;
     abi_ulong arg_start;
     abi_ulong arg_end;
+    abi_ulong arg_strings;
+    abi_ulong env_strings;
     uint32_t  elf_flags;
 };
 
