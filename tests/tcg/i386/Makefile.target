@@ -21,7 +21,6 @@ run-plugin-test-i386-pcmpistri-%: QEMU_OPTS += -cpu max
 run-test-i386-bmi2: QEMU_OPTS += -cpu max
 run-plugin-test-i386-bmi2-%: QEMU_OPTS += -cpu max
 
-CFLAGS +=  -Wno-error=overflow
 #
 # hello-i386 is a barebones app
 #
