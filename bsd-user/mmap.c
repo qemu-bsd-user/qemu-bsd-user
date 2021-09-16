@@ -609,7 +609,6 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             }
             goto the_end;
         }
-#ifdef MAP_EXCL
         /* Reject the mapping if any page within the range is mapped */
         if (flags & MAP_EXCL) {
             for (addr = start; addr < end; addr++) {
@@ -617,7 +616,6 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                     goto fail;
             }
         }
-#endif
 
         /* Reject the mapping if any page within the range is mapped */
         if ((flags & MAP_EXCL) && page_check_range(start, len, 0) < 0) {
