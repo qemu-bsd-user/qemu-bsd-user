@@ -99,7 +99,8 @@ int target_mprotect(abi_ulong start, abi_ulong len, int prot)
             }
             end = host_end;
         }
-        ret = mprotect(g2h_untagged(host_start), qemu_host_page_size, prot1 & PAGE_BITS);
+        ret = mprotect(g2h_untagged(host_start),
+                       qemu_host_page_size, prot1 & PAGE_BITS);
         if (ret != 0)
             goto error;
         host_start += qemu_host_page_size;
@@ -109,8 +110,8 @@ int target_mprotect(abi_ulong start, abi_ulong len, int prot)
         for (addr = end; addr < host_end; addr += TARGET_PAGE_SIZE) {
             prot1 |= page_get_flags(addr);
         }
-        ret = mprotect(g2h_untagged(host_end - qemu_host_page_size), qemu_host_page_size,
-                       prot1 & PAGE_BITS);
+        ret = mprotect(g2h_untagged(host_end - qemu_host_page_size),
+                       qemu_host_page_size, prot1 & PAGE_BITS);
         if (ret != 0)
             goto error;
         host_end -= qemu_host_page_size;
@@ -152,7 +153,7 @@ static int mmap_frag(abi_ulong real_start,
     if (prot1 == 0) {
         /* no page was there, so we allocate one */
         void *p = mmap(host_start, qemu_host_page_size, prot,
-                       flags | ((fd != -1) ? MAP_ANONYMOUS : 0), -1, 0);
+                       flags | ((fd != -1) ? MAP_ANON : 0), -1, 0);
         if (p == MAP_FAILED)
             return -1;
         prot1 = prot;
@@ -282,9 +283,9 @@ static abi_ulong mmap_find_vma_aligned(abi_ulong start, abi_ulong size,
     addr = start;
     wrapped = repeat = 0;
     prev = 0;
-    flags = MAP_ANONYMOUS | MAP_PRIVATE;
+    flags = MAP_ANON | MAP_PRIVATE;
     if (alignment != 0) {
-	flags |= MAP_ALIGNED(alignment);
+        flags |= MAP_ALIGNED(alignment);
     }
 
     for (;; prev = ptr) {
@@ -406,7 +407,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         if (flags & MAP_FIXED) {
             printf("MAP_FIXED ");
         }
-        if (flags & MAP_ANONYMOUS) {
+        if (flags & MAP_ANON) {
             printf("MAP_ANON ");
         }
         if (flags & MAP_EXCL) {
@@ -428,7 +429,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
     }
 #endif
 
-    if ((flags & MAP_ANONYMOUS) && fd != -1) {
+    if ((flags & MAP_ANON) && fd != -1) {
         errno = EINVAL;
         goto fail;
     }
@@ -529,7 +530,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
          * qemu_real_host_page_size
          */
         p = mmap(g2h_untagged(start), host_len, prot,
-                 flags | MAP_FIXED | ((fd != -1) ? MAP_ANONYMOUS : 0), -1, 0);
+                 flags | MAP_FIXED | ((fd != -1) ? MAP_ANON : 0), -1, 0);
         if (p == MAP_FAILED)
             goto fail;
         /* update start so that it points to the file position at 'offset' */
@@ -580,7 +581,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                 goto fail;
             }
             retaddr = target_mmap(start, len, prot | PROT_WRITE,
-                                  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
+                                  MAP_FIXED | MAP_PRIVATE | MAP_ANON,
                                   -1, 0);
             if (retaddr == -1)
                 goto fail;
@@ -631,7 +632,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         if (real_start < real_end) {
             void *p;
             unsigned long offset1;
-            if (flags & MAP_ANONYMOUS)
+            if (flags & MAP_ANON)
                 offset1 = 0;
             else
                 offset1 = offset + real_start - start;
@@ -695,8 +696,7 @@ static void mmap_reserve(abi_ulong start, abi_ulong size)
     }
     if (real_start != real_end) {
         mmap(g2h_untagged(real_start), real_end - real_start, PROT_NONE,
-                 MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE,
-                 -1, 0);
+                 MAP_FIXED | MAP_ANON | MAP_PRIVATE, -1, 0);
     }
 }
 
