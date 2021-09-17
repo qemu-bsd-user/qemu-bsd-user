@@ -17,6 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "qemu/osdep.h"
+
 #include "qemu.h"
 #include "qemu-common.h"
 
@@ -398,8 +399,8 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                prot & PROT_WRITE ? 'w' : '-',
                prot & PROT_EXEC ? 'x' : '-');
         if (flags & MAP_ALIGNMENT_MASK) {
-            printf("MAP_ALIGNED(%u) ", (flags & MAP_ALIGNMENT_MASK) >>
-                   MAP_ALIGNMENT_SHIFT);
+            printf("MAP_ALIGNED(%u) ",
+                   (flags & MAP_ALIGNMENT_MASK) >> MAP_ALIGNMENT_SHIFT);
         }
         if (flags & MAP_GUARD) {
             printf("MAP_GUARD ");
@@ -464,6 +465,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         errno = ENOMEM;
         goto fail;
     }
+
     real_start = start & qemu_host_page_mask;
     host_offset = offset & qemu_host_page_mask;
 
@@ -593,6 +595,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             }
             goto the_end;
         }
+
         /* Reject the mapping if any page within the range is mapped */
         if (flags & MAP_EXCL) {
             for (addr = start; addr < end; addr++) {
