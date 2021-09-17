@@ -17,6 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "qemu/osdep.h"
+
 #include "qemu.h"
 #include "qemu-common.h"
 
@@ -607,6 +608,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             }
             goto the_end;
         }
+
         /* Reject the mapping if any page within the range is mapped */
         if (flags & MAP_EXCL) {
             for (addr = start; addr < end; addr++) {
