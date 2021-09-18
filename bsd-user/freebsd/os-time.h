@@ -586,7 +586,6 @@ static inline abi_long do_freebsd_pselect(void *cpu_env, int n,
     return ret;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
 /* ppoll(2) */
 static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
         abi_long arg2, abi_ulong arg3, abi_ulong arg4)
@@ -643,7 +642,6 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
 
     return ret;
 }
-#endif /* __FreeBSD_version >= 1100000 */
 
 /* kqueue(2) */
 static inline abi_long do_freebsd_kqueue(void)
@@ -894,7 +892,6 @@ static inline abi_long do_freebsd_getitimer(int arg1, abi_ulong arg2)
    return ret;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 902503
 /* clock_getcpuclockid2(id_t, int, clockid_t *)  Not documented. */
 static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1,
         abi_ulong arg2, abi_ulong arg3, abi_ulong arg4)
@@ -938,20 +935,6 @@ static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1,
     return ret;
 }
 
-#else /* ! __FreeBSD_version >= 902503 */
-
-static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1 __unused,
-        abi_ulong arg2 __unused, abi_ulong arg3 __unused,
-        abi_ulong arg4 __unused)
-{
-
-    qemu_log("qemu: Unsupported syscall clock_getcpuclockid2()\n");
-    return -TARGET_ENOSYS;
-}
-#endif /* ! __FreeBSD_version >= 902503 */
-
-#if defined(__FreeBSD_version) && ((__FreeBSD__ == 10 && __FreeBSD_version >= 1003000) || __FreeBSD_version >= 1100056)
-
 static inline abi_long do_freebsd_futimens(abi_ulong arg1,
         abi_ulong arg2)
 {
@@ -970,6 +953,7 @@ static inline abi_long do_freebsd_futimens(abi_ulong arg1,
 
     return get_errno(futimens(arg1, tvp));
 }
+
 static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
         abi_ulong arg2, abi_ulong arg3, abi_ulong arg4)
 {
@@ -997,18 +981,5 @@ static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
     unlock_user(p, arg2, 0);
     return ret;
 }
-#else /* ! __FreeBSD_version >= 1100000 */
-static inline abi_long do_freebsd_futimens(abi_ulong arg1,
-        abi_ulong arg2)
-{
-    qemu_log("qemu: Unsupported syscall futimens\n");
-    return -TARGET_ENOSYS;
-}
-static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
-        abi_ulong arg2, abi_ulong arg3, abi_ulong arg4)
-{
-    qemu_log("qemu: Unsupported syscall utimensat()\n");
-    return -TARGET_ENOSYS;
-}
-#endif /* ! __FreeBSD_version >= 1100000 */
+
 #endif /* __FREEBSD_OS_TIME_H_ */
