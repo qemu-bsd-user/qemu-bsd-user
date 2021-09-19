@@ -378,7 +378,6 @@ abi_long freebsd_umtx_wake_private(abi_ulong obj, uint32_t val)
         val, NULL, NULL));
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #if defined(UMTX_OP_NWAKE_PRIVATE)
 #define BATCH_SIZE 128
 abi_long freebsd_umtx_nwake_private(abi_ulong target_array_addr, uint32_t num)
@@ -483,9 +482,7 @@ abi_long freebsd_umtx_mutex_wake2(abi_ulong target_addr, uint32_t flags)
 #endif /* _UMTX_OPTIMIZED */
 }
 #endif /* UMTX_OP_MUTEX_WAKE2 */
-#endif /* __FreeBSD_version > 900000 */
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 1100000
 abi_long freebsd_umtx_sem2_wait(abi_ulong obj, size_t tsz, void *t)
 {
 #ifdef _UMTX_OPTIMIZED
@@ -647,8 +644,6 @@ abi_long freebsd_umtx_sem2_wake(abi_ulong obj)
     return ret;
 #endif /* _UMTX_OPTIMIZED */
 }
-
-#endif /* ! __FreeBSD_version > 1100000 */
 
 abi_long freebsd_umtx_sem_wait(abi_ulong obj, size_t tsz, void *t)
 {
@@ -1468,7 +1463,6 @@ abi_long freebsd_rw_unlock(abi_ulong target_addr)
 #endif  /* _UMTX_OPTIMIZED */
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 1200000
 abi_long
 freebsd_umtx_shm(abi_ulong target_addr, long fflag)
 {
@@ -1507,8 +1501,6 @@ freebsd_umtx_robust_list(abi_ulong target_addr, size_t rbsize)
     return -TARGET_EOPNOTSUPP;
 #endif
 }
-
-#endif /* __FreeBSD_version > 1200000 */
 
 abi_long do_freebsd_thr_new(CPUArchState *env,
         abi_ulong target_param_addr, int32_t param_size)
