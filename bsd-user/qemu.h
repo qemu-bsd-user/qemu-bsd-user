@@ -109,15 +109,6 @@ typedef struct TaskState {
 
     struct TaskState *next;
     int used; /* non zero if used */
-#ifdef TARGET_ARM
-    int swi_errno;
-#endif
-#if defined(TARGET_ARM) || defined(TARGET_M68K) || defined(TARGET_UNICORE32)
-    /* Extra fields for semihosted binaries. */
-    uint32_t heap_base;
-    uint32_t heap_limit;
-    uint32_t stack_base;
-#endif
     struct image_info *info;
     struct bsd_binprm *bprm;
 
