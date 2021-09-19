@@ -25,11 +25,9 @@
 #include <sys/queue.h>
 #include <sys/sysctl.h>
 #include <sys/unistd.h>
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/socket.h>
 struct kinfo_proc;
 #include <libprocstat.h>
-#endif
 #include <string.h>
 
 #include "qemu.h"
@@ -42,7 +40,6 @@ static char *
 get_filename_from_fd(pid_t pid, int fd, char *filename, size_t len)
 {
     char *ret = NULL;
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
     unsigned int cnt;
     struct procstat *procstat = NULL;
     struct kinfo_proc *kp = NULL;
@@ -78,73 +75,8 @@ out:
         procstat_freeprocs(procstat, kp);
     if (procstat != NULL)
         procstat_close(procstat);
-#endif
     return ret;
 }
-
-#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
-static int
-is_target_shell_script(int fd, char *interp, size_t size, char **interp_args)
-{
-    char buf[2], *p, *b;
-    ssize_t n;
-
-    if (fd < 0) {
-        return 0;
-    }
-    (void)lseek(fd, 0L, SEEK_SET);
-    if (read(fd, buf, 2) != 2) {
-        return 0;
-    }
-    if (buf[0] != '#' && buf[1] != '!') {
-        return 0;
-    }
-    if (size == 0) {
-        return 0;
-    }
-    b = interp;
-    /* Remove the trailing whitespace after "#!", if any. */
-    while (size != 0) {
-        n = read(fd, b, 1);
-        if (n < 0 || n == 0) {
-            return 0;
-        }
-        if ((*b != ' ') && (*b != '\t')) {
-            b++;
-            size--;
-            break;
-        }
-    }
-    while (size != 0) {
-        n = read(fd, b, size);
-        if (n < 0 || n == 0) {
-            return 0;
-        }
-        if ((p = memchr(b, '\n', size)) != NULL) {
-            int hasargs = 0;
-            *p = 0;
-
-            *interp_args = NULL;
-            p = interp;
-            while (*p) {
-                if ((*p == ' ') || (*p == '\t')) {
-                    hasargs = 1;
-                    *p = 0;
-                } else if (hasargs) {
-                    *interp_args = p;
-                    break;
-                }
-                ++p;
-            }
-            return 1;
-        }
-        b += n;
-        size -= n;
-    }
-
-    return 0;
-}
-#endif
 
 /*
  * execve/fexecve
@@ -234,10 +166,6 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
     }
 
     if (do_fexec) {
-#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
-        char execpath[PATH_MAX], *scriptargs;
-#endif /* __FreeBSD_version < 1100000 */
-
         if (((int)path_or_fd > 0 &&
             is_target_elf_binary((int)path_or_fd)) == 1) {
             char execpath[PATH_MAX];
@@ -266,41 +194,11 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
                 ret = -TARGET_EBADF;
                 goto execve_end;
             }
-#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
-        } else if (is_target_shell_script((int)path_or_fd, execpath,
-                    sizeof(execpath), &scriptargs) != 0) {
-            char scriptpath[PATH_MAX];
-
-            /* execve() as a target script using emulator. */
-            if (get_filename_from_fd(getpid(), (int)path_or_fd, scriptpath,
-                        sizeof(scriptpath)) != NULL) {
-                *qargp = execpath;
-                *qarg1 = scriptpath;
-#ifndef DONT_INHERIT_INTERP_PREFIX
-                memmove(qargp + 2, qargp, (qargend-qargp) * sizeof(*qargp));
-                qargp[0] = (char *)"-L";
-                qargp[1] = (char *)interp_prefix;
-                qarg1 += 2;
-                qargend += 2;
-#endif
-                if (scriptargs) {
-                    memmove(qarg1 + 1, qarg1, (qargend-qarg1) * sizeof(*qarg1));
-                    *qarg1 = scriptargs;
-                }
-                ret = get_errno(execve(qemu_proc_pathname, qarg0, envp));
-            } else {
-                ret = -TARGET_EBADF;
-                goto execve_end;
-            }
-#endif
         } else {
             ret = get_errno(fexecve((int)path_or_fd, argp, envp));
         }
     } else {
         int fd;
-#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
-        char execpath[PATH_MAX], *scriptargs;
-#endif
 
         p = lock_user_string(path_or_fd);
         if (p == NULL) {
@@ -328,26 +226,6 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
             *qarg1++ = (char *)interp_prefix;
 #endif
             ret = get_errno(execve(qemu_proc_pathname, qargp, envp));
-#if defined(__FreeBSD_version) && __FreeBSD_version < 1100000
-        } else if (is_target_shell_script(fd, execpath,
-                    sizeof(execpath), &scriptargs) != 0) {
-            close(fd);
-            /* execve() as a target script using emulator. */
-            *qargp = execpath;
-            *qarg1 = (char *)p;
-#ifndef DONT_INHERIT_INTERP_PREFIX
-            memmove(qargp + 2, qargp, (qargend-qargp) * sizeof(*qargp));
-            qargp[0] = (char *)"-L";
-            qargp[1] = (char *)interp_prefix;
-            qarg1 += 2;
-            qargend += 2;
-#endif
-            if (scriptargs) {
-                memmove(qarg1 + 1, qarg1, (qargend-qarg1) * sizeof(*qarg1));
-                *qarg1 = scriptargs;
-            }
-            ret = get_errno(execve(qemu_proc_pathname, qarg0, envp));
-#endif
         } else {
             close(fd);
             /* Execve() as a host native binary. */
@@ -377,15 +255,7 @@ execve_end:
     return ret;
 }
 
-#if !defined(__FreeBSD_version)
-#error __FreeBSD_version not defined!
-#endif
-
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1001510
 #include <sys/procctl.h>
-#endif
-
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1001510 && defined(PROC_REAP_ACQUIRE)
 
 static abi_long
 t2h_procctl_cmd(int target_cmd, int *host_cmd)
@@ -601,19 +471,3 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
 
     return error;
 }
-
-#else /* ! __FreeBSD_version >= 1100000 */
-
-abi_long
-do_freebsd_procctl(__unused void *cpu_env, __unused int idtype,
-        __unused abi_ulong arg2, __unused abi_ulong arg3,
-        __unused abi_ulong arg4, __unused abi_ulong arg5,
-        __unused abi_ulong arg6)
-{
-
-    qemu_log("qemu: Unsupported syscall procctl()\n");
-    return -TARGET_ENOSYS;
-}
-
-
-#endif /* ! __FreeBSD_version >= 1100000 */
