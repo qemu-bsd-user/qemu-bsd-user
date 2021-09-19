@@ -43,6 +43,7 @@ extern enum BSDType bsd_type;
 #include "target_syscall.h"
 #include "target_os_vmparam.h"
 #include "target_os_signal.h"
+#include "hostdep.h"
 #include "exec/gdbstub.h"
 
 /*
