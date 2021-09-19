@@ -19,8 +19,6 @@
 
 #include <sys/param.h>
 
-int qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right);
-
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1200031
 #define BSD_HAVE_INO64
 #endif
@@ -97,8 +95,7 @@ struct qemu_sigqueue {
 struct emulated_sigtable {
     int pending; /* true if signal is pending */
     struct qemu_sigqueue *first;
-    struct qemu_sigqueue info; /* in order to always have memory for the
-                                  first signal, we put it here */
+    struct qemu_sigqueue info;	/* Put first signal info here */
 };
 
 /*
@@ -251,6 +248,7 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp);
 int do_sigaction(int sig, const struct target_sigaction *act,
                 struct target_sigaction *oact);
 void QEMU_NORETURN force_sig(int target_sig);
+int qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right);
 /**
  * block_signals: block all signals while handling this guest syscall
  *
