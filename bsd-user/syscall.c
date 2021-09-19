@@ -33,6 +33,8 @@
 static abi_ulong target_brk;
 static abi_ulong target_original_brk;
 
+int g_posix_timers[32] = { 0, } ;
+
 abi_long get_errno(abi_long ret)
 {
     if (ret == -1) {

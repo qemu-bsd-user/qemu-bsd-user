@@ -9,3 +9,5 @@ bsd_user_ss.add(files(
   'syscall.c',
   'uaccess.c',
 ))
+
+subdir(targetos)
