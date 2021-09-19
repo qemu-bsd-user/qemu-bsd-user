@@ -108,8 +108,8 @@ typedef struct TaskState {
     pid_t ts_tid;     /* tid (or pid) of this task */
 
     struct TaskState *next;
-    struct image_info *info;
     struct bsd_binprm *bprm;
+    struct image_info *info;
 
     struct emulated_sigtable sigtab[TARGET_NSIG];
     struct qemu_sigqueue sigqueue_table[MAX_SIGQUEUE_SIZE]; /* siginfo queue */
