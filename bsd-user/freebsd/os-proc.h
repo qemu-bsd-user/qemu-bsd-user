@@ -21,14 +21,10 @@
 #define __FREEBSD_PROC_H_
 
 #include <sys/param.h>
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 #include <sys/procctl.h>
 #include <sys/signal.h>
-#endif
 #include <sys/types.h>
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/procdesc.h>
-#endif
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -81,7 +77,6 @@ static inline abi_long do_freebsd_wait4(abi_long arg1, abi_ulong target_status,
     return ret;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 /* wait6(2) */
 static inline abi_long do_freebsd_wait6(void *cpu_env, abi_long idtype, 
     abi_long id1, abi_long id2,
@@ -129,20 +124,6 @@ static inline abi_long do_freebsd_wait6(void *cpu_env, abi_long idtype,
     return ret;
 }
 
-#else /* !  __FreeBSD_version >= 1000000 */
-
-static inline abi_long do_freebsd_wait6( __unused abi_long idtype,
-	__unused abi_long id,  __unused abi_ulong target_status,
-	__unused abi_long options, __unused abi_ulong target_wrusage,
-	__unused abi_ulong target_infop)
-{
-
-    qemu_log("qemu: Unsupported syscall wait6()\n");
-    return -TARGET_ENOSYS;
-}
-#endif /* __FreeBSD_version >= 1000000 */
-
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 /* setloginclass(2) */
 static inline abi_long do_freebsd_setloginclass(abi_ulong arg1)
 {
@@ -213,42 +194,6 @@ static inline abi_long do_freebsd_pdgetpid(abi_long fd, abi_ulong target_pidp)
     }
     return ret;
 }
-
-#else
-
-/* setloginclass(2) */
-static inline abi_long do_freebsd_setloginclass(abi_ulong arg1)
-{
-
-    qemu_log("qemu: Unsupported syscall setloginclass()\n");
-    return -TARGET_ENOSYS;
-}
-
-/* getloginclass(2) */
-static inline abi_long do_freebsd_getloginclass(abi_ulong arg1, abi_ulong arg2)
-{
-
-    qemu_log("qemu: Unsupported syscall getloginclass()\n");
-    return -TARGET_ENOSYS;
-}
-
-/* pdwait4(2) */
-static inline abi_long do_freebsd_pdwait4(abi_long arg1,
-        abi_ulong target_status, abi_long arg3, abi_ulong target_rusage)
-{
-
-    qemu_log("qemu: Unsupported syscall pdwait4()\n");
-    return -TARGET_ENOSYS;
-}
-
-/* pdgetpid(2) */
-static inline abi_long do_freebsd_pdgetpid(abi_long fd, abi_ulong target_pidp)
-{
-
-    qemu_log("qemu: Unsupported syscall pdgetpid()\n");
-    return -TARGET_ENOSYS;
-}
-#endif /* !  __FreeBSD_version > 900000 */
 
 /* undocumented __setugid */
 static inline abi_long do_freebsd___setugid(abi_long arg1)
@@ -330,7 +275,6 @@ static inline abi_long do_freebsd_rfork(void *cpu_env, abi_long flags)
 
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 /* pdfork(2) */
 static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
         abi_long flags)
@@ -362,19 +306,6 @@ static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
 
     return ret;
 }
-
-#else
-
-/* pdfork(2) */
-static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong arg1,
-        abi_long arg2)
-{
-
-    qemu_log("qemu: Unsupported syscall pdfork()\n");
-    return -TARGET_ENOSYS;
-}
-
-#endif /* __FreeBSD_version > 900000 */
 
 /* jail(2) */
 static inline abi_long do_freebsd_jail(abi_ulong arg1)
