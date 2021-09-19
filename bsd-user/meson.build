@@ -14,4 +14,3 @@ bsd_user_ss.add(files(
 if fs.exists(targetos)
    subdir(targetos)
 endif
-

@@ -126,6 +126,14 @@ struct target_freebsd_timeval {
 #endif
 };
 
+/* compare to sys/timex.h */
+
+/* Maxiumum of 32 active POSIX timers allowed at any one time. */
+extern int g_posix_timers[32];
+
+#define TIMER_MAGIC 0x0caf0000
+#define TIMER_MAGIC_MASK 0xffff0000
+
 /*
  *  sys/resource.h
  */
