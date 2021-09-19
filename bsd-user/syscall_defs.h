@@ -490,13 +490,6 @@ struct target_ip_mreqn {
 /*
  * sys/stat.h
  */
-#if defined(__FreeBSD_version) && __FreeBSD_version < 900000
-#define st_atim st_atimespec
-#define st_ctim st_ctimespec
-#define st_mtim st_mtimespec
-#define st_birthtim st_birthtimespec
-#endif
-
 struct target_freebsd11_stat {
     uint32_t  st_dev;       /* inode's device */
     uint32_t  st_ino;       /* inode's number */
