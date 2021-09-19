@@ -2090,6 +2090,7 @@ trace_events_subdirs = [
   'util',
 ]
 if have_user
+  trace_events_subdirs += [ 'bsd-user' ]
   trace_events_subdirs += [ 'linux-user' ]
 endif
 if have_block
