@@ -102,7 +102,6 @@ typedef struct TaskState {
     pid_t ts_tid;     /* tid (or pid) of this task */
 
     struct TaskState *next;
-    struct bsd_binprm *bprm;
     struct image_info *info;
     struct bsd_binprm *bprm;
 
