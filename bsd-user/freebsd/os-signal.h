@@ -20,7 +20,6 @@
 #ifndef __FREEBSD_OS_SIGNAL_H_
 #define __FREEBSD_OS_SIGNAL_H_
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #include <sys/procdesc.h>
 
 /* pdkill(2) */
@@ -29,15 +28,5 @@ static inline abi_long do_freebsd_pdkill(abi_long arg1, abi_long arg2)
 
     return get_errno(pdkill(arg1, arg2));
 }
-
-#else
-
-static inline abi_long do_freebsd_pdkill(abi_long arg1, abi_long arg2)
-{
-
-    qemu_log("qemu: Unsupported syscall pdkill()\n");
-    return -TARGET_ENOSYS;
-}
-#endif /* ! __FreeBSD_version > 900000 */
 
 #endif /* ! __FREEBSD_OS_SIGNAL_H_ */
