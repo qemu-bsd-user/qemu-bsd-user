@@ -554,7 +554,6 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         ret = freebsd_rw_unlock(obj);
         break;
 
-#if defined(__FreeBSD_version) && __FreeBSD_version > 900000
 #ifdef UMTX_OP_MUTEX_WAKE2
     case TARGET_UMTX_OP_MUTEX_WAKE2:
         ret = freebsd_umtx_mutex_wake2(obj, val);
@@ -567,7 +566,6 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         break;
 #endif /* UMTX_OP_NWAKE_PRIVATE */
 
-#if __FreeBSD_version > 1100000
     case TARGET_UMTX_OP_SEM2_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
 #ifdef _UMTX_OPTIMIZED
@@ -603,7 +601,6 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         /* Don't need to do access_ok(). */
         ret = freebsd_umtx_sem2_wake(obj);
         break;
-#endif /* __FreeBSD_version > 1100000 */
     case TARGET_UMTX_OP_SEM_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
 #ifdef _UMTX_OPTIMIZED
@@ -626,16 +623,12 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         /* Don't need to do access_ok(). */
         ret = freebsd_umtx_sem_wake(obj);
         break;
-#if __FreeBSD_version > 1200000
     case UMTX_OP_SHM:
         ret = freebsd_umtx_shm(uaddr, val);
         break;
     case TARGET_UMTX_OP_ROBUST_LISTS:
         ret = freebsd_umtx_robust_list(uaddr, val);
         break;
-#endif /* __FreeBSD_version > 1200000 */
-
-#endif
     default:
         return -TARGET_EINVAL;
     }
