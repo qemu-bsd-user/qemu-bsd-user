@@ -266,14 +266,12 @@ static inline abi_long do_bsd_close(abi_long arg1)
     return get_errno(close(arg1));
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100502
 /* fdatasync(2) */
 static inline abi_long do_bsd_fdatasync(abi_long arg1)
 {
 
     return get_errno(fdatasync(arg1));
 }
-#endif
 
 /* fsync(2) */
 static inline abi_long do_bsd_fsync(abi_long arg1)
@@ -991,11 +989,9 @@ static inline abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
     int timeout = arg3;
     struct pollfd *pfd;
     struct target_pollfd *target_pfd;
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     CPUState *cpu = env_cpu(env);
     TaskState *ts = (TaskState *)cpu->opaque;
     sigset_t mask, omask;
-#endif /* !  __FreeBSD_version >= 1100000 */
 
     target_pfd = lock_user(VERIFY_WRITE, arg1,
             sizeof(struct target_pollfd) * nfds, 1);
@@ -1008,7 +1004,6 @@ static inline abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
         pfd[i].events = tswap16(target_pfd[i].events);
     }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1100000
     sigfillset(&mask);
     sigprocmask(SIG_BLOCK, &mask, &omask);
     if (ts->signal_pending) {
@@ -1026,10 +1021,6 @@ static inline abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
         ret = get_errno(ppoll(pfd, nfds, tsptr, &omask));
         sigprocmask(SIG_SETMASK, &omask, NULL);
     }
-#else
-    /* No ppoll() before FreeBSD 11.0 */
-    ret = get_errno(poll(pfd, nfds, timeout));
-#endif /* !  __FreeBSD_version >= 1100000 */
 
     if (!is_error(ret)) {
         for (i = 0; i < nfds; i++) {
