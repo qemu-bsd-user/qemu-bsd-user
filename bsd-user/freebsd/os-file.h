@@ -101,7 +101,6 @@ static abi_long do_freebsd_aio_mlock(__unused abi_ulong iocb)
     return -TARGET_ENOSYS;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1000000
 /* pipe2(2) */
 static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
 {
@@ -139,26 +138,6 @@ static inline abi_long do_bsd_chflagsat(int fd, abi_ulong path,
 
     return ret;
 }
-
-#else /* !  __FreeBSD_version > 1000000 */
-
-static abi_long do_bsd_pipe2(__unused void *cpu_env, __unused abi_long arg1,
-	__unused int flags)
-{
-
-    qemu_log("qemu: Unsupported syscall pipe2()\n");
-    return -TARGET_ENOSYS;
-}
-
-static inline abi_long do_bsd_chflagsat(__unused int fd,
-	__unused abi_ulong path, __unused abi_ulong flags, int atflags)
-{
-
-    qemu_log("qemu: Unsupported syscall chflagsat()\n");
-    return -TARGET_ENOSYS;
-}
-
-#endif /* !  __FreeBSD_version >= 1000000 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300091
 /* close_range(2) */
