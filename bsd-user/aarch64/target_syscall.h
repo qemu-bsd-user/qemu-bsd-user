@@ -44,13 +44,6 @@ struct target_pt_regs {
     uint64_t    pstate;
 };
 
-#define ARM_SYSCALL_BASE    0 /* XXX: FreeBSD only */
-
-#define TARGET_FREEBSD_ARM_SYNC_ICACHE      0
-#define TARGET_FREEBSD_ARM_DRAIN_WRITEBUF   1
-#define TARGET_FREEBSD_ARM_SET_TP       2
-#define TARGET_FREEBSD_ARM_GET_TP       3
-
 #define TARGET_HW_MACHINE       "arm64"
 #define TARGET_HW_MACHINE_ARCH  "aarch64"
 
