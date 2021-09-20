@@ -1,7 +1,7 @@
 /*
  * ARM AArch64 ELF definitions for bsd-user
  *
- * Copyright (c) 2015 Stacey D. Son <sson at Freebsd>
+ * Copyright (c) 2015 Stacey D. Son
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
