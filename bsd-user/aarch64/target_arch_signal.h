@@ -152,4 +152,25 @@ static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
     return err;
 }
 
+/* Compare to set_mcontext() in arm64/arm64/machdep.c */
+static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
+        int srflag)
+{
+    int err = 0, i;
+    const uint64_t *gr = mcp->mc_gpregs.gp_x;
+
+    for (i = 0; i < 30; i++) {
+        regs->xregs[i] = tswap64(gr[i]);
+    }
+
+    regs->xregs[TARGET_REG_SP] = tswap64(mcp->mc_gpregs.gp_sp);
+    regs->xregs[TARGET_REG_LR] = tswap64(mcp->mc_gpregs.gp_lr);
+    regs->pc = mcp->mc_gpregs.gp_elr;
+    pstate_write(regs, mcp->mc_gpregs.gp_spsr);
+
+    /* XXX FP? */
+
+    return err;
+}
+
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
