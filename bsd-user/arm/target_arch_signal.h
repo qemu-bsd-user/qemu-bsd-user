@@ -55,10 +55,6 @@
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)  /* recommended size */
 
 /* arm/arm/machdep.c */
-#define TARGET_MC_GET_CLEAR_RET 0x0001
-#define TARGET_MC_ADD_MAGIC     0x0002
-#define TARGET_MC_SET_ONSTACK   0x0004
-
 struct target_sigcontext {
     target_sigset_t sc_mask;    /* signal mask to retstore */
     int32_t     sc_onstack;     /* sigstack state to restore */

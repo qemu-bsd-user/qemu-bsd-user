@@ -32,8 +32,6 @@
 #define TARGET_MINSIGSTKSZ  (1024 * 4)
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)
 
-#define TARGET_MC_GET_CLEAR_RET 0x0001
-
 struct target_sigcontext {
     int32_t     _dummy;
 };

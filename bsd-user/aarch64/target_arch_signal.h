@@ -37,9 +37,6 @@
 #define TARGET_MINSIGSTKSZ  (1024 * 4)                  /* min sig stack size */
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)  /* recommended size */
 
-/* sys/sys/ucontext.h XXX maybe should be in a FreeBSD wide header */
-#define TARGET_MC_GET_CLEAR_RET 0x0001
-
 /* sys/arm64/include/signal.h */
 struct target_sigcontext {
     int32_t     _dummy;
