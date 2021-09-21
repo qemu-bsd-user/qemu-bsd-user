@@ -81,4 +81,13 @@ struct target_sigframe {
     target_ucontext_t   sf_uc;  /* saved ucontext */
 };
 
+/* compare to struct trapframe in sys/arm64/include/frame.h */
+struct target_trapframe {
+        uint64_t    tf_sp;
+        uint64_t    tf_lr;
+        uint64_t    tf_elr;
+        uint64_t    tf_spsr;
+        uint64_t    tf_x[30];
+};
+
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
