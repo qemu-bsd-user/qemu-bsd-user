@@ -34,9 +34,6 @@
 
 /* mips/mips/pm_machdep.c */
 #define TARGET_UCONTEXT_MAGIC   0xACEDBADE
-#define TARGET_MC_GET_CLEAR_RET 0x0001
-#define TARGET_MC_ADD_MAGIC     0x0002
-#define TARGET_MC_SET_ONSTACK   0x0004
 
 struct target_sigcontext {
     target_sigset_t sc_mask;    /* signal mask to retstore */

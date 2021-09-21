@@ -78,4 +78,10 @@
 #define TARGET_SS_ONSTACK 0x0001  /* take signals on alternate stack */
 #define TARGET_SS_DISABLE 0x0004  /* disable taking signals on alternate stack*/
 
+/* FreeBSD's sys/ucontex.h defines this */
+#define TARGET_MC_GET_CLEAR_RET 0x0001
+
+#define TARGET_MC_ADD_MAGIC     0x0002	/* Add magic ucontext */
+#define TARGET_MC_SET_ONSTACK   0x0004	/* Set onstack ucontext */
+
 #endif /* !_TARGET_OS_SIGNAL_H_ */

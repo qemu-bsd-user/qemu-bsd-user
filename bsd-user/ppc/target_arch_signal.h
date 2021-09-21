@@ -44,11 +44,6 @@ extern bool bsd_ppc_is_elfv1(CPUPPCState *env);
 #endif
 
 /* powerpc/powerpc/exec_machdep.c */
-#define TARGET_MC_GET_CLEAR_RET 	0x0001
-#define TARGET_MC_SET_ONSTACK	 	0x0004
-#define TARGET_MC_FP_VALID		0x0001
-#define TARGET_MC_AV_VALID		0x0002
-
 typedef struct target_trapframe {
 	abi_long fixreg[32];
 	abi_long lr;
@@ -81,6 +76,8 @@ struct target_sigcontext {
 typedef struct target_mcontext {
 	int32_t     mc_vers;
 	int32_t     mc_flags;
+#define TARGET_MC_FP_VALID		0x0001
+#define TARGET_MC_AV_VALID		0x0002
 	int32_t     mc_onstack;     /* sigstack state to restore */
 	int32_t     mc_len;
 	uint64_t    mc_avec[32*2];
