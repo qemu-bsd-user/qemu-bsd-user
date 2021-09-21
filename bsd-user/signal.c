@@ -30,43 +30,6 @@ static target_stack_t target_sigaltstack_used = {
     .ss_flags = TARGET_SS_DISABLE,
 };
 
-static uint8_t host_to_target_signal_table[TARGET_NSIG] = {
-    [SIGHUP]    =   TARGET_SIGHUP,
-    [SIGINT]    =   TARGET_SIGINT,
-    [SIGQUIT]   =   TARGET_SIGQUIT,
-    [SIGILL]    =   TARGET_SIGILL,
-    [SIGTRAP]   =   TARGET_SIGTRAP,
-    [SIGABRT]   =   TARGET_SIGABRT,
-    [SIGEMT]    =   TARGET_SIGEMT,
-    [SIGFPE]    =   TARGET_SIGFPE,
-    [SIGKILL]   =   TARGET_SIGKILL,
-    [SIGBUS]    =   TARGET_SIGBUS,
-    [SIGSEGV]   =   TARGET_SIGSEGV,
-    [SIGSYS]    =   TARGET_SIGSYS,
-    [SIGPIPE]   =   TARGET_SIGPIPE,
-    [SIGALRM]   =   TARGET_SIGALRM,
-    [SIGTERM]   =   TARGET_SIGTERM,
-    [SIGURG]    =   TARGET_SIGURG,
-    [SIGSTOP]   =   TARGET_SIGSTOP,
-    [SIGTSTP]   =   TARGET_SIGTSTP,
-    [SIGCONT]   =   TARGET_SIGCONT,
-    [SIGCHLD]   =   TARGET_SIGCHLD,
-    [SIGTTIN]   =   TARGET_SIGTTIN,
-    [SIGTTOU]   =   TARGET_SIGTTOU,
-    [SIGIO]     =   TARGET_SIGIO,
-    [SIGXCPU]   =   TARGET_SIGXCPU,
-    [SIGXFSZ]   =   TARGET_SIGXFSZ,
-    [SIGVTALRM] =   TARGET_SIGVTALRM,
-    [SIGPROF]   =   TARGET_SIGPROF,
-    [SIGWINCH]  =   TARGET_SIGWINCH,
-    [SIGINFO]   =   TARGET_SIGINFO,
-    [SIGUSR1]   =   TARGET_SIGUSR1,
-    [SIGUSR2]   =   TARGET_SIGUSR2,
-    [SIGTHR]    =   TARGET_SIGTHR,
-    [SIGLIBRT]  =   TARGET_SIGLIBRT,
-};
-
-static uint8_t target_to_host_signal_table[TARGET_NSIG];
 static struct target_sigaction sigact_table[TARGET_NSIG];
 static void host_signal_handler(int host_signum, siginfo_t *info, void *puc);
 static void target_to_host_sigset_internal(sigset_t *d,
@@ -85,22 +48,12 @@ static inline int sas_ss_flags(unsigned long sp)
 
 int host_to_target_signal(int sig)
 {
-
-    if (sig < 0 || sig >= TARGET_NSIG) {
-        return sig;
-    }
-
-    return host_to_target_signal_table[sig];
+    return sig;
 }
 
 int target_to_host_signal(int sig)
 {
-
-    if (sig < 0 || sig >= TARGET_NSIG) {
-        return sig;
-    }
-
-    return target_to_host_signal_table[sig];
+    return sig;
 }
 
 static inline void target_sigemptyset(target_sigset_t *set)
@@ -831,19 +784,8 @@ void signal_init(void)
     TaskState *ts = (TaskState *)thread_cpu->opaque;
     struct sigaction act;
     struct sigaction oact;
-    int i, j;
+    int i;
     int host_sig;
-
-    /* Generate the signal conversion tables.  */
-    for (i = 1; i < TARGET_NSIG; i++) {
-        if (host_to_target_signal_table[i] == 0) {
-            host_to_target_signal_table[i] = i;
-        }
-    }
-    for (i = 1; i < TARGET_NSIG; i++) {
-        j = host_to_target_signal_table[i];
-        target_to_host_signal_table[j] = i;
-    }
 
     /* Set the signal mask from the host mask. */
     sigprocmask(0, 0, &ts->signal_mask);
