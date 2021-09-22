@@ -24,4 +24,16 @@
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
+static inline void target_cpu_init(CPURISCVState *env,
+        struct target_pt_regs *regs)
+{
+    int i;
+
+    for (i = 0; i < 32; i++) {
+        env->gpr[i] = regs->regs[i];
+    }
+
+    env->pc = regs->sepc;
+}
+
 #endif /* ! _TARGET_ARCH_CPU_H_ */
