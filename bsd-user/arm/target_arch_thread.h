@@ -39,6 +39,9 @@ static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
     /* r0 = arg */
     regs->regs[0] = arg;
     regs->spsr = ARM_CPU_MODE_USR;
+    if (entry & 0x1) {
+        regs->spsr |= CPSR_T;
+    }
 }
 
 static inline void target_thread_init(struct target_pt_regs *regs,
