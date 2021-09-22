@@ -27,7 +27,7 @@ static inline abi_long do_freebsd_arch_sysarch(CPURISCVState *env, int op,
         abi_ulong parms)
 {
 
-    return -TARGET_EINVAL;
+    return -TARGET_EOPNOTSUPP;
 }
 
 static inline void do_freebsd_arch_print_sysarch(
