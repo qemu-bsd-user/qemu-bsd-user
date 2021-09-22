@@ -1,7 +1,7 @@
 /*
  *  FreeBSD time related system call shims
  *
- *  Copyright (c) 2013-15 Stacey D. Son
+ *  Copyright (c) 2013-2015 Stacey Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __FREEBSD_OS_TIME_H_
-#define __FREEBSD_OS_TIME_H_
+#ifndef _FREEBSD_OS_TIME_H_
+#define _FREEBSD_OS_TIME_H_
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -982,4 +982,4 @@ static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
     return ret;
 }
 
-#endif /* __FREEBSD_OS_TIME_H_ */
+#endif /* _FREEBSD_OS_TIME_H_ */
