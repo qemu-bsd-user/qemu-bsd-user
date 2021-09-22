@@ -31,8 +31,6 @@
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
-#define TARGET_CPU_RESET(cpu)
-
 static inline void target_cpu_init(CPUARMState *env,
         struct target_pt_regs *regs)
 {
