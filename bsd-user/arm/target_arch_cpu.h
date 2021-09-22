@@ -23,12 +23,6 @@
 
 #include "target_arch.h"
 
-#ifdef ARM_DEBUG
-#define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
-#else
-#define DEBUG_PRINTF(...)
-#endif
-
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
 static inline void target_cpu_init(CPUARMState *env,
@@ -118,7 +112,6 @@ static inline void target_cpu_loop(CPUARMState *env)
                         n = env->regs[7];
                     }
                 }
-                DEBUG_PRINTF("AVANT CALL %d\n", n);
                 if (bsd_type == target_freebsd) {
                     int ret;
                     abi_ulong params = get_sp_from_cpustate(env);
@@ -195,7 +188,6 @@ static inline void target_cpu_loop(CPUARMState *env)
                     fprintf(stderr, "qemu: bsd_type (= %d) syscall "
                             "not supported\n", bsd_type);
                 }
-                DEBUG_PRINTF("APRES CALL\n");
             }
             break;
         case EXCP_INTERRUPT:
