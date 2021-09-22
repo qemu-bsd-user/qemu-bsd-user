@@ -110,6 +110,21 @@ static inline void target_cpu_loop(CPURISCVState *env)
                         bsd_type);
             }
             break;
+        case RISCV_EXCP_ILLEGAL_INST:
+            info.si_signo = TARGET_SIGILL;
+            info.si_code = TARGET_ILL_ILLOPC;
+            break;
+        case RISCV_EXCP_BREAKPOINT:
+            info.si_signo = TARGET_SIGTRAP;
+            info.si_code = TARGET_TRAP_BRKPT;
+            info.si_addr = env->pc;
+            break;
+        case RISCV_EXCP_INST_PAGE_FAULT:
+        case RISCV_EXCP_LOAD_PAGE_FAULT:
+        case RISCV_EXCP_STORE_PAGE_FAULT:
+            info.si_signo = TARGET_SIGSEGV;
+            info.si_code = TARGET_SEGV_MAPERR;
+            break;
         case EXCP_DEBUG:
             info.si_signo = TARGET_SIGTRAP;
             info.si_code = TARGET_TRAP_BRKPT;
