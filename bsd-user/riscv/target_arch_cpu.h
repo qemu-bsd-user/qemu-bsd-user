@@ -41,6 +41,8 @@ static inline void target_cpu_loop(CPURISCVState *env)
     CPUState *cs = env_cpu(env);
     int trapnr;
     target_siginfo_t info;
+    abi_long ret;
+    unsigned int syscall_num;
 
     for (;;) {
         cpu_exec_start(cs);
@@ -58,6 +60,55 @@ static inline void target_cpu_loop(CPURISCVState *env)
             break;
         case EXCP_ATOMIC:
             cpu_exec_step_atomic(cs);
+            break;
+        case RISCV_EXCP_U_ECALL:
+            if (bsd_type == target_freebsd) {
+                syscall_num = env->gpr[5]; /* t0 */
+                env->pc += TARGET_INSN_SIZE;
+                /* Compare to cpu_fetch_syscall_args() in riscv/riscv/trap.c */
+                if (TARGET_FREEBSD_NR___syscall == syscall_num ||
+                            TARGET_FREEBSD_NR_syscall == syscall_num) {
+                    ret = do_freebsd_syscall(env,
+                            env->gpr[xA0], /* a0 */
+                            env->gpr[xA1], /* a1 */
+                            env->gpr[xA2], /* a2 */
+                            env->gpr[xA3], /* a3 */
+                            env->gpr[xA4], /* a4 */
+                            env->gpr[xA5], /* a5 */
+                            env->gpr[xA6], /* a6 */
+                            env->gpr[xA7], /* a7 */
+                            0);
+                } else {
+                    ret = do_freebsd_syscall(env,
+                            syscall_num,
+                            env->gpr[xA0], /* a0 */
+                            env->gpr[xA1], /* a1 */
+                            env->gpr[xA2], /* a2 */
+                            env->gpr[xA3], /* a3 */
+                            env->gpr[xA4], /* a4 */
+                            env->gpr[xA5], /* a5 */
+                            env->gpr[xA6], /* a6 */
+                            env->gpr[xA7]  /* a7 */
+                            );
+                }
+
+                /*
+                 * Compare to cpu_set_syscall_retval() in
+                 * riscv/riscv/vm_machdep.c
+                 */
+                if (ret >= 0) {
+                    env->gpr[xA0] = ret; /* a0 */
+                    env->gpr[5] = 0;     /* t0 */
+                } else if (ret == -TARGET_ERESTART) {
+                    env->pc -= TARGET_INSN_SIZE;
+                } else if (ret != -TARGET_EJUSTRETURN) {
+                    env->gpr[xA0] = -ret; /* a0 */
+                    env->gpr[5] = 1;      /* t0 */
+                }
+            } else {
+                fprintf(stderr, "qemu: bsd_type (= %d) syscall not supported\n",
+                        bsd_type);
+            }
             break;
         case EXCP_DEBUG:
             info.si_signo = TARGET_SIGTRAP;
