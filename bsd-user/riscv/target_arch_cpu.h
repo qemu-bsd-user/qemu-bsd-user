@@ -53,6 +53,16 @@ static inline void target_cpu_loop(CPURISCVState *env)
         info.si_addr = 0;
 
         switch (trapnr) {
+        case EXCP_INTERRUPT:
+            /* just indicate that signals should be handled asap */
+            break;
+        case EXCP_ATOMIC:
+            cpu_exec_step_atomic(cs);
+            break;
+        case EXCP_DEBUG:
+            info.si_signo = TARGET_SIGTRAP;
+            info.si_code = TARGET_TRAP_BRKPT;
+            break;
         default:
             fprintf(stderr, "qemu: unhandled CPU exception "
                 "0x%x - aborting\n", trapnr);
