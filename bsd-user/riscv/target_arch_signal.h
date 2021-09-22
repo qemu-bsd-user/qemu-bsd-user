@@ -65,4 +65,32 @@ typedef struct target_mcontext {
     uint64_t               mc_spare[8];
 } target_mcontext_t;
 
+typedef struct target_ucontext {
+    target_sigset_t   uc_sigmask;
+    target_mcontext_t uc_mcontext;
+    abi_ulong         uc_link;
+    target_stack_t    uc_stack;
+    int32_t           uc_flags;
+    int32_t         __spare__[4];
+} target_ucontext_t;
+
+struct target_sigframe {
+    target_ucontext_t   sf_uc; /* = *sf_uncontext */
+    target_siginfo_t    sf_si; /* = *sf_siginfo (SA_SIGINFO case)*/
+};
+
+struct target_trapframe {
+    uint64_t tf_ra;
+    uint64_t tf_sp;
+    uint64_t tf_gp;
+    uint64_t tf_tp;
+    uint64_t tf_t[7];
+    uint64_t tf_s[12];
+    uint64_t tf_a[8];
+    uint64_t tf_sepc;
+    uint64_t tf_sstatus;
+    uint64_t tf_stval;
+    uint64_t tf_scause;
+};
+
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
