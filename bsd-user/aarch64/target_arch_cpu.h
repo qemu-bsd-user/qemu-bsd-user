@@ -21,12 +21,6 @@
 
 #include "target_arch.h"
 
-#ifdef AARCH_DEBUG
-#define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
-#else
-#define DEBUG_PRINTF(...)
-#endif
-
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
 static inline void target_cpu_init(CPUARMState *env,
