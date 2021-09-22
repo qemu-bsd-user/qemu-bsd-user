@@ -36,4 +36,8 @@ static inline void target_cpu_init(CPURISCVState *env,
     env->pc = regs->sepc;
 }
 
+static inline void target_cpu_reset(CPUArchState *cpu)
+{
+}
+
 #endif /* ! _TARGET_ARCH_CPU_H_ */
