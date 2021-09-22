@@ -36,6 +36,16 @@ static inline void target_cpu_init(CPURISCVState *env,
     env->pc = regs->sepc;
 }
 
+static inline void target_cpu_clone_regs(CPURISCVState *env, target_ulong newsp)
+{
+    if (newsp) {
+        env->gpr[xSP] = newsp;
+    }
+
+    env->gpr[xA0] = 0; /* a0 */
+    env->gpr[5] = 0;   /* t0 */
+}
+
 static inline void target_cpu_reset(CPUArchState *cpu)
 {
 }
