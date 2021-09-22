@@ -1,7 +1,7 @@
 /*
  * ARM AArch64 specific CPU for bsd-user
  *
- * Copyright (c) 2015 Stacey D. Son <sson@FreeBSD.org>
+ * Copyright (c) 2015 Stacey Son
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
