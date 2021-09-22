@@ -220,4 +220,13 @@ static inline abi_long set_mcontext(CPURISCVState *regs, target_mcontext_t *mcp,
     return 0;
 }
 
+/* Compare with sys_sigreturn() in riscv/riscv/machdep.c */
+static inline abi_long get_ucontext_sigreturn(CPURISCVState *regs,
+                        abi_ulong target_sf, abi_ulong *target_uc)
+{
+
+    *target_uc = target_sf;
+    return 0;
+}
+
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
