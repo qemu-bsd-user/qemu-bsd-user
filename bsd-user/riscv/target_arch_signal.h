@@ -93,4 +93,33 @@ struct target_trapframe {
     uint64_t tf_scause;
 };
 
+/*
+ * Compare with sendsig() in riscv/riscv/machdep.c
+ * Assumes that target stack frame memory is locked.
+ */
+static inline abi_long
+set_sigtramp_args(CPURISCVState *regs, int sig, struct target_sigframe *frame,
+    abi_ulong frame_addr, struct target_sigaction *ka)
+{
+    /*
+     * Arguments to signal handler:
+     *  a0 (10) = signal number
+     *  a1 (11) = siginfo pointer
+     *  a2 (12) = ucontext pointer
+     *  pc      = signal pointer handler
+     *  sp (2)  = sigframe pointer
+     *  ra (1)  = sigtramp at base of user stack
+     */
+
+     regs->gpr[10] = sig;
+     regs->gpr[11] = frame_addr +
+         offsetof(struct target_sigframe, sf_si);
+     regs->gpr[12] = frame_addr +
+         offsetof(struct target_sigframe, sf_uc);
+     regs->pc = ka->_sa_handler;
+     regs->gpr[2] = frame_addr;
+     regs->gpr[1] = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
+     return 0;
+}
+
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
