@@ -24,9 +24,6 @@
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
-/* TODO Don't know whether this needs to point to cpu_reset or not. */
-#define TARGET_CPU_RESET(cpu)
-
 static inline void target_cpu_init(CPURISCVState *env,
         struct target_pt_regs *regs)
 {
