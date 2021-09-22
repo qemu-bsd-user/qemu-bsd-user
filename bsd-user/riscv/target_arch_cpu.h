@@ -36,6 +36,38 @@ static inline void target_cpu_init(CPURISCVState *env,
     env->pc = regs->sepc;
 }
 
+static inline void target_cpu_loop(CPURISCVState *env)
+{
+    CPUState *cs = env_cpu(env);
+    int trapnr;
+    target_siginfo_t info;
+
+    for (;;) {
+        cpu_exec_start(cs);
+        trapnr = cpu_exec(cs);
+        cpu_exec_end(cs);
+        process_queued_cpu_work(cs);
+
+        info.si_signo = 0;
+        info.si_errno = 0;
+        info.si_addr = 0;
+
+        switch (trapnr) {
+        default:
+            fprintf(stderr, "qemu: unhandled CPU exception "
+                "0x%x - aborting\n", trapnr);
+            cpu_dump_state(cs, stderr, 0);
+            abort();
+        }
+
+        if (info.si_signo) {
+            queue_signal(env, info.si_signo, &info);
+        }
+
+        process_pending_signals(env);
+    }
+}
+
 static inline void target_cpu_clone_regs(CPURISCVState *env, target_ulong newsp)
 {
     if (newsp) {
