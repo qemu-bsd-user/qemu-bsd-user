@@ -250,5 +250,4 @@ static inline abi_long get_ucontext_sigreturn(CPUARMState *regs,
     return 0;
 }
 
-
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
