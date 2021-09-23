@@ -20,7 +20,6 @@
 #ifndef _TARGET_ARCH_CPU_H_
 #define _TARGET_ARCH_CPU_H_
 
-
 #include "target_arch.h"
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
@@ -41,7 +40,6 @@ static inline void target_cpu_loop(CPUARMState *env)
     int trapnr;
     target_siginfo_t info;
     unsigned int n;
-    uint32_t addr;
     CPUState *cs = env_cpu(env);
 
     for (;;) {
@@ -99,19 +97,12 @@ static inline void target_cpu_loop(CPUARMState *env)
                  */
                 if (trapnr == EXCP_BKPT) {
                     if (env->thumb) {
-                        n = env->regs[7];
                         env->regs[15] += 2;
                     } else {
-                        n = env->regs[7];
                         env->regs[15] += 4;
                     }
-                } else { /* trapnr != EXCP_BKPT */
-                    if (env->thumb) {
-                        n = env->regs[7];
-                    } else {
-                        n = env->regs[7];
-                    }
                 }
+                n = env->regs[7];
                 if (bsd_type == target_freebsd) {
                     int ret;
                     abi_ulong params = get_sp_from_cpustate(env);
@@ -195,20 +186,14 @@ static inline void target_cpu_loop(CPUARMState *env)
             break;
         case EXCP_PREFETCH_ABORT:
             /* See arm/arm/trap.c prefetch_abort_handler() */
-            addr = env->exception.vaddress;
-            goto do_segv;
         case EXCP_DATA_ABORT:
             /* See arm/arm/trap.c data_abort_handler() */
-            addr = env->exception.vaddress;
-        do_segv:
-            {
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                /* XXX: check env->error_code */
-                info.si_code = 0;
-                info.si_addr = addr;
-                queue_signal(env, info.si_signo, &info);
-            }
+            info.si_signo = TARGET_SIGSEGV;
+            info.si_errno = 0;
+            /* XXX: check env->error_code */
+            info.si_code = 0;
+            info.si_addr = env->exception.vaddress;;
+            queue_signal(env, info.si_signo, &info);
             break;
         case EXCP_DEBUG:
             {
