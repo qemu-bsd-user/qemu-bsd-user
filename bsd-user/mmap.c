@@ -403,7 +403,7 @@ abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size)
 abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
                      int flags, int fd, off_t offset)
 {
-    abi_ulong addr, ret, end, real_start, real_end, retaddr, host_offset, host_len;
+    abi_ulong ret, end, real_start, real_end, retaddr, host_offset, host_len;
 
     mmap_lock();
     if (qemu_loglevel_mask(CPU_LOG_PAGE)) {
@@ -610,11 +610,9 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
         }
 
         /* Reject the mapping if any page within the range is mapped */
-        if (flags & MAP_EXCL) {
-            for (addr = start; addr < end; addr++) {
-                if (page_get_flags(addr) != 0)
-                    goto fail;
-            }
+        if ((flags & MAP_EXCL) && page_check_range(start, len, 0) < 0) {
+            errno = EINVAL;
+            goto fail;
         }
 
         /* Reject the mapping if any page within the range is mapped */
