@@ -127,6 +127,14 @@ add_global_arguments(config_host['QEMU_CXXFLAGS'].split(),
 add_global_link_arguments(config_host['QEMU_LDFLAGS'].split(),
                           native: false, language: ['c', 'cpp', 'objc'])
 
+# This is super ugly...  But FreeBSD doesn't (yet?) have -static-pie support and
+# we need -static for our package building farm, so bsd-user hasn't switched to
+# the pie and probing method just yet.
+if target.endswith('bsd-user')
+  add_global_link_arguments('-Wl,--image-base=0x60000000',
+                            native: false, language: ['c', 'cpp', 'objc'])
+endif
+
 if targetos == 'linux'
   add_project_arguments('-isystem', meson.current_source_dir() / 'linux-headers',
                         '-isystem', 'linux-headers',
