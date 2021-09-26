@@ -292,7 +292,7 @@ extern unsigned long target_sgrowsiz;
 
 /* syscall.c */
 abi_long get_errno(abi_long ret);
-int is_error(abi_long ret);
+bool is_error(abi_long ret);
 int host_to_target_errno(int err);
 
 /* os-proc.c */
