@@ -139,7 +139,7 @@ int host_to_target_errno(int err)
     return err;
 }
 
-int is_error(abi_long ret)
+bool is_error(abi_long ret)
 {
 
     return (abi_ulong)ret >= (abi_ulong)(-4096);
