@@ -17,7 +17,6 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#include <sys/resource.h>
 
 #include "qemu/osdep.h"
 #include "qemu.h"
@@ -376,7 +375,7 @@ void QEMU_NORETURN force_sig(int target_sig)
  * Queue a signal so that it will be send to the virtual CPU as soon as
  * possible.
  */
-int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
+void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
 {
     CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
@@ -410,7 +409,7 @@ int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     } else {
         q = alloc_sigqueue(env);
         if (!q) {
-            return -EAGAIN;
+            return; /* XXX WHAT TO DO */
         }
         while (*pq != NULL) {
             pq = &(*pq)->next;
@@ -422,7 +421,7 @@ int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     k->pending = 1;
     /* Signal that a new signal is pending. */
     ts->signal_pending = 1;
-    return 1;
+    return;
 }
 
 static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
@@ -454,22 +453,21 @@ static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
 
     host_to_target_siginfo_noswap(&tinfo, info);
 
-    if (queue_signal(env, sig, &tinfo) == 1) {
-        /* Block host signals until target signal handler entered. We
-         * can't block SIGSEGV or SIGBUS while we're executing guest
-         * code in case the guest code provokes one in the window between
-         * now and it getting out to the main loop. Signals will be
-         * unblocked again in process_pending_signals().
-         */
-        sigfillset(&uc->uc_sigmask);
-        sigdelset(&uc->uc_sigmask, SIGSEGV);
-        sigdelset(&uc->uc_sigmask, SIGBUS);
+    queue_signal(env, sig, &tinfo);	/* XXX how to cope with failure? */
 
-        /* Interrupt the virtual CPU as soon as possible. */
-        cpu_exit(thread_cpu);
-    } else {
-        /* XXX We should really be handling this. */
-    }
+    /*
+     * Block host signals until target signal handler entered. We
+     * can't block SIGSEGV or SIGBUS while we're executing guest
+     * code in case the guest code provokes one in the window between
+     * now and it getting out to the main loop. Signals will be
+     * unblocked again in process_pending_signals().
+     */
+    sigfillset(&uc->uc_sigmask);
+    sigdelset(&uc->uc_sigmask, SIGSEGV);
+    sigdelset(&uc->uc_sigmask, SIGBUS);
+
+    /* Interrupt the virtual CPU as soon as possible. */
+    cpu_exit(thread_cpu);
 }
 
 /* do_sigaltstack() returns target values and errnos. */
