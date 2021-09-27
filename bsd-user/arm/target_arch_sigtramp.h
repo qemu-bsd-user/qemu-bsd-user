@@ -43,6 +43,8 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
     /* 9 */ sys_exit
     };
 
+    G_STATIC_ASSERT(sizeof(sigtramp_code) == TARGET_SZSIGCODE);
+
     for (i = 0; i < 9; i++) {
         tswap32s(&sigtramp_code[i]);
     }
