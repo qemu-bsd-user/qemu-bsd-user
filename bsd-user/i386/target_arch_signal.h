@@ -21,7 +21,7 @@
 #include "cpu.h"
 
 /* Size of the signal trampolin code placed on the stack. */
-#define TARGET_SZSIGCODE    0
+#define TARGET_SZSIGCODE    32
 
 /* compare to  x86/include/_limits.h */
 #define TARGET_MINSIGSTKSZ  (512 * 4)               /* min sig stack size */

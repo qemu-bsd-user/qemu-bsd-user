@@ -23,7 +23,29 @@
 static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
         unsigned sys_sigreturn)
 {
+    static uint8_t sigtramp_code[] = {
+                                /* sigcode: */
+        /*  0 */ 0xff, 0x54, 0x24, 0x10,
+                                /* call   *0x10(%esp) */
+        /*  4 */ 0x8d, 0x44, 0x24, 0x20,
+                                /* lea    0x20(%esp),%eax */
+        /*  8 */ 0x50,          /* push   %eax */
+        /*  9 */ 0xf7, 0x40, 0x54, 0x00, 0x00, 0x02, 0x00,
+                                /* testl  $0x20000,0x54(%eax) */
+        /* 10 */ 0x75, 0x03,
+                                /* jne    15 <sigcode+0x15> */
+        /* 12 */ 0x8e, 0x68, 0x14,
+                                /* mov    0x14(%eax),%gs */
+        /* 15 */ 0xb8, 0xa1, 0x01, 0x00, 0x00,
+                                /* mov    $0x1a1,%eax */
+        /* 1a */ 0x50,          /* push   %eax */
+        /* 1b */ 0xcd, 0x80,    /* int    $0x80 */
+        /* 1d */ 0xeb, 0xfe,    /* jmp    1d <sigcode+0x1d> */
+        /* 1f */ 0x90,          /* nop */
+    };
 
-    return 0;
+    G_STATIC_ASSERT(sizeof(sigtramp_code) == TARGET_SZSIGCODE);
+
+    return memcpy_to_target(offset, sigtramp_code, sizeof(sigtramp_code));
 }
 #endif /* _TARGET_ARCH_SIGTRAMP_H_ */
