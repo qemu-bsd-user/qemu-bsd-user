@@ -104,10 +104,9 @@ struct target_sigframe {
     target_ucontext_t   sf_uc;  /* saved ucontext */
 };
 
-
 /* compare to sys/arm/include/frame.h */
 struct target_trapframe {
-    abi_ulong tf_spsr; /* Zero on arm26 */
+    abi_ulong tf_spsr;
     abi_ulong tf_r0;
     abi_ulong tf_r1;
     abi_ulong tf_r2;
@@ -123,8 +122,8 @@ struct target_trapframe {
     abi_ulong tf_r12;
     abi_ulong tf_usr_sp;
     abi_ulong tf_usr_lr;
-    abi_ulong tf_svc_sp; /* Not used on arm26 */
-    abi_ulong tf_svc_lr; /* Not used on arm26 */
+    abi_ulong tf_svc_sp;
+    abi_ulong tf_svc_lr;
     abi_ulong tf_pc;
 };
 
