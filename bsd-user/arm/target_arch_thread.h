@@ -39,6 +39,11 @@ static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
     /* r0 = arg */
     regs->regs[0] = arg;
     regs->spsr = ARM_CPU_MODE_USR;
+    /*
+     * Thumb mode is encoded by the low bit in the entry point (since ARM can't
+     * execute at odd addresses). When it's set, set the Thumb bit (T) in the
+     * CPSR.
+     */
     if (entry & 0x1) {
         regs->spsr |= CPSR_T;
     }
@@ -50,6 +55,11 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     abi_long stack = infop->start_stack;
     memset(regs, 0, sizeof(*regs));
     regs->ARM_cpsr = 0x10;
+    /*
+     * Thumb mode is encoded by the low bit in the entry point (since ARM can't
+     * execute at odd addresses). When it's set, set the Thumb bit (T) in the
+     * CPSR.
+     */
     if (infop->entry & 1) {
         regs->ARM_cpsr |= CPSR_T;
     }
