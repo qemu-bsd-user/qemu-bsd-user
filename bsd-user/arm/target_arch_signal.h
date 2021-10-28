@@ -56,38 +56,27 @@
 
 /* arm/arm/machdep.c */
 struct target_sigcontext {
-    target_sigset_t sc_mask;    /* signal mask to retstore */
-    int32_t     sc_onstack;     /* sigstack state to restore */
-    abi_long    sc_pc;          /* pc at time of signal */
-    abi_long    sc_reg[32];     /* processor regs 0 to 31 */
-    abi_long    mullo, mulhi;   /* mullo and mulhi registers */
-    int32_t     sc_fpused;      /* fp has been used */
-    abi_long    sc_fpregs[33];  /* fp regs 0 to 31 & csr */
-    abi_long    sc_fpc_eir;     /* fp exception instr reg */
-    /* int32_t reserved[8]; */
+    int _dummy;
 };
 
-typedef struct {
-    uint32_t    __fp_fpsr;
-    struct {
-        uint32_t    __fp_exponent;
-        uint32_t    __fp_mantissa_hi;
-        uint32_t    __fp_mantissa_lo;
-    }       __fp_fr[8];
-} target__fpregset_t;
-
-typedef struct {
-    uint32_t    __vfp_fpscr;
-    uint32_t    __vfp_fstmx[33];
-    uint32_t    __vfp_fpsid;
-} target__vfpregset_t;
+/*
+ * Floating point register state
+ */
+typedef struct target_mcontext_vfp {
+    abi_ullong  mcv_reg[32];
+    abi_ulong   mcv_fpscr;
+} target_mcontext_vfp_t;
 
 typedef struct target_mcontext {
-    uint32_t        __gregs[TARGET__NGREG];
-    union {
-        target__fpregset_t  __fpregs;
-        target__vfpregset_t __vfpregs;
-    } __fpu;
+    uint32_t    __gregs[32];
+
+    /*
+     * Originally, rest of this structure was named __fpu, 35 * 4 bytes
+     * long, never accessed from kernel.
+     */
+    abi_long    mc_vfp_size;
+    abi_ptr     *mc_vfp_ptr;
+    abi_int     mc_spare[33];
 } target_mcontext_t;
 
 typedef struct target_ucontext {
