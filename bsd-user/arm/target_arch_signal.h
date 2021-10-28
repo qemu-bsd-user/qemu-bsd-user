@@ -211,10 +211,10 @@ static inline abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp,
 }
 
 /* Compare to arm/arm/machdep.c sys_sigreturn() */
-static inline abi_long get_ucontext_sigreturn(CPUARMState *regs,
+static inline abi_long get_ucontext_sigreturn(CPUARMState *env,
         abi_ulong target_sf, abi_ulong *target_uc)
 {
-    uint32_t cpsr = cpsr_read(regs);
+    uint32_t cpsr = cpsr_read(env);
 
     *target_uc = 0;
 
