@@ -202,6 +202,7 @@ static inline void target_cpu_loop(CPUARMState *env)
                 info.si_signo = TARGET_SIGTRAP;
                 info.si_errno = 0;
                 info.si_code = TARGET_TRAP_BRKPT;
+                info.si_addr = env->exception.vaddress;;
                 queue_signal(env, info.si_signo, &info);
             }
             break;
