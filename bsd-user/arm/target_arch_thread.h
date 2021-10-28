@@ -20,7 +20,7 @@
 #define _TARGET_ARCH_THREAD_H_
 
 /* Compare to arm/arm/vm_machdep.c cpu_set_upcall_kse() */
-static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
+static inline void target_thread_set_upcall(CPUARMState *env, abi_ulong entry,
     abi_ulong arg, abi_ulong stack_base, abi_ulong stack_size)
 {
     abi_ulong sp;
@@ -33,12 +33,12 @@ static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
         sizeof(struct target_trapframe)) & ~0x7;
 
     /* sp = stack base */
-    regs->regs[13] = sp;
+    env->regs[13] = sp;
     /* pc = start function entry */
-    regs->regs[15] = entry & 0xfffffffe;
+    env->regs[15] = entry & 0xfffffffe;
     /* r0 = arg */
-    regs->regs[0] = arg;
-    regs->spsr = ARM_CPU_MODE_USR;
+    env->regs[0] = arg;
+    env->spsr = ARM_CPU_MODE_USR;
     /*
      * Thumb mode is encoded by the low bit in the entry point (since ARM can't
      * execute at odd addresses). When it's set, set the Thumb bit (T) in the
