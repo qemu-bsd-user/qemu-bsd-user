@@ -29,7 +29,7 @@ static inline void target_thread_set_upcall(CPUARMState *env, abi_ulong entry,
      * Make sure the stack is properly aligned.
      * arm/include/param.h (STACKLIGN() macro)
      */
-    sp = (u_int)((stack_base + stack_size) & ~0x7;
+    sp = (u_int)(stack_base + stack_size) & ~0x7;
 
     /* sp = stack base */
     env->regs[13] = sp;
