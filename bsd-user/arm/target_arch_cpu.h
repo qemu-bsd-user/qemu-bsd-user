@@ -91,7 +91,6 @@ static inline void target_cpu_loop(CPUARMState *env)
         case EXCP_SWI:
         case EXCP_BKPT:
             {
-                env->eabi = 1; /* FreeBSD is eabi only now */
                 /*
                  * system call
                  * See arm/arm/trap.c cpu_fetch_syscall_args()
