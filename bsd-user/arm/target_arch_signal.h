@@ -91,6 +91,7 @@ typedef struct target_ucontext {
 struct target_sigframe {
     target_siginfo_t    sf_si;  /* saved siginfo */
     target_ucontext_t   sf_uc;  /* saved ucontext */
+    target_mcontext_vfp_t sf_vfp; /* actual saved VFP context */
 };
 
 /* compare to sys/arm/include/frame.h */
