@@ -45,7 +45,7 @@ static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
      * CPSR.
      */
     if (entry & 0x1) {
-        regs->spsr |= CPSR_T;
+        cpsr_write(env, cpsr_read(env) | CPSR_T, CPSR_T, CPSRWriteByInstr);
     }
 }
 
