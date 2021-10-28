@@ -102,6 +102,8 @@ static inline abi_long
 set_sigtramp_args(CPUARMState *env, int sig, struct target_sigframe *frame,
     abi_ulong frame_addr, struct target_sigaction *ka)
 {
+    abi_ulong cpsr;
+
     /*
      * Arguments to signal handler:
      *  r0 = signal number
@@ -122,9 +124,19 @@ set_sigtramp_args(CPUARMState *env, int sig, struct target_sigframe *frame,
     /* the trampoline uses r5 as the uc address */
     env->regs[5] = frame_addr +
         offsetof(struct target_sigframe, sf_uc);
-    env->regs[TARGET_REG_PC] = ka->_sa_handler;
+    env->regs[TARGET_REG_PC] = ka->_sa_handler & ~1;
     env->regs[TARGET_REG_SP] = frame_addr;
     env->regs[TARGET_REG_LR] = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
+    /*
+     * Low bit indicates whether or not we're entering thumb mode.
+     */
+    cpsr = cpsr_read(env);
+    if (ka->_sa_handler & 1) {
+        cpsr |= CPSR_T;
+    } else {
+        cpsr &= ~CPSR_T;
+    }
+    cpsr_write(env, cpsr, CPSR_T, CPSRWriteByInstr);
 
     return 0;
 }
