@@ -94,29 +94,6 @@ struct target_sigframe {
     target_mcontext_vfp_t sf_vfp; /* actual saved VFP context */
 };
 
-/* compare to sys/arm/include/frame.h */
-struct target_trapframe {
-    abi_ulong tf_spsr;
-    abi_ulong tf_r0;
-    abi_ulong tf_r1;
-    abi_ulong tf_r2;
-    abi_ulong tf_r3;
-    abi_ulong tf_r4;
-    abi_ulong tf_r5;
-    abi_ulong tf_r6;
-    abi_ulong tf_r7;
-    abi_ulong tf_r8;
-    abi_ulong tf_r9;
-    abi_ulong tf_r10;
-    abi_ulong tf_r11;
-    abi_ulong tf_r12;
-    abi_ulong tf_usr_sp;
-    abi_ulong tf_usr_lr;
-    abi_ulong tf_svc_sp;
-    abi_ulong tf_svc_lr;
-    abi_ulong tf_pc;
-};
-
 /*
  * Compare to arm/arm/machdep.c sendsig()
  * Assumes that target stack frame memory is locked.
