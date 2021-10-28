@@ -99,7 +99,7 @@ struct target_sigframe {
  * Assumes that target stack frame memory is locked.
  */
 static inline abi_long
-set_sigtramp_args(CPUARMState *regs, int sig, struct target_sigframe *frame,
+set_sigtramp_args(CPUARMState *env, int sig, struct target_sigframe *frame,
     abi_ulong frame_addr, struct target_sigaction *ka)
 {
     /*
@@ -113,18 +113,18 @@ set_sigtramp_args(CPUARMState *regs, int sig, struct target_sigframe *frame,
      *  lr = sigtramp at base of user stack
      */
 
-    regs->regs[0] = sig;
-    regs->regs[1] = frame_addr +
+    env->regs[0] = sig;
+    env->regs[1] = frame_addr +
         offsetof(struct target_sigframe, sf_si);
-    regs->regs[2] = frame_addr +
+    env->regs[2] = frame_addr +
         offsetof(struct target_sigframe, sf_uc);
 
     /* the trampoline uses r5 as the uc address */
-    regs->regs[5] = frame_addr +
+    env->regs[5] = frame_addr +
         offsetof(struct target_sigframe, sf_uc);
-    regs->regs[TARGET_REG_PC] = ka->_sa_handler;
-    regs->regs[TARGET_REG_SP] = frame_addr;
-    regs->regs[TARGET_REG_LR] = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
+    env->regs[TARGET_REG_PC] = ka->_sa_handler;
+    env->regs[TARGET_REG_SP] = frame_addr;
+    env->regs[TARGET_REG_LR] = TARGET_PS_STRINGS - TARGET_SZSIGCODE;
 
     return 0;
 }
@@ -133,67 +133,67 @@ set_sigtramp_args(CPUARMState *regs, int sig, struct target_sigframe *frame,
  * Compare to arm/arm/machdep.c get_mcontext()
  * Assumes that the memory is locked if mcp points to user memory.
  */
-static inline abi_long get_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
+static inline abi_long get_mcontext(CPUARMState *env, target_mcontext_t *mcp,
         int flags)
 {
     int err = 0;
     uint32_t *gr = mcp->__gregs;
 
-    gr[TARGET_REG_CPSR] = tswap32(cpsr_read(regs));
+    gr[TARGET_REG_CPSR] = tswap32(cpsr_read(env));
     if (flags & TARGET_MC_GET_CLEAR_RET) {
         gr[TARGET_REG_R0] = 0;
         gr[TARGET_REG_CPSR] &= ~CPSR_C;
     } else {
-        gr[TARGET_REG_R0] = tswap32(regs->regs[0]);
+        gr[TARGET_REG_R0] = tswap32(env->regs[0]);
     }
 
-    gr[TARGET_REG_R1] = tswap32(regs->regs[1]);
-    gr[TARGET_REG_R2] = tswap32(regs->regs[2]);
-    gr[TARGET_REG_R3] = tswap32(regs->regs[3]);
-    gr[TARGET_REG_R4] = tswap32(regs->regs[4]);
-    gr[TARGET_REG_R5] = tswap32(regs->regs[5]);
-    gr[TARGET_REG_R6] = tswap32(regs->regs[6]);
-    gr[TARGET_REG_R7] = tswap32(regs->regs[7]);
-    gr[TARGET_REG_R8] = tswap32(regs->regs[8]);
-    gr[TARGET_REG_R9] = tswap32(regs->regs[9]);
-    gr[TARGET_REG_R10] = tswap32(regs->regs[10]);
-    gr[TARGET_REG_R11] = tswap32(regs->regs[11]);
-    gr[TARGET_REG_R12] = tswap32(regs->regs[12]);
+    gr[TARGET_REG_R1] = tswap32(env->regs[1]);
+    gr[TARGET_REG_R2] = tswap32(env->regs[2]);
+    gr[TARGET_REG_R3] = tswap32(env->regs[3]);
+    gr[TARGET_REG_R4] = tswap32(env->regs[4]);
+    gr[TARGET_REG_R5] = tswap32(env->regs[5]);
+    gr[TARGET_REG_R6] = tswap32(env->regs[6]);
+    gr[TARGET_REG_R7] = tswap32(env->regs[7]);
+    gr[TARGET_REG_R8] = tswap32(env->regs[8]);
+    gr[TARGET_REG_R9] = tswap32(env->regs[9]);
+    gr[TARGET_REG_R10] = tswap32(env->regs[10]);
+    gr[TARGET_REG_R11] = tswap32(env->regs[11]);
+    gr[TARGET_REG_R12] = tswap32(env->regs[12]);
 
-    gr[TARGET_REG_SP] = tswap32(regs->regs[13]);
-    gr[TARGET_REG_LR] = tswap32(regs->regs[14]);
-    gr[TARGET_REG_PC] = tswap32(regs->regs[15]);
+    gr[TARGET_REG_SP] = tswap32(env->regs[13]);
+    gr[TARGET_REG_LR] = tswap32(env->regs[14]);
+    gr[TARGET_REG_PC] = tswap32(env->regs[15]);
 
     return err;
 }
 
 /* Compare to arm/arm/machdep.c set_mcontext() */
-static inline abi_long set_mcontext(CPUARMState *regs, target_mcontext_t *mcp,
+static inline abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp,
         int srflag)
 {
     int err = 0;
     const uint32_t *gr = mcp->__gregs;
     uint32_t cpsr;
 
-    regs->regs[0] = tswap32(gr[TARGET_REG_R0]);
-    regs->regs[1] = tswap32(gr[TARGET_REG_R1]);
-    regs->regs[2] = tswap32(gr[TARGET_REG_R2]);
-    regs->regs[3] = tswap32(gr[TARGET_REG_R3]);
-    regs->regs[4] = tswap32(gr[TARGET_REG_R4]);
-    regs->regs[5] = tswap32(gr[TARGET_REG_R5]);
-    regs->regs[6] = tswap32(gr[TARGET_REG_R6]);
-    regs->regs[7] = tswap32(gr[TARGET_REG_R7]);
-    regs->regs[8] = tswap32(gr[TARGET_REG_R8]);
-    regs->regs[9] = tswap32(gr[TARGET_REG_R9]);
-    regs->regs[10] = tswap32(gr[TARGET_REG_R10]);
-    regs->regs[11] = tswap32(gr[TARGET_REG_R11]);
-    regs->regs[12] = tswap32(gr[TARGET_REG_R12]);
+    env->regs[0] = tswap32(gr[TARGET_REG_R0]);
+    env->regs[1] = tswap32(gr[TARGET_REG_R1]);
+    env->regs[2] = tswap32(gr[TARGET_REG_R2]);
+    env->regs[3] = tswap32(gr[TARGET_REG_R3]);
+    env->regs[4] = tswap32(gr[TARGET_REG_R4]);
+    env->regs[5] = tswap32(gr[TARGET_REG_R5]);
+    env->regs[6] = tswap32(gr[TARGET_REG_R6]);
+    env->regs[7] = tswap32(gr[TARGET_REG_R7]);
+    env->regs[8] = tswap32(gr[TARGET_REG_R8]);
+    env->regs[9] = tswap32(gr[TARGET_REG_R9]);
+    env->regs[10] = tswap32(gr[TARGET_REG_R10]);
+    env->regs[11] = tswap32(gr[TARGET_REG_R11]);
+    env->regs[12] = tswap32(gr[TARGET_REG_R12]);
 
-    regs->regs[13] = tswap32(gr[TARGET_REG_SP]);
-    regs->regs[14] = tswap32(gr[TARGET_REG_LR]);
-    regs->regs[15] = tswap32(gr[TARGET_REG_PC]);
+    env->regs[13] = tswap32(gr[TARGET_REG_SP]);
+    env->regs[14] = tswap32(gr[TARGET_REG_LR]);
+    env->regs[15] = tswap32(gr[TARGET_REG_PC]);
     cpsr = tswap32(gr[TARGET_REG_CPSR]);
-    cpsr_write(regs, cpsr, CPSR_USER | CPSR_EXEC, CPSRWriteByInstr);
+    cpsr_write(env, cpsr, CPSR_USER | CPSR_EXEC, CPSRWriteByInstr);
 
     return err;
 }
