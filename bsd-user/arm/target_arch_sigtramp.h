@@ -26,11 +26,6 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
 {
     int i;
     uint32_t sys_exit = TARGET_FREEBSD_NR_exit;
-    /*
-     * The code has to load r7 manually rather than using
-     * "ldr r7, =SYS_return to make sure the size of the
-     * code is correct.
-     */
     uint32_t sigtramp_code[] = {
     /* 1 */ 0xE1A0000D,                  /* mov r0, sp */
     /* 2 */ 0xE2800000 + sigf_uc,        /* add r0, r0, #SIGF_UC */
