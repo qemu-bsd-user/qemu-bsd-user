@@ -87,14 +87,7 @@ typedef struct target_mcontext {
 	uint64_t    mc_vsxfpreg[32]; /* low-order half of VSR0-31 */
 } target_mcontext_t;
 
-typedef struct target_ucontext {
-    target_sigset_t   uc_sigmask;
-    target_mcontext_t uc_mcontext;
-    abi_ulong         uc_link;
-    target_stack_t    uc_stack;
-    int32_t           uc_flags;
-    int32_t         __spare__[4];
-} target_ucontext_t;
+#include "target_os_ucontext.h"
 
 struct target_sigframe {
 	target_ucontext_t sf_uc;
