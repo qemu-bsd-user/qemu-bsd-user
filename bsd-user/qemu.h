@@ -620,7 +620,7 @@ target_arg64(uint64_t word0, uint64_t word1)
 #ifdef TARGET_ARM
 static inline int
 regpairs_aligned(void *cpu_env) {
-    return ((((CPUARMState *)cpu_env)->eabi) == 1);
+    return 1;
 }
 #elif defined(TARGET_MIPS) && TARGET_ABI_BITS == 32
 static inline int regpairs_aligned(void *cpu_env)
