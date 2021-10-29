@@ -43,29 +43,6 @@ extern bool bsd_ppc_is_elfv1(CPUPPCState *env);
 #define TARGET_CALLFRAME_SIZ    (TARGET_SZREG * 6)
 #endif
 
-/* powerpc/powerpc/exec_machdep.c */
-typedef struct target_trapframe {
-	abi_long fixreg[32];
-	abi_long lr;
-	abi_long cr;
-	abi_long xer;
-	abi_long ctr;
-	abi_long srr0;
-	abi_long srr1;
-	abi_long exc;
-	abi_long dar; /* DAR filled in on DSI traps */
-	union {
-		struct {
-			/* dsisr only filled on a DSI trap */
-			abi_long dsisr;
-		} aim;
-		struct {
-			abi_long esr;
-			abi_long dbcr0;
-		} booke;
-	} cpu;
-} target_trapframe_t;
-
 typedef struct target_mcontext {
 	int32_t     mc_vers;
 	int32_t     mc_flags;
