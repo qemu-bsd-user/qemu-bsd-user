@@ -86,15 +86,6 @@ struct target_sigframe {
     target_ucontext_t   sf_uc;  /* saved ucontext */
 };
 
-/* compare to struct trapframe in sys/arm64/include/frame.h */
-struct target_trapframe {
-        uint64_t    tf_sp;
-        uint64_t    tf_lr;
-        uint64_t    tf_elr;
-        uint64_t    tf_spsr;
-        uint64_t    tf_x[30];
-};
-
 /*
  * Compare to sendsig() in sys/arm64/arm64/machdep.c
  * Assumes that target stack frame memory is locked.

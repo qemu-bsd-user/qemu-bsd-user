@@ -29,8 +29,7 @@ static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
      * Make sure the stack is properly aligned.
      * arm64/include/param.h (STACKLIGN() macro)
      */
-    sp = (abi_ulong)((stack_base + stack_size) -
-        sizeof(struct target_trapframe)) & ~(16 - 1);
+    sp = (abi_ulong)(stack_base + stack_size) & ~(16 - 1);
 
     /* sp = stack base */
     regs->xregs[31] = sp;
