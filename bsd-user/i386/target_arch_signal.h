@@ -28,12 +28,6 @@
 #define TARGET_SIGSTKSZ     (MINSIGSTKSZ + 32768)   /* recommended size */
 
 typedef struct target_mcontext {
-    /*
-     * The definition of mcontext_t must match the layout of
-     * struct sigcontext after the sc_mask member.  This is so
-     * that we can support sigcontext and ucontext_t at the same
-     * time.
-     */
     abi_ulong   mc_onstack;     /* XXX - sigcontext compat. */
     abi_ulong   mc_gs;          /* machine state (struct trapframe) */
     abi_ulong   mc_fs;
