@@ -32,10 +32,6 @@
 #define TARGET_MINSIGSTKSZ  (1024 * 4)
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)
 
-struct target_sigcontext {
-    int32_t     _dummy;
-};
-
 struct target_gpregs {
     uint64_t    gp_ra;
     uint64_t    gp_sp;
@@ -54,7 +50,6 @@ struct target_fpregs {
     uint32_t        fp_flags;
     uint32_t        pad;
 };
-
 
 typedef struct target_mcontext {
     struct target_gpregs   mc_gpregs;
