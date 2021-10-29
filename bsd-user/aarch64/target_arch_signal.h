@@ -37,11 +37,6 @@
 #define TARGET_MINSIGSTKSZ  (1024 * 4)                  /* min sig stack size */
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)  /* recommended size */
 
-/* sys/arm64/include/signal.h */
-struct target_sigcontext {
-    int32_t     _dummy;
-};
-
 /* struct __mcontext in sys/arm64/include/ucontext.h */
 
 struct target_gpregs {
