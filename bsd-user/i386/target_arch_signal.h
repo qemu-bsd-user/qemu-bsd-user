@@ -27,11 +27,6 @@
 #define TARGET_MINSIGSTKSZ  (512 * 4)               /* min sig stack size */
 #define TARGET_SIGSTKSZ     (MINSIGSTKSZ + 32768)   /* recommended size */
 
-struct target_sigcontext {
-    /* to be added */
-};
-
-/* compare to x86/include/ucontext.h */
 typedef struct target_mcontext {
     /*
      * The definition of mcontext_t must match the layout of
