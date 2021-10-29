@@ -270,15 +270,6 @@ static inline abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp,
 static inline abi_long get_ucontext_sigreturn(CPUARMState *env,
         abi_ulong target_sf, abi_ulong *target_uc)
 {
-    uint32_t cpsr = cpsr_read(env);
-
-    *target_uc = 0;
-
-    if ((cpsr & CPSR_M) != ARM_CPU_MODE_USR ||
-            (cpsr & (CPSR_I | CPSR_F)) != 0) {
-        return -TARGET_EINVAL;
-    }
-
     *target_uc = target_sf;
 
     return 0;
