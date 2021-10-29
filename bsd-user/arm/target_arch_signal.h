@@ -54,11 +54,6 @@
 #define TARGET_MINSIGSTKSZ  (1024 * 4)                  /* min sig stack size */
 #define TARGET_SIGSTKSZ     (TARGET_MINSIGSTKSZ + 32768)  /* recommended size */
 
-/* arm/arm/machdep.c */
-struct target_sigcontext {
-    int _dummy;
-};
-
 /*
  * Floating point register state
  */
