@@ -1,12 +1,6 @@
 #ifndef _TARGET_OS_SIGNAL_H_
 #define _TARGET_OS_SIGNAL_H_
 
-/* FreeBSD's sys/ucontext.h defines this */
-#define TARGET_MC_GET_CLEAR_RET 0x0001
-
-#define TARGET_MC_ADD_MAGIC     0x0002	/* Add magic ucontext */
-#define TARGET_MC_SET_ONSTACK   0x0004	/* Set onstack ucontext */
-
 #include "target_os_siginfo.h"
 #include "target_arch_signal.h"
 
