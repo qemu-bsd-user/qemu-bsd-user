@@ -27,8 +27,7 @@ static inline void target_thread_set_upcall(CPURISCVState *regs,
 {
     abi_ulong sp;
 
-    sp = (abi_ulong)((stack_base + stack_size) -
-        sizeof(struct target_trapframe)) & ~(16 - 1);
+    sp = (abi_ulong)(stack_base + stack_size) & ~(16 - 1);
 
     regs->gpr[xSP] = sp;
     regs->pc = entry;
