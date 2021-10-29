@@ -67,20 +67,6 @@ struct target_sigframe {
     target_siginfo_t    sf_si; /* = *sf_siginfo (SA_SIGINFO case)*/
 };
 
-struct target_trapframe {
-    uint64_t tf_ra;
-    uint64_t tf_sp;
-    uint64_t tf_gp;
-    uint64_t tf_tp;
-    uint64_t tf_t[7];
-    uint64_t tf_s[12];
-    uint64_t tf_a[8];
-    uint64_t tf_sepc;
-    uint64_t tf_sstatus;
-    uint64_t tf_stval;
-    uint64_t tf_scause;
-};
-
 /*
  * Compare with sendsig() in riscv/riscv/machdep.c
  * Assumes that target stack frame memory is locked.
