@@ -66,13 +66,6 @@ typedef struct target_trapframe {
 	} cpu;
 } target_trapframe_t;
 
-struct target_sigcontext {
-    int32_t            sc_onstack;     /* sigstack state to restore */
-    int32_t            __sc_mask13;
-    target_trapframe_t sc_frame;
-    target_sigset_t    sc_mask;    /* signal mask to retstore */
-};
-
 typedef struct target_mcontext {
 	int32_t     mc_vers;
 	int32_t     mc_flags;

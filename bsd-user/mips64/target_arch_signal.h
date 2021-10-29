@@ -35,18 +35,6 @@
 /* mips/mips/pm_machdep.c */
 #define TARGET_UCONTEXT_MAGIC   0xACEDBADE
 
-struct target_sigcontext {
-    target_sigset_t sc_mask;    /* signal mask to retstore */
-    int32_t     sc_onstack;     /* sigstack state to restore */
-    abi_long    sc_pc;          /* pc at time of signal */
-    abi_long    sc_reg[32];     /* processor regs 0 to 31 */
-    abi_long    mullo, mulhi;   /* mullo and mulhi registers */
-    int32_t     sc_fpused;      /* fp has been used */
-    abi_long    sc_fpregs[33];  /* fp regs 0 to 31 & csr */
-    abi_long    sc_fpc_eir;     /* fp exception instr reg */
-    /* int32_t reserved[8]; */
-};
-
 typedef struct target_mcontext {
     int32_t     mc_onstack;     /* sigstack state to restore */
     abi_long    mc_pc;          /* pc at time of signal */
