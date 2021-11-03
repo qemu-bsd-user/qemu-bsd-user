@@ -54,38 +54,13 @@ static inline void target_cpu_loop(CPUARMState *env)
                 /* See arm/arm/undefined.c undefinedinstruction(); */
                 info.si_addr = env->regs[15];
 
-                /*
-                 * Make sure the PC is correctly aligned. (It should
-                 * be.)
-                 */
-                if ((info.si_addr & 3) != 0) {
-                    info.si_signo = TARGET_SIGILL;
-                    info.si_errno = 0;
-                    info.si_code = TARGET_ILL_ILLADR;
-                    queue_signal(env, info.si_signo, &info);
-                } else {
-                    int rc = 0;
-#ifdef NOT_YET
-                    uint32_t opcode;
+                /* illegal instruction */
+                info.si_signo = TARGET_SIGILL;
+                info.si_errno = 0;
+                info.si_code = TARGET_ILL_ILLOPC;
+                queue_signal(env, info.si_signo, &info);
 
-                    /*
-                     * Get the opcode.
-                     *
-                     * FIXME - what to do if get_user() fails?
-                     */
-                    get_user_u32(opcode, env->regs[15]);
-
-                    /* Check the opcode with CP handlers we may have. */
-                    rc = EmulateAll(opcode, &ts->fpa, env);
-#endif /* NOT_YET */
-                    if (rc == 0) {
-                        /* illegal instruction */
-                        info.si_signo = TARGET_SIGILL;
-                        info.si_errno = 0;
-                        info.si_code = TARGET_ILL_ILLOPC;
-                        queue_signal(env, info.si_signo, &info);
-                    }
-                }
+                /* TODO: What about instruction emulation? */
             }
             break;
         case EXCP_SWI:
