@@ -118,13 +118,7 @@ set_sigtramp_args(CPUARMState *env, int sig, struct target_sigframe *frame,
     /*
      * Low bit indicates whether or not we're entering thumb mode.
      */
-    cpsr = cpsr_read(env);
-    if (ka->_sa_handler & 1) {
-        cpsr |= CPSR_T;
-    } else {
-        cpsr &= ~CPSR_T;
-    }
-    cpsr_write(env, cpsr, CPSR_T, CPSRWriteByInstr);
+    cpsr_write(env, (ka->_sa_handler & 1) * CPSR_T, CPSR_T, CPSRWriteByInstr);
 
     return 0;
 }
