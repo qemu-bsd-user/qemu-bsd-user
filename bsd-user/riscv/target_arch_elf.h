@@ -39,7 +39,7 @@ static uint32_t get_elf_hwcap(void)
 {
     RISCVCPU *cpu = RISCV_CPU(thread_cpu);
 
-    return cpu->env.misa;
+    return cpu->env.misa_ext_mask;
 }
 
 #define USE_ELF_CORE_DUMP
