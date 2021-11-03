@@ -23,6 +23,7 @@
 #include "qemu-common.h"
 #include "os-time.h"
 #include "trace.h"
+#include "hw/core/tcg-cpu-ops.h"
 
 static target_stack_t target_sigaltstack_used = {
     .ss_sp = 0,
@@ -424,23 +425,30 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     return;
 }
 
+/*
+ * Force a synchronously taken QEMU_SI_FAULT signal. For QEMU the
+ * 'force' part is handled in process_pending_signals().
+ * XXX BSD-user: we're still queueing it? and QEMU_SI_FAULT isn't a thing?
+ */
+static void force_sig_fault(int sig, int code, abi_ulong addr)
+{
+    CPUState *cpu = thread_cpu;
+    CPUArchState *env = cpu->env_ptr;
+    target_siginfo_t info = {};
+
+    info.si_signo = sig;
+    info.si_errno = 0;
+    info.si_code = code;
+    info.si_addr = addr;
+    queue_signal(env, sig, &info);
+}
+
 static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
 {
     CPUArchState *env = thread_cpu->env_ptr;
     int sig;
     target_siginfo_t tinfo;
     ucontext_t *uc = puc;
-
-    /*
-     * The CPU emulator uses some host signal to detect exceptions so
-     * we forward to it some signals.
-     */
-    if ((host_signum == SIGSEGV || host_signum == SIGBUS) &&
-            info->si_code < 0x10000) {
-        if (cpu_signal_handler(host_signum, info, puc)) {
-            return;
-        }
-    }
 
     /* Get the target signal number. */
     sig = host_to_target_signal(host_signum);
@@ -962,4 +970,34 @@ void process_pending_signals(CPUArchState *cpu_env)
         sigprocmask(SIG_SETMASK, &set, 0);
     }
     ts->in_sigsuspend = false;
+}
+
+void cpu_loop_exit_sigsegv(CPUState *cpu, target_ulong addr,
+                           MMUAccessType access_type, bool maperr, uintptr_t ra)
+{
+    const struct TCGCPUOps *tcg_ops = CPU_GET_CLASS(cpu)->tcg_ops;
+
+    if (tcg_ops->record_sigsegv) {
+        tcg_ops->record_sigsegv(cpu, addr, access_type, maperr, ra);
+    }
+
+    force_sig_fault(TARGET_SIGSEGV,
+                    maperr ? TARGET_SEGV_MAPERR : TARGET_SEGV_ACCERR,
+                    addr);
+    cpu->exception_index = EXCP_INTERRUPT;
+    cpu_loop_exit_restore(cpu, ra);
+}
+
+void cpu_loop_exit_sigbus(CPUState *cpu, target_ulong addr,
+                          MMUAccessType access_type, uintptr_t ra)
+{
+    const struct TCGCPUOps *tcg_ops = CPU_GET_CLASS(cpu)->tcg_ops;
+
+    if (tcg_ops->record_sigbus) {
+        tcg_ops->record_sigbus(cpu, addr, access_type, ra);
+    }
+
+    force_sig_fault(TARGET_SIGBUS, TARGET_BUS_ADRALN, addr);
+    cpu->exception_index = EXCP_INTERRUPT;
+    cpu_loop_exit_restore(cpu, ra);
 }
