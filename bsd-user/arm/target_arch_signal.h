@@ -63,7 +63,7 @@ typedef struct target_mcontext_vfp {
 } target_mcontext_vfp_t;
 
 typedef struct target_mcontext {
-    uint32_t    __gregs[32];
+    uint32_t    __gregs[TARGET__NGREG];
 
     /*
      * Originally, rest of this structure was named __fpu, 35 * 4 bytes
