@@ -73,6 +73,9 @@ typedef struct target_mcontext {
     int32_t     mc_spare2[4];
 } target_mcontext_t;
 
+#define TARGET_MCONTEXT_SIZE 640
+#define TARGET_UCONTEXT_SIZE 704
+
 #include "target_os_ucontext.h"
 
 struct target_sigframe {
