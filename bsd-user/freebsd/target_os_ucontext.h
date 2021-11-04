@@ -26,3 +26,6 @@ typedef struct target_ucontext {
     int32_t             uc_flags;
     int32_t             __spare__[4];
 } target_ucontext_t;
+
+G_STATIC_ASSERT(TARGET_MCONTEXT_SIZE == sizeof(target_mcontext_t));
+G_STATIC_ASSERT(TARGET_UCONTEXT_SIZE == sizeof(target_ucontext_t));
