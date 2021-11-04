@@ -57,6 +57,16 @@ typedef struct target_mcontext {
 	uint64_t    mc_vsxfpreg[32]; /* low-order half of VSR0-31 */
 } target_mcontext_t;
 
+#if 0
+#if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
+#define TARGET_MCONTEXT_SIZE 1384
+#define TARGET_UCONTEXT_SIZE 1464
+#else
+#define TARGET_MCONTEXT_SIZE 1216
+#define TARGET_UCONTEXT_SIZE 1280
+#endif
+#endif
+
 #include "target_os_ucontext.h"
 
 struct target_sigframe {

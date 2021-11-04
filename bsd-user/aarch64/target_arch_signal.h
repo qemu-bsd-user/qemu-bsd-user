@@ -67,6 +67,9 @@ struct target__mcontext {
 
 typedef struct target__mcontext target_mcontext_t;
 
+#define TARGET_MCONTEXT_SIZE 880
+#define TARGET_UCONTEXT_SIZE 960
+
 #include "target_os_ucontext.h"
 
 struct target_sigframe {
