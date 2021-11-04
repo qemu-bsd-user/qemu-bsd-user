@@ -63,16 +63,19 @@ typedef struct target_mcontext_vfp {
 } target_mcontext_vfp_t;
 
 typedef struct target_mcontext {
-    uint32_t    __gregs[TARGET__NGREG];
+    abi_uint    __gregs[TARGET__NGREG];
 
     /*
      * Originally, rest of this structure was named __fpu, 35 * 4 bytes
      * long, never accessed from kernel.
      */
-    abi_long    mc_vfp_size;
-    abi_ptr     *mc_vfp_ptr;
+    abi_ulong   mc_vfp_size;
+    abi_ptr     mc_vfp_ptr;
     abi_int     mc_spare[33];
 } target_mcontext_t;
+
+#define TARGET_MCONTEXT_SIZE 208
+#define TARGET_UCONTEXT_SIZE 260
 
 #include "target_os_ucontext.h"
 

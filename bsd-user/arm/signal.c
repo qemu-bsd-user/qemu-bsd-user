@@ -97,13 +97,15 @@ abi_long get_mcontext(CPUARMState *env, target_mcontext_t *mcp, int flags)
     gr[TARGET_REG_LR] = tswap32(env->regs[14]);
     gr[TARGET_REG_PC] = tswap32(env->regs[15]);
 
-    if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_ptr != NULL) {
+    if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_ptr != 0) {
         /* see get_vfpcontext in sys/arm/arm/exec_machdep.c */
-        target_mcontext_vfp_t *vfp = (target_mcontext_vfp_t *)mcp->mc_vfp_ptr;
+        target_mcontext_vfp_t *vfp;
+        vfp = lock_user(VERIFY_WRITE, mcp->mc_vfp_ptr, sizeof(*vfp), 0);
         for (int i = 0; i < 32; i++) {
             vfp->mcv_reg[i] = tswap64(*aa32_vfp_dreg(env, i));
         }
         vfp->mcv_fpscr = tswap32(vfp_get_fpscr(env));
+        unlock_user(vfp, mcp->mc_vfp_ptr, sizeof(*vfp));
     }
     return err;
 }
@@ -164,14 +166,18 @@ abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp, int srflag)
     env->regs[13] = tswap32(gr[TARGET_REG_SP]);
     env->regs[14] = tswap32(gr[TARGET_REG_LR]);
     env->regs[15] = tswap32(gr[TARGET_REG_PC]);
-    if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_ptr != NULL) {
+    if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_ptr != 0) {
         /* see set_vfpcontext in sys/arm/arm/exec_machdep.c */
-        target_mcontext_vfp_t *vfp = (target_mcontext_vfp_t *)mcp->mc_vfp_ptr;
+        target_mcontext_vfp_t *vfp;
+
+        vfp = lock_user(VERIFY_READ, mcp->mc_vfp_ptr, sizeof(*vfp), 1);
         for (int i = 0; i < 32; i++) {
-            *aa32_vfp_dreg(env, i) = tswap64(vfp->mcv_reg[i]);
+            __get_user(*aa32_vfp_dreg(env, i), &vfp->mcv_reg[i]);
         }
-        fpscr =  tswap32(vfp->mcv_fpscr);
+        __get_user(fpscr, &vfp->mcv_fpscr);
         vfp_set_fpscr(env, fpscr);
+        unlock_user(vfp, mcp->mc_vfp_ptr, sizeof(target_ucontext_t));
+
         /*
          * linux-user sets fpexc, fpinst and fpinst2, but these aren't in
          * FreeBSD's mcontext, what to do?
