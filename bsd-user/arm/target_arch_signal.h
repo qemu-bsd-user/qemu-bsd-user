@@ -90,8 +90,6 @@ static inline abi_long
 set_sigtramp_args(CPUARMState *env, int sig, struct target_sigframe *frame,
     abi_ulong frame_addr, struct target_sigaction *ka)
 {
-    abi_ulong cpsr;
-
     /*
      * Arguments to signal handler:
      *  r0 = signal number
