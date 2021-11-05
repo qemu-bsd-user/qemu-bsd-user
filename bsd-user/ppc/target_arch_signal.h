@@ -72,13 +72,4 @@ struct target_sigframe {
 	target_siginfo_t  sf_si;
 };
 
-abi_long set_sigtramp_args(CPUPPCState *regs, int sig,
-                           struct target_sigframe *frame,
-                           abi_ulong frame_addr,
-                           struct target_sigaction *ka);
-abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp, int flags);
-abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp, int srflag);
-abi_long get_ucontext_sigreturn(CPUPPCState *regs, abi_ulong target_sf,
-                                abi_ulong *target_uc);
-
 #endif /* !_TARGET_ARCH_SIGNAL_H_ */
