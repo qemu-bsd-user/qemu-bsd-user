@@ -44,27 +44,25 @@ extern bool bsd_ppc_is_elfv1(CPUPPCState *env);
 #endif
 
 typedef struct target_mcontext {
-	int32_t     mc_vers;
-	int32_t     mc_flags;
+	abi_int     mc_vers;
+	abi_int     mc_flags;
 #define TARGET_MC_FP_VALID		0x0001
 #define TARGET_MC_AV_VALID		0x0002
-	int32_t     mc_onstack;     /* sigstack state to restore */
-	int32_t     mc_len;
+	abi_int     mc_onstack;     /* sigstack state to restore */
+	abi_int     mc_len;
 	uint64_t    mc_avec[32*2];
 	uint32_t    mc_av[2];
 	abi_long    mc_frame[42];    /* process regs 0 to 31 */
 	uint64_t    mc_fpreg[33];  /* fp regs 0 to 31  */
 	uint64_t    mc_vsxfpreg[32]; /* low-order half of VSR0-31 */
-} target_mcontext_t;
+} target_mcontext_t __aligned(16);
 
-#if 0
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-#define TARGET_MCONTEXT_SIZE 1384
-#define TARGET_UCONTEXT_SIZE 1464
+#define TARGET_MCONTEXT_SIZE 1392
+#define TARGET_UCONTEXT_SIZE 1472
 #else
-#define TARGET_MCONTEXT_SIZE 1216
+#define TARGET_MCONTEXT_SIZE 1224
 #define TARGET_UCONTEXT_SIZE 1280
-#endif
 #endif
 
 #include "target_os_ucontext.h"
