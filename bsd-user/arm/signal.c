@@ -116,7 +116,7 @@ abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp, int srflag)
     int err = 0;
     const uint32_t *gr = mcp->__gregs;
     uint32_t cpsr, ccpsr = cpsr_read(env);
-    uint32_t fpscr;
+    uint32_t fpscr, mask;
 
     cpsr = tswap32(gr[TARGET_REG_CPSR]);
     /*
@@ -133,19 +133,17 @@ abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp, int srflag)
     }
 
     /*
+     * The movs pc,lr instruction that implements the return to userland masks
+     * these bits out.
+     */
+    mask = cpsr & CPSR_T ? 0x1 : 0x3;
+
+    /*
      * Make sure that we either have no vfp, or it's the correct size.
      * FreeBSD just ignores it, though, so maybe we'll need to adjust
      * things below instead.
      */
     if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_size != sizeof(target_mcontext_vfp_t)) {
-        return -TARGET_EINVAL;
-    }
-    /*
-     * Make sure T mode matches the PC's notion of thumb mode, although
-     * FreeBSD lets the processor sort this out, so we may need remove
-     * this check, or generate a signal...
-     */
-    if (!!(tswap32(gr[TARGET_REG_PC]) & 1) != !!(cpsr & CPSR_T)) {
         return -TARGET_EINVAL;
     }
 
@@ -165,7 +163,7 @@ abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp, int srflag)
 
     env->regs[13] = tswap32(gr[TARGET_REG_SP]);
     env->regs[14] = tswap32(gr[TARGET_REG_LR]);
-    env->regs[15] = tswap32(gr[TARGET_REG_PC]);
+    env->regs[15] = tswap32(gr[TARGET_REG_PC] & ~mask);
     if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_ptr != 0) {
         /* see set_vfpcontext in sys/arm/arm/exec_machdep.c */
         target_mcontext_vfp_t *vfp;
