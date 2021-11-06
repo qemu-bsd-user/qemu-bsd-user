@@ -68,7 +68,7 @@ safe_syscall_base:
 	 */
 safe_syscall_start:
 	/* if signal_pending is non-zero, don't do the call */
-	mov	4+16	(%esp), %eax	/* signal_pending */
+	mov	4+16(%esp), %eax	/* signal_pending */
 	cmpl	$0, (%eax)
 	jnz	1f
 	mov	8+16(%esp), %eax	/* syscall number */
@@ -100,7 +100,6 @@ safe_syscall_end:
 	.cfi_restore_state
 	mov	$-TARGET_ERESTARTSYS, %eax
 	jmp	safe_syscall_end
-	ret
 	.cfi_endproc
 
 	.size	safe_syscall_base, .-safe_syscall_base
