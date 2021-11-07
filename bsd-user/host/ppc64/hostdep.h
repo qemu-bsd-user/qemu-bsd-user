@@ -15,6 +15,9 @@
 /* We have a safe-syscall.inc.S */
 #define HAVE_SAFE_SYSCALL
 
+/* XXX Likely incorrect, but matches current code */
+#define ADJUST_SYSCALL_RETCODE
+
 #ifndef __ASSEMBLER__
 
 /* These are defined by the safe-syscall.inc.S file */
