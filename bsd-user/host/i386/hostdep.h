@@ -15,6 +15,11 @@
 /* We have a safe-syscall.inc.S */
 #define HAVE_SAFE_SYSCALL
 
+#define ADJUST_SYSCALL_RETCODE \
+    jnb 2f;                    \
+    neg %eax;                  \
+    2:
+
 #ifndef __ASSEMBLER__
 
 /* These are defined by the safe-syscall.inc.S file */
