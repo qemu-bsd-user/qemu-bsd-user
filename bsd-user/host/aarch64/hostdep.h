@@ -20,26 +20,4 @@
     neg x0, x0;                \
     2:
 
-#ifndef __ASSEMBLER__
-
-/* These are defined by the safe-syscall.inc.S file */
-extern char safe_syscall_start[];
-extern char safe_syscall_end[];
-
-/* FreeBSD-ism */
-#define DEFINE_PCREG(puc)	&((ucontext_t *)(puc))->uc_mcontext.mc_gpregs.gp_lr
-
-/* Adjust the signal context to rewind out of safe-syscall if we're in it */
-static inline void rewind_if_in_safe_syscall(void *puc)
-{
-    __u64 *pcreg = DEFINE_PCREG(puc);
-
-    if (*pcreg > (uintptr_t)safe_syscall_start
-        && *pcreg < (uintptr_t)safe_syscall_end) {
-        *pcreg = (uintptr_t)safe_syscall_start;
-    }
-}
-
-#endif /* __ASSEMBLER__ */
-
 #endif
