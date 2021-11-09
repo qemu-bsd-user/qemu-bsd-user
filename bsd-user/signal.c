@@ -18,9 +18,13 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #include "qemu/osdep.h"
 #include "qemu.h"
 #include "qemu-common.h"
+
+void force_sig_fault(int sig, int code, abi_ulong addr);
+
 #include "os-time.h"
 #include "trace.h"
 #include "hw/core/tcg-cpu-ops.h"
@@ -447,7 +451,7 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
  * 'force' part is handled in process_pending_signals().
  * XXX BSD-user: we're still queueing it? and QEMU_SI_FAULT isn't a thing?
  */
-static void force_sig_fault(int sig, int code, abi_ulong addr)
+void force_sig_fault(int sig, int code, abi_ulong addr)
 {
     CPUState *cpu = thread_cpu;
     CPUArchState *env = cpu->env_ptr;
