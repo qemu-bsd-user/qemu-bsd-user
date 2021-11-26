@@ -20,9 +20,6 @@ die() {
 doit aarch64 aarch64
 doit armv7 arm
 doit i386 i386
-doit mips mips
-doit mipsel mipsel
-doit mips64 mips64
 doit powerpc ppc
 doit powerpc64 ppc64
 doit riscv64 riscv64
