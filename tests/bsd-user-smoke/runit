@@ -1,13 +1,13 @@
 #!/bin/sh
 
-src=$1
-build=$2
+build=$1
+testing=$2
 
 doit() {
 	local a=$1 q=$2
 
 	echo Hello World > foo1
-	$build/qemu-$q $src/h.$a > foo2 || die "cmd failed: $build/qemu-$q $src/h.$a"
+	$build/qemu-$q $testing/h.$a > foo2 || die "cmd failed: $build/qemu-$q $testing/h.$a"
 	cmp foo1 foo2 || die "Hello World expected"
 	rm foo1 foo2
 }
