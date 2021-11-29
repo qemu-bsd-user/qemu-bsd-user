@@ -63,7 +63,7 @@ static inline void target_cpu_loop(CPURISCVState *env)
             break;
         case RISCV_EXCP_U_ECALL:
             if (bsd_type == target_freebsd) {
-                syscall_num = env->gpr[5]; /* t0 */
+                syscall_num = env->gpr[xT0]; /* t0 */
                 env->pc += TARGET_INSN_SIZE;
                 /* Compare to cpu_fetch_syscall_args() in riscv/riscv/trap.c */
                 if (TARGET_FREEBSD_NR___syscall == syscall_num ||
@@ -98,12 +98,12 @@ static inline void target_cpu_loop(CPURISCVState *env)
                  */
                 if (ret >= 0) {
                     env->gpr[xA0] = ret; /* a0 */
-                    env->gpr[5] = 0;     /* t0 */
+                    env->gpr[xT0] = 0;   /* t0 */
                 } else if (ret == -TARGET_ERESTART) {
                     env->pc -= TARGET_INSN_SIZE;
                 } else if (ret != -TARGET_EJUSTRETURN) {
                     env->gpr[xA0] = -ret; /* a0 */
-                    env->gpr[5] = 1;      /* t0 */
+                    env->gpr[xT0] = 1;   /* t0 */
                 }
             } else {
                 fprintf(stderr, "qemu: bsd_type (= %d) syscall not supported\n",
