@@ -22,6 +22,7 @@
 #include "qemu/osdep.h"
 #include "qemu.h"
 #include "qemu-common.h"
+#include "signal-common.h"
 
 void force_sig_fault(int sig, int code, abi_ulong addr);
 
@@ -37,7 +38,7 @@ static target_stack_t target_sigaltstack_used = {
 };
 
 static struct target_sigaction sigact_table[TARGET_NSIG];
-static void host_signal_handler(int host_signum, siginfo_t *info, void *puc);
+static void host_signal_handler(int host_sig, siginfo_t *info, void *puc);
 static void target_to_host_sigset_internal(sigset_t *d,
         const target_sigset_t *s);
 
@@ -405,7 +406,9 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     struct qemu_sigqueue *q, **pq;
 
     k = &ts->sigtab[sig - 1];
-    trace_user_queue_signal(env, sig);
+    trace_user_queue_signal(env, sig); /* We called this in the caller? XXX */
+    /*
+     XXX does the segv changes make this go away? -- I think so */
     if (sig == TARGET_SIGSEGV && sigismember(&ts->signal_mask, SIGSEGV)) {
         /* Guest has blocked SIGSEGV but we got one anyway. Assume this
          * is a forced SIGSEGV (ie one the kernel handles via force_sig_info
@@ -424,6 +427,7 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
      * FreeBSD signals are always queued.
      * Linux only queues real time signals.
      * XXX this code is not thread safe.
+     * "What lock protects ts->sigtab?"
      */
     if (!k->pending) {
         /* first signal */
@@ -450,6 +454,7 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
  * Force a synchronously taken QEMU_SI_FAULT signal. For QEMU the
  * 'force' part is handled in process_pending_signals().
  * XXX BSD-user: we're still queueing it? and QEMU_SI_FAULT isn't a thing?
+ * XXX BSD-user -- we need to adjust our cpu-loop to call this
  */
 void force_sig_fault(int sig, int code, abi_ulong addr)
 {
@@ -464,25 +469,97 @@ void force_sig_fault(int sig, int code, abi_ulong addr)
     queue_signal(env, sig, &info);
 }
 
-static void host_signal_handler(int host_signum, siginfo_t *info, void *puc)
+static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 {
-    CPUArchState *env = thread_cpu->env_ptr;
+    CPUState *cpu = thread_cpu;
+    CPUArchState *env = cpu->env_ptr;
     int sig;
     target_siginfo_t tinfo;
     ucontext_t *uc = puc;
+    uintptr_t pc = 0;
+    bool sync_sig = false;
+
+    /*
+     * Non-spoofed SIGSEGV and SIGBUS are synchronous, and need special
+     * handling wrt signal blocking and unwinding.
+     */
+    if ((host_sig == SIGSEGV || host_sig == SIGBUS) && info->si_code > 0) {
+        MMUAccessType access_type;
+        uintptr_t host_addr;
+        abi_ptr guest_addr;
+        bool is_write;
+
+        host_addr = (uintptr_t)info->si_addr;
+
+        /*
+         * Convert forcefully to guest address space: addresses outside
+         * reserved_va are still valid to report via SEGV_MAPERR.
+         */
+        guest_addr = h2g_nocheck(host_addr);
+
+        pc = host_signal_pc(uc);
+        is_write = host_signal_write(info, uc);
+        access_type = adjust_signal_pc(&pc, is_write);
+
+        if (host_sig == SIGSEGV) {
+            bool maperr = true;
+
+            if (info->si_code == SEGV_ACCERR && h2g_valid(host_addr)) {
+                /* If this was a write to a TB protected page, restart. */
+                if (is_write &&
+                    handle_sigsegv_accerr_write(cpu, &uc->uc_sigmask,
+                                                pc, guest_addr)) {
+                    return;
+                }
+
+                /*
+                 * With reserved_va, the whole address space is PROT_NONE,
+                 * which means that we may get ACCERR when we want MAPERR.
+                 */
+                if (page_get_flags(guest_addr) & PAGE_VALID) {
+                    maperr = false;
+                } else {
+                    info->si_code = SEGV_MAPERR;
+                }
+            }
+
+            sigprocmask(SIG_SETMASK, &uc->uc_sigmask, NULL);
+            cpu_loop_exit_sigsegv(cpu, guest_addr, access_type, maperr, pc);
+        } else {
+            sigprocmask(SIG_SETMASK, &uc->uc_sigmask, NULL);
+            if (info->si_code == BUS_ADRALN) {
+                cpu_loop_exit_sigbus(cpu, guest_addr, access_type, pc);
+            }
+        }
+
+        sync_sig = true;
+    }
 
     /* Get the target signal number. */
-    sig = host_to_target_signal(host_signum);
+    sig = host_to_target_signal(host_sig);
     if (sig < 1 || sig > TARGET_NSIG) {
         return;
     }
-    trace_user_host_signal(env, host_signum, sig);
-
-    rewind_if_in_safe_syscall(puc);
+    trace_user_host_signal(cpu, host_sig, sig);
 
     host_to_target_siginfo_noswap(&tinfo, info);
 
     queue_signal(env, sig, &tinfo);	/* XXX how to cope with failure? */
+    /* Linux does something else here -> the queue signal may be wrong, but maybe not. */
+    /* And then it does the rewind_if_in_safe_syscall */
+
+    /*
+     * For synchronous signals, unwind the cpu state to the faulting
+     * insn and then exit back to the main loop so that the signal
+     * is delivered immediately.
+     XXXX Should this be in queue_signal?
+     */
+    if (sync_sig) {
+        cpu->exception_index = EXCP_INTERRUPT;
+        cpu_loop_exit_restore(cpu, pc);
+    }
+
+    rewind_if_in_safe_syscall(puc);
 
     /*
      * Block host signals until target signal handler entered. We

@@ -33,6 +33,7 @@
 #include "qapi/error.h"
 #include "qemu.h"
 #include "qemu-common.h"
+#include "signal-common.h"
 #include "qemu/config-file.h"
 #include "qemu/path.h"
 #include "qemu/help_option.h"
