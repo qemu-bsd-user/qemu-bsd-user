@@ -58,6 +58,7 @@
 
 /* Necessary parameters */
 #define TARGET_ELF_EXEC_PAGESIZE TARGET_PAGE_SIZE
+#define TARGET_ELF_PAGELENGTH(_v) ROUND_UP((_v), TARGET_ELF_EXEC_PAGESIZE)
 #define TARGET_ELF_PAGESTART(_v) ((_v) & \
         ~(unsigned long)(TARGET_ELF_EXEC_PAGESIZE - 1))
 #define TARGET_ELF_PAGEOFFSET(_v) ((_v) & (TARGET_ELF_EXEC_PAGESIZE - 1))
