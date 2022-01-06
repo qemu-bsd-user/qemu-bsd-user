@@ -891,7 +891,8 @@ static bool pnv_phb4_resolve_pe(PnvPhb4DMASpace *ds)
     bus_num = pci_bus_num(ds->bus);
     addr = rtt & PHB_RTT_BASE_ADDRESS_MASK;
     addr += 2 * PCI_BUILD_BDF(bus_num, ds->devfn);
-    if (dma_memory_read(&address_space_memory, addr, &rte, sizeof(rte))) {
+    if (dma_memory_read(&address_space_memory, addr, &rte,
+                        sizeof(rte), MEMTXATTRS_UNSPECIFIED)) {
         phb_error(ds->phb, "Failed to read RTT entry at 0x%"PRIx64, addr);
         /* Set error bits ? fence ? ... */
         return false;
@@ -961,7 +962,7 @@ static void pnv_phb4_translate_tve(PnvPhb4DMASpace *ds, hwaddr addr,
             /* Grab the TCE address */
             taddr = base | (((addr >> sh) & ((1ul << tbl_shift) - 1)) << 3);
             if (dma_memory_read(&address_space_memory, taddr, &tce,
-                                sizeof(tce))) {
+                                sizeof(tce), MEMTXATTRS_UNSPECIFIED)) {
                 phb_error(ds->phb, "Failed to read TCE at 0x%"PRIx64, taddr);
                 return;
             }
@@ -1200,11 +1201,12 @@ static void pnv_phb4_realize(DeviceState *dev, Error **errp)
     memory_region_init(&phb->pci_mmio, OBJECT(phb), name,
                        PCI_MMIO_TOTAL_SIZE);
 
-    pci->bus = pci_register_root_bus(dev, "root-bus",
+    pci->bus = pci_register_root_bus(dev, dev->id,
                                      pnv_phb4_set_irq, pnv_phb4_map_irq, phb,
                                      &phb->pci_mmio, &phb->pci_io,
                                      0, 4, TYPE_PNV_PHB4_ROOT_BUS);
     pci_setup_iommu(pci->bus, pnv_phb4_dma_iommu, phb);
+    pci->bus->flags |= PCI_BUS_EXTENDED_CONFIG_SPACE;
 
     /* Add a single Root port */
     qdev_prop_set_uint8(DEVICE(&phb->root), "chassis", phb->chip_id);
@@ -1226,18 +1228,6 @@ static void pnv_phb4_realize(DeviceState *dev, Error **errp)
     pnv_phb4_update_xsrc(phb);
 
     phb->qirqs = qemu_allocate_irqs(xive_source_set_irq, xsrc, xsrc->nr_irqs);
-}
-
-static void pnv_phb4_reset(DeviceState *dev)
-{
-    PnvPHB4 *phb = PNV_PHB4(dev);
-    PCIDevice *root_dev = PCI_DEVICE(&phb->root);
-
-    /*
-     * Configure PCI device id at reset using a property.
-     */
-    pci_config_set_vendor_id(root_dev->config, PCI_VENDOR_ID_IBM);
-    pci_config_set_device_id(root_dev->config, phb->device_id);
 }
 
 static const char *pnv_phb4_root_bus_path(PCIHostState *host_bridge,
@@ -1272,7 +1262,6 @@ static Property pnv_phb4_properties[] = {
         DEFINE_PROP_UINT32("index", PnvPHB4, phb_id, 0),
         DEFINE_PROP_UINT32("chip-id", PnvPHB4, chip_id, 0),
         DEFINE_PROP_UINT64("version", PnvPHB4, version, 0),
-        DEFINE_PROP_UINT16("device-id", PnvPHB4, device_id, 0),
         DEFINE_PROP_LINK("stack", PnvPHB4, stack, TYPE_PNV_PHB4_PEC_STACK,
                          PnvPhb4PecStack *),
         DEFINE_PROP_END_OF_LIST(),
@@ -1289,7 +1278,6 @@ static void pnv_phb4_class_init(ObjectClass *klass, void *data)
     device_class_set_props(dc, pnv_phb4_properties);
     set_bit(DEVICE_CATEGORY_BRIDGE, dc->categories);
     dc->user_creatable  = false;
-    dc->reset           = pnv_phb4_reset;
 
     xfc->notify         = pnv_phb4_xive_notify;
 }

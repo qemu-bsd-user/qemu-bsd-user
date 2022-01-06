@@ -324,7 +324,7 @@ F: disas/sparc.c
 X86 TCG CPUs
 M: Paolo Bonzini <pbonzini@redhat.com>
 M: Richard Henderson <richard.henderson@linaro.org>
-M: Eduardo Habkost <ehabkost@redhat.com>
+M: Eduardo Habkost <eduardo@habkost.net>
 S: Maintained
 F: target/i386/tcg/
 F: tests/tcg/i386/
@@ -393,7 +393,7 @@ F: target/ppc/kvm.c
 
 S390 KVM CPUs
 M: Halil Pasic <pasic@linux.ibm.com>
-M: Christian Borntraeger <borntraeger@de.ibm.com>
+M: Christian Borntraeger <borntraeger@linux.ibm.com>
 S: Supported
 F: target/s390x/kvm/
 F: target/s390x/ioinst.[ch]
@@ -1527,7 +1527,7 @@ S390 Machines
 -------------
 S390 Virtio-ccw
 M: Halil Pasic <pasic@linux.ibm.com>
-M: Christian Borntraeger <borntraeger@de.ibm.com>
+M: Christian Borntraeger <borntraeger@linux.ibm.com>
 S: Supported
 F: hw/char/sclp*.[hc]
 F: hw/char/terminal3270.c
@@ -1541,7 +1541,7 @@ T: git https://github.com/borntraeger/qemu.git s390-next
 L: qemu-s390x@nongnu.org
 
 S390-ccw boot
-M: Christian Borntraeger <borntraeger@de.ibm.com>
+M: Christian Borntraeger <borntraeger@linux.ibm.com>
 M: Thomas Huth <thuth@redhat.com>
 S: Supported
 F: hw/s390x/ipl.*
@@ -1628,9 +1628,10 @@ F: include/hw/i386/microvm.h
 F: pc-bios/bios-microvm.bin
 
 Machine core
-M: Eduardo Habkost <ehabkost@redhat.com>
+M: Eduardo Habkost <eduardo@habkost.net>
 M: Marcel Apfelbaum <marcel.apfelbaum@gmail.com>
-R: Philippe Mathieu-Daudé <philmd@redhat.com>
+R: Philippe Mathieu-Daudé <f4bug@amsat.org>
+R: Yanan Wang <wangyanan55@huawei.com>
 S: Supported
 F: cpu.c
 F: hw/core/cpu.c
@@ -1810,7 +1811,7 @@ F: docs/virtio-net-failover.rst
 T: git https://github.com/jasowang/qemu.git net
 
 Parallel NOR Flash devices
-M: Philippe Mathieu-Daudé <philmd@redhat.com>
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
 T: git https://gitlab.com/philmd/qemu.git pflash-next
 S: Maintained
 F: hw/block/pflash_cfi*.c
@@ -1825,6 +1826,7 @@ F: hw/scsi/*
 F: tests/qtest/virtio-scsi-test.c
 F: tests/qtest/fuzz-virtio-scsi-test.c
 F: tests/qtest/am53c974-test.c
+F: tests/qtest/fuzz-lsi53c895a-test.c
 T: git https://github.com/bonzini/qemu.git scsi-next
 
 SSI
@@ -2225,7 +2227,7 @@ F: hw/isa/piix4.c
 F: include/hw/southbridge/piix.h
 
 Firmware configuration (fw_cfg)
-M: Philippe Mathieu-Daudé <philmd@redhat.com>
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
 R: Gerd Hoffmann <kraxel@redhat.com>
 S: Supported
 F: docs/specs/fw_cfg.txt
@@ -2523,7 +2525,7 @@ F: scripts/coccinelle/errp-guard.cocci
 
 GDB stub
 M: Alex Bennée <alex.bennee@linaro.org>
-R: Philippe Mathieu-Daudé <philmd@redhat.com>
+R: Philippe Mathieu-Daudé <f4bug@amsat.org>
 S: Maintained
 F: gdbstub*
 F: include/exec/gdbstub.h
@@ -2534,7 +2536,7 @@ Memory API
 M: Paolo Bonzini <pbonzini@redhat.com>
 M: Peter Xu <peterx@redhat.com>
 M: David Hildenbrand <david@redhat.com>
-R: Philippe Mathieu-Daudé <philmd@redhat.com>
+R: Philippe Mathieu-Daudé <f4bug@amsat.org>
 S: Supported
 F: include/exec/ioport.h
 F: include/exec/memop.h
@@ -2648,13 +2650,13 @@ F: backends/cryptodev*.c
 Python library
 M: John Snow <jsnow@redhat.com>
 M: Cleber Rosa <crosa@redhat.com>
-R: Eduardo Habkost <ehabkost@redhat.com>
+R: Eduardo Habkost <eduardo@habkost.net>
 S: Maintained
 F: python/
 T: git https://gitlab.com/jsnow/qemu.git python
 
 Python scripts
-M: Eduardo Habkost <ehabkost@redhat.com>
+M: Eduardo Habkost <eduardo@habkost.net>
 M: Cleber Rosa <crosa@redhat.com>
 S: Odd Fixes
 F: scripts/*.py
@@ -2730,7 +2732,7 @@ T: git https://github.com/mdroth/qemu.git qga
 QOM
 M: Paolo Bonzini <pbonzini@redhat.com>
 R: Daniel P. Berrange <berrange@redhat.com>
-R: Eduardo Habkost <ehabkost@redhat.com>
+R: Eduardo Habkost <eduardo@habkost.net>
 S: Supported
 F: docs/qdev-device-use.txt
 F: hw/core/qdev*
@@ -2750,7 +2752,7 @@ F: tests/unit/check-qom-proplist.c
 F: tests/unit/test-qdev-global-props.c
 
 QOM boilerplate conversion script
-M: Eduardo Habkost <ehabkost@redhat.com>
+M: Eduardo Habkost <eduardo@habkost.net>
 S: Maintained
 F: scripts/codeconverter/
 
@@ -2872,11 +2874,15 @@ D-Bus
 M: Marc-André Lureau <marcandre.lureau@redhat.com>
 S: Maintained
 F: backends/dbus-vmstate.c
-F: tests/dbus-vmstate*
+F: ui/dbus*
+F: audio/dbus*
 F: util/dbus.c
+F: include/ui/dbus*
 F: include/qemu/dbus.h
-F: docs/interop/dbus.rst
-F: docs/interop/dbus-vmstate.rst
+F: docs/interop/dbus*
+F: docs/sphinx/dbus*
+F: docs/sphinx/fakedbusdoc.py
+F: tests/qtest/dbus*
 
 Seccomp
 M: Eduardo Otubo <otubo@redhat.com>
@@ -2976,12 +2982,13 @@ F: docs/COLO-FT.txt
 
 COLO Proxy
 M: Zhang Chen <chen.zhang@intel.com>
-M: Li Zhijian <lizhijian@cn.fujitsu.com>
+M: Li Zhijian <lizhijian@fujitsu.com>
 S: Supported
 F: docs/colo-proxy.txt
 F: net/colo*
 F: net/filter-rewriter.c
 F: net/filter-mirror.c
+F: tests/qtest/test-filter*
 
 Record/replay
 M: Pavel Dovgalyuk <pavel.dovgaluk@ispras.ru>
@@ -3023,14 +3030,14 @@ F: include/hw/i2c/smbus_slave.h
 F: include/hw/i2c/smbus_eeprom.h
 
 Firmware schema specifications
-M: Philippe Mathieu-Daudé <philmd@redhat.com>
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
 R: Daniel P. Berrange <berrange@redhat.com>
 R: Kashyap Chamarthy <kchamart@redhat.com>
 S: Maintained
 F: docs/interop/firmware.json
 
 EDK2 Firmware
-M: Philippe Mathieu-Daudé <philmd@redhat.com>
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
 R: Gerd Hoffmann <kraxel@redhat.com>
 S: Supported
 F: hw/i386/*ovmf*
@@ -3076,8 +3083,9 @@ Usermode Emulation
 Overall usermode emulation
 M: Riku Voipio <riku.voipio@iki.fi>
 S: Maintained
-F: thunk.c
 F: accel/tcg/user-exec*.c
+F: include/user/
+F: common-user/
 
 BSD user
 M: Warner Losh <imp@bsdimp.com>
@@ -3136,6 +3144,11 @@ M: Richard Henderson <richard.henderson@linaro.org>
 S: Maintained
 F: tcg/i386/
 F: disas/i386.c
+
+LoongArch64 TCG target
+M: WANG Xuerui <git@xen0n.name>
+S: Maintained
+F: tcg/loongarch64/
 
 MIPS TCG target
 M: Philippe Mathieu-Daudé <f4bug@amsat.org>
@@ -3262,7 +3275,7 @@ F: block/null.c
 NVMe Block Driver
 M: Stefan Hajnoczi <stefanha@redhat.com>
 R: Fam Zheng <fam@euphon.net>
-R: Philippe Mathieu-Daudé <philmd@redhat.com>
+R: Philippe Mathieu-Daudé <f4bug@amsat.org>
 L: qemu-block@nongnu.org
 S: Supported
 F: block/nvme*
@@ -3469,7 +3482,7 @@ M: Alex Bennée <alex.bennee@linaro.org>
 M: Philippe Mathieu-Daudé <f4bug@amsat.org>
 M: Thomas Huth <thuth@redhat.com>
 R: Wainer dos Santos Moschetta <wainersm@redhat.com>
-R: Willian Rampazzo <willianr@redhat.com>
+R: Beraldo Leal <bleal@redhat.com>
 S: Maintained
 F: .github/lockdown.yml
 F: .gitlab-ci.yml
@@ -3505,11 +3518,17 @@ F: tests/tcg/Makefile.include
 Integration Testing with the Avocado framework
 W: https://trello.com/b/6Qi1pxVn/avocado-qemu
 R: Cleber Rosa <crosa@redhat.com>
-R: Philippe Mathieu-Daudé <philmd@redhat.com>
+R: Philippe Mathieu-Daudé <f4bug@amsat.org>
 R: Wainer dos Santos Moschetta <wainersm@redhat.com>
-R: Willian Rampazzo <willianr@redhat.com>
+R: Beraldo Leal <bleal@redhat.com>
 S: Odd Fixes
 F: tests/avocado/
+
+GitLab custom runner (Works On Arm Sponsored)
+M: Alex Bennée <alex.bennee@linaro.org>
+M: Philippe Mathieu-Daudé <f4bug@amsat.org>
+S: Maintained
+F: .gitlab-ci.d/custom-runners/ubuntu-20.04-aarch64.yml
 
 Documentation
 -------------

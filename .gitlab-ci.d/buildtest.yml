@@ -100,6 +100,17 @@ avocado-system-debian:
     IMAGE: debian-amd64
     MAKE_CHECK_ARGS: check-avocado
 
+crash-test-debian:
+  extends: .native_test_job_template
+  needs:
+    - job: build-system-debian
+      artifacts: true
+  variables:
+    IMAGE: debian-amd64
+  script:
+    - cd build
+    - scripts/device-crash-test -q ./qemu-system-i386
+
 build-system-fedora:
   extends: .native_build_job_template
   needs:
@@ -134,6 +145,18 @@ avocado-system-fedora:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check-avocado
 
+crash-test-fedora:
+  extends: .native_test_job_template
+  needs:
+    - job: build-system-fedora
+      artifacts: true
+  variables:
+    IMAGE: fedora
+  script:
+    - cd build
+    - scripts/device-crash-test -q ./qemu-system-ppc
+    - scripts/device-crash-test -q ./qemu-system-riscv32
+
 build-system-centos:
   extends: .native_build_job_template
   needs:
@@ -141,7 +164,7 @@ build-system-centos:
   variables:
     IMAGE: centos8
     CONFIGURE_ARGS: --disable-nettle --enable-gcrypt --enable-fdt=system
-                    --enable-modules --enable-trace-backends=dtrace
+      --enable-modules --enable-trace-backends=dtrace --enable-docs
     TARGETS: ppc64-softmmu or1k-softmmu s390x-softmmu
       x86_64-softmmu rx-softmmu sh4-softmmu nios2-softmmu
     MAKE_CHECK_ARGS: check-build
