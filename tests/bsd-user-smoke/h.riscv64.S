@@ -15,7 +15,7 @@ qemu_start:
 	lui	a0, %hi(.L.str)
 	addi	a1, a0, %lo(.L.str)
 	addi	a0, zero, STDOUT_FILENO
-	addi	a2, zero, %lo(len)
+	addi	a2, zero, 12
 	li	t0, SYS_write
 	ecall
 
