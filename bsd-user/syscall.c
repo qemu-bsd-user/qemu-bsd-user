@@ -870,8 +870,14 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_swapon(arg1);
         break;
 
+#if TARGET_FREEBSD_NR_freebsd13_swapoff
+    case TARGET_FREEBSD_NR_freebsd13_swapoff: /* freebsd13_swapoff(2) */
+        ret = do_bsd_swapoff(arg1, 0);
+        break;
+#endif
+
     case TARGET_FREEBSD_NR_swapoff: /* swapoff(2) */
-        ret = do_bsd_swapoff(arg1);
+        ret = do_bsd_swapoff(arg1, arg2);
         break;
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300080

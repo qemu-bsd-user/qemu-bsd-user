@@ -158,6 +158,9 @@
 { TARGET_FREEBSD_NR_freebsd11_vadvise, "freebsd11_vadvise", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_freebsd12_closefrom, "freebsd12_closefrom", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_freebsd12_shm_open, "freebsd12_shm_open", NULL, NULL, NULL },
+#ifdef TARGET_FREEBSD_NR_freebsd13_swapoff
+{ TARGET_FREEBSD_NR_freebsd13_swapoff, "swapoff", NULL, NULL, NULL },
+#endif
 { TARGET_FREEBSD_NR_freebsd7___semctl, "freebsd7___semctl", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_freebsd7_msgctl, "freebsd7_msgctl", NULL, NULL, NULL },
 { TARGET_FREEBSD_NR_freebsd7_shmctl, "freebsd7_shmctl", NULL, NULL, NULL },

@@ -17,6 +17,7 @@ bsd_user_ss.add(files(
   'main.c',
   'mmap.c',
   'safe-syscall.S',
+  'thunk.c',
   'signal.c',
   'strace.c',
   'syscall.c',
