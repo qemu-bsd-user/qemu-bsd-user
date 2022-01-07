@@ -353,7 +353,9 @@
 #define	TARGET_FREEBSD_NR_getcontext	421
 #define	TARGET_FREEBSD_NR_setcontext	422
 #define	TARGET_FREEBSD_NR_swapcontext	423
-#define	TARGET_FREEBSD_NR_swapoff	424
+#if __FreeBSD_version >= 1400044
+#define	TARGET_FREEBSD_NR_freebsd13_swapoff	424
+#endif
 #define	TARGET_FREEBSD_NR___acl_get_link	425
 #define	TARGET_FREEBSD_NR___acl_set_link	426
 #define	TARGET_FREEBSD_NR___acl_delete_link	427
@@ -499,7 +501,11 @@
 #define	TARGET_FREEBSD_NR___specialfd	577
 /* #define	TARGET_FREEBSD_NR_aio_writev	578 */
 /* #define	TARGET_FREEBSD_NR_aio_readv		579 */
-#define	TARGET_FREEBSD_NR_MAXSYSCALL	580
+#if __FreeBSD_version >= 1400044
+#define	TARGET_FREEBSD_NR_swapoff	582
+#endif
+#define	TARGET_FREEBSD_NR_MAXSYSCALL	583
+
 /* Legacy system calls. */
 #ifndef	TARGET_FREEBSD_NR_killpg
 #define	TARGET_FREEBSD_NR_killpg	146
