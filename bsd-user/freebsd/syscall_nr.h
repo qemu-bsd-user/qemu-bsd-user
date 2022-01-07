@@ -372,6 +372,8 @@
 #define	TARGET_FREEBSD_NR_swapcontext	423
 #if __FreeBSD_version >= 1400044
 #define	TARGET_FREEBSD_NR_freebsd13_swapoff	424
+#else
+#define	TARGET_FREEBSD_NR_swapoff	424
 #endif
 #define	TARGET_FREEBSD_NR___acl_get_link	425
 #define	TARGET_FREEBSD_NR___acl_set_link	426
