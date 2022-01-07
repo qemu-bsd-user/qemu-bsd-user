@@ -353,7 +353,8 @@
 #define	TARGET_FREEBSD_NR_getcontext	421
 #define	TARGET_FREEBSD_NR_setcontext	422
 #define	TARGET_FREEBSD_NR_swapcontext	423
-#if __FreeBSD_version >= 1400044
+#if __FreeBSD_version >= 1400044 || \
+    (__FreeBSD_version < 1400000 && __FreeBSD_version >= 1300523)
 #define	TARGET_FREEBSD_NR_freebsd13_swapoff	424
 #else
 #define	TARGET_FREEBSD_NR_swapoff	424
@@ -503,7 +504,8 @@
 #define	TARGET_FREEBSD_NR___specialfd	577
 /* #define	TARGET_FREEBSD_NR_aio_writev	578 */
 /* #define	TARGET_FREEBSD_NR_aio_readv		579 */
-#if __FreeBSD_version >= 1400044
+#if __FreeBSD_version >= 1400044 || \
+    (__FreeBSD_version < 1400000 && __FreeBSD_version >= 1300523)
 #define	TARGET_FREEBSD_NR_swapoff	582
 #endif
 #define	TARGET_FREEBSD_NR_MAXSYSCALL	583
