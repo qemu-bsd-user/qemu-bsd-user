@@ -1100,7 +1100,7 @@ static inline abi_long do_bsd_swapon(abi_long arg1)
     return ret;
 }
 
-#if __FreeBSD_version >= 1400044
+#ifdef TARGET_FREEBSD_NR_freebsd13_swapoff
 /* swapoff(2) */
 static inline abi_long do_freebsd13_swapoff(abi_long arg1)
 {
@@ -1122,7 +1122,7 @@ static inline abi_long do_bsd_swapoff(abi_long arg1, abi_long arg2)
     void *p;
 
     LOCK_PATH(p, arg1);
-#if __FreeBSD_version >= 1400044
+#ifdef TARGET_FREEBSD_NR_freebsd13_swapoff
     ret = get_errno(swapoff(path(p), arg2));
 #else
     ret = get_errno(swapoff(path(p)));
