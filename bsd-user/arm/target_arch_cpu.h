@@ -65,6 +65,7 @@ static inline void target_cpu_loop(CPUARMState *env)
                  * system call
                  * See arm/arm/syscall.c cpu_fetch_syscall_args()
                  */
+
                 n = env->regs[7];
                 if (bsd_type == target_freebsd) {
                     int ret;

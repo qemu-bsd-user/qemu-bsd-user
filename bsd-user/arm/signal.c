@@ -163,7 +163,7 @@ abi_long set_mcontext(CPUARMState *env, target_mcontext_t *mcp, int srflag)
 
     env->regs[13] = tswap32(gr[TARGET_REG_SP]);
     env->regs[14] = tswap32(gr[TARGET_REG_LR]);
-    env->regs[15] = tswap32(gr[TARGET_REG_PC]) & ~mask;
+    env->regs[15] = tswap32(gr[TARGET_REG_PC] & ~mask);
     if (mcp->mc_vfp_size != 0 && mcp->mc_vfp_ptr != 0) {
         /* see set_vfpcontext in sys/arm/arm/exec_machdep.c */
         target_mcontext_vfp_t *vfp;
