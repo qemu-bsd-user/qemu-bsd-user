@@ -51,13 +51,10 @@ static inline void target_cpu_loop(CPUARMState *env)
         case EXCP_UDEF:
         case EXCP_NOCP:
         case EXCP_INVSTATE:
-            {
-                /*
-                 * See arm/arm/undefined.c undefinedinstruction();
-                 */
-                force_sig_fault(TARGET_SIGILL, TARGET_ILL_ILLOPC,
-                                env->regs[15]);
-            }
+            /*
+             * See arm/arm/undefined.c undefinedinstruction();
+             */
+            force_sig_fault(TARGET_SIGILL, TARGET_ILL_ILLOPC, env->regs[15]);
             break;
         case EXCP_SWI:
             {
