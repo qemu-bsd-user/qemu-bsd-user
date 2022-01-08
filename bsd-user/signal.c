@@ -23,9 +23,6 @@
 #include "qemu.h"
 #include "qemu-common.h"
 #include "signal-common.h"
-
-void force_sig_fault(int sig, int code, abi_ulong addr);
-
 #include "os-time.h"
 #include "trace.h"
 #include "hw/core/tcg-cpu-ops.h"
