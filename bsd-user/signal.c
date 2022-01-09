@@ -62,7 +62,6 @@ int target_to_host_signal(int sig)
 
 static inline void target_sigemptyset(target_sigset_t *set)
 {
-
     memset(set, 0, sizeof(*set));
 }
 
@@ -76,17 +75,17 @@ qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right)
 
     sigemptyset(&work);
     for (i = 1; i < NSIG; ++i) {
-        if (sigismember(left, i) || sigismember(right, i))
+        if (sigismember(left, i) || sigismember(right, i)) {
             sigaddset(&work, i);
+        }
     }
 
     *dest = work;
-    return (0);
+    return 0;
 }
 
 static inline void target_sigaddset(target_sigset_t *set, int signum)
 {
-
     signum--;
     uint32_t mask = (uint32_t)1 << (signum % TARGET_NSIG_BPW);
     set->__bits[signum / TARGET_NSIG_BPW] |= mask;
@@ -94,7 +93,6 @@ static inline void target_sigaddset(target_sigset_t *set, int signum)
 
 static inline int target_sigismember(const target_sigset_t *set, int signum)
 {
-
     signum--;
     abi_ulong mask = (abi_ulong)1 << (signum % TARGET_NSIG_BPW);
     return (set->__bits[signum / TARGET_NSIG_BPW] & mask) != 0;
@@ -213,7 +211,8 @@ static void tswap_siginfo(target_siginfo_t *tinfo, const target_siginfo_t *info)
     tinfo->si_uid = tswap32(info->si_uid);
     tinfo->si_status = tswap32(info->si_status);
     tinfo->si_addr = tswapal(info->si_addr);
-    /* Unswapped, because we passed it through mostly untouched.  si_value is
+    /*
+     * Unswapped, because we passed it through mostly untouched.  si_value is
      * opaque to the kernel, so we didn't bother with potentially wasting cycles
      * to swap it into host byte order.
      */
@@ -245,8 +244,9 @@ int block_signals(void)
     TaskState *ts = (TaskState *)thread_cpu->opaque;
     sigset_t set;
 
-    /* It's OK to block everything including SIGSEGV, because we won't
-     * run any further guest code before unblocking signals in
+    /*
+     * It's OK to block everything including SIGSEGV, because we won't run any
+     * further guest code before unblocking signals in
      * process_pending_signals().
      */
     sigfillset(&set);
@@ -394,15 +394,17 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     k = &ts->sigtab[sig - 1];
     trace_user_queue_signal(env, sig); /* We called this in the caller? XXX */
     /*
-     XXX does the segv changes make this go away? -- I think so */
+     * XXX does the segv changes make this go away? -- I think so
+     */
     if (sig == TARGET_SIGSEGV && sigismember(&ts->signal_mask, SIGSEGV)) {
-        /* Guest has blocked SIGSEGV but we got one anyway. Assume this
-         * is a forced SIGSEGV (ie one the kernel handles via force_sig_info
-         * because it got a real MMU fault). A blocked SIGSEGV in that
-         * situation is treated as if using the default handler. This is
-         * not correct if some other process has randomly sent us a SIGSEGV
-         * via kill(), but that is not easy to distinguish at this point,
-         * so we assume it doesn't happen.
+        /*
+         * Guest has blocked SIGSEGV but we got one anyway. Assume this is a
+         * forced SIGSEGV (ie one the kernel handles via force_sig_info because
+         * it got a real MMU fault). A blocked SIGSEGV in that situation is
+         * treated as if using the default handler. This is not correct if some
+         * other process has randomly sent us a SIGSEGV via kill(), but that is
+         * not easy to distinguish at this point, so we assume it doesn't
+         * happen.
          */
         force_sig(sig);
     }
@@ -410,10 +412,8 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     pq = &k->first;
 
     /*
-     * FreeBSD signals are always queued.
-     * Linux only queues real time signals.
-     * XXX this code is not thread safe.
-     * "What lock protects ts->sigtab?"
+     * FreeBSD signals are always queued.  Linux only queues real time signals.
+     * XXX this code is not thread safe.  "What lock protects ts->sigtab?"
      */
     if (!k->pending) {
         /* first signal */
@@ -530,9 +530,11 @@ static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 
     host_to_target_siginfo_noswap(&tinfo, info);
 
-    queue_signal(env, sig, &tinfo);	/* XXX how to cope with failure? */
-    /* Linux does something else here -> the queue signal may be wrong, but maybe not. */
-    /* And then it does the rewind_if_in_safe_syscall */
+    queue_signal(env, sig, &tinfo);       /* XXX how to cope with failure? */
+    /*
+     * Linux does something else here -> the queue signal may be wrong, but
+     * maybe not.  And then it does the rewind_if_in_safe_syscall
+     */
 
     /*
      * For synchronous signals, unwind the cpu state to the faulting
@@ -576,13 +578,12 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
         oss.ss_flags = tswapl(sas_ss_flags(sp));
     }
 
-    if(uss_addr)
-    {
+    if (uss_addr) {
         target_stack_t *uss;
         target_stack_t ss;
         size_t minstacksize = TARGET_MINSIGSTKSZ;
 
-	ret = -TARGET_EFAULT;
+        ret = -TARGET_EFAULT;
         if (!lock_user_struct(VERIFY_READ, uss, uss_addr, 1)) {
             goto out;
         }
@@ -591,25 +592,27 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
         __get_user(ss.ss_flags, &uss->ss_flags);
         unlock_user_struct(uss, uss_addr, 0);
 
-	ret = -TARGET_EPERM;
-	if (on_sig_stack(sp))
+        ret = -TARGET_EPERM;
+        if (on_sig_stack(sp)) {
             goto out;
+        }
 
-	ret = -TARGET_EINVAL;
-	if (ss.ss_flags != TARGET_SS_DISABLE
+        ret = -TARGET_EINVAL;
+        if (ss.ss_flags != TARGET_SS_DISABLE
             && ss.ss_flags != TARGET_SS_ONSTACK
-            && ss.ss_flags != 0)
+            && ss.ss_flags != 0) {
             goto out;
+        }
 
-	if (ss.ss_flags == TARGET_SS_DISABLE) {
+        if (ss.ss_flags == TARGET_SS_DISABLE) {
             ss.ss_size = 0;
             ss.ss_sp = 0;
-	} else {
+        } else {
             ret = -TARGET_ENOMEM;
             if (ss.ss_size < minstacksize) {
                 goto out;
             }
-	}
+        }
 
         target_sigaltstack_used.ss_sp = ss.ss_sp;
         target_sigaltstack_used.ss_size = ss.ss_size;
@@ -617,8 +620,9 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
 
     if (uoss_addr) {
         ret = -TARGET_EFAULT;
-        if (copy_to_user(uoss_addr, &oss, sizeof(oss)))
+        if (copy_to_user(uoss_addr, &oss, sizeof(oss))) {
             goto out;
+        }
     }
 
     ret = 0;
@@ -1043,7 +1047,8 @@ void process_pending_signals(CPUArchState *cpu_env)
             }
         }
 
-        /* unblock signals and check one more time. Unblocking signals may cause
+        /*
+         * unblock signals and check one more time. Unblocking signals may cause
          * us to take anothe rhost signal, which will set signal_pending again.
          */
         qatomic_set(&ts->signal_pending, 0);
