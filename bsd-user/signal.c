@@ -27,6 +27,7 @@
 #include "trace.h"
 #include "hw/core/tcg-cpu-ops.h"
 #include "host-signal.h"
+#include "user/safe-syscall.h"
 
 static target_stack_t target_sigaltstack_used = {
     .ss_sp = 0,
@@ -100,11 +101,6 @@ static inline int target_sigismember(const target_sigset_t *set, int signum)
     return (set->__bits[signum / TARGET_NSIG_BPW] & mask) != 0;
 }
 
-#ifdef HAVE_SAFE_SYSCALL
-/* These are defined by the safe-syscall.inc.S file */
-extern char safe_syscall_start[];
-extern char safe_syscall_end[];
-
 /* Adjust the signal context to rewind out of safe-syscall if we're in it */
 static inline void rewind_if_in_safe_syscall(void *puc)
 {
@@ -116,12 +112,6 @@ static inline void rewind_if_in_safe_syscall(void *puc)
         host_signal_set_pc(uc, (uintptr_t)safe_syscall_start);
     }
 }
-#else
-static inline void rewind_if_in_safe_syscall(void *puc)
-{
-    /* Default version: never rewind */
-}
-#endif
 
 static void host_to_target_sigset_internal(target_sigset_t *d,
         const sigset_t *s)
