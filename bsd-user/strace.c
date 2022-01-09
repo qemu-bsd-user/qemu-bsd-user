@@ -37,7 +37,7 @@ get_comma(int last)
 }
 
 /*
-* Prints out raw parameter using given format.  Caller needs
+ * Prints out raw parameter using given format.  Caller needs
  * to do byte swapping if needed.
  */
 static void
