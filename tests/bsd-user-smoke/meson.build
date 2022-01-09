@@ -1,3 +1,7 @@
+if not have_bsd_user
+   subdir_done()
+endif
+
 runit = find_program('runit')
 
 bsd_user_archs = [ 'aarch64', 'armv7', 'amd64', 'i386', 'powerpc', 'powerpc64', 'riscv64' ]
