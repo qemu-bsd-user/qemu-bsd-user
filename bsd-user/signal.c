@@ -27,7 +27,6 @@
 #include "trace.h"
 #include "hw/core/tcg-cpu-ops.h"
 #include "host-signal.h"
-#include "user/safe-syscall.h"
 
 static target_stack_t target_sigaltstack_used = {
     .ss_sp = 0,
