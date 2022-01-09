@@ -113,7 +113,7 @@ typedef struct TaskState {
     sigset_t signal_mask;
     sigset_t sigsuspend_mask;
 
-    uint8_t stack[0];
+    uint8_t stack[];
 } __attribute__((aligned(16))) TaskState;
 
 void init_task_state(TaskState *ts);
