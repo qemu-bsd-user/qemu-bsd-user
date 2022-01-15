@@ -116,6 +116,7 @@ static inline void target_cpu_loop(CPUX86State *env)
 
         switch (trapnr) {
         case 0x80:
+        {
             /* syscall from int $0x80 */
             abi_ulong params = (abi_ulong) env->regs[R_ESP] + sizeof(int32_t);
             int32_t syscall_nr = env->regs[R_EAX];
@@ -160,7 +161,7 @@ static inline void target_cpu_loop(CPUX86State *env)
                 env->eflags &= ~CC_C;
             }
             break;
-
+        }
         case EXCP_INTERRUPT:
             /* just indicate that signals should be handled asap */
             break;
