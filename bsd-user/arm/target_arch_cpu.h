@@ -53,6 +53,13 @@ static inline void target_cpu_loop(CPUARMState *env)
         case EXCP_INVSTATE:
             /*
              * See arm/arm/undefined.c undefinedinstruction();
+             *
+             * A number of details aren't emulated (they likely don't matter):
+             * o Misaligned PC generates ILL_ILLADR
+             * o Thumb-2 instructions generate ILLADR
+             * o Both modes implement coprocessor instructions, which we don't
+             *   do here. FreeBSD just implements them for the VFP coprocessor
+             *   and special kernel breakpoints, trace points, dtrace, etc.
              */
             force_sig_fault(TARGET_SIGILL, TARGET_ILL_ILLOPC, env->regs[15]);
             break;
@@ -161,8 +168,8 @@ static inline void target_cpu_loop(CPUARMState *env)
             case 0x6: /* Access flag fault, level 2 */
             case 0x9: /* Domain fault, level 1 */
             case 0xb: /* Domain fault, level 2 */
-            case 0xd: /* Permision fault, level 1 */
-            case 0xf: /* Permision fault, level 2 */
+            case 0xd: /* Permission fault, level 1 */
+            case 0xf: /* Permission fault, level 2 */
                 si_signo = TARGET_SIGSEGV;
                 si_code = TARGET_SEGV_ACCERR;
                 break;

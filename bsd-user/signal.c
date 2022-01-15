@@ -50,6 +50,11 @@ static inline int sas_ss_flags(unsigned long sp)
         ? SS_ONSTACK : 0;
 }
 
+/*
+ * The BSD ABIs use the same singal numbers across all the CPU architectures, so
+ * (unlike Linux) these functions are just the identity mapping. This might not
+ * be true for XyzBSD running on AbcBSD, which doesn't currently work.
+ */
 int host_to_target_signal(int sig)
 {
     return sig;
@@ -884,12 +889,6 @@ void signal_init(void)
 
     /* Set the signal mask from the host mask. */
     sigprocmask(0, 0, &ts->signal_mask);
-
-    /*
-     * Set all host signal handlers. ALL signals are blocked during the
-     * handlers to serialize them.
-     */
-    memset(sigact_table, 0, sizeof(sigact_table));
 
     sigfillset(&act.sa_mask);
     act.sa_sigaction = host_signal_handler;
