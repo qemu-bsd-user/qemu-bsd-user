@@ -735,7 +735,7 @@ static inline abi_ulong get_sigframe(struct target_sigaction *ka,
             target_sigaltstack_used.ss_size;
     }
 
-#if defined(TARGET_MIPS) || defined(TARGET_ARM)
+#if defined(TARGET_ARM)
     return (sp - frame_size) & ~7;
 #elif defined(TARGET_AARCH64)
     return (sp - frame_size) & ~15;
