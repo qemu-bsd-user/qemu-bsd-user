@@ -45,6 +45,8 @@
 #include "qemu/cutils.h"
 #include "exec/log.h"
 #include "trace/control.h"
+#include "qemu/guest-random.h"
+#include "crypto/init.h"
 
 #include "host-os.h"
 #include "target_arch_cpu.h"
@@ -53,6 +55,7 @@ int singlestep;
 uintptr_t guest_base;
 static const char *cpu_model;
 static const char *cpu_type;
+static const char *seed_optarg;
 bool have_guest_base;
 /*
  * When running 32-on-64 we should make sure we can fit all of the possible
@@ -503,6 +506,19 @@ int main(int argc, char **argv)
 
     if (reserved_va) {
             mmap_next_start = reserved_va;
+    }
+
+    {
+        Error *err = NULL;
+        if (seed_optarg != NULL) {
+            qemu_guest_random_seed_main(seed_optarg, &err);
+        } else {
+            qcrypto_init(&err);
+        }
+        if (err) {
+            error_reportf_err(err, "cannot initialize crypto: ");
+            exit(1);
+        }
     }
 
     /*
