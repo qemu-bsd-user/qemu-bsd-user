@@ -164,6 +164,7 @@ void target_to_host_sigset(sigset_t *d, const target_sigset_t *s)
 }
 
 /* Siginfo conversion. */
+
 static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
         const siginfo_t *info)
 {
