@@ -163,6 +163,12 @@ void target_to_host_sigset(sigset_t *d, const target_sigset_t *s)
     target_to_host_sigset_internal(d, &s1);
 }
 
+static bool has_trapno(int sig)
+{
+    return sig == SIGILL || sig == SIGFPE || sig == SIGSEGV || \
+        sig == SIGBUS || sig == SIGTRAP;
+}
+
 /* Siginfo conversion. */
 
 static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
@@ -183,16 +189,15 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
     /* si_value is opaque to kernel */
     tinfo->si_value.sival_ptr =
         (abi_ulong)(unsigned long)info->si_value.sival_ptr;
-    if (SIGILL == sig || SIGFPE == sig || SIGSEGV == sig || SIGBUS == sig ||
-            SIGTRAP == sig) {
+    if (has_trapno(sig)) {
         tinfo->_reason._fault._trapno = info->_reason._fault._trapno;
     }
 #ifdef SIGPOLL
-    if (SIGPOLL == sig) {
+    if (sig == SIGPOLL) {
         tinfo->_reason._poll._band = info->_reason._poll._band;
     }
 #endif
-    if (SI_TIMER == code) {
+    if (code == SI_TIMER) {
         int timerid;
 
         timerid = info->_reason._timer._timerid;
@@ -223,16 +228,15 @@ static void tswap_siginfo(target_siginfo_t *tinfo, const target_siginfo_t *info)
      * to swap it into host byte order.
      */
     tinfo->si_value.sival_ptr = info->si_value.sival_ptr;
-    if (SIGILL == sig || SIGFPE == sig || SIGSEGV == sig || SIGBUS == sig ||
-            SIGTRAP == sig) {
+    if (has_trapno(sig)) {
         tinfo->_reason._fault._trapno = tswap32(info->_reason._fault._trapno);
     }
 #ifdef SIGPOLL
-    if (SIGPOLL == sig) {
+    if (sig == SIGPOLL) {
         tinfo->_reason._poll._band = tswap32(info->_reason._poll._band);
     }
 #endif
-    if (SI_TIMER == code) {
+    if (code == SI_TIMER) {
         tinfo->_reason._timer._timerid = tswap32(info->_reason._timer._timerid);
         tinfo->_reason._timer._overrun = tswap32(info->_reason._timer._overrun);
     }
@@ -740,7 +744,8 @@ static inline abi_ulong get_sigframe(struct target_sigaction *ka,
 #endif
 }
 
-/* compare to mips/mips/pm_machdep.c and sparc64/sparc64/machdep.c sendsig() */
+/* compare to $M/$M/exec_machdep.c sendsig() */
+
 static void setup_frame(int sig, int code, struct target_sigaction *ka,
     target_sigset_t *set, target_siginfo_t *tinfo, CPUArchState *regs)
 {
@@ -755,13 +760,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     }
 
     memset(frame, 0, sizeof(*frame));
-#if defined(TARGET_MIPS)
-    int mflags = on_sig_stack(frame_addr) ? TARGET_MC_ADD_MAGIC :
-        TARGET_MC_SET_ONSTACK | TARGET_MC_ADD_MAGIC;
-#else
-    int mflags = 0;
-#endif
-    if (get_mcontext(regs, &frame->sf_uc.uc_mcontext, mflags)) {
+    if (get_mcontext(regs, &frame->sf_uc.uc_mcontext, 0)) {
         goto give_sigsegv;
     }
 
@@ -780,9 +779,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
         frame->sf_si.si_status = tinfo->si_status;
         frame->sf_si.si_addr = tinfo->si_addr;
 
-        if (TARGET_SIGILL == sig || TARGET_SIGFPE == sig ||
-                TARGET_SIGSEGV == sig || TARGET_SIGBUS == sig ||
-                TARGET_SIGTRAP == sig) {
+        if (has_trapno(sig)) {
             frame->sf_si._reason._fault._trapno = tinfo->_reason._fault._trapno;
         }
 
@@ -792,12 +789,12 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
          * signal value. Otherwise, the contents of si_value are
          * undefined.
          */
-        if (SI_QUEUE == code || SI_TIMER == code || SI_ASYNCIO == code ||
-                SI_MESGQ == code) {
+        if (code == SI_QUEUE || code == SI_TIMER || code == SI_ASYNCIO ||
+                code == SI_MESGQ) {
             frame->sf_si.si_value.sival_int = tinfo->si_value.sival_int;
         }
 
-        if (SI_TIMER == code) {
+        if (code == SI_TIMER) {
             frame->sf_si._reason._timer._timerid =
                 tinfo->_reason._timer._timerid;
             frame->sf_si._reason._timer._overrun =
@@ -805,7 +802,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
         }
 
 #ifdef SIGPOLL
-        if (SIGPOLL == sig) {
+        if (sig == SIGPOLL) {
             frame->sf_si._reason._band = tinfo->_reason._band;
         }
 #endif
@@ -957,17 +954,17 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
          * default handler : ignore some signal. The other are job
          * control or fatal.
          */
-        if (TARGET_SIGTSTP == sig || TARGET_SIGTTIN == sig ||
-                TARGET_SIGTTOU == sig) {
+        if (sig == TARGET_SIGTSTP || sig == TARGET_SIGTTIN ||
+            sig == TARGET_SIGTTOU) {
             kill(getpid(), SIGSTOP);
-        } else if (TARGET_SIGCHLD != sig && TARGET_SIGURG != sig &&
-            TARGET_SIGINFO != sig &&
-            TARGET_SIGWINCH != sig && TARGET_SIGCONT != sig) {
+        } else if (sig != TARGET_SIGCHLD && sig != TARGET_SIGURG &&
+                   sig != TARGET_SIGINFO && sig != TARGET_SIGWINCH &&
+                   sig != TARGET_SIGCONT) {
             force_sig(sig);
         }
-    } else if (TARGET_SIG_IGN == handler) {
+    } else if (handler == TARGET_SIG_IGN) {
         /* ignore sig */
-    } else if (TARGET_SIG_ERR == handler) {
+    } else if (handler == TARGET_SIG_ERR) {
         force_sig(sig);
     } else {
         /* compute the blocked signals during the handler execution */
