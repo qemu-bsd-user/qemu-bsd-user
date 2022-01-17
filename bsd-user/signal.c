@@ -365,17 +365,14 @@ void QEMU_NORETURN force_sig(int target_sig)
  * Queue a signal so that it will be send to the virtual CPU as soon as
  * possible.
  */
-void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
+void queue_signal(CPUArchState *env, int sig, int si_type, target_siginfo_t *info)
 {
     CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
     struct emulated_sigtable *k;
 
     k = &ts->sigtab[sig - 1];
-    trace_user_queue_signal(env, sig); /* We called this in the caller? XXX */
-    /*
-     * XXX does the segv changes make this go away? -- I think so
-     */
+    trace_user_queue_signal(env, sig);
     if (sig == TARGET_SIGSEGV && sigismember(&ts->signal_mask, SIGSEGV)) {
         /*
          * Guest has blocked SIGSEGV but we got one anyway. Assume this is a
@@ -432,16 +429,18 @@ void force_sig_fault(int sig, int code, abi_ulong addr)
     info.si_errno = 0;
     info.si_code = code;
     info.si_addr = addr;
-    queue_signal(env, sig, &info);
+    queue_signal(env, sig, QEMU_SI_FAULT, &info);
 }
 
 static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 {
-    CPUState *cpu = thread_cpu;
-    CPUArchState *env = cpu->env_ptr;
-    int sig;
+    CPUArchState *env = thread_cpu->env_ptr;
+    CPUState *cpu = env_cpu(env);
+    TaskState *ts = cpu->opaque;
     target_siginfo_t tinfo;
     ucontext_t *uc = puc;
+    struct emulated_sigtable *k;
+    int guest_sig;
     uintptr_t pc = 0;
     bool sync_sig = false;
 
@@ -502,25 +501,23 @@ static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
     }
 
     /* Get the target signal number. */
-    sig = host_to_target_signal(host_sig);
-    if (sig < 1 || sig > TARGET_NSIG) {
+    guest_sig = host_to_target_signal(host_sig);
+    if (guest_sig < 1 || guest_sig > TARGET_NSIG) {
         return;
     }
-    trace_user_host_signal(cpu, host_sig, sig);
+    trace_user_host_signal(cpu, host_sig, guest_sig);
 
     host_to_target_siginfo_noswap(&tinfo, info);
 
-    queue_signal(env, sig, &tinfo);       /* XXX how to cope with failure? */
-    /*
-     * Linux does something else here -> the queue signal may be wrong, but
-     * maybe not.  And then it does the rewind_if_in_safe_syscall
-     */
+    k = &ts->sigtab[guest_sig - 1];
+    k->info = tinfo;
+    k->pending = guest_sig;
+    ts->signal_pending = 1;
 
     /*
      * For synchronous signals, unwind the cpu state to the faulting
      * insn and then exit back to the main loop so that the signal
      * is delivered immediately.
-     XXXX Should this be in queue_signal?
      */
     if (sync_sig) {
         cpu->exception_index = EXCP_INTERRUPT;
@@ -620,8 +617,8 @@ int do_sigaction(int sig, const struct target_sigaction *act,
     int host_sig;
     int ret = 0;
 
-    if (sig < 1 || sig > TARGET_NSIG || TARGET_SIGKILL == sig ||
-            TARGET_SIGSTOP == sig) {
+    if (sig < 1 || sig > TARGET_NSIG || sig == TARGET_SIGKILL ||
+        sig == TARGET_SIGSTOP) {
         return -EINVAL;
     }
 
@@ -674,15 +671,14 @@ int do_sigaction(int sig, const struct target_sigaction *act,
 static inline abi_ulong get_sigframe(struct target_sigaction *ka,
         CPUArchState *regs, size_t frame_size)
 {
-    abi_ulong sp;
     TaskState *ts = (TaskState *)thread_cpu->opaque;
+    abi_ulong sp;
 
     /* Use default user stack */
     sp = get_sp_from_cpustate(regs);
 
-    if ((ka->sa_flags & TARGET_SA_ONSTACK) && (sas_ss_flags(ts, sp) == 0)) {
-        sp = ts->sigaltstack_used.ss_sp +
-            ts->sigaltstack_used.ss_size;
+    if ((ka->sa_flags & TARGET_SA_ONSTACK) && sas_ss_flags(ts, sp) == 0) {
+        sp = ts->sigaltstack_used.ss_sp + ts->sigaltstack_used.ss_size;
     }
 
 #if defined(TARGET_ARM)
@@ -740,7 +736,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
          * undefined.
          */
         if (code == SI_QUEUE || code == SI_TIMER || code == SI_ASYNCIO ||
-                code == SI_MESGQ) {
+            code == SI_MESGQ) {
             frame->sf_si.si_value.sival_int = tinfo->si_value.sival_int;
         }
 

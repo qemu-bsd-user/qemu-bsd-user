@@ -60,9 +60,9 @@ static inline void target_cpu_init(CPUPPCState *env,
 static inline void target_cpu_loop(CPUPPCState *env)
 {
     CPUState *cs = env_cpu(env);
-    target_siginfo_t info;
     int trapnr;
     target_ulong ret;
+    int32_t signo, code;
 
     for(;;) {
         bool arch_interrupt;
@@ -90,27 +90,22 @@ static inline void target_cpu_loop(CPUPPCState *env)
                       env->spr[SPR_DAR]);
             /* XXX: check this. Seems bugged */
             if (env->error_code & 0x40000000) {
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                info.si_code = TARGET_SEGV_MAPERR;
+                signo = TARGET_SIGSEGV;
+                code = TARGET_SEGV_MAPERR;
             } else if (env->error_code & 0x04000000) {
-                info.si_signo = TARGET_SIGILL;
-                info.si_errno = 0;
-                info.si_code = TARGET_ILL_ILLADR;
+                signo = TARGET_SIGILL;
+                code = TARGET_ILL_ILLADR;
             } else if (env->error_code & 0x08000000) {
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                info.si_code = TARGET_SEGV_ACCERR;
+                signo = TARGET_SIGSEGV;
+                code = TARGET_SEGV_ACCERR;
             } else {
                 /* Let's send a regular segfault... */
                 fprintf(stderr, "Invalid segfault errno (%02x)\n",
                           env->error_code);
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                info.si_code = TARGET_SEGV_MAPERR;
+                signo = TARGET_SIGSEGV;
+                code = TARGET_SEGV_MAPERR;
             }
-            info.si_addr = env->nip;
-            queue_signal(env, info.si_signo, &info);
+            force_sig_fault(signo, code, env->nip);
             break;
         case POWERPC_EXCP_ISI:      /* Instruction storage exception         */
             fprintf(stderr, "Invalid instruction fetch: 0x\n" TARGET_FMT_lx
@@ -118,27 +113,23 @@ static inline void target_cpu_loop(CPUPPCState *env)
             /* XXX: check this */
             switch (env->error_code & 0xFF000000) {
             case 0x40000000:
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                info.si_code = TARGET_SEGV_MAPERR;
+                signo = TARGET_SIGSEGV;
+                code = TARGET_SEGV_MAPERR;
                 break;
             case 0x10000000:
             case 0x08000000:
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                info.si_code = TARGET_SEGV_ACCERR;
+                signo = TARGET_SIGSEGV;
+                code = TARGET_SEGV_ACCERR;
                 break;
             default:
                 /* Let's send a regular segfault... */
                 fprintf(stderr, "Invalid segfault errno (%02x)\n",
                           env->error_code);
-                info.si_signo = TARGET_SIGSEGV;
-                info.si_errno = 0;
-                info.si_code = TARGET_SEGV_MAPERR;
+                signo = TARGET_SIGSEGV;
+                code = TARGET_SEGV_MAPERR;
                 break;
             }
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            force_sig_fault(signo, code, env->nip - 4);
             break;
         case POWERPC_EXCP_EXTERNAL: /* External input                        */
             cpu_abort(cs, "External interrupt while in user mode. "
@@ -147,11 +138,9 @@ static inline void target_cpu_loop(CPUPPCState *env)
         case POWERPC_EXCP_ALIGN:    /* Alignment exception                   */
             fprintf(stderr, "Unaligned memory access\n");
             /* XXX: check this */
-            info.si_signo = TARGET_SIGBUS;
-            info.si_errno = 0;
-            info.si_code = TARGET_BUS_ADRALN;
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            signo = TARGET_SIGBUS;
+            code = TARGET_BUS_ADRALN;
+            force_sig_fault(signo, code, env->nip - 4);
             break;
         case POWERPC_EXCP_PROGRAM:  /* Program exception                     */
         case POWERPC_EXCP_HV_EMU:   /* HV emulation                          */
@@ -159,24 +148,23 @@ static inline void target_cpu_loop(CPUPPCState *env)
             switch (env->error_code & ~0xF) {
             case POWERPC_EXCP_FP:
                 fprintf(stderr, "Floating point program exception\n");
-                info.si_signo = TARGET_SIGFPE;
-                info.si_errno = 0;
+                signo = TARGET_SIGFPE;
                 switch (env->error_code & 0xF) {
                 case POWERPC_EXCP_FP_OX:
-                    info.si_code = TARGET_FPE_FLTOVF;
+                    code = TARGET_FPE_FLTOVF;
                     break;
                 case POWERPC_EXCP_FP_UX:
-                    info.si_code = TARGET_FPE_FLTUND;
+                    code = TARGET_FPE_FLTUND;
                     break;
                 case POWERPC_EXCP_FP_ZX:
                 case POWERPC_EXCP_FP_VXZDZ:
-                    info.si_code = TARGET_FPE_FLTDIV;
+                    code = TARGET_FPE_FLTDIV;
                     break;
                 case POWERPC_EXCP_FP_XX:
-                    info.si_code = TARGET_FPE_FLTRES;
+                    code = TARGET_FPE_FLTRES;
                     break;
                 case POWERPC_EXCP_FP_VXSOFT:
-                    info.si_code = TARGET_FPE_FLTINV;
+                    code = TARGET_FPE_FLTINV;
                     break;
                 case POWERPC_EXCP_FP_VXSNAN:
                 case POWERPC_EXCP_FP_VXISI:
@@ -185,7 +173,7 @@ static inline void target_cpu_loop(CPUPPCState *env)
                 case POWERPC_EXCP_FP_VXVC:
                 case POWERPC_EXCP_FP_VXSQRT:
                 case POWERPC_EXCP_FP_VXCVI:
-                    info.si_code = TARGET_FPE_FLTSUB;
+                    code = TARGET_FPE_FLTSUB;
                     break;
                 default:
                     fprintf(stderr, "Unknown floating point exception (%02x)\n",
@@ -195,43 +183,41 @@ static inline void target_cpu_loop(CPUPPCState *env)
                 break;
             case POWERPC_EXCP_INVAL:
                 fprintf(stderr, "Invalid instruction\n");
-                info.si_signo = TARGET_SIGILL;
-                info.si_errno = 0;
+                signo = TARGET_SIGILL;
                 switch (env->error_code & 0xF) {
                 case POWERPC_EXCP_INVAL_INVAL:
-                    info.si_code = TARGET_ILL_ILLOPC;
+                    code = TARGET_ILL_ILLOPC;
                     break;
                 case POWERPC_EXCP_INVAL_LSWX:
-                    info.si_code = TARGET_ILL_ILLOPN;
+                    code = TARGET_ILL_ILLOPN;
                     break;
                 case POWERPC_EXCP_INVAL_SPR:
-                    info.si_code = TARGET_ILL_PRVREG;
+                    code = TARGET_ILL_PRVREG;
                     break;
                 case POWERPC_EXCP_INVAL_FP:
-                    info.si_code = TARGET_ILL_COPROC;
+                    code = TARGET_ILL_COPROC;
                     break;
                 default:
                     fprintf(stderr, "Unknown invalid operation (%02x)\n",
                               env->error_code & 0xF);
-                    info.si_code = TARGET_ILL_ILLADR;
+                    code = TARGET_ILL_ILLADR;
                     break;
                 }
                 break;
             case POWERPC_EXCP_PRIV:
                 fprintf(stderr, "Privilege violation\n");
-                info.si_signo = TARGET_SIGILL;
-                info.si_errno = 0;
+                signo = TARGET_SIGILL;
                 switch (env->error_code & 0xF) {
                 case POWERPC_EXCP_PRIV_OPC:
-                    info.si_code = TARGET_ILL_PRVOPC;
+                    code = TARGET_ILL_PRVOPC;
                     break;
                 case POWERPC_EXCP_PRIV_REG:
-                    info.si_code = TARGET_ILL_PRVREG;
+                    code = TARGET_ILL_PRVREG;
                     break;
                 default:
                     fprintf(stderr, "Unknown privilege violation (%02x)\n",
                               env->error_code & 0xF);
-                    info.si_code = TARGET_ILL_PRVOPC;
+                    code = TARGET_ILL_PRVOPC;
                     break;
                 }
                 break;
@@ -244,19 +230,16 @@ static inline void target_cpu_loop(CPUPPCState *env)
                           env->error_code);
                 break;
             }
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            force_sig_fault(signo, code, env->nip - 4);
             break;
         case POWERPC_EXCP_FPU:      /* Floating-point unavailable exception  */
             env->msr |= (1 << MSR_FP);
             env->nip -= 4;
 #if 0
             fprintf(stderr, "No floating point allowed\n");
-            info.si_signo = TARGET_SIGILL;
-            info.si_errno = 0;
-            info.si_code = TARGET_ILL_COPROC;
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            signo = TARGET_SIGILL;
+            code = TARGET_ILL_COPROC;
+            force_sig_fault(signo, code, env->nip - 4);
 #endif
             break;
         case POWERPC_EXCP_SYSCALL:  /* System call exception                 */
@@ -265,11 +248,9 @@ static inline void target_cpu_loop(CPUPPCState *env)
             break;
         case POWERPC_EXCP_APU:      /* Auxiliary processor unavailable       */
             fprintf(stderr, "No APU instruction allowed\n");
-            info.si_signo = TARGET_SIGILL;
-            info.si_errno = 0;
-            info.si_code = TARGET_ILL_COPROC;
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            signo = TARGET_SIGILL;
+            code = TARGET_ILL_COPROC;
+            force_sig_fault(signo, code, env->nip - 4);
             break;
         case POWERPC_EXCP_DECR:     /* Decrementer exception                 */
             cpu_abort(cs, "Decrementer interrupt while in user mode. "
@@ -293,11 +274,9 @@ static inline void target_cpu_loop(CPUPPCState *env)
             break;
         case POWERPC_EXCP_SPEU:     /* SPE/embedded floating-point unavail.  */
             fprintf(stderr, "No SPE/floating-point instruction allowed\n");
-            info.si_signo = TARGET_SIGILL;
-            info.si_errno = 0;
-            info.si_code = TARGET_ILL_COPROC;
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            signo = TARGET_SIGILL;
+            code = TARGET_ILL_COPROC;
+            force_sig_fault(signo, code, env->nip - 4);
             break;
         case POWERPC_EXCP_EFPDI:    /* Embedded floating-point data IRQ      */
             cpu_abort(cs, "Embedded floating-point data IRQ not handled\n");
@@ -360,11 +339,9 @@ static inline void target_cpu_loop(CPUPPCState *env)
             env->nip -= 4;
 #if 0
             fprintf(stderr, "No Altivec instructions allowed\n");
-            info.si_signo = TARGET_SIGILL;
-            info.si_errno = 0;
-            info.si_code = TARGET_ILL_COPROC;
-            info.si_addr = env->nip - 4;
-            queue_signal(env, info.si_signo, &info);
+            signo = TARGET_SIGILL;
+            code = TARGET_ILL_COPROC;
+            force_sig_fault(signo, code, env->nip - 4);
 #endif
             break;
         case POWERPC_EXCP_PIT:      /* Programmable interval timer IRQ       */
@@ -449,11 +426,9 @@ static inline void target_cpu_loop(CPUPPCState *env)
             break;
         case EXCP_DEBUG:
             {
-
-                info.si_signo = TARGET_SIGTRAP;
-                info.si_errno = 0;
-                info.si_code = TARGET_TRAP_BRKPT;
-                queue_signal(env, info.si_signo, &info);
+                signo = TARGET_SIGTRAP;
+                code = TARGET_TRAP_BRKPT;
+                force_sig_fault(signo, code, env->nip);
             }
             break;
         case EXCP_ATOMIC:

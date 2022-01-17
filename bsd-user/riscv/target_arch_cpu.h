@@ -43,6 +43,7 @@ static inline void target_cpu_loop(CPURISCVState *env)
     target_siginfo_t info;
     abi_long ret;
     unsigned int syscall_num;
+    int32_t signo, code;
 
     for (;;) {
         cpu_exec_start(cs);
@@ -50,9 +51,7 @@ static inline void target_cpu_loop(CPURISCVState *env)
         cpu_exec_end(cs);
         process_queued_cpu_work(cs);
 
-        info.si_signo = 0;
-        info.si_errno = 0;
-        info.si_addr = 0;
+        signo = 0;
 
         switch (trapnr) {
         case EXCP_INTERRUPT:
@@ -111,17 +110,16 @@ static inline void target_cpu_loop(CPURISCVState *env)
             }
             break;
         case RISCV_EXCP_ILLEGAL_INST:
-            info.si_signo = TARGET_SIGILL;
-            info.si_code = TARGET_ILL_ILLOPC;
+            signo = TARGET_SIGILL;
+            code = TARGET_ILL_ILLOPC;
             break;
         case RISCV_EXCP_BREAKPOINT:
-            info.si_signo = TARGET_SIGTRAP;
-            info.si_code = TARGET_TRAP_BRKPT;
-            info.si_addr = env->pc;
+            signo = TARGET_SIGTRAP;
+            code = TARGET_TRAP_BRKPT;
             break;
         case EXCP_DEBUG:
-            info.si_signo = TARGET_SIGTRAP;
-            info.si_code = TARGET_TRAP_BRKPT;
+            signo = TARGET_SIGTRAP;
+            code = TARGET_TRAP_BRKPT;
             break;
         default:
             fprintf(stderr, "qemu: unhandled CPU exception "
@@ -131,7 +129,7 @@ static inline void target_cpu_loop(CPURISCVState *env)
         }
 
         if (info.si_signo) {
-            queue_signal(env, info.si_signo, &info);
+            force_sig_fault(signo, code, env->pc);
         }
 
         process_pending_signals(env);

@@ -44,7 +44,6 @@ static inline void target_cpu_loop(CPUARMState *env)
 {
     CPUState *cs = env_cpu(env);
     int trapnr, ec, fsc, si_code, si_signo;
-    target_siginfo_t info;
     uint64_t code, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8;
     uint32_t pstate;
     abi_long ret;
@@ -114,11 +113,7 @@ static inline void target_cpu_loop(CPUARMState *env)
             break;
 
         case EXCP_UDEF:
-            info.si_signo = TARGET_SIGILL;
-            info.si_errno = 0;
-            info.si_code = TARGET_ILL_ILLOPN;
-            info.si_addr = env->pc;
-            queue_signal(env, info.si_signo, &info);
+            force_sig_fault(TARGET_SIGILL, TARGET_ILL_ILLOPN, env->pc);
             break;
 
 
@@ -156,10 +151,7 @@ static inline void target_cpu_loop(CPUARMState *env)
 
         case EXCP_DEBUG:
         case EXCP_BKPT:
-            info.si_signo = TARGET_SIGTRAP;
-            info.si_errno = 0;
-            info.si_code = TARGET_TRAP_BRKPT;
-            queue_signal(env, info.si_signo, &info);
+            force_sig_fault(TARGET_SIGTRAP, TARGET_TRAP_BRKPT, env->pc);
             break;
 
         case EXCP_ATOMIC:
