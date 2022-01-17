@@ -82,17 +82,9 @@ struct image_info {
     uint32_t  elf_flags;
 };
 
-#define MAX_SIGQUEUE_SIZE 1024
-
-struct qemu_sigqueue {
-    struct qemu_sigqueue *next;
-    target_siginfo_t info;
-};
-
 struct emulated_sigtable {
     int pending; /* true if signal is pending */
-    struct qemu_sigqueue *first;
-    struct qemu_sigqueue info;  /* Put first signal info here */
+    target_siginfo_t info;
 };
 
 /*
@@ -106,14 +98,28 @@ typedef struct TaskState {
     struct image_info *info;
 
     struct emulated_sigtable sigtab[TARGET_NSIG];
-    struct qemu_sigqueue sigqueue_table[MAX_SIGQUEUE_SIZE]; /* siginfo queue */
-    struct qemu_sigqueue *first_free; /* first free siginfo queue entry */
-    int signal_pending; /* non zero if a signal may be pending */
+    /*
+     * Nonzero if process_pending_signals() needs to do something (either
+     * handle a pending signal or unblock signals).
+     * This flag is written from a signal handler so should be accessed via
+     * the qatomic_read() and qatomic_set() functions. (It is not accessed
+     * from multiple threads.)
+     */
+    int signal_pending;
+    /* True if we're leaving a sigsuspend and sigsuspend_mask is valid. */
     bool in_sigsuspend;
+    /*
+     * This thread's signal mask, as requested by the guest program.
+     * The actual signal mask of this thread may differ:
+     *  + we don't let SIGSEGV and SIGBUS be blocked while running guest code
+     *  + sometimes we block all signals to avoid races
+     */
     sigset_t signal_mask;
+    /*
+     * The signal mask imposed by a guest sigsuspend syscall, if we are
+     * currently in the middle of such a syscall
+     */
     sigset_t sigsuspend_mask;
-
-    uint8_t stack[];
 } __attribute__((aligned(16))) TaskState;
 
 void init_task_state(TaskState *ts);

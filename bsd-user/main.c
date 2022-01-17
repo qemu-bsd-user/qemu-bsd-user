@@ -219,13 +219,6 @@ void qemu_cpu_kick(CPUState *cpu)
 /* Assumes contents are already zeroed.  */
 void init_task_state(TaskState *ts)
 {
-    int i;
-
-    ts->first_free = ts->sigqueue_table;
-    for (i = 0; i < MAX_SIGQUEUE_SIZE - 1; i++) {
-        ts->sigqueue_table[i].next = &ts->sigqueue_table[i + 1];
-    }
-    ts->sigqueue_table[i].next = NULL;
 }
 
 CPUArchState *cpu_copy(CPUArchState *env)

@@ -308,29 +308,6 @@ static int core_dump_signal(int sig)
     }
 }
 
-/* Signal queue handling. */
-static inline struct qemu_sigqueue *alloc_sigqueue(CPUArchState *env)
-{
-    CPUState *cpu = env_cpu(env);
-    TaskState *ts = cpu->opaque;
-    struct qemu_sigqueue *q = ts->first_free;
-
-    if (!q) {
-        return NULL;
-    }
-    ts->first_free = q->next;
-    return q;
-}
-
-static inline void free_sigqueue(CPUArchState *env, struct qemu_sigqueue *q)
-{
-
-    CPUState *cpu = env_cpu(env);
-    TaskState *ts = cpu->opaque;
-    q->next = ts->first_free;
-    ts->first_free = q;
-}
-
 /* Abort execution with signal. */
 void QEMU_NORETURN force_sig(int target_sig)
 {
@@ -399,7 +376,6 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
     CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
     struct emulated_sigtable *k;
-    struct qemu_sigqueue *q, **pq;
 
     k = &ts->sigtab[sig - 1];
     trace_user_queue_signal(env, sig); /* We called this in the caller? XXX */
@@ -419,27 +395,7 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
         force_sig(sig);
     }
 
-    pq = &k->first;
-
-    /*
-     * FreeBSD signals are always queued.  Linux only queues real time signals.
-     * XXX this code is not thread safe.  "What lock protects ts->sigtab?"
-     */
-    if (!k->pending) {
-        /* first signal */
-        q = &k->info;
-    } else {
-        q = alloc_sigqueue(env);
-        if (!q) {
-            return; /* XXX WHAT TO DO */
-        }
-        while (*pq != NULL) {
-            pq = &(*pq)->next;
-        }
-    }
-    *pq = q;
-    q->info = *info;
-    q->next = NULL;
+    k->info = *info;
     k->pending = 1;
     /* Signal that a new signal is pending. */
     ts->signal_pending = 1;
@@ -919,7 +875,6 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
 {
     CPUState *cpu = env_cpu(cpu_env);
     TaskState *ts = cpu->opaque;
-    struct qemu_sigqueue *q;
     struct target_sigaction *sa;
     int code;
     sigset_t set;
@@ -929,12 +884,7 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
 
     trace_user_handle_signal(cpu_env, sig);
 
-    /* Dequeue signal. */
-    q = k->first;
-    k->first = q->next;
-    if (!k->first) {
-        k->pending = 0;
-    }
+    k->pending = 0;
 
     sig = gdb_handlesig(cpu, sig);
     if (!sig) {
@@ -946,7 +896,7 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
     }
 
     if (do_strace) {
-        print_taken_signal(sig, &q->info);
+        print_taken_signal(sig, &k->info);
     }
 
     if (handler == TARGET_SIG_DFL) {
@@ -1003,10 +953,10 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
 #endif
 #endif /* not yet */
 
-        code = q->info.si_code;
+        code = k->info.si_code;
         /* prepare the stack frame of the virtual CPU */
         if (sa->sa_flags & TARGET_SA_SIGINFO) {
-            tswap_siginfo(&tinfo, &q->info);
+            tswap_siginfo(&tinfo, &k->info);
             setup_frame(sig, code, sa, &target_old_set, &tinfo, cpu_env);
         } else {
             setup_frame(sig, code, sa, &target_old_set, NULL, cpu_env);
@@ -1014,9 +964,6 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
         if (sa->sa_flags & TARGET_SA_RESETHAND) {
             sa->_sa_handler = TARGET_SIG_DFL;
         }
-    }
-    if (q != &k->info) {
-        free_sigqueue(cpu_env, q);
     }
 }
 
