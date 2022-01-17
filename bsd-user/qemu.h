@@ -120,6 +120,9 @@ typedef struct TaskState {
      * currently in the middle of such a syscall
      */
     sigset_t sigsuspend_mask;
+
+    /* This thread's sigaltstack, if it has one */
+    struct target_sigaltstack sigaltstack_used;
 } __attribute__((aligned(16))) TaskState;
 
 void init_task_state(TaskState *ts);

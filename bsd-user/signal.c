@@ -28,26 +28,20 @@
 #include "hw/core/tcg-cpu-ops.h"
 #include "host-signal.h"
 
-static target_stack_t target_sigaltstack_used = {
-    .ss_sp = 0,
-    .ss_size = 0,
-    .ss_flags = TARGET_SS_DISABLE,
-};
-
 static struct target_sigaction sigact_table[TARGET_NSIG];
 static void host_signal_handler(int host_sig, siginfo_t *info, void *puc);
 static void target_to_host_sigset_internal(sigset_t *d,
         const target_sigset_t *s);
 
-static inline int on_sig_stack(unsigned long sp)
+static inline int on_sig_stack(TaskState *ts, unsigned long sp)
 {
-    return sp - target_sigaltstack_used.ss_sp < target_sigaltstack_used.ss_size;
+    return sp - ts->sigaltstack_used.ss_sp < ts->sigaltstack_used.ss_size;
 }
 
-static inline int sas_ss_flags(unsigned long sp)
+static inline int sas_ss_flags(TaskState *ts, unsigned long sp)
 {
-    return target_sigaltstack_used.ss_size == 0 ? SS_DISABLE : on_sig_stack(sp)
-        ? SS_ONSTACK : 0;
+    return ts->sigaltstack_used.ss_size == 0 ? SS_DISABLE :
+        on_sig_stack(ts, sp) ? SS_ONSTACK : 0;
 }
 
 /*
@@ -532,14 +526,15 @@ static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 /* compare to kern/kern_sig.c sys_sigaltstack() and kern_sigaltstack() */
 abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
 {
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
     int ret;
     target_stack_t oss;
 
     if (uoss_addr) {
         /* Save current signal stack params */
-        oss.ss_sp = tswapl(target_sigaltstack_used.ss_sp);
-        oss.ss_size = tswapl(target_sigaltstack_used.ss_size);
-        oss.ss_flags = tswapl(sas_ss_flags(sp));
+        oss.ss_sp = tswapl(ts->sigaltstack_used.ss_sp);
+        oss.ss_size = tswapl(ts->sigaltstack_used.ss_size);
+        oss.ss_flags = tswapl(sas_ss_flags(ts, sp));
     }
 
     if (uss_addr) {
@@ -557,7 +552,7 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
         unlock_user_struct(uss, uss_addr, 0);
 
         ret = -TARGET_EPERM;
-        if (on_sig_stack(sp)) {
+        if (on_sig_stack(ts, sp)) {
             goto out;
         }
 
@@ -578,8 +573,8 @@ abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp)
             }
         }
 
-        target_sigaltstack_used.ss_sp = ss.ss_sp;
-        target_sigaltstack_used.ss_size = ss.ss_size;
+        ts->sigaltstack_used.ss_sp = ss.ss_sp;
+        ts->sigaltstack_used.ss_size = ss.ss_size;
     }
 
     if (uoss_addr) {
@@ -680,13 +675,14 @@ static inline abi_ulong get_sigframe(struct target_sigaction *ka,
         CPUArchState *regs, size_t frame_size)
 {
     abi_ulong sp;
+    TaskState *ts = (TaskState *)thread_cpu->opaque;
 
     /* Use default user stack */
     sp = get_sp_from_cpustate(regs);
 
-    if ((ka->sa_flags & TARGET_SA_ONSTACK) && (sas_ss_flags(sp) == 0)) {
-        sp = target_sigaltstack_used.ss_sp +
-            target_sigaltstack_used.ss_size;
+    if ((ka->sa_flags & TARGET_SA_ONSTACK) && (sas_ss_flags(ts, sp) == 0)) {
+        sp = ts->sigaltstack_used.ss_sp +
+            ts->sigaltstack_used.ss_size;
     }
 
 #if defined(TARGET_ARM)
