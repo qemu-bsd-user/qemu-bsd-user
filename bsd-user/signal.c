@@ -165,8 +165,8 @@ void target_to_host_sigset(sigset_t *d, const target_sigset_t *s)
 
 static bool has_trapno(int sig)
 {
-    return sig == SIGILL || sig == SIGFPE || sig == SIGSEGV || \
-        sig == SIGBUS || sig == SIGTRAP;
+    return sig == SIGILL || sig == SIGFPE || sig == SIGSEGV || sig == SIGBUS ||
+        sig == SIGTRAP;
 }
 
 /* Siginfo conversion. */
