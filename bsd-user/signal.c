@@ -405,8 +405,6 @@ void queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
 /*
  * Force a synchronously taken QEMU_SI_FAULT signal. For QEMU the
  * 'force' part is handled in process_pending_signals().
- * XXX BSD-user: we're still queueing it? and QEMU_SI_FAULT isn't a thing?
- * XXX BSD-user -- we need to adjust our cpu-loop to call this
  */
 void force_sig_fault(int sig, int code, abi_ulong addr)
 {
