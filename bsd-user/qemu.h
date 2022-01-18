@@ -251,7 +251,6 @@ long do_sigreturn(CPUArchState *env, abi_ulong addr);
 abi_long do_sigaltstack(abi_ulong uss_addr, abi_ulong uoss_addr, abi_ulong sp);
 int do_sigaction(int sig, const struct target_sigaction *act,
                 struct target_sigaction *oact);
-void QEMU_NORETURN force_sig(int target_sig);
 int qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right);
 /**
  * block_signals: block all signals while handling this guest syscall

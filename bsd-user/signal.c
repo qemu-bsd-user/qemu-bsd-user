@@ -303,7 +303,7 @@ static int core_dump_signal(int sig)
 }
 
 /* Abort execution with signal. */
-void QEMU_NORETURN force_sig(int target_sig)
+static void QEMU_NORETURN dump_core_and_abort(int target_sig)
 {
     CPUArchState *env = thread_cpu->env_ptr;
     CPUState *cpu = env_cpu(env);
@@ -383,7 +383,7 @@ void queue_signal(CPUArchState *env, int sig, int si_type, target_siginfo_t *inf
          * not easy to distinguish at this point, so we assume it doesn't
          * happen.
          */
-        force_sig(sig);
+        dump_core_and_abort(sig);
     }
 
     k->info = *info;
@@ -690,7 +690,7 @@ static inline abi_ulong get_sigframe(struct target_sigaction *ka,
 #endif
 }
 
-/* compare to $M/$M/exec_machdep.c sendsig() */
+/* compare to $M/$M/exec_machdep.c sendsig and sys/kern/kern_sig.c sigexit */
 
 static void setup_frame(int sig, int code, struct target_sigaction *ka,
     target_sigset_t *set, target_siginfo_t *tinfo, CPUArchState *regs)
@@ -702,7 +702,9 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     frame_addr = get_sigframe(ka, regs, sizeof(*frame));
     trace_user_setup_frame(regs, frame_addr);
     if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0)) {
-        goto give_sigsegv;
+        unlock_user_struct(frame, frame_addr, 1);
+        dump_core_and_abort(TARGET_SIGILL);
+        return;
     }
 
     memset(frame, 0, sizeof(*frame));
@@ -751,16 +753,10 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
 
     }
 
-    if (set_sigtramp_args(regs, sig, frame, frame_addr, ka)) {
-        goto give_sigsegv;
-    }
+    set_sigtramp_args(regs, sig, frame, frame_addr, ka);
 
     unlock_user_struct(frame, frame_addr, 1);
     return;
-
-give_sigsegv:
-    unlock_user_struct(frame, frame_addr, 1);
-    force_sig(TARGET_SIGSEGV);
 }
 
 static int reset_signal_mask(target_ucontext_t *ucontext)
@@ -782,6 +778,7 @@ static int reset_signal_mask(target_ucontext_t *ucontext)
     return 0;
 }
 
+/* See sys/$M/$M/exec_machdep.c sigreturn() */
 long do_sigreturn(CPUArchState *regs, abi_ulong addr)
 {
     long ret;
@@ -815,7 +812,6 @@ badframe:
     if (ucontext != NULL) {
         unlock_user_struct(ucontext, target_ucontext, 0);
     }
-    force_sig(TARGET_SIGSEGV);
     return -TARGET_EFAULT;
 }
 
@@ -896,12 +892,12 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
         } else if (sig != TARGET_SIGCHLD && sig != TARGET_SIGURG &&
                    sig != TARGET_SIGINFO && sig != TARGET_SIGWINCH &&
                    sig != TARGET_SIGCONT) {
-            force_sig(sig);
+            dump_core_and_abort(sig);
         }
     } else if (handler == TARGET_SIG_IGN) {
         /* ignore sig */
     } else if (handler == TARGET_SIG_ERR) {
-        force_sig(sig);
+        dump_core_and_abort(sig);
     } else {
         /* compute the blocked signals during the handler execution */
         sigset_t *blocked_set;
