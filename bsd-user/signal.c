@@ -706,14 +706,10 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     }
 
     memset(frame, 0, sizeof(*frame));
-    if (get_mcontext(regs, &frame->sf_uc.uc_mcontext, 0)) {
-        goto give_sigsegv;
-    }
+    setup_sigframe_arch(regs, frame_addr, frame, 0);
 
     for (i = 0; i < TARGET_NSIG_WORDS; i++) {
-        if (__put_user(set->__bits[i], &frame->sf_uc.uc_sigmask.__bits[i])) {
-            goto give_sigsegv;
-        }
+        __put_user(set->__bits[i], &frame->sf_uc.uc_sigmask.__bits[i]);
     }
 
     if (tinfo) {

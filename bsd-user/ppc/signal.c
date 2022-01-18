@@ -63,6 +63,19 @@ set_sigtramp_args(CPUPPCState *regs, int sig, struct target_sigframe *frame,
 }
 
 /*
+ * Compare to powerpc/powerpc/exec_machdep.c sendsig()
+ * Assumes that the memory is locked if frame points to user memory.
+ */
+abi_long setup_sigframe_arch(CPUPPCState *env, abi_ulong frame_addr,
+                             struct target_sigframe *frame, int flags)
+{
+    target_mcontext_t *mcp = &frame->sf_uc.uc_mcontext;
+
+    get_mcontext(env, mcp, flags);
+    return 0;
+}
+
+/*
  * Compare to powerpc/powerpc/exec_machdep.c get_mcontext()
  * Assumes that the memory is locked if mcp points to user memory.
  */
