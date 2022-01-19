@@ -97,6 +97,7 @@ typedef struct TaskState {
     struct bsd_binprm *bprm;
     struct image_info *info;
 
+    struct emulated_sigtable sync_signal;
     struct emulated_sigtable sigtab[TARGET_NSIG];
     /*
      * Nonzero if process_pending_signals() needs to do something (either

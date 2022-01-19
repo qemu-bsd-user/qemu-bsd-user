@@ -369,27 +369,15 @@ void queue_signal(CPUArchState *env, int sig, int si_type, target_siginfo_t *inf
 {
     CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
-    struct emulated_sigtable *k;
 
-    k = &ts->sigtab[sig - 1];
     trace_user_queue_signal(env, sig);
-    if (sig == TARGET_SIGSEGV && sigismember(&ts->signal_mask, SIGSEGV)) {
-        /*
-         * Guest has blocked SIGSEGV but we got one anyway. Assume this is a
-         * forced SIGSEGV (ie one the kernel handles via force_sig_info because
-         * it got a real MMU fault). A blocked SIGSEGV in that situation is
-         * treated as if using the default handler. This is not correct if some
-         * other process has randomly sent us a SIGSEGV via kill(), but that is
-         * not easy to distinguish at this point, so we assume it doesn't
-         * happen.
-         */
-        dump_core_and_abort(sig);
-    }
 
-    k->info = *info;
-    k->pending = 1;
+    info->si_code = deposit32(info->si_code, 24, 8, si_type);
+
+    ts->sync_signal.info = *info;
+    ts->sync_signal.pending = sig;
     /* Signal that a new signal is pending. */
-    ts->signal_pending = 1;
+    qatomic_set(&ts->signal_pending, 1);
     return;
 }
 
@@ -958,18 +946,38 @@ void process_pending_signals(CPUArchState *cpu_env)
     TaskState *ts = cpu->opaque;
 
     while (qatomic_read(&ts->signal_pending)) {
-        /* FIXME: This is not threadsafe. */
-
         sigfillset(&set);
         sigprocmask(SIG_SETMASK, &set, 0);
 
+    restart_scan:
+        sig = ts->sync_signal.pending;
+        if (sig) {
+            /*
+             * Synchronous signals are forced by the emulated CPU in some way.
+             * If they are set to ignore, restore the default handler (see
+             * sys/kern_sig.c trapsignal() and execsigs() for this behavior)
+             * though maybe this is done only when forcing exit for non SIGCHLD.
+             */
+            if (sigismember(&ts->signal_mask, target_to_host_signal(sig)) ||
+                sigact_table[sig - 1]._sa_handler == TARGET_SIG_IGN) {
+                sigdelset(&ts->signal_mask, target_to_host_signal(sig));
+                sigact_table[sig - 1]._sa_handler = TARGET_SIG_DFL;
+            }
+            handle_pending_signal(cpu_env, sig, &ts->sync_signal);
+        }
+
         k = ts->sigtab;
-        blocked_set = ts->in_sigsuspend ?
-            &ts->sigsuspend_mask : &ts->signal_mask;
         for (sig = 1; sig <= TARGET_NSIG; sig++, k++) {
+            blocked_set = ts->in_sigsuspend ?
+                &ts->sigsuspend_mask : &ts->signal_mask;
             if (k->pending &&
                 !sigismember(blocked_set, target_to_host_signal(sig))) {
                 handle_pending_signal(cpu_env, sig, k);
+                /*
+                 * Restart scan from the beginning, as handle_pending_signal
+                 * might have resulted in a new synchronous signal (eg SIGSEGV).
+                 */
+                goto restart_scan;
             }
         }
 
