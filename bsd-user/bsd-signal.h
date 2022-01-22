@@ -85,7 +85,7 @@ static inline abi_long do_bsd_sigprocmask(abi_long arg1, abi_ulong arg2,
         switch (arg1) {
         case TARGET_SIG_BLOCK:
             how = SIG_BLOCK;
-            qemu_sigorset(&ts->signal_mask, &ts->signal_mask, set_ptr);
+            sigorset(&ts->signal_mask, &ts->signal_mask, set_ptr);
             break;
 
         case TARGET_SIG_UNBLOCK:

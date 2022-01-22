@@ -64,25 +64,6 @@ static inline void target_sigemptyset(target_sigset_t *set)
     memset(set, 0, sizeof(*set));
 }
 
-#include <signal.h>
-
-int
-qemu_sigorset(sigset_t *dest, const sigset_t *left, const sigset_t *right)
-{
-    sigset_t work;
-    int i;
-
-    sigemptyset(&work);
-    for (i = 1; i < NSIG; ++i) {
-        if (sigismember(left, i) || sigismember(right, i)) {
-            sigaddset(&work, i);
-        }
-    }
-
-    *dest = work;
-    return 0;
-}
-
 static inline void target_sigaddset(target_sigset_t *set, int signum)
 {
     signum--;
@@ -907,7 +888,7 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
 
         blocked_set = ts->in_sigsuspend ?
             &ts->sigsuspend_mask : &ts->signal_mask;
-        qemu_sigorset(&ts->signal_mask, blocked_set, &set);
+        sigorset(&ts->signal_mask, blocked_set, &set);
         ts->in_sigsuspend = false;
         sigprocmask(SIG_SETMASK, &ts->signal_mask, NULL);
 
