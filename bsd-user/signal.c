@@ -90,13 +90,17 @@ static inline void rewind_if_in_safe_syscall(void *puc)
     }
 }
 
+/*
+ * Note: The following take advantage of the BSD signal property that all
+ * signals are available on all architectures.
+ */
 static void host_to_target_sigset_internal(target_sigset_t *d,
         const sigset_t *s)
 {
     int i;
 
     target_sigemptyset(d);
-    for (i = 1; i <= TARGET_NSIG; i++) {
+    for (i = 1; i <= NSIG; i++) {
         if (sigismember(s, i)) {
             target_sigaddset(d, host_to_target_signal(i));
         }
@@ -109,7 +113,7 @@ void host_to_target_sigset(target_sigset_t *d, const sigset_t *s)
     int i;
 
     host_to_target_sigset_internal(&d1, s);
-    for (i = 0; i < TARGET_NSIG_WORDS; i++) {
+    for (i = 0; i < _SIG_WORDS; i++) {
         d->__bits[i] = tswap32(d1.__bits[i]);
     }
 }
