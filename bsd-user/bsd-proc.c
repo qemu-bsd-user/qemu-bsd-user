@@ -27,6 +27,7 @@
 
 #include "qemu.h"
 #include "qemu-bsd.h"
+#include "signal-common.h"
 
 #include "bsd-proc.h"
 

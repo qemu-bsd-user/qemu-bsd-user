@@ -19,6 +19,7 @@
 
 #include "qemu.h"
 #include "target_arch_sysarch.h"
+#include "signal-common.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/mount.h>

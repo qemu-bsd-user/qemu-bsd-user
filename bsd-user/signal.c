@@ -729,13 +729,13 @@ int do_sigaction(int sig, const struct target_sigaction *act,
 }
 
 static inline abi_ulong get_sigframe(struct target_sigaction *ka,
-        CPUArchState *regs, size_t frame_size)
+        CPUArchState *env, size_t frame_size)
 {
     TaskState *ts = (TaskState *)thread_cpu->opaque;
     abi_ulong sp;
 
     /* Use default user stack */
-    sp = get_sp_from_cpustate(regs);
+    sp = get_sp_from_cpustate(env);
 
     if ((ka->sa_flags & TARGET_SA_ONSTACK) && sas_ss_flags(ts, sp) == 0) {
         sp = ts->sigaltstack_used.ss_sp + ts->sigaltstack_used.ss_size;
@@ -753,14 +753,14 @@ static inline abi_ulong get_sigframe(struct target_sigaction *ka,
 /* compare to $M/$M/exec_machdep.c sendsig and sys/kern/kern_sig.c sigexit */
 
 static void setup_frame(int sig, int code, struct target_sigaction *ka,
-    target_sigset_t *set, target_siginfo_t *tinfo, CPUArchState *regs)
+    target_sigset_t *set, target_siginfo_t *tinfo, CPUArchState *env)
 {
     struct target_sigframe *frame;
     abi_ulong frame_addr;
     int i;
 
-    frame_addr = get_sigframe(ka, regs, sizeof(*frame));
-    trace_user_setup_frame(regs, frame_addr);
+    frame_addr = get_sigframe(ka, env, sizeof(*frame));
+    trace_user_setup_frame(env, frame_addr);
     if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0)) {
         unlock_user_struct(frame, frame_addr, 1);
         dump_core_and_abort(TARGET_SIGILL);
@@ -768,7 +768,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     }
 
     memset(frame, 0, sizeof(*frame));
-    setup_sigframe_arch(regs, frame_addr, frame, 0);
+    setup_sigframe_arch(env, frame_addr, frame, 0);
 
     for (i = 0; i < TARGET_NSIG_WORDS; i++) {
         __put_user(set->__bits[i], &frame->sf_uc.uc_sigmask.__bits[i]);
@@ -795,7 +795,7 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
                sizeof(tinfo->_reason));
     }
 
-    set_sigtramp_args(regs, sig, frame, frame_addr, ka);
+    set_sigtramp_args(env, sig, frame, frame_addr, ka);
 
     unlock_user_struct(frame, frame_addr, 1);
 }
@@ -820,24 +820,24 @@ static int reset_signal_mask(target_ucontext_t *ucontext)
 }
 
 /* See sys/$M/$M/exec_machdep.c sigreturn() */
-long do_sigreturn(CPUArchState *regs, abi_ulong addr)
+long do_sigreturn(CPUArchState *env, abi_ulong addr)
 {
     long ret;
     abi_ulong target_ucontext;
     target_ucontext_t *ucontext = NULL;
 
     /* Get the target ucontext address from the stack frame */
-    ret = get_ucontext_sigreturn(regs, addr, &target_ucontext);
+    ret = get_ucontext_sigreturn(env, addr, &target_ucontext);
     if (is_error(ret)) {
         return ret;
     }
-    trace_user_do_sigreturn(regs, addr);
+    trace_user_do_sigreturn(env, addr);
     if (!lock_user_struct(VERIFY_READ, ucontext, target_ucontext, 0)) {
         goto badframe;
     }
 
     /* Set the register state back to before the signal. */
-    if (set_mcontext(regs, &ucontext->uc_mcontext, 1)) {
+    if (set_mcontext(env, &ucontext->uc_mcontext, 1)) {
         goto badframe;
     }
 
@@ -898,10 +898,10 @@ void signal_init(void)
     }
 }
 
-static void handle_pending_signal(CPUArchState *cpu_env, int sig,
+static void handle_pending_signal(CPUArchState *env, int sig,
                                   struct emulated_sigtable *k)
 {
-    CPUState *cpu = env_cpu(cpu_env);
+    CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
     struct target_sigaction *sa;
     int code;
@@ -910,7 +910,7 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
     target_siginfo_t tinfo;
     target_sigset_t target_old_set;
 
-    trace_user_handle_signal(cpu_env, sig);
+    trace_user_handle_signal(env, sig);
 
     k->pending = 0;
 
@@ -985,9 +985,9 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
         /* prepare the stack frame of the virtual CPU */
         if (sa->sa_flags & TARGET_SA_SIGINFO) {
             tswap_siginfo(&tinfo, &k->info);
-            setup_frame(sig, code, sa, &target_old_set, &tinfo, cpu_env);
+            setup_frame(sig, code, sa, &target_old_set, &tinfo, env);
         } else {
-            setup_frame(sig, code, sa, &target_old_set, NULL, cpu_env);
+            setup_frame(sig, code, sa, &target_old_set, NULL, env);
         }
         if (sa->sa_flags & TARGET_SA_RESETHAND) {
             sa->_sa_handler = TARGET_SIG_DFL;
@@ -995,9 +995,9 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
     }
 }
 
-void process_pending_signals(CPUArchState *cpu_env)
+void process_pending_signals(CPUArchState *env)
 {
-    CPUState *cpu = env_cpu(cpu_env);
+    CPUState *cpu = env_cpu(env);
     int sig;
     sigset_t *blocked_set, set;
     struct emulated_sigtable *k;
@@ -1021,7 +1021,7 @@ void process_pending_signals(CPUArchState *cpu_env)
                 sigdelset(&ts->signal_mask, target_to_host_signal(sig));
                 sigact_table[sig - 1]._sa_handler = TARGET_SIG_DFL;
             }
-            handle_pending_signal(cpu_env, sig, &ts->sync_signal);
+            handle_pending_signal(env, sig, &ts->sync_signal);
         }
 
         k = ts->sigtab;
@@ -1030,7 +1030,7 @@ void process_pending_signals(CPUArchState *cpu_env)
                 &ts->sigsuspend_mask : &ts->signal_mask;
             if (k->pending &&
                 !sigismember(blocked_set, target_to_host_signal(sig))) {
-                handle_pending_signal(cpu_env, sig, k);
+                handle_pending_signal(env, sig, k);
                 /*
                  * Restart scan from the beginning, as handle_pending_signal
                  * might have resulted in a new synchronous signal (eg SIGSEGV).
