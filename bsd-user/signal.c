@@ -142,10 +142,13 @@ void target_to_host_sigset(sigset_t *d, const target_sigset_t *s)
     target_to_host_sigset_internal(d, &s1);
 }
 
-static bool has_trapno(int sig)
+static bool has_trapno(int tsig)
 {
-    return sig == SIGILL || sig == SIGFPE || sig == SIGSEGV || sig == SIGBUS ||
-        sig == SIGTRAP;
+    return tsig == TARGET_SIGILL ||
+        tsig == TARGET_SIGFPE ||
+        tsig == TARGET_SIGSEGV ||
+        tsig == TARGET_SIGBUS ||
+        tsig == TARGET_SIGTRAP;
 }
 
 /* Siginfo conversion. */
@@ -226,12 +229,12 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
             tinfo->_reason._fault._trapno = info->_reason._fault._trapno;
             si_type = QEMU_SI_FAULT;
         }
-#ifdef SIGPOLL
+#ifdef TARGET_SIGPOLL
         /*
          * FreeBSD never had SIGPOLL, but emulates it for Linux so there's
          * a chance it may popup in the future.
          */
-        if (sig == SIGPOLL) {
+        if (sig == TARGET_SIGPOLL) {
             tinfo->_reason._poll._band = info->_reason._poll._band;
             si_type = QEMU_SI_POLL;
         }
@@ -241,7 +244,7 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
          * capsicum is somewhere between weak and non-existant, but if we get
          * one, then we know what to save.
          */
-        if (sig == SIGTRAP) {
+        if (sig == TARGET_SIGTRAP) {
             tinfo->_reason._capsicum._syscall =
                 info->_reason._capsicum._syscall;
             si_type = QEMU_SI_CAPSICUM;
