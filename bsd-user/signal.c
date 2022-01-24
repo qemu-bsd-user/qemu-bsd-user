@@ -150,14 +150,32 @@ static bool has_trapno(int sig)
 
 /* Siginfo conversion. */
 
+/*
+ * Populate tinfo w/o swapping based on guessing which fields are valid.
+ */
 static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
         const siginfo_t *info)
 {
-    int sig, code;
+    int sig = host_to_target_signal(info->si_signo);
+    int si_code = info->si_code;
+    int si_type;
 
-    sig = host_to_target_signal(info->si_signo);
-    /* XXX should have host_to_target_si_code() */
-    code = tswap32(info->si_code);
+    /*
+     * Make sure we that the variable portion of the target siginfo is zeroed out
+     * so we don't leak anything into that.
+     */
+    memset(&tinfo->_reason, 0, sizeof(tinfo->_reason));
+
+    /*
+     * This is awkward, because we have to use a combination of the si_code and
+     * si_signo to figure out which of the union's members are valid.o We
+     * therefore make our best guess.
+     *
+     * Once we have made our guess, we record it in the top 16 bits of
+     * the si_code, so that tswap_siginfo() later can use it.
+     * tswap_siginfo() will strip these top bits out before writing
+     * si_code to the guest (sign-extending the lower bits).
+     */
     tinfo->si_signo = sig;
     tinfo->si_errno = info->si_errno;
     tinfo->si_code = info->si_code;
@@ -165,59 +183,123 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
     tinfo->si_uid = info->si_uid;
     tinfo->si_status = info->si_status;
     tinfo->si_addr = (abi_ulong)(unsigned long)info->si_addr;
-    /* si_value is opaque to kernel */
+    /*
+     * si_value is opaque to kernel. On all FreeBSD platforms,
+     * sizeof(sival_ptr) >= sizeof(sival_int) so the following
+     * always will copy the larger element.
+     */
     tinfo->si_value.sival_ptr =
         (abi_ulong)(unsigned long)info->si_value.sival_ptr;
-    if (has_trapno(sig)) {
-        tinfo->_reason._fault._trapno = info->_reason._fault._trapno;
-    }
-#ifdef SIGPOLL
-    if (sig == SIGPOLL) {
-        tinfo->_reason._poll._band = info->_reason._poll._band;
-    }
-#endif
-    if (code == SI_TIMER) {
-        int timerid;
 
-        timerid = info->_reason._timer._timerid;
-#ifdef __FreeBSD__
-        timerid = host_to_target_timerid(timerid);
-#endif
-        tinfo->_reason._timer._timerid = timerid;
+    switch (si_code) {
+        /*
+         * All the SI_xxx codes that are defined here are global to
+         * all the signals (they have values that none of the other,
+         * more specific signal info will set).
+         */
+    case SI_USER:
+    case SI_LWP:
+    case SI_KERNEL:
+    case SI_QUEUE:
+    case SI_ASYNCIO:
+        /*
+         * Only the fixed parts are valid (though FreeBSD doesn't always
+         * set all the fields to non-zero values.
+         */
+        si_type = QEMU_SI_NOINFO;
+        break;
+    case SI_TIMER:
+        tinfo->_reason._timer._timerid = info->_reason._timer._timerid;
         tinfo->_reason._timer._overrun = info->_reason._timer._overrun;
+        si_type = QEMU_SI_TIMER;
+        break;
+    case SI_MESGQ:
+        tinfo->_reason._mesgq._mqd = info->_reason._mesgq._mqd;
+        si_type = QEMU_SI_MESGQ;
+        break;
+    default:
+        /*
+         * We have to go based on the signal number now to figure out
+         * what's valid.
+         */
+        if (has_trapno(sig)) {
+            tinfo->_reason._fault._trapno = info->_reason._fault._trapno;
+            si_type = QEMU_SI_FAULT;
+        }
+#ifdef SIGPOLL
+        /*
+         * FreeBSD never had SIGPOLL, but emulates it for Linux so there's
+         * a chance it may popup in the future.
+         */
+        if (sig == SIGPOLL) {
+            tinfo->_reason._poll._band = info->_reason._poll._band;
+            si_type = QEMU_SI_POLL;
+        }
+#endif
+        /*
+         * Unsure that this can actually be generated, and our support for
+         * capsicum is somewhere between weak and non-existant, but if we get
+         * one, then we know what to save.
+         */
+        if (sig == SIGTRAP) {
+            tinfo->_reason._capsicum._syscall =
+                info->_reason._capsicum._syscall;
+            si_type = QEMU_SI_CAPSICUM;
+        }
+        break;
     }
+    tinfo->si_code = deposit32(si_code, 24, 8, si_type);
 }
 
 static void tswap_siginfo(target_siginfo_t *tinfo, const target_siginfo_t *info)
 {
-    int sig, code;
+    int si_type = extract32(info->si_code, 24, 8);
+    int si_code = sextract32(info->si_code, 0, 24);
 
-    sig = info->si_signo;
-    code = info->si_code;
-    tinfo->si_signo = tswap32(sig);
-    tinfo->si_errno = tswap32(info->si_errno);
-    tinfo->si_code = tswap32(info->si_code);
-    tinfo->si_pid = tswap32(info->si_pid);
-    tinfo->si_uid = tswap32(info->si_uid);
-    tinfo->si_status = tswap32(info->si_status);
-    tinfo->si_addr = tswapal(info->si_addr);
+    __put_user(info->si_signo, &tinfo->si_signo);
+    __put_user(info->si_errno, &tinfo->si_errno);
+    __put_user(si_code, &tinfo->si_code); /* Zero out si_type, it's internal */
+    __put_user(info->si_pid, &tinfo->si_pid);
+    __put_user(info->si_uid, &tinfo->si_uid);
+    __put_user(info->si_status, &tinfo->si_status);
+    __put_user(info->si_addr, &tinfo->si_addr);
     /*
      * Unswapped, because we passed it through mostly untouched.  si_value is
      * opaque to the kernel, so we didn't bother with potentially wasting cycles
      * to swap it into host byte order.
      */
     tinfo->si_value.sival_ptr = info->si_value.sival_ptr;
-    if (has_trapno(sig)) {
-        tinfo->_reason._fault._trapno = tswap32(info->_reason._fault._trapno);
-    }
-#ifdef SIGPOLL
-    if (sig == SIGPOLL) {
-        tinfo->_reason._poll._band = tswap32(info->_reason._poll._band);
-    }
-#endif
-    if (code == SI_TIMER) {
-        tinfo->_reason._timer._timerid = tswap32(info->_reason._timer._timerid);
-        tinfo->_reason._timer._overrun = tswap32(info->_reason._timer._overrun);
+
+    /*
+     * We can use our internal marker of which fields in the structure
+     * are valid, rather than duplicating the guesswork of
+     * host_to_target_siginfo_noswap() here.
+     */
+    switch (si_type) {
+    case QEMU_SI_NOINFO:	/* No additional info */
+        break;
+    case QEMU_SI_FAULT:
+        __put_user(info->_reason._fault._trapno, &tinfo->_reason._fault._trapno);
+        break;
+    case QEMU_SI_TIMER:
+        __put_user(info->_reason._timer._timerid,
+                   &tinfo->_reason._timer._timerid);
+        __put_user(info->_reason._timer._overrun,
+                   &tinfo->_reason._timer._overrun);
+        break;
+    case QEMU_SI_MESGQ:
+        __put_user(info->_reason._mesgq._mqd, &tinfo->_reason._mesgq._mqd);
+        break;
+    case QEMU_SI_POLL:
+        /* Note: Not generated on FreeBSD */
+        __put_user(info->_reason._poll._band, &tinfo->_reason._poll._band);
+        break;
+    case QEMU_SI_CAPSICUM:
+        __put_user(info->_reason._capsicum._syscall,
+                   &tinfo->_reason._capsicum._syscall);
+        break;
+    default:
+        g_assert_not_reached();
     }
 }
 
@@ -695,35 +777,17 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
         frame->sf_si.si_uid = tinfo->si_uid;
         frame->sf_si.si_status = tinfo->si_status;
         frame->sf_si.si_addr = tinfo->si_addr;
-
-        if (has_trapno(sig)) {
-            frame->sf_si._reason._fault._trapno = tinfo->_reason._fault._trapno;
-        }
-
+        /* see host_to_target_siginfo_noswap() for more details */
+        frame->sf_si.si_value.sival_ptr = tinfo->si_value.sival_ptr;
         /*
-         * If si_code is one of SI_QUEUE, SI_TIMER, SI_ASYNCIO, or
-         * SI_MESGQ, then si_value contains the application-specified
-         * signal value. Otherwise, the contents of si_value are
-         * undefined.
+         * At this point, whatever is in the _reason union is complete
+         * and in target order, so just copy the whole thing over, even
+         * if it's too large for this specific signal.
+         * host_to_target_siginfo_noswap() and tswap_siginfo() have ensured
+         * that's so.
          */
-        if (code == SI_QUEUE || code == SI_TIMER || code == SI_ASYNCIO ||
-            code == SI_MESGQ) {
-            frame->sf_si.si_value.sival_int = tinfo->si_value.sival_int;
-        }
-
-        if (code == SI_TIMER) {
-            frame->sf_si._reason._timer._timerid =
-                tinfo->_reason._timer._timerid;
-            frame->sf_si._reason._timer._overrun =
-                tinfo->_reason._timer._overrun;
-        }
-
-#ifdef SIGPOLL
-        if (sig == SIGPOLL) {
-            frame->sf_si._reason._band = tinfo->_reason._band;
-        }
-#endif
-
+        memcpy(&frame->sf_si._reason, &tinfo->_reason,
+               sizeof(tinfo->_reason));
     }
 
     set_sigtramp_args(regs, sig, frame, frame_addr, ka);
@@ -908,7 +972,7 @@ static void handle_pending_signal(CPUArchState *cpu_env, int sig,
 #endif
 #endif /* not yet */
 
-        code = k->info.si_code;
+        code = k->info.si_code; /* From host, so no si_type */
         /* prepare the stack frame of the virtual CPU */
         if (sa->sa_flags & TARGET_SA_SIGINFO) {
             tswap_siginfo(&tinfo, &k->info);
