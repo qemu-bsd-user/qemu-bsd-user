@@ -161,8 +161,8 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
     int si_type;
 
     /*
-     * Make sure we that the variable portion of the target siginfo is zeroed out
-     * so we don't leak anything into that.
+     * Make sure we that the variable portion of the target siginfo is zeroed
+     * out so we don't leak anything into that.
      */
     memset(&tinfo->_reason, 0, sizeof(tinfo->_reason));
 
@@ -276,10 +276,11 @@ static void tswap_siginfo(target_siginfo_t *tinfo, const target_siginfo_t *info)
      * host_to_target_siginfo_noswap() here.
      */
     switch (si_type) {
-    case QEMU_SI_NOINFO:	/* No additional info */
+    case QEMU_SI_NOINFO:        /* No additional info */
         break;
     case QEMU_SI_FAULT:
-        __put_user(info->_reason._fault._trapno, &tinfo->_reason._fault._trapno);
+        __put_user(info->_reason._fault._trapno,
+                   &tinfo->_reason._fault._trapno);
         break;
     case QEMU_SI_TIMER:
         __put_user(info->_reason._timer._timerid,
@@ -432,7 +433,8 @@ static void QEMU_NORETURN dump_core_and_abort(int target_sig)
  * Queue a signal so that it will be send to the virtual CPU as soon as
  * possible.
  */
-void queue_signal(CPUArchState *env, int sig, int si_type, target_siginfo_t *info)
+void queue_signal(CPUArchState *env, int sig, int si_type,
+                  target_siginfo_t *info)
 {
     CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
@@ -793,7 +795,6 @@ static void setup_frame(int sig, int code, struct target_sigaction *ka,
     set_sigtramp_args(regs, sig, frame, frame_addr, ka);
 
     unlock_user_struct(frame, frame_addr, 1);
-    return;
 }
 
 static int reset_signal_mask(target_ucontext_t *ucontext)

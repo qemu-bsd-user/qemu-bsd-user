@@ -21,6 +21,7 @@
 #define _TARGET_ARCH_CPU_H_
 
 #include "target_arch.h"
+#include "signal-common.h"
 
 #define TARGET_DEFAULT_CPU_MODEL "any"
 
@@ -150,7 +151,8 @@ static inline void target_cpu_loop(CPUARMState *env)
         case EXCP_PREFETCH_ABORT:
         case EXCP_DATA_ABORT:
             /*
-             * See arm/arm/trap-v6.c prefetch_abort_handler() and data_abort_handler()
+             * See arm/arm/trap-v6.c prefetch_abort_handler() and
+             * data_abort_handler()
              *
              * However, FreeBSD maps these to a generic value and then uses that
              * to maybe fault in pages in vm/vm_fault.c:vm_fault_trap(). I

@@ -77,7 +77,7 @@ typedef struct target_siginfo {
         } _poll;
 
         struct {
-            int	_mqd;
+            int _mqd;
         } _mesgq;
 
         struct {
@@ -85,7 +85,7 @@ typedef struct target_siginfo {
              * Syscall number for signals delivered as a result of system calls
              * denied by Capsicum.
              */
-            int	_syscall;
+            int _syscall;
         } _capsicum;
 
         /* Spare for future growth */
