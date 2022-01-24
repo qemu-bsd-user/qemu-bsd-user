@@ -4,7 +4,7 @@
 #include "target_os_siginfo.h"
 #include "target_arch_signal.h"
 
-abi_long setup_sigframe_arch(CPUArchState *regs, abi_ulong frame_addr,
+abi_long setup_sigframe_arch(CPUArchState *env, abi_ulong frame_addr,
                              struct target_sigframe *frame, int flags);
 
 /* Compare to sys/signal.h */
