@@ -677,9 +677,13 @@ int do_sigaction(int sig, const struct target_sigaction *act,
     int host_sig;
     int ret = 0;
 
-    if (sig < 1 || sig > TARGET_NSIG || sig == TARGET_SIGKILL ||
-        sig == TARGET_SIGSTOP) {
-        return -EINVAL;
+    if (sig < 1 || sig > TARGET_NSIG) {
+        return -TARGET_EINVAL;
+    }
+
+    if ((sig == TARGET_SIGKILL || sig == TARGET_SIGSTOP) &&
+        act != NULL && act->_sa_handler != TARGET_SIG_DFL) {
+        return -TARGET_EINVAL;
     }
 
     if (block_signals()) {
