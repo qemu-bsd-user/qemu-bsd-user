@@ -818,7 +818,6 @@ static int reset_signal_mask(target_ucontext_t *ucontext)
         }
     target_to_host_sigset_internal(&blocked, &target_set);
     ts->signal_mask = blocked;
-    sigprocmask(SIG_SETMASK, &ts->signal_mask, NULL);
 
     return 0;
 }
