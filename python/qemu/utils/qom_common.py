@@ -27,11 +27,8 @@ from typing import (
     TypeVar,
 )
 
-from . import QEMUMonitorProtocol, QMPError
-
-
-# The following is needed only for a type alias.
-Subparsers = argparse._SubParsersAction  # pylint: disable=protected-access
+from qemu.aqmp import QMPError
+from qemu.aqmp.legacy import QEMUMonitorProtocol
 
 
 class ObjectPropertyInfo:
@@ -89,7 +86,7 @@ class QOMCommand:
         self.qmp.connect()
 
     @classmethod
-    def register(cls, subparsers: Subparsers) -> None:
+    def register(cls, subparsers: Any) -> None:
         """
         Register this command with the argument parser.
 

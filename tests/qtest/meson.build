@@ -103,7 +103,7 @@ if dbus_daemon.found() and config_host.has_key('GDBUS_CODEGEN')
   #qtests_i386 += ['dbus-vmstate-test']
   dbus_vmstate1 = custom_target('dbus-vmstate description',
                                 output: ['dbus-vmstate1.h', 'dbus-vmstate1.c'],
-                                input: meson.source_root() / 'backends/dbus-vmstate1.xml',
+                                input: meson.project_source_root() / 'backends/dbus-vmstate1.xml',
                                 command: [config_host['GDBUS_CODEGEN'],
                                           '@INPUT@',
                                           '--interface-prefix', 'org.qemu',
@@ -335,10 +335,9 @@ foreach dir : target_dirs
         test: executable(test, src, dependencies: deps)
       }
     endif
-    # FIXME: missing dependency on the emulator binary and qemu-img
     test('qtest-@0@/@1@'.format(target_base, test),
          qtest_executables[test],
-         depends: [test_deps, qtest_emulator],
+         depends: [test_deps, qtest_emulator, emulator_modules],
          env: qtest_env,
          args: ['--tap', '-k'],
          protocol: 'tap',
