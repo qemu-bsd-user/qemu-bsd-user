@@ -16,7 +16,6 @@ bsd_user_ss.add(files(
   'elfload.c',
   'main.c',
   'mmap.c',
-  'safe-syscall.S',
   'thunk.c',
   'signal.c',
   'strace.c',
