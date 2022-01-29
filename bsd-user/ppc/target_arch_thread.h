@@ -91,9 +91,7 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     regs->gpr[6] = 0;
     regs->gpr[7] = 0;
     regs->gpr[8] = TARGET_PS_STRINGS;
-    if (bsd_type == target_freebsd) {
-        regs->lr = infop->entry;
-    }
+    regs->lr = infop->entry;
 }
 
 #endif /* !_TARGET_ARCH_THREAD_H_ */
