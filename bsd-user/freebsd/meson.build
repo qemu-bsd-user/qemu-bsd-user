@@ -4,6 +4,7 @@ bsd_user_ss.add(files(
   'os-socket.c',
   'os-stat.c',
   'os-sys.c',
+  'os-syscall.c',
   'os-thread.c',
   'os-time.c',
 ))
