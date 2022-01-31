@@ -1,8 +1,8 @@
 /*
  *  BSD syscalls
  *
- *  Copyright (c) 2003 - 2008 Fabrice Bellard
- *  Copyright (c) 2013-14 Stacey D. Son
+ *  Copyright (c) 2003-2008 Fabrice Bellard
+ *  Copyright (c) 2013-2014 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,6 +18,10 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * We need the FreeBSD "legacy" definitions. Rust needs the FreeBSD 11 system
+ * calls, so we have to emulate that despite FreeBSD being EOL'd.
+ */
 #define _WANT_FREEBSD11_STAT
 #define _WANT_FREEBSD11_STATFS
 #define _WANT_FREEBSD11_DIRENT
@@ -58,7 +62,6 @@
 #include "os-stat.h"
 #include "os-thread.h"
 
-/* #define DEBUG */
 /* Used in os-thread */
 safe_syscall1(int, thr_suspend, struct timespec *, timeout);
 safe_syscall5(int, _umtx_op, void *, obj, int, op, unsigned long, val, void *,
