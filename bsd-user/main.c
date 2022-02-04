@@ -230,6 +230,11 @@ void qemu_cpu_kick(CPUState *cpu)
 /* Assumes contents are already zeroed.  */
 void init_task_state(TaskState *ts)
 {
+    ts->sigaltstack_used = (struct target_sigaltstack) {
+        .ss_sp = 0,
+        .ss_size = 0,
+        .ss_flags = TARGET_SS_DISABLE,
+    };
 }
 
 CPUArchState *cpu_copy(CPUArchState *env)

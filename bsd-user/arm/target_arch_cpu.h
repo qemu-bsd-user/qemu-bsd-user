@@ -55,7 +55,7 @@ static inline void target_cpu_loop(CPUARMState *env)
              * See arm/arm/undefined.c undefinedinstruction();
              *
              * A number of details aren't emulated (they likely don't matter):
-             * o Misaligned PC generates ILL_ILLADR
+             * o Misaligned PC generates ILL_ILLADR (these can't come from qemu)
              * o Thumb-2 instructions generate ILLADR
              * o Both modes implement coprocessor instructions, which we don't
              *   do here. FreeBSD just implements them for the VFP coprocessor

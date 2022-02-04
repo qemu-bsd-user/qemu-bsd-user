@@ -225,6 +225,7 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
          * We have to go based on the signal number now to figure out
          * what's valid.
          */
+        si_type = QEMU_SI_NOINFO;
         if (has_trapno(sig)) {
             tinfo->_reason._fault._trapno = info->_reason._fault._trapno;
             si_type = QEMU_SI_FAULT;
@@ -244,11 +245,13 @@ static inline void host_to_target_siginfo_noswap(target_siginfo_t *tinfo,
          * capsicum is somewhere between weak and non-existant, but if we get
          * one, then we know what to save.
          */
+#ifdef QEMU_SI_CAPSICUM
         if (sig == TARGET_SIGTRAP) {
             tinfo->_reason._capsicum._syscall =
                 info->_reason._capsicum._syscall;
             si_type = QEMU_SI_CAPSICUM;
         }
+#endif
         break;
     }
     tinfo->si_code = deposit32(si_code, 24, 8, si_type);
@@ -298,10 +301,12 @@ static void tswap_siginfo(target_siginfo_t *tinfo, const target_siginfo_t *info)
         /* Note: Not generated on FreeBSD */
         __put_user(info->_reason._poll._band, &tinfo->_reason._poll._band);
         break;
+#ifdef QEMU_SI_CAPSICUM
     case QEMU_SI_CAPSICUM:
         __put_user(info->_reason._capsicum._syscall,
                    &tinfo->_reason._capsicum._syscall);
         break;
+#endif
     default:
         g_assert_not_reached();
     }
@@ -322,7 +327,10 @@ int block_signals(void)
     /*
      * It's OK to block everything including SIGSEGV, because we won't run any
      * further guest code before unblocking signals in
-     * process_pending_signals().
+     * process_pending_signals(). We depend on the FreeBSD behaivor here where
+     * this will only affect this thread's signal mask. We don't use
+     * pthread_sigmask which might seem more correct because that routine also
+     * does odd things with SIGCANCEL to implement pthread_cancel().
      */
     sigfillset(&set);
     sigprocmask(SIG_SETMASK, &set, 0);
@@ -697,7 +705,6 @@ int do_sigaction(int sig, const struct target_sigaction *act,
         oact->sa_mask = k->sa_mask;
     }
     if (act) {
-        /* XXX: this is most likely not threadsafe. */
         k->_sa_handler = tswapal(act->_sa_handler);
         k->sa_flags = tswap32(act->sa_flags);
         k->sa_mask = act->sa_mask;
@@ -745,6 +752,7 @@ static inline abi_ulong get_sigframe(struct target_sigaction *ka,
         sp = ts->sigaltstack_used.ss_sp + ts->sigaltstack_used.ss_size;
     }
 
+/* TODO: make this a target_arch function / define */
 #if defined(TARGET_ARM)
     return (sp - frame_size) & ~7;
 #elif defined(TARGET_AARCH64)
@@ -811,11 +819,12 @@ static int reset_signal_mask(target_ucontext_t *ucontext)
     target_sigset_t target_set;
     TaskState *ts = (TaskState *)thread_cpu->opaque;
 
-    for (i = 0; i < TARGET_NSIG_WORDS; i++)
+    for (i = 0; i < TARGET_NSIG_WORDS; i++) {
         if (__get_user(target_set.__bits[i],
                     &ucontext->uc_sigmask.__bits[i])) {
             return -TARGET_EFAULT;
         }
+    }
     target_to_host_sigset_internal(&blocked, &target_set);
     ts->signal_mask = blocked;
 
@@ -1043,8 +1052,8 @@ void process_pending_signals(CPUArchState *env)
         }
 
         /*
-         * unblock signals and check one more time. Unblocking signals may cause
-         * us to take anothe rhost signal, which will set signal_pending again.
+         * Unblock signals and check one more time. Unblocking signals may cause
+         * us to take another host signal, which will set signal_pending again.
          */
         qatomic_set(&ts->signal_pending, 0);
         ts->in_sigsuspend = false;

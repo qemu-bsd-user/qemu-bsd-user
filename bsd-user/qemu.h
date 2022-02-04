@@ -89,6 +89,10 @@ typedef struct TaskState {
     struct image_info *info;
 
     struct emulated_sigtable sync_signal;
+    /*
+     * TODO: Since we block all signals while returning to the main CPU
+     * loop, this needn't be an array
+     */
     struct emulated_sigtable sigtab[TARGET_NSIG];
     /*
      * Nonzero if process_pending_signals() needs to do something (either
