@@ -580,28 +580,14 @@ target_arg64(uint64_t word0, uint64_t word1)
 }
 #endif /* TARGET_ABI_BITS != 32 */
 
-/* ARM EABI and MIPS expect 64bit types aligned even on pairs of registers */
-#ifdef TARGET_ARM
-static inline int
-regpairs_aligned(void *cpu_env) {
+/* ARM EABI and 32-bit powerpc have aligned even on pairs of registers */
+static inline int regpairs_aligned(void *cpu_env) {
+#if TARGET_ABI_BITS == 32 && !defined(TARGET_I386)
     return 1;
-}
-#elif defined(TARGET_MIPS) && TARGET_ABI_BITS == 32
-static inline int regpairs_aligned(void *cpu_env)
-{
-    return 1;
-}
-#elif defined(TARGET_PPC) && TARGET_ABI_BITS == 32
-static inline int regpairs_aligned(void *cpu_env)
-{
-    return 1;
-}
 #else
-static inline int regpairs_aligned(void *cpu_env)
-{
     return 0;
-}
 #endif
+}
 
 #include <pthread.h>
 
