@@ -130,7 +130,6 @@ abi_long get_errno(abi_long ret)
 {
 
     if (ret == -1) {
-        /* XXX need to translate host -> target errnos here */
         return -host_to_target_errno(errno);
     } else {
         return ret;
@@ -139,7 +138,11 @@ abi_long get_errno(abi_long ret)
 
 int host_to_target_errno(int err)
 {
-    /* XXX need to translate host errnos here */
+    /*
+     * All the BSDs have the property that the error numbers are uniform across
+     * all architectures for a given BSD, though they may vary between different
+     * BSDs.
+     */
     return err;
 }
 
@@ -259,7 +262,6 @@ void unlock_iovec(struct iovec *vec, abi_ulong target_addr,
 
     free(vec);
 }
-
 
 /* stub for arm semihosting support */
 abi_long do_brk(abi_ulong new_brk)
@@ -585,6 +587,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     case TARGET_FREEBSD_NR_readv: /* readv(2) */
         ret = do_bsd_readv(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_preadv: /* preadv(2) */
+        ret = do_bsd_preadv(arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_write: /* write(2) */

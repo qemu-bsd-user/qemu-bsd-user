@@ -150,6 +150,27 @@ static inline abi_long do_bsd_readv(abi_long arg1, abi_long arg2, abi_long arg3)
     return ret;
 }
 
+/* preadv(2) */
+static inline abi_long do_bsd_preadv(void *cpu_env, abi_long arg1,
+    abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
+{
+    abi_long ret;
+    struct iovec *vec = lock_iovec(VERIFY_WRITE, arg2, arg3, 1);
+
+    if (vec != NULL) {
+        if (regpairs_aligned(cpu_env) != 0) {
+            arg4 = arg5;
+            arg5 = arg6;
+        }
+        ret = get_errno(safe_preadv(arg1, vec, arg3, target_arg64(arg4, arg5)));
+        unlock_iovec(vec, arg2, arg3, 0);
+    } else {
+        ret = -host_to_target_errno(errno);
+    }
+
+    return ret;
+}
+
 /* write(2) */
 static inline abi_long do_bsd_write(abi_long arg1, abi_long arg2, abi_long arg3)
 {
