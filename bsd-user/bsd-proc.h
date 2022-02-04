@@ -1,7 +1,7 @@
 /*
  *  process related system call shims and definitions
  *
- *  Copyright (c) 2013-14 Stacey D. Son
+ *  Copyright (c) 2013-2014 Stacey D. Son
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __BSD_PROC_H_
-#define __BSD_PROC_H_
+#ifndef BSD_PROC_H_
+#define BSD_PROC_H_
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -473,4 +473,4 @@ static inline abi_long do_bsd_sched_get_priority_max(int policy)
 
 int bsd_get_ncpu(void);
 
-#endif /* !__BSD_PROC_H_ */
+#endif /* !BSD_PROC_H_ */
