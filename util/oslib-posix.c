@@ -36,6 +36,7 @@
 #include "trace.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
+#include "qemu/madvise.h"
 #include "qemu/sockets.h"
 #include "qemu/thread.h"
 #include <libgen.h>
@@ -683,6 +684,7 @@ void os_mem_prealloc(int fd, char *area, size_t memory, int smp_cpus,
 
         ret = sigaction(SIGBUS, &act, &sigbus_oldact);
         if (ret) {
+            qemu_mutex_unlock(&sigbus_mutex);
             error_setg_errno(errp, errno,
                 "os_mem_prealloc: failed to install signal handler");
             return;

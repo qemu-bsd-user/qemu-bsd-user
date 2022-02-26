@@ -20,6 +20,7 @@
 #include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "qemu.h"
+#include "qemu/timer.h"
 #include "user-internals.h"
 #include "cpu_loop-common.h"
 #include "signal-common.h"
@@ -52,14 +53,6 @@ uint32_t cpu_ppc_load_atbu(CPUPPCState *env)
 uint64_t cpu_ppc_load_vtb(CPUPPCState *env)
 {
     return cpu_ppc_get_tb(env);
-}
-
-uint32_t cpu_ppc601_load_rtcu(CPUPPCState *env)
-__attribute__ (( alias ("cpu_ppc_load_tbu") ));
-
-uint32_t cpu_ppc601_load_rtcl(CPUPPCState *env)
-{
-    return cpu_ppc_load_tbl(env) & 0x3FFFFF80;
 }
 
 /* XXX: to be fixed */
@@ -288,14 +281,6 @@ void cpu_loop(CPUPPCState *env)
         case POWERPC_EXCP_PIT:      /* Programmable interval timer IRQ       */
             cpu_abort(cs, "Programmable interval timer interrupt "
                       "while in user mode. Aborting\n");
-            break;
-        case POWERPC_EXCP_IO:       /* IO error exception                    */
-            cpu_abort(cs, "IO error exception while in user mode. "
-                      "Aborting\n");
-            break;
-        case POWERPC_EXCP_RUNM:     /* Run mode exception                    */
-            cpu_abort(cs, "Run mode exception while in user mode. "
-                      "Aborting\n");
             break;
         case POWERPC_EXCP_EMUL:     /* Emulation trap exception              */
             cpu_abort(cs, "Emulation trap exception not handled\n");
