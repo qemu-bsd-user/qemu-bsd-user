@@ -22,12 +22,7 @@
 
 #include <sys/types.h>
 #include <sys/mount.h>
-#include <sys/uio.h>
-#include <fcntl.h>
 #include <poll.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 
 #include "qemu/path.h"
 
