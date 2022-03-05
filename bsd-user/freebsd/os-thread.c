@@ -403,7 +403,7 @@ abi_long freebsd_umtx_nwake_private(abi_ulong target_array_addr, uint32_t num)
     tp = (abi_ulong *)g2h_untagged(target_array_addr);
     for (i = 0, count = num; i < num; i += BATCH_SIZE, count -= BATCH_SIZE) {
         for (j = i; j < i + MIN(BATCH_SIZE, count); j++) {
-            uaddrs[i % BATCH_SIZE] = (uintptr_t)g2h_untagged(tp[j]);
+            uaddrs[j % BATCH_SIZE] = (uintptr_t)g2h_untagged(tp[j]);
         }
 
         /*
