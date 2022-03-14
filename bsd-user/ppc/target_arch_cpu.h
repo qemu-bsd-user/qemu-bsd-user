@@ -348,14 +348,6 @@ static inline void target_cpu_loop(CPUPPCState *env)
             cpu_abort(cs, "Programmable interval timer interrupt "
                       "while in user mode. Aborting\n");
             break;
-        case POWERPC_EXCP_IO:       /* IO error exception                    */
-            cpu_abort(cs, "IO error exception while in user mode. "
-                      "Aborting\n");
-            break;
-        case POWERPC_EXCP_RUNM:     /* Run mode exception                    */
-            cpu_abort(cs, "Run mode exception while in user mode. "
-                      "Aborting\n");
-            break;
         case POWERPC_EXCP_EMUL:     /* Emulation trap exception              */
             cpu_abort(cs, "Emulation trap exception not handled\n");
             break;
