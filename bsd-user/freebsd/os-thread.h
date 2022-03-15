@@ -244,32 +244,6 @@ static inline abi_long do_freebsd_swapcontext(void *cpu_env, abi_ulong arg1,
 }
 
 
-/* undocumented _umtx_lock() */
-static inline abi_long do_freebsd__umtx_lock(abi_ulong target_addr)
-{
-    abi_long ret;
-    long tid;
-
-    ret = get_errno(thr_self(&tid));
-    if (is_error(ret)) {
-        return ret;
-    }
-    return freebsd_lock_umtx(target_addr, tid, 0, NULL);
-}
-
-/* undocumented _umtx_unlock() */
-static inline abi_long do_freebsd__umtx_unlock(abi_ulong target_addr)
-{
-    abi_long ret;
-    long tid;
-
-    ret = get_errno(thr_self(&tid));
-    if (is_error(ret)) {
-        return ret;
-    }
-    return freebsd_unlock_umtx(target_addr, tid);
-}
-
 #define safe_g2h_untagged(x) ((x) != 0 ? g2h_untagged(x) : NULL)
 
 /* undocumented _umtx_op(void *obj, int op, u_long val, void *uaddr,
@@ -286,40 +260,6 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
 #endif
 
     switch (op) {
-    case TARGET_UMTX_OP_LOCK:
-#ifdef _UMTX_OPTIMIZED
-        if (target_time != 0 && !access_ok(VERIFY_READ, target_time, uaddr))
-            return -TARGET_EFAULT;
-        ret = freebsd_lock_umtx(obj, 0, uaddr, safe_g2h_untagged(target_time));
-#else
-        ret = get_errno(thr_self(&tid));
-        if (is_error(ret)) {
-            return ret;
-        }
-
-        if (target_time != 0) {
-            ret = t2h_freebsd_umtx_time(target_time, uaddr, ut, &utsz);
-            if (is_error(ret))
-                return ret;
-            ret = freebsd_lock_umtx(obj, tid, utsz, &ut);
-        } else {
-            ret = freebsd_lock_umtx(obj, tid, 0, NULL);
-        }
-#endif
-        break;
-
-    case TARGET_UMTX_OP_UNLOCK:
-#ifdef _UMTX_OPTIMIZED
-        ret = freebsd_unlock_umtx(obj, 0);
-#else
-        ret = get_errno(thr_self(&tid));
-        if (is_error(ret)) {
-            return ret;
-        }
-        ret = freebsd_unlock_umtx(obj, tid);
-#endif
-        break;
-
     case TARGET_UMTX_OP_WAIT:
         /* args: obj *, val, (void *)sizeof(ut), ut * */
 #ifdef _UMTX_OPTIMIZED
