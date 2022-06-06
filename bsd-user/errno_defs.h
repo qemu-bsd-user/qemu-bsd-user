@@ -34,8 +34,8 @@
  *      @(#)errno.h     8.5 (Berkeley) 1/21/94
  */
 
-#ifndef _ERRNO_DEFS_H_
-#define _ERRNO_DEFS_H_
+#ifndef ERRNO_DEFS_H
+#define ERRNO_DEFS_H
 
 #define TARGET_EPERM            1               /* Operation not permitted */
 #define TARGET_ENOENT           2               /* No such file or directory */

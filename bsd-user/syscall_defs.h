@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _SYSCALL_DEFS_H_
-#define _SYSCALL_DEFS_H_
+#ifndef SYSCALL_DEFS_H
+#define SYSCALL_DEFS_H
 
 #include <sys/syscall.h>
 #include <sys/resource.h>
@@ -474,7 +474,7 @@ __target_cmsg_nxthdr(struct target_msghdr *__mhdr,
     return __ptr;
 }
 
-/*
+#endif /* SYSCALL_DEFS_H */
  * netinet/in.h
  */
 struct target_ip_mreq {
