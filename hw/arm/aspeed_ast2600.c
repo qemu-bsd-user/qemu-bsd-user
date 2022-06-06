@@ -11,7 +11,6 @@
 #include "qapi/error.h"
 #include "hw/misc/unimp.h"
 #include "hw/arm/aspeed_soc.h"
-#include "hw/char/serial.h"
 #include "qemu/module.h"
 #include "qemu/error-report.h"
 #include "hw/i2c/aspeed_i2c.h"
@@ -47,6 +46,8 @@ static const hwaddr aspeed_soc_ast2600_memmap[] = {
     [ASPEED_DEV_XDMA]      = 0x1E6E7000,
     [ASPEED_DEV_ADC]       = 0x1E6E9000,
     [ASPEED_DEV_DP]        = 0x1E6EB000,
+    [ASPEED_DEV_SBC]       = 0x1E6F2000,
+    [ASPEED_DEV_EMMC_BC]   = 0x1E6f5000,
     [ASPEED_DEV_VIDEO]     = 0x1E700000,
     [ASPEED_DEV_SDHCI]     = 0x1E740000,
     [ASPEED_DEV_EMMC]      = 0x1E750000,
@@ -59,7 +60,18 @@ static const hwaddr aspeed_soc_ast2600_memmap[] = {
     [ASPEED_DEV_IBT]       = 0x1E789140,
     [ASPEED_DEV_I2C]       = 0x1E78A000,
     [ASPEED_DEV_UART1]     = 0x1E783000,
+    [ASPEED_DEV_UART2]     = 0x1E78D000,
+    [ASPEED_DEV_UART3]     = 0x1E78E000,
+    [ASPEED_DEV_UART4]     = 0x1E78F000,
     [ASPEED_DEV_UART5]     = 0x1E784000,
+    [ASPEED_DEV_UART6]     = 0x1E790000,
+    [ASPEED_DEV_UART7]     = 0x1E790100,
+    [ASPEED_DEV_UART8]     = 0x1E790200,
+    [ASPEED_DEV_UART9]     = 0x1E790300,
+    [ASPEED_DEV_UART10]    = 0x1E790400,
+    [ASPEED_DEV_UART11]    = 0x1E790500,
+    [ASPEED_DEV_UART12]    = 0x1E790600,
+    [ASPEED_DEV_UART13]    = 0x1E790700,
     [ASPEED_DEV_VUART]     = 0x1E787000,
     [ASPEED_DEV_I3C]       = 0x1E7A0000,
     [ASPEED_DEV_SDRAM]     = 0x80000000,
@@ -76,6 +88,14 @@ static const int aspeed_soc_ast2600_irqmap[] = {
     [ASPEED_DEV_UART3]     = 49,
     [ASPEED_DEV_UART4]     = 50,
     [ASPEED_DEV_UART5]     = 8,
+    [ASPEED_DEV_UART6]     = 57,
+    [ASPEED_DEV_UART7]     = 58,
+    [ASPEED_DEV_UART8]     = 59,
+    [ASPEED_DEV_UART9]     = 60,
+    [ASPEED_DEV_UART10]    = 61,
+    [ASPEED_DEV_UART11]    = 62,
+    [ASPEED_DEV_UART12]    = 63,
+    [ASPEED_DEV_UART13]    = 64,
     [ASPEED_DEV_VUART]     = 8,
     [ASPEED_DEV_FMC]       = 39,
     [ASPEED_DEV_SDMC]      = 0,
@@ -112,11 +132,11 @@ static const int aspeed_soc_ast2600_irqmap[] = {
     [ASPEED_DEV_I3C]       = 102,   /* 102 -> 107 */
 };
 
-static qemu_irq aspeed_soc_get_irq(AspeedSoCState *s, int ctrl)
+static qemu_irq aspeed_soc_ast2600_get_irq(AspeedSoCState *s, int dev)
 {
     AspeedSoCClass *sc = ASPEED_SOC_GET_CLASS(s);
 
-    return qdev_get_gpio_in(DEVICE(&s->a7mpcore), sc->irqmap[ctrl]);
+    return qdev_get_gpio_in(DEVICE(&s->a7mpcore), sc->irqmap[dev]);
 }
 
 static void aspeed_soc_ast2600_init(Object *obj)
@@ -162,7 +182,6 @@ static void aspeed_soc_ast2600_init(Object *obj)
 
     snprintf(typename, sizeof(typename), "aspeed.fmc-%s", socname);
     object_initialize_child(obj, "fmc", &s->fmc, typename);
-    object_property_add_alias(obj, "num-cs", OBJECT(&s->fmc), "num-cs");
 
     for (i = 0; i < sc->spis_num; i++) {
         snprintf(typename, sizeof(typename), "aspeed.spi%d-%s", i + 1, socname);
@@ -227,6 +246,8 @@ static void aspeed_soc_ast2600_init(Object *obj)
     object_initialize_child(obj, "hace", &s->hace, typename);
 
     object_initialize_child(obj, "i3c", &s->i3c, TYPE_ASPEED_I3C);
+
+    object_initialize_child(obj, "sbc", &s->sbc, TYPE_ASPEED_SBC);
 }
 
 /*
@@ -253,6 +274,11 @@ static void aspeed_soc_ast2600_realize(DeviceState *dev, Error **errp)
 
     /* Video engine stub */
     create_unimplemented_device("aspeed.video", sc->memmap[ASPEED_DEV_VIDEO],
+                                0x1000);
+
+    /* eMMC Boot Controller stub */
+    create_unimplemented_device("aspeed.emmc-boot-controller",
+                                sc->memmap[ASPEED_DEV_EMMC_BC],
                                 0x1000);
 
     /* CPU */
@@ -345,10 +371,8 @@ static void aspeed_soc_ast2600_realize(DeviceState *dev, Error **errp)
     sysbus_connect_irq(SYS_BUS_DEVICE(&s->adc), 0,
                        aspeed_soc_get_irq(s, ASPEED_DEV_ADC));
 
-    /* UART - attach an 8250 to the IO space as our UART */
-    serial_mm_init(get_system_memory(), sc->memmap[s->uart_default], 2,
-                   aspeed_soc_get_irq(s, s->uart_default), 38400,
-                   serial_hd(0), DEVICE_LITTLE_ENDIAN);
+    /* UART */
+    aspeed_soc_uart_init(s);
 
     /* I2C */
     object_property_set_link(OBJECT(&s->i2c), "dram", OBJECT(s->dram_mr),
@@ -380,7 +404,6 @@ static void aspeed_soc_ast2600_realize(DeviceState *dev, Error **errp)
     for (i = 0; i < sc->spis_num; i++) {
         object_property_set_link(OBJECT(&s->spi[i]), "dram",
                                  OBJECT(s->dram_mr), &error_abort);
-        object_property_set_int(OBJECT(&s->spi[i]), "num-cs", 1, &error_abort);
         if (!sysbus_realize(SYS_BUS_DEVICE(&s->spi[i]), errp)) {
             return;
         }
@@ -539,6 +562,12 @@ static void aspeed_soc_ast2600_realize(DeviceState *dev, Error **errp)
         /* The AST2600 I3C controller has one IRQ per bus. */
         sysbus_connect_irq(SYS_BUS_DEVICE(&s->i3c.devices[i]), 0, irq);
     }
+
+    /* Secure Boot Controller */
+    if (!sysbus_realize(SYS_BUS_DEVICE(&s->sbc), errp)) {
+        return;
+    }
+    sysbus_mmio_map(SYS_BUS_DEVICE(&s->sbc), 0, sc->memmap[ASPEED_DEV_SBC]);
 }
 
 static void aspeed_soc_ast2600_class_init(ObjectClass *oc, void *data)
@@ -556,9 +585,11 @@ static void aspeed_soc_ast2600_class_init(ObjectClass *oc, void *data)
     sc->ehcis_num    = 2;
     sc->wdts_num     = 4;
     sc->macs_num     = 4;
+    sc->uarts_num    = 13;
     sc->irqmap       = aspeed_soc_ast2600_irqmap;
     sc->memmap       = aspeed_soc_ast2600_memmap;
     sc->num_cpus     = 2;
+    sc->get_irq      = aspeed_soc_ast2600_get_irq;
 }
 
 static const TypeInfo aspeed_soc_ast2600_type_info = {

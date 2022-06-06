@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __BSD_FILE_H_
-#define __BSD_FILE_H_
+#ifndef BSD_FILE_H
+#define BSD_FILE_H
 
 #include <sys/types.h>
 #include <sys/mount.h>
@@ -1066,7 +1066,7 @@ static inline abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
         ret = get_errno(res);
         set_second_rval(cpu_env, 0xFFFFFFFF);
     } else {
-#ifdef TARGET_WORDS_BIGENDIAN
+#ifdef TARGET_BIG_ENDIAN
         ret = ((res >> 32) & 0xFFFFFFFF);
         set_second_rval(cpu_env, res & 0xFFFFFFFF);
 #else
@@ -1148,4 +1148,4 @@ static inline abi_long do_bsd_swapoff(abi_long arg1, abi_long arg2)
     return ret;
 }
 
-#endif /* !__BSD_FILE_H_ */
+#endif /* BSD_FILE_H */

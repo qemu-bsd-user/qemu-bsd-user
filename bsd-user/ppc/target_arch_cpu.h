@@ -22,7 +22,7 @@
 #include "target_arch.h"
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-#if defined(TARGET_WORDS_BIGENDIAN)
+#if defined(TARGET_BIG_ENDIAN)
 #define TARGET_DEFAULT_CPU_MODEL "ppc64"
 #else
 /* LE is restricted to POWER8 and up. */

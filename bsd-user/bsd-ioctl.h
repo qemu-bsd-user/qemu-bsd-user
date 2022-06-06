@@ -17,11 +17,10 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __BSD_IOCTL_H_
-#define __BSD_IOCTL_H_
+#ifndef BSD_IOCTL_H
+#define BSD_IOCTL_H
 
 abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg);
 void init_bsd_ioctl(void);
 
-#endif /* !__BSD_IOCTL_H_ */
-
+#endif /* BSD_IOCTL_H */

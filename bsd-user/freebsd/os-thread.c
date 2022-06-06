@@ -33,7 +33,6 @@
 #include <time.h>
 
 #include "qemu.h"
-#include "qemu-common.h"
 #include "qemu-os.h"
 #include "signal-common.h"
 #include "target_arch_cpu.h"

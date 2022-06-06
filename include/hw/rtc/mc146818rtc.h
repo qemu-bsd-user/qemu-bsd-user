@@ -25,6 +25,7 @@ struct RTCState {
     MemoryRegion coalesced_io;
     uint8_t cmos_data[128];
     uint8_t cmos_index;
+    uint8_t isairq;
     int32_t base_year;
     uint64_t base_rtc;
     uint64_t last_update;
@@ -55,4 +56,4 @@ ISADevice *mc146818_rtc_init(ISABus *bus, int base_year,
 void rtc_set_memory(ISADevice *dev, int addr, int val);
 int rtc_get_memory(ISADevice *dev, int addr);
 
-#endif /* MC146818RTC_H */
+#endif /* HW_RTC_MC146818RTC_H */

@@ -17,8 +17,8 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TARGET_ARM_VEC_INTERNALS_H
-#define TARGET_ARM_VEC_INTERNALS_H
+#ifndef TARGET_ARM_VEC_INTERNAL_H
+#define TARGET_ARM_VEC_INTERNAL_H
 
 /*
  * Note that vector data is stored in host-endian 64-bit chunks,
@@ -29,7 +29,7 @@
  * The H1_<N> macros are used when performing byte arithmetic and then
  * casting the final pointer to a type of size N.
  */
-#ifdef HOST_WORDS_BIGENDIAN
+#if HOST_BIG_ENDIAN
 #define H1(x)   ((x) ^ 7)
 #define H1_2(x) ((x) ^ 6)
 #define H1_4(x) ((x) ^ 4)
@@ -217,4 +217,4 @@ uint64_t pmull_h(uint64_t op1, uint64_t op2);
  */
 uint64_t pmull_w(uint64_t op1, uint64_t op2);
 
-#endif /* TARGET_ARM_VEC_INTERNALS_H */
+#endif /* TARGET_ARM_VEC_INTERNAL_H */

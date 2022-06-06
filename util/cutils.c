@@ -26,10 +26,15 @@
 #include "qemu/host-utils.h"
 #include <math.h>
 
-#include "qemu-common.h"
-#include "qemu/sockets.h"
-#include "qemu/iov.h"
-#include "net/net.h"
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+#include <sys/user.h>
+#endif
+
+#ifdef __NetBSD__
+#include <sys/sysctl.h>
+#endif
+
 #include "qemu/ctype.h"
 #include "qemu/cutils.h"
 #include "qemu/error-report.h"
@@ -147,77 +152,6 @@ time_t mktimegm(struct tm *tm)
     t += 3600 * tm->tm_hour + 60 * tm->tm_min + tm->tm_sec;
     return t;
 }
-
-/*
- * Make sure data goes on disk, but if possible do not bother to
- * write out the inode just for timestamp updates.
- *
- * Unfortunately even in 2009 many operating systems do not support
- * fdatasync and have to fall back to fsync.
- */
-int qemu_fdatasync(int fd)
-{
-#ifdef CONFIG_FDATASYNC
-    return fdatasync(fd);
-#else
-    return fsync(fd);
-#endif
-}
-
-/**
- * Sync changes made to the memory mapped file back to the backing
- * storage. For POSIX compliant systems this will fallback
- * to regular msync call. Otherwise it will trigger whole file sync
- * (including the metadata case there is no support to skip that otherwise)
- *
- * @addr   - start of the memory area to be synced
- * @length - length of the are to be synced
- * @fd     - file descriptor for the file to be synced
- *           (mandatory only for POSIX non-compliant systems)
- */
-int qemu_msync(void *addr, size_t length, int fd)
-{
-#ifdef CONFIG_POSIX
-    size_t align_mask = ~(qemu_real_host_page_size - 1);
-
-    /**
-     * There are no strict reqs as per the length of mapping
-     * to be synced. Still the length needs to follow the address
-     * alignment changes. Additionally - round the size to the multiple
-     * of PAGE_SIZE
-     */
-    length += ((uintptr_t)addr & (qemu_real_host_page_size - 1));
-    length = (length + ~align_mask) & align_mask;
-
-    addr = (void *)((uintptr_t)addr & align_mask);
-
-    return msync(addr, length, MS_SYNC);
-#else /* CONFIG_POSIX */
-    /**
-     * Perform the sync based on the file descriptor
-     * The sync range will most probably be wider than the one
-     * requested - but it will still get the job done
-     */
-    return qemu_fdatasync(fd);
-#endif /* CONFIG_POSIX */
-}
-
-#ifndef _WIN32
-/* Sets a specific flag */
-int fcntl_setfl(int fd, int flag)
-{
-    int flags;
-
-    flags = fcntl(fd, F_GETFL);
-    if (flags == -1)
-        return -errno;
-
-    if (fcntl(fd, F_SETFL, flags | flag) == -1)
-        return -errno;
-
-    return 0;
-}
-#endif
 
 static int64_t suffix_mul(char suffix, int64_t unit)
 {
@@ -939,19 +873,6 @@ int parse_debug_env(const char *name, int max, int initial)
 }
 
 /*
- * Helper to print ethernet mac address
- */
-const char *qemu_ether_ntoa(const MACAddr *mac)
-{
-    static char ret[18];
-
-    snprintf(ret, sizeof(ret), "%02x:%02x:%02x:%02x:%02x:%02x",
-             mac->a[0], mac->a[1], mac->a[2], mac->a[3], mac->a[4], mac->a[5]);
-
-    return ret;
-}
-
-/*
  * Return human readable string for size @val.
  * @val can be anything that uint64_t allows (no more than "16 EiB").
  * Use IEC binary units like KiB, MiB, and so forth.
@@ -1017,6 +938,114 @@ static inline const char *next_component(const char *dir, int *p_len)
     }
     *p_len = len;
     return dir;
+}
+
+static const char *exec_dir;
+
+void qemu_init_exec_dir(const char *argv0)
+{
+#ifdef G_OS_WIN32
+    char *p;
+    char buf[MAX_PATH];
+    DWORD len;
+
+    if (exec_dir) {
+        return;
+    }
+
+    len = GetModuleFileName(NULL, buf, sizeof(buf) - 1);
+    if (len == 0) {
+        return;
+    }
+
+    buf[len] = 0;
+    p = buf + len - 1;
+    while (p != buf && *p != '\\') {
+        p--;
+    }
+    *p = 0;
+    if (access(buf, R_OK) == 0) {
+        exec_dir = g_strdup(buf);
+    } else {
+        exec_dir = CONFIG_BINDIR;
+    }
+#else
+    char *p = NULL;
+    char buf[PATH_MAX];
+
+    if (exec_dir) {
+        return;
+    }
+
+#if defined(__linux__)
+    {
+        int len;
+        len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (len > 0) {
+            buf[len] = 0;
+            p = buf;
+        }
+    }
+#elif defined(__FreeBSD__) \
+      || (defined(__NetBSD__) && defined(KERN_PROC_PATHNAME))
+    {
+#if defined(__FreeBSD__)
+        static int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+#else
+        static int mib[4] = {CTL_KERN, KERN_PROC_ARGS, -1, KERN_PROC_PATHNAME};
+#endif
+        size_t len = sizeof(buf) - 1;
+
+        *buf = '\0';
+        if (!sysctl(mib, ARRAY_SIZE(mib), buf, &len, NULL, 0) &&
+            *buf) {
+            buf[sizeof(buf) - 1] = '\0';
+            p = buf;
+        }
+    }
+#elif defined(__APPLE__)
+    {
+        char fpath[PATH_MAX];
+        uint32_t len = sizeof(fpath);
+        if (_NSGetExecutablePath(fpath, &len) == 0) {
+            p = realpath(fpath, buf);
+            if (!p) {
+                return;
+            }
+        }
+    }
+#elif defined(__HAIKU__)
+    {
+        image_info ii;
+        int32_t c = 0;
+
+        *buf = '\0';
+        while (get_next_image_info(0, &c, &ii) == B_OK) {
+            if (ii.type == B_APP_IMAGE) {
+                strncpy(buf, ii.name, sizeof(buf));
+                buf[sizeof(buf) - 1] = 0;
+                p = buf;
+                break;
+            }
+        }
+    }
+#endif
+    /* If we don't have any way of figuring out the actual executable
+       location then try argv[0].  */
+    if (!p && argv0) {
+        p = realpath(argv0, buf);
+    }
+    if (p) {
+        exec_dir = g_path_get_dirname(p);
+    } else {
+        exec_dir = CONFIG_BINDIR;
+    }
+#endif
+}
+
+const char *qemu_get_exec_dir(void)
+{
+    return exec_dir;
 }
 
 char *get_relocated_path(const char *dir)

@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __FREEBSD_OS_SIGNAL_H_
-#define __FREEBSD_OS_SIGNAL_H_
+#ifndef FREEBSD_OS_SIGNAL_H
+#define FREEBSD_OS_SIGNAL_H
 
 #include <sys/procdesc.h>
 
@@ -29,4 +29,4 @@ static inline abi_long do_freebsd_pdkill(abi_long arg1, abi_long arg2)
     return get_errno(pdkill(arg1, arg2));
 }
 
-#endif /* ! __FREEBSD_OS_SIGNAL_H_ */
+#endif /* FREEBSD_OS_SIGNAL_H */

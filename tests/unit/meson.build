@@ -77,7 +77,9 @@ if have_block
     'test-crypto-hash': [crypto],
     'test-crypto-hmac': [crypto],
     'test-crypto-cipher': [crypto],
+    'test-crypto-akcipher': [crypto],
     'test-crypto-secret': [crypto, keyutils],
+    'test-crypto-der': [crypto],
     'test-authz-simple': [authz],
     'test-authz-list': [authz],
     'test-authz-listfile': [authz],
@@ -148,13 +150,13 @@ if have_system
     endif
 
     tests += {
-      'test-qdev-global-props': [qom, hwcore, testqapi]
+      'test-qdev-global-props': [qom, hwcore]
     }
   endif
 endif
 
-if have_ga and targetos == 'linux' and 'CONFIG_TSAN' not in config_host
-  tests += {'test-qga': ['../qtest/libqtest.c']}
+if have_ga and targetos == 'linux'
+  tests += {'test-qga': ['../qtest/libqmp.c']}
   test_deps += {'test-qga': qga}
 endif
 

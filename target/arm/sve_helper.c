@@ -2802,7 +2802,7 @@ static void swap_memmove(void *vd, void *vs, size_t n)
     uintptr_t o = (d | s | n) & 7;
     size_t i;
 
-#ifndef HOST_WORDS_BIGENDIAN
+#if !HOST_BIG_ENDIAN
     o = 0;
 #endif
     switch (o) {
@@ -2864,7 +2864,7 @@ static void swap_memzero(void *vd, size_t n)
         return;
     }
 
-#ifndef HOST_WORDS_BIGENDIAN
+#if !HOST_BIG_ENDIAN
     o = 0;
 #endif
     switch (o) {
@@ -3382,6 +3382,7 @@ void HELPER(sve_punpk_p)(void *vd, void *vn, uint32_t pred_desc)
 void HELPER(NAME)(void *vd, void *vn, void *vm, uint32_t desc)       \
 {                                                                    \
     intptr_t oprsz = simd_oprsz(desc);                               \
+    intptr_t odd_ofs = simd_data(desc);                              \
     intptr_t i, oprsz_2 = oprsz / 2;                                 \
     ARMVectorReg tmp_n, tmp_m;                                       \
     /* We produce output faster than we consume input.               \
@@ -3393,8 +3394,9 @@ void HELPER(NAME)(void *vd, void *vn, void *vm, uint32_t desc)       \
         vm = memcpy(&tmp_m, vm, oprsz_2);                            \
     }                                                                \
     for (i = 0; i < oprsz_2; i += sizeof(TYPE)) {                    \
-        *(TYPE *)(vd + H(2 * i + 0)) = *(TYPE *)(vn + H(i));         \
-        *(TYPE *)(vd + H(2 * i + sizeof(TYPE))) = *(TYPE *)(vm + H(i)); \
+        *(TYPE *)(vd + H(2 * i + 0)) = *(TYPE *)(vn + odd_ofs + H(i)); \
+        *(TYPE *)(vd + H(2 * i + sizeof(TYPE))) =                    \
+            *(TYPE *)(vm + odd_ofs + H(i));                          \
     }                                                                \
     if (sizeof(TYPE) == 16 && unlikely(oprsz & 16)) {                \
         memset(vd + oprsz - 16, 0, 16);                              \
@@ -6734,7 +6736,11 @@ void sve_ld1_z(CPUARMState *env, void *vd, uint64_t *vg, void *vm,
                     if (mtedesc && arm_tlb_mte_tagged(&info.attrs)) {
                         mte_check(env, mtedesc, addr, retaddr);
                     }
-                    host_fn(&scratch, reg_off, info.host);
+                    if (unlikely(info.flags & TLB_MMIO)) {
+                        tlb_fn(env, &scratch, reg_off, addr, retaddr);
+                    } else {
+                        host_fn(&scratch, reg_off, info.host);
+                    }
                 } else {
                     /* Element crosses the page boundary. */
                     sve_probe_page(&info2, false, env, addr + in_page, 0,
@@ -7112,7 +7118,9 @@ void sve_st1_z(CPUARMState *env, void *vd, uint64_t *vg, void *vm,
                 if (likely(in_page >= msize)) {
                     sve_probe_page(&info, false, env, addr, 0, MMU_DATA_STORE,
                                    mmu_idx, retaddr);
-                    host[i] = info.host;
+                    if (!(info.flags & TLB_MMIO)) {
+                        host[i] = info.host;
+                    }
                 } else {
                     /*
                      * Element crosses the page boundary.

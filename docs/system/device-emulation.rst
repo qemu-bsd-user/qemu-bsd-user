@@ -83,6 +83,8 @@ Emulated Devices
    :maxdepth: 1
 
    devices/can.rst
+   devices/ccid.rst
+   devices/cxl.rst
    devices/ivshmem.rst
    devices/net.rst
    devices/nvme.rst

@@ -53,7 +53,6 @@
 #include <stdio.h>
 
 #include "qemu.h"
-#include "qemu-common.h"
 
 #include "bsd-ioctl.h"
 #include "os-ioctl-cryptodev.h"

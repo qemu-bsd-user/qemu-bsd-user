@@ -17,12 +17,12 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_H_
-#define _TARGET_ARCH_H_
+#ifndef TARGET_ARCH_H
+#define TARGET_ARCH_H
 
 #include "qemu.h"
 
 /* target_arch_cpu.c */
 extern bool bsd_ppc_is_elfv1(CPUPPCState *env);
 
-#endif /* !_TARGET_ARCH_H_ */
+#endif /* TARGET_ARCH_H */

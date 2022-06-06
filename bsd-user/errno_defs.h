@@ -157,4 +157,4 @@
 //_Static_assert(TARGET_ERESTART == QEMU_ERESTARTSYS,
 //               "TARGET_ERESTART and QEMU_ERESTARTSYS expected to match");
 
-#endif /* !  _ERRNO_DEFS_H_ */
+#endif /* ERRNO_DEFS_H */

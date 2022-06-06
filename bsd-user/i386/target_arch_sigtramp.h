@@ -48,4 +48,4 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
 
     return memcpy_to_target(offset, sigtramp_code, sizeof(sigtramp_code));
 }
-#endif /* _TARGET_ARCH_SIGTRAMP_H_ */
+#endif /* TARGET_ARCH_SIGTRAMP_H */

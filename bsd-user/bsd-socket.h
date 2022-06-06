@@ -245,7 +245,7 @@ static inline abi_long do_bsd_recvfrom(int fd, abi_ulong msg, size_t len,
                     &addrlen));
     } else {
         saddr = NULL; /* To keep compiler quiet.  */
-        ret = get_errno(qemu_recv(fd, host_msg, len, flags));
+        ret = get_errno(recv(fd, host_msg, len, flags));
     }
     if (!is_error(ret)) {
         if (target_addr) {

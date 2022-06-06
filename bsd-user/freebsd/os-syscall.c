@@ -36,7 +36,6 @@
 #include <utime.h>
 
 #include "qemu.h"
-#include "qemu-common.h"
 #include "signal-common.h"
 #include "user/syscall-trace.h"
 
@@ -128,7 +127,6 @@ int g_posix_timers[32] = { 0, } ;
  */
 abi_long get_errno(abi_long ret)
 {
-
     if (ret == -1) {
         return -host_to_target_errno(errno);
     } else {
@@ -148,7 +146,6 @@ int host_to_target_errno(int err)
 
 bool is_error(abi_long ret)
 {
-
     return (abi_ulong)ret >= (abi_ulong)(-4096);
 }
 
@@ -1902,6 +1899,5 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
 void syscall_init(void)
 {
-
     init_bsd_ioctl();
 }
