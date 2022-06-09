@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __FREEBSD_PROC_H_
-#define __FREEBSD_PROC_H_
+#ifndef BSD_USER_FREEBSD_OS_PROC_H
+#define BSD_USER_FREEBSD_OS_PROC_H
 
 #include <sys/param.h>
 #include <sys/procctl.h>
@@ -482,4 +482,4 @@ static inline abi_long do_freebsd_auditctl(abi_ulong arg1)
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __FREEBSD_PROC_H_ */
+#endif /* BSD_USER_FREEBSD_OS_PROC_H */

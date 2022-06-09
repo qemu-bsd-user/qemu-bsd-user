@@ -1,5 +1,5 @@
-#ifndef __NETBSD_OS_TIME_H_
-#define __NETBSD_OS_TIME_H_
+#ifndef NETBSD_OS_TIME_H
+#define NETBSD_OS_TIME_H
 
 /*
  * XXX To support FreeBSD binaries on NetBSD these syscalls will need to
@@ -176,4 +176,4 @@ static inline abi_long do_freebsd_sigtimedwait(abi_ulong arg1, abi_ulong arg2,
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __NETBSD_OS_TIME_H_ */
+#endif /* NETBSD_OS_TIME_H */

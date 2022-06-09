@@ -1,5 +1,5 @@
-#ifndef _IOCTL_IOCCOM_H_
-#define _IOCTL_IOCCOM_H_
+#ifndef BSD_USER_NETBSD_OS_IOCTL_IOCCOM_H
+#define BSD_USER_NETBSD_OS_IOCTL_IOCCOM_H
 
 /* XXX needs to be fixed for NetBSD dependencies */
 
@@ -35,4 +35,4 @@
 /* this should be _IORW, but stdio got there first */
 #define TARGET_IOWR(g, n, t)  TARGET_IOC(IOC_INOUT,   (g), (n), sizeof(t))
 
-#endif /* !_IOCTL_IOCCOM_H_ */
+#endif /* BSD_USER_NETBSD_OS_IOCTL_IOCCOM_H */

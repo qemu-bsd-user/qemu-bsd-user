@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __FREEBSD_STAT_H_
-#define __FREEBSD_STAT_H_
+#ifndef BSD_USER_FREEBSD_OS_STAT_H
+#define BSD_USER_FREEBSD_OS_STAT_H
 
 #define _WANT_FREEBSD11_STAT
 #define _WANT_FREEBSD11_STATFS
@@ -710,4 +710,4 @@ static inline abi_long do_freebsd_realpathat(abi_long arg1, abi_long arg2,
 }
 #endif
 
-#endif /* ! __FREEBSD_STAT_H_ */
+#endif /* BSD_USER_FREEBSD_OS_STAT_H */

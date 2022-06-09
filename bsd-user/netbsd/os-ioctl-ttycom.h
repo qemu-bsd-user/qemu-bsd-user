@@ -1,5 +1,5 @@
-#ifndef _IOCTL_TTYCOM_H_
-#define _IOCTL_TTYCOM_H_
+#ifndef BSD_USER_NETBSD_OS_IOCTL_TTYCOM_H
+#define BSD_USER_NETBSD_OS_IOCTL_TTYCOM_H
 
 /* XXX Needs to be fixed for NetBSD dependencies */
 
@@ -237,4 +237,4 @@ struct target_winsize {
 #define TARGET_H4DISC       7       /* Netgraph Bluetooth H4
                            discipline */
 
-#endif /*! _IOCTL_TTYCOM_H_ */
+#endif /* BSD_USER_NETBSD_OS_IOCTL_TTYCOM_H */

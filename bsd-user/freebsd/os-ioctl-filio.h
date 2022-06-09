@@ -16,8 +16,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _IOCTL_FILIO_H_
-#define _IOCTL_FILIO_H_
+
+#ifndef BSD_USER_FREEBSD_OS_IOCTL_FILIO_H
+#define BSD_USER_FREEBSD_OS_IOCTL_FILIO_H
 
 /* see sys/filio.h */
 #define TARGET_FIOCLEX      TARGET_IO('f', 1)
@@ -42,4 +43,4 @@ struct target_fiodgname_arg {
 #define TARGET_FIOSEEKDATA  TARGET_IOWR('f', 97, off_t)
 #define TARGET_FIOSEEKHOLE  TARGET_IOWR('f', 98, off_t)
 
-#endif /* !_IOCTL_FILIO_H_ */
+#endif /* BSD_USER_FREEBSD_OS_IOCTL_FILIO_H */

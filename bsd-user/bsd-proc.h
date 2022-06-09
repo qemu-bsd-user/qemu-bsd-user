@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BSD_PROC_H_
-#define BSD_PROC_H_
+#ifndef BSD_PROC_H
+#define BSD_PROC_H
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -473,4 +473,4 @@ static inline abi_long do_bsd_sched_get_priority_max(int policy)
 
 int bsd_get_ncpu(void);
 
-#endif /* !BSD_PROC_H_ */
+#endif /* BSD_PROC_H */

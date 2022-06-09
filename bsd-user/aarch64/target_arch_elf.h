@@ -16,8 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _TARGET_ARCH_ELF_H_
-#define _TARGET_ARCH_ELF_H_
+
+#ifndef TARGET_ARCH_ELF_H
+#define TARGET_ARCH_ELF_H
 
 #define ELF_START_MMAP 0x80000000
 #define ELF_ET_DYN_LOAD_ADDR    0x100000
@@ -159,4 +160,4 @@ static uint32_t get_elf_hwcap2(void)
 
 #undef GET_FEATURE_ID
 
-#endif /* _TARGET_ARCH_ELF_H_ */
+#endif /* TARGET_ARCH_ELF_H */

@@ -17,8 +17,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _IOCTL_IN6_VAR_H_
-#define _IOCTL_IN6_VAR_H_
+
+#ifndef BSD_USER_FREEBSD_OS_IOCTL_IN6_VAR_H
+#define BSD_USER_FREEBSD_OS_IOCTL_IN6_VAR_H
 
 /* see netinet6/in6_var.h */
 
@@ -226,4 +227,4 @@ struct  target_in6_ndifreq {
 #define	TARGET_SIOCDADDRCTL_POLICY	TARGET_IOW('u', 109, struct target_in6_addrpolicy)
 */
 
-#endif /* !_IOCTL_IN6_VAR_H_ */
+#endif /* BSD_USER_FREEBSD_OS_IOCTL_IN6_VAR_H */

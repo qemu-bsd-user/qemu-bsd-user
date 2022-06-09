@@ -1,5 +1,5 @@
-#ifndef _IOCTL_FILIO_H_
-#define _IOCTL_FILIO_H_
+#ifndef BSD_USER_OPENBSD_OS_IOCTL_FILIO_H
+#define BSD_USER_OPENBSD_OS_IOCTL_FILIO_H
 
 /* XXX needs to be fixed for OpenBSD dependencies */
 
@@ -26,4 +26,4 @@ struct target_fiodgname_arg {
 #define TARGET_FIOSEEKDATA  TARGET_IOWR('f', 97, off_t)
 #define TARGET_FIOSEEKHOLE  TARGET_IOWR('f', 98, off_t)
 
-#endif /* !_IOCTL_FILIO_H_ */
+#endif /* BSD_USER_OPENBSD_OS_IOCTL_FILIO_H */

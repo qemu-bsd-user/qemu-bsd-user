@@ -17,8 +17,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _OS_IOCTL_SOCKIO_H_
-#define _OS_IOCTL_SOCKIO_H_
+
+#ifndef OS_IOCTL_SOCKIO_H
+#define OS_IOCTL_SOCKIO_H
 
 /* See sys/sockio.h */
 #define TARGET_SIOCSHIWAT       TARGET_IOW('s',  0, int32_t)
@@ -249,4 +250,4 @@ struct target_lagg_reqopts {
 };
 #define TARGET_SIOCGLAGGOPTS TARGET_IOWR('i', 152, struct target_lagg_reqopts)
 
-#endif /* _OS_IOCTL_SOCKIO_H_ */
+#endif /* OS_IOCTL_SOCKIO_H */

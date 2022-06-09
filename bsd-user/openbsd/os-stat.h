@@ -15,8 +15,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __OPENBSD_STAT_H_
-#define __OPENBSD_STAT_H_
+#ifndef BSD_USER_OPENBSD_OS_STAT_H
+#define BSD_USER_OPENBSD_OS_STAT_H
 
 /*
  * XXX To support FreeBSD binaries on OpenBSD these syscalls will need
@@ -173,4 +173,4 @@ static inline abi_long do_freebsd_fcntl(abi_long arg1, abi_long arg2,
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __OPENBSD_STAT_H_ */
+#endif /* BSD_USER_OPENBSD_OS_STAT_H */

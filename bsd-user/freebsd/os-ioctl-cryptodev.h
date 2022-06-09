@@ -16,8 +16,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _IOCTL_CRYPTODEV_H_
-#define _IOCTL_CRYPTODEV_H_
+
+#ifndef BSD_USER_FREEBSD_OS_IOCTL_CRYPTODEV_H
+#define BSD_USER_FREEBSD_OS_IOCTL_CRYPTODEV_H
 
 /* see opencrypto/cryptodev.h */
 
@@ -82,4 +83,4 @@ struct target_crypt_kop {
 #define	TARGET_CIOCKEY2		TARGET_IOWR('c', 107, struct target_crypt_kop)
 #define	TARGET_CIOCFINDDEV	TARGET_IOWR('c', 108, struct target_crypt_find_op)
 
-#endif /* !_IOCTL_CRYPTODEV_H_ */
+#endif /* BSD_USER_FREEBSD_OS_IOCTL_CRYPTODEV_H */

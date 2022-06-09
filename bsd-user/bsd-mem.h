@@ -46,8 +46,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _BSD_MMAN_H_
-#define _BSD_MMAN_H_
+#ifndef BSD_USER_BSD_MEM_H
+#define BSD_USER_BSD_MEM_H
 
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -438,4 +438,4 @@ static inline abi_long do_bsd_sstk(void)
     return -TARGET_ENOSYS;
 }
 
-#endif /* !_BSD_MMAN_H_ */
+#endif /* BSD_USER_BSD_MEM_H */

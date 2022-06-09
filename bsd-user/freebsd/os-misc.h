@@ -16,8 +16,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __OS_MISC_H_
-#define __OS_MISC_H_
+
+#ifndef OS_MISC_H
+#define OS_MISC_H
 
 #include <sys/cpuset.h>
 #include <sys/random.h>
@@ -664,4 +665,4 @@ static inline abi_long do_freebsd_getrandom(abi_ulong buf, abi_ulong buflen,
 }
 #endif
 
-#endif /* ! __OS_MISC_H_ */
+#endif /* OS_MISC_H */

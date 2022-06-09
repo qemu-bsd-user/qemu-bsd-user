@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __BSD_SIGNAL_H_
-#define __BSD_SIGNAL_H_
+#ifndef BSD_SIGNAL_H
+#define BSD_SIGNAL_H
 
 #include <signal.h>
 
@@ -261,4 +261,4 @@ static inline abi_long do_bsd_killpg(abi_long pg, abi_long sig)
     return get_errno(killpg(pg, target_to_host_signal(sig)));
 }
 
-#endif /* !  __BSD_SIGNAL_H_ */
+#endif /* BSD_SIGNAL_H */

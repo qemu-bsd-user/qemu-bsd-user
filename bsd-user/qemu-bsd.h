@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _QEMU_BSD_H_
-#define _QEMU_BSD_H_
+#ifndef QEMU_BSD_H
+#define QEMU_BSD_H
 
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -80,4 +80,4 @@ abi_long target_to_host_msqid_ds(struct msqid_ds *host_md,
 abi_long host_to_target_msqid_ds(abi_ulong target_addr,
         struct msqid_ds *host_md);
 
-#endif /* !_QEMU_BSD_H_ */
+#endif /* QEMU_BSD_H */

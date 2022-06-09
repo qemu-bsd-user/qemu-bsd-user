@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_THREAD_H_
-#define _TARGET_ARCH_THREAD_H_
+#ifndef TARGET_ARCH_THREAD_H
+#define TARGET_ARCH_THREAD_H
 
 /* Compare with cpu_set_upcall() in riscv/riscv/vm_machdep.c */
 static inline void target_thread_set_upcall(CPURISCVState *regs,
@@ -44,4 +44,4 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     regs->regs[xSP] = infop->start_stack & ~(16 - 1);
 }
 
-#endif /* !_TARGET_ARCH_THREAD_H_ */
+#endif /* TARGET_ARCH_THREAD_H */

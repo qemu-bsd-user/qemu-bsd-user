@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_ELF_H_
-#define _TARGET_ARCH_ELF_H_
+#ifndef TARGET_ARCH_ELF_H
+#define TARGET_ARCH_ELF_H
 
 #define elf_check_arch(x) ((x) == EM_RISCV)
 #define ELF_START_MMAP 0x80000000
@@ -45,4 +45,4 @@ static uint32_t get_elf_hwcap(void)
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE        4096
 
-#endif /* _TARGET_ARCH_ELF_H_ */
+#endif /* TARGET_ARCH_ELF_H */

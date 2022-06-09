@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _FREEBSD_OS_TIME_H_
-#define _FREEBSD_OS_TIME_H_
+#ifndef FREEBSD_OS_TIME_H
+#define FREEBSD_OS_TIME_H
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -982,4 +982,4 @@ static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
     return ret;
 }
 
-#endif /* _FREEBSD_OS_TIME_H_ */
+#endif /* FREEBSD_OS_TIME_H */

@@ -16,8 +16,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __FREEBSD_OS_THREAD_H_
-#define __FREEBSD_OS_THREAD_H_
+
+#ifndef FREEBSD_OS_THREAD_H
+#define FREEBSD_OS_THREAD_H
 
 #include <sys/thr.h>
 #include <sys/rtprio.h>
@@ -575,4 +576,4 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
     return ret;
 }
 
-#endif /* !__FREEBSD_OS_THREAD_H_ */
+#endif /* FREEBSD_OS_THREAD_H */

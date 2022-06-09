@@ -17,8 +17,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _OS_IOCTL_DISK_H_
-#define _OS_IOCTL_DISK_H_
+
+#ifndef OS_IOCTL_DISK_H
+#define OS_IOCTL_DISK_H
 
 /* See sys/disk.h */
 
@@ -50,4 +51,4 @@ struct target_diocgattr_arg {
 
 #define TARGET_DIOCGATTR    TARGET_IOWR('d', 142, struct target_diocgattr_arg)
 
-#endif /* _OS_IOCTL_DISK_H_ */
+#endif /* OS_IOCTL_DISK_H */

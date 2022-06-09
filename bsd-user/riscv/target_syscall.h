@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_SYSCALL_H_
-#define _TARGET_ARCH_SYSCALL_H_
+#ifndef BSD_USER_RISCV_TARGET_SYSCALL_H
+#define BSD_USER_RISCV_TARGET_SYSCALL_H
 
 /*
  * struct target_pt_regs defines the way the registers are stored on the stack
@@ -35,4 +35,4 @@ struct target_pt_regs {
 #define TARGET_HW_MACHINE       "riscv64"
 #define TARGET_HW_MACHINE_ARCH  UNAME_MACHINE
 
-#endif /* !__ARCH_SYSCALL_H_ */
+#endif /* BSD_USER_RISCV_TARGET_SYSCALL_H */

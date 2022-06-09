@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _QEMU_OS_H_
-#define _QEMU_OS_H_
+#ifndef QEMU_OS_H
+#define QEMU_OS_H
 
 #define _WANT_FREEBSD11_STAT
 #define _WANT_FREEBSD11_STATFS
@@ -106,4 +106,4 @@ abi_long t2h_freebsd_acl(struct acl *host_acl, abi_ulong target_addr);
 abi_long h2t_freebsd_acl(abi_ulong target_addr, struct acl *host_acl);
 abi_long t2h_freebsd_acl_type(acl_type_t *host_type, abi_long target_type);
 
-#endif /* !_QEMU_OS_H_ */
+#endif /* QEMU_OS_H */

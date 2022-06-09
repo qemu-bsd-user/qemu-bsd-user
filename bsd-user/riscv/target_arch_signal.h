@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_SIGNAL_H_
-#define _TARGET_ARCH_SIGNAL_H_
+#ifndef TARGET_ARCH_SIGNAL_H
+#define TARGET_ARCH_SIGNAL_H
 
 #include "cpu.h"
 
@@ -70,4 +70,4 @@ struct target_sigframe {
     target_siginfo_t    sf_si; /* = *sf_siginfo (SA_SIGINFO case)*/
 };
 
-#endif /* !_TARGET_ARCH_SIGNAL_H_ */
+#endif /* TARGET_ARCH_SIGNAL_H */

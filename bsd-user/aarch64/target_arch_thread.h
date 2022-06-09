@@ -16,8 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _TARGET_ARCH_THREAD_H_
-#define _TARGET_ARCH_THREAD_H_
+
+#ifndef TARGET_ARCH_THREAD_H
+#define TARGET_ARCH_THREAD_H
 
 /* Compare to arm64/arm64/vm_machdep.c cpu_set_upcall_kse() */
 static inline void target_thread_set_upcall(CPUARMState *regs, abi_ulong entry,
@@ -57,4 +58,4 @@ static inline void target_thread_init(struct target_pt_regs *regs,
     regs->sp = stack & ~(16 - 1);
 }
 
-#endif /* !_TARGET_ARCH_THREAD_H_ */
+#endif /* TARGET_ARCH_THREAD_H */

@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _SYSCALL_DEFS_H_
-#define _SYSCALL_DEFS_H_
+#ifndef SYSCALL_DEFS_H
+#define SYSCALL_DEFS_H
 
 #include <sys/syscall.h>
 #include <sys/resource.h>
@@ -946,4 +946,4 @@ type safe_##name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, \
 #define safe_ioctl(...) safe_syscall(SYS_ioctl, __VA_ARGS__)
 #define safe_fcntl(...) safe_syscall(SYS_fcntl, __VA_ARGS__)
 
-#endif /* ! _SYSCALL_DEFS_H_ */
+#endif /* SYSCALL_DEFS_H */

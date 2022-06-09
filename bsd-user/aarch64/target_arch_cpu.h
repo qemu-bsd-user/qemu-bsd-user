@@ -16,8 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _TARGET_ARCH_CPU_H_
-#define _TARGET_ARCH_CPU_H_
+
+#ifndef TARGET_ARCH_CPU_H
+#define TARGET_ARCH_CPU_H
 
 #include "target_arch.h"
 #include "target/arm/syndrome.h"
@@ -193,4 +194,4 @@ static inline void target_cpu_reset(CPUArchState *env)
 {
 }
 
-#endif /* !_TARGET_ARCH_CPU_H */
+#endif /* TARGET_ARCH_CPU_H */

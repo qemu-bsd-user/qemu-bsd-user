@@ -16,8 +16,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _TARGET_ARCH_SIGTRAMP_H_
-#define _TARGET_ARCH_SIGTRAMP_H_
+
+#ifndef TARGET_ARCH_SIGTRAMP_H
+#define TARGET_ARCH_SIGTRAMP_H
 
 /* Compare to ENTRY(sigcode) in arm64/arm64/locore.S */
 static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
@@ -44,4 +45,4 @@ static inline abi_long setup_sigtramp(abi_ulong offset, unsigned sigf_uc,
 
     return memcpy_to_target(offset, sigtramp_code, TARGET_SZSIGCODE);
 }
-#endif /* _TARGET_ARCH_SIGTRAMP_H_ */
+#endif /* TARGET_ARCH_SIGTRAMP_H */

@@ -16,8 +16,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __FREEBSD_SOCKET_H_
-#define __FREEBSD_SOCKET_H_
+
+#ifndef BSD_USER_FREEBSD_OS_SOCKET_H
+#define BSD_USER_FREEBSD_OS_SOCKET_H
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -792,4 +793,4 @@ static inline abi_long do_freebsd_accept4(int fd, abi_ulong target_addr,
     return ret;
 }
 
-#endif /* !__FREEBSD_SOCKET_H_ */
+#endif /* BSD_USER_FREEBSD_OS_SOCKET_H */

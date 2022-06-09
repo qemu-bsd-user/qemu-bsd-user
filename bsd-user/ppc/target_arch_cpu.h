@@ -16,8 +16,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_CPU_H_
-#define _TARGET_ARCH_CPU_H_
+#ifndef TARGET_ARCH_CPU_H
+#define TARGET_ARCH_CPU_H
 
 #include "target_arch.h"
 
@@ -459,4 +459,4 @@ static inline void target_cpu_reset(CPUArchState *env)
     cpu_reset(env_cpu(env));
 }
 
-#endif /* ! _TARGET_ARCH_CPU_H_ */
+#endif /* TARGET_ARCH_CPU_H */

@@ -1,5 +1,5 @@
-#ifndef __OPENBSD_OS_TIME_H_
-#define __OPENBSD_OS_TIME_H_
+#ifndef OPENBSD_OS_TIME_H
+#define OPENBSD_OS_TIME_H
 
 /*
  * XXX To support FreeBSD binaries on OpenBSD these syscalls will need to
@@ -176,4 +176,4 @@ static inline abi_long do_freebsd_sigtimedwait(abi_ulong arg1, abi_ulong arg2,
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __OPENBSD_OS_TIME_H_ */
+#endif /* OPENBSD_OS_TIME_H */

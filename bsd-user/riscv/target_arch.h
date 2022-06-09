@@ -17,11 +17,11 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_H_
-#define _TARGET_ARCH_H_
+#ifndef TARGET_ARCH_H
+#define TARGET_ARCH_H
 
 #include "qemu.h"
 
 void target_cpu_set_tls(CPURISCVState *env, target_ulong newtls);
 
-#endif /* !_TARGET_ARCH_H_ */
+#endif /* TARGET_ARCH_H */

@@ -16,8 +16,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __BSD_SOCKET_H_
-#define __BSD_SOCKET_H_
+
+#ifndef BSD_SOCKET_H
+#define BSD_SOCKET_H
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -278,4 +279,4 @@ static inline abi_long do_bsd_shutdown(abi_long s, abi_long how)
     return get_errno(shutdown(s, how));
 }
 
-#endif /* !__BSD_SOCKET_H_ */
+#endif /* BSD_SOCKET_H */

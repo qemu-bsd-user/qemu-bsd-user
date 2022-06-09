@@ -1,5 +1,5 @@
-#ifndef __NETBSD_PROC_H_
-#define __NETBSD_PROC_H_
+#ifndef BSD_USER_NETBSD_OS_PROC_H
+#define BSD_USER_NETBSD_OS_PROC_H
 
 /*
  * XXX To support FreeBSD binaries on NetBSD these syscalls will need
@@ -240,4 +240,4 @@ static inline abi_long do_freebsd_auditctl(abi_ulong arg1)
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __NETBSD_PROC_H_ */
+#endif /* BSD_USER_NETBSD_OS_PROC_H */

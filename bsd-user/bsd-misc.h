@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __BSD_MISC_H_
-#define __BSD_MISC_H_
+#ifndef BSD_MISC_H
+#define BSD_MISC_H
 
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -385,4 +385,4 @@ static inline abi_long do_bsd_getdtablesize(void)
     return get_errno(getdtablesize());
 }
 
-#endif /* ! __BSD_MISC_H_ */
+#endif /* BSD_MISC_H */

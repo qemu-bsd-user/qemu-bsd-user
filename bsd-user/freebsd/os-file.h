@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __FREEBSD_OS_FILE_H_
-#define __FREEBSD_OS_FILE_H_
+#ifndef FREEBSD_OS_FILE_H
+#define FREEBSD_OS_FILE_H
 
 #define _WANT_FREEBSD11_STAT
 #define _WANT_FREEBSD11_STATFS
@@ -215,4 +215,4 @@ static inline abi_long do_freebsd___specialfd(int type, abi_ulong req,
 }
 #endif /* __FreeBSD_version >= 1300037 */
 
-#endif /* __FREEBSD_OS_FILE_H_ */
+#endif /* FREEBSD_OS_FILE_H */

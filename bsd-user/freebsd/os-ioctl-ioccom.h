@@ -17,8 +17,9 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _IOCTL_IOCCOM_H_
-#define _IOCTL_IOCCOM_H_
+#ifndef BSD_USER_FREEBSD_OS_IOCTL_IOCCOM_H
+#define BSD_USER_FREEBSD_OS_IOCTL_IOCCOM_H
+
 /*
  * Ioctl's have the command encoded in the lower word, and the size of
  * any in or out parameters in the upper word.  The high 3 bits of the
@@ -51,4 +52,4 @@
 /* this should be _IORW, but stdio got there first */
 #define TARGET_IOWR(g, n, t)  TARGET_IOC(IOC_INOUT,   (g), (n), sizeof(t))
 
-#endif /* !_IOCTL_IOCCOM_H_ */
+#endif /* BSD_USER_FREEBSD_OS_IOCTL_IOCCOM_H */

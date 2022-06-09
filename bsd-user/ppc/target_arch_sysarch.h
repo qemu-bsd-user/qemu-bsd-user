@@ -16,8 +16,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_SYSARCH_H_
-#define _TARGET_ARCH_SYSARCH_H_
+#ifndef TARGET_ARCH_SYSARCH_H
+#define TARGET_ARCH_SYSARCH_H
 
 static inline abi_long do_freebsd_arch_sysarch(CPUPPCState *env, int op,
         abi_ulong parms)

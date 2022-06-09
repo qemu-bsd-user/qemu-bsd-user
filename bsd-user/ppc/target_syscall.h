@@ -15,8 +15,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef _POWERPC_SYSCALL_H_
-#define _POWERPC_SYSCALL_H_
+
+#ifndef BSD_USER_PPC_TARGET_SYSCALL_H
+#define BSD_USER_PPC_TARGET_SYSCALL_H
 
 /*
  * struct target_pt_regs defines the way the registers are stored on the stack
@@ -54,4 +55,4 @@ struct target_pt_regs {
 #define TARGET_HW_MACHINE_ARCH  UNAME_MACHINE
 #endif
 
-#endif /* !_POWERPC_SYSCALL_H_ */
+#endif /* BSD_USER_PPC_TARGET_SYSCALL_H */

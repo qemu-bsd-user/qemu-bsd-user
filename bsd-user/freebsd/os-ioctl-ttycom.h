@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _IOCTL_TTYCOM_H_
-#define _IOCTL_TTYCOM_H_
+#ifndef BSD_USER_FREEBSD_OS_IOCTL_TTYCOM_H
+#define BSD_USER_FREEBSD_OS_IOCTL_TTYCOM_H
 
 #include "os-ioctl-ioccom.h"
 
@@ -254,4 +254,4 @@ struct target_winsize {
 #define TARGET_H4DISC       7       /* Netgraph Bluetooth H4
                            discipline */
 
-#endif /*! _IOCTL_TTYCOM_H_ */
+#endif /* BSD_USER_FREEBSD_OS_IOCTL_TTYCOM_H */

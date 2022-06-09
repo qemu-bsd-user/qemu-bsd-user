@@ -1,5 +1,5 @@
-#ifndef __OPENBSD_OS_THREAD_H_
-#define __OPENBSD_OS_THREAD_H_
+#ifndef OPENBSD_OS_THREAD_H
+#define OPENBSD_OS_THREAD_H
 
 /*
  * XXX To support FreeBSD binaries on OpenBSD these syscalls will need to
@@ -130,4 +130,4 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __OPENBSD_OS_THREAD_H_ */
+#endif /* OPENBSD_OS_THREAD_H */

@@ -1,5 +1,5 @@
-#ifndef __OPENBSD_PROC_H_
-#define __OPENBSD_PROC_H_
+#ifndef BSD_USER_OPENBSD_OS_PROC_H
+#define BSD_USER_OPENBSD_OS_PROC_H
 
 /*
  * XXX To support FreeBSD binaries on OpenBSD these syscalls will need
@@ -240,4 +240,4 @@ static inline abi_long do_freebsd_auditctl(abi_ulong arg1)
     return -TARGET_ENOSYS;
 }
 
-#endif /* ! __OPENBSD_PROC_H_ */
+#endif /* BSD_USER_OPENBSD_OS_PROC_H */

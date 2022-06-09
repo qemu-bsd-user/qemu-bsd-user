@@ -17,8 +17,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _TARGET_ARCH_SYSARCH_H_
-#define _TARGET_ARCH_SYSARCH_H_
+#ifndef TARGET_ARCH_SYSARCH_H
+#define TARGET_ARCH_SYSARCH_H
 
 #include "target_syscall.h"
 #include "target_arch.h"
@@ -38,4 +38,4 @@ static inline void do_freebsd_arch_print_sysarch(
     gemu_log("UNKNOWN OP: %d, " TARGET_ABI_FMT_lx ")", (int)arg1, arg2);
 }
 
-#endif /*!__ARCH_SYSARCH_H_ */
+#endif /* TARGET_ARCH_SYSARCH_H */
