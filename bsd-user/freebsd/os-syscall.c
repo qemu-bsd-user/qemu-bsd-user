@@ -20,7 +20,8 @@
 
 /*
  * We need the FreeBSD "legacy" definitions. Rust needs the FreeBSD 11 system
- * calls, so we have to emulate that despite FreeBSD being EOL'd.
+ * calls since it doesn't use libc at all, so we have to emulate that despite
+ * FreeBSD 11 being EOL'd.
  */
 #define _WANT_FREEBSD11_STAT
 #define _WANT_FREEBSD11_STATFS
