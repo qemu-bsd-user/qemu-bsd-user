@@ -637,12 +637,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_revoke(arg1);
         break;
 
-#ifdef TARGET_FREEBSD_NR_creat
-    case TARGET_FREEBSD_NR_creat: /* creat(2) (obsolete) */
-        ret = do_bsd_creat(arg1);
-        break;
-#endif
-
     case TARGET_FREEBSD_NR_access: /* access(2) */
         ret = do_bsd_access(arg1, arg2);
         break;
