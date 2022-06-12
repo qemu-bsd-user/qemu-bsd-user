@@ -26,8 +26,6 @@
 
 #include "qemu/path.h"
 
-#define target_to_host_bitmask(x, tbl) (x)
-
 #define LOCK_PATH(p, arg)                   \
 do {                                        \
     (p) = lock_user_string(arg);            \
@@ -67,12 +65,6 @@ int freebsd11_mknodat(int fd, char *path, mode_t mode, uint32_t dev);
 __sym_compat(mknodat, freebsd11_mknodat, FBSD_1.1);
 #endif
 
-struct target_pollfd {
-    int32_t fd;         /* file descriptor */
-    int16_t events;     /* requested events */
-    int16_t revents;    /* returned events */
-};
-
 extern struct iovec *lock_iovec(int type, abi_ulong target_addr, int count,
         int copy);
 extern void unlock_iovec(struct iovec *vec, abi_ulong target_addr, int count,
@@ -93,7 +85,7 @@ ssize_t safe_writev(int fd, const struct iovec *iov, int iovcnt);
 ssize_t safe_pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
 
 /* read(2) */
-static inline abi_long do_bsd_read(abi_long arg1, abi_long arg2, abi_long arg3)
+static abi_long do_bsd_read(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     void *p;
@@ -109,7 +101,7 @@ static inline abi_long do_bsd_read(abi_long arg1, abi_long arg2, abi_long arg3)
 }
 
 /* pread(2) */
-static inline abi_long do_bsd_pread(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_pread(void *cpu_env, abi_long arg1,
     abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
 {
     abi_long ret;
@@ -130,7 +122,7 @@ static inline abi_long do_bsd_pread(void *cpu_env, abi_long arg1,
 }
 
 /* readv(2) */
-static inline abi_long do_bsd_readv(abi_long arg1, abi_long arg2, abi_long arg3)
+static abi_long do_bsd_readv(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     struct iovec *vec = lock_iovec(VERIFY_WRITE, arg2, arg3, 0);
@@ -146,7 +138,7 @@ static inline abi_long do_bsd_readv(abi_long arg1, abi_long arg2, abi_long arg3)
 }
 
 /* preadv(2) */
-static inline abi_long do_bsd_preadv(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_preadv(void *cpu_env, abi_long arg1,
     abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
 {
     abi_long ret;
@@ -167,7 +159,7 @@ static inline abi_long do_bsd_preadv(void *cpu_env, abi_long arg1,
 }
 
 /* write(2) */
-static inline abi_long do_bsd_write(abi_long arg1, abi_long arg2, abi_long arg3)
+static abi_long do_bsd_write(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long nbytes, ret;
     void *p;
@@ -188,7 +180,7 @@ static inline abi_long do_bsd_write(abi_long arg1, abi_long arg2, abi_long arg3)
 }
 
 /* pwrite(2) */
-static inline abi_long do_bsd_pwrite(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_pwrite(void *cpu_env, abi_long arg1,
     abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
 {
     abi_long ret;
@@ -209,7 +201,7 @@ static inline abi_long do_bsd_pwrite(void *cpu_env, abi_long arg1,
 }
 
 /* writev(2) */
-static inline abi_long do_bsd_writev(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_writev(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
     abi_long ret;
@@ -226,7 +218,7 @@ static inline abi_long do_bsd_writev(abi_long arg1, abi_long arg2,
 }
 
 /* pwritev(2) */
-static inline abi_long do_bsd_pwritev(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_pwritev(void *cpu_env, abi_long arg1,
     abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
 {
     abi_long ret;
@@ -247,7 +239,7 @@ static inline abi_long do_bsd_pwritev(void *cpu_env, abi_long arg1,
 }
 
 /* open(2) */
-static inline abi_long do_bsd_open(abi_long arg1, abi_long arg2, abi_long arg3)
+static abi_long do_bsd_open(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     void *p;
@@ -261,7 +253,7 @@ static inline abi_long do_bsd_open(abi_long arg1, abi_long arg2, abi_long arg3)
 }
 
 /* openat(2) */
-static inline abi_long do_bsd_openat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_openat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -276,28 +268,28 @@ static inline abi_long do_bsd_openat(abi_long arg1, abi_long arg2,
 }
 
 /* close(2) */
-static inline abi_long do_bsd_close(abi_long arg1)
+static abi_long do_bsd_close(abi_long arg1)
 {
 
     return get_errno(close(arg1));
 }
 
 /* fdatasync(2) */
-static inline abi_long do_bsd_fdatasync(abi_long arg1)
+static abi_long do_bsd_fdatasync(abi_long arg1)
 {
 
     return get_errno(fdatasync(arg1));
 }
 
 /* fsync(2) */
-static inline abi_long do_bsd_fsync(abi_long arg1)
+static abi_long do_bsd_fsync(abi_long arg1)
 {
 
     return get_errno(fsync(arg1));
 }
 
 /* closefrom(2) */
-static inline abi_long do_bsd_closefrom(abi_long arg1)
+static abi_long do_bsd_closefrom(abi_long arg1)
 {
 
     closefrom(arg1);  /* returns void */
@@ -305,7 +297,7 @@ static inline abi_long do_bsd_closefrom(abi_long arg1)
 }
 
 /* revoke(2) */
-static inline abi_long do_bsd_revoke(abi_long arg1)
+static abi_long do_bsd_revoke(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -318,7 +310,7 @@ static inline abi_long do_bsd_revoke(abi_long arg1)
 }
 
 /* creat(2) (obsolete) */
-static inline abi_long do_bsd_creat(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_creat(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -332,7 +324,7 @@ static inline abi_long do_bsd_creat(abi_long arg1, abi_long arg2)
 
 
 /* access(2) */
-static inline abi_long do_bsd_access(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_access(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -345,7 +337,7 @@ static inline abi_long do_bsd_access(abi_long arg1, abi_long arg2)
 }
 
 /* eaccess(2) */
-static inline abi_long do_bsd_eaccess(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_eaccess(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -358,7 +350,7 @@ static inline abi_long do_bsd_eaccess(abi_long arg1, abi_long arg2)
 }
 
 /* faccessat(2) */
-static inline abi_long do_bsd_faccessat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_faccessat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -372,7 +364,7 @@ static inline abi_long do_bsd_faccessat(abi_long arg1, abi_long arg2,
 }
 
 /* chdir(2) */
-static inline abi_long do_bsd_chdir(abi_long arg1)
+static abi_long do_bsd_chdir(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -385,14 +377,14 @@ static inline abi_long do_bsd_chdir(abi_long arg1)
 }
 
 /* fchdir(2) */
-static inline abi_long do_bsd_fchdir(abi_long arg1)
+static abi_long do_bsd_fchdir(abi_long arg1)
 {
 
     return get_errno(fchdir(arg1));
 }
 
 /* rename(2) */
-static inline abi_long do_bsd_rename(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_rename(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p1, *p2;
@@ -405,7 +397,7 @@ static inline abi_long do_bsd_rename(abi_long arg1, abi_long arg2)
 }
 
 /* renameat(2) */
-static inline abi_long do_bsd_renameat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_renameat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -419,7 +411,7 @@ static inline abi_long do_bsd_renameat(abi_long arg1, abi_long arg2,
 }
 
 /* link(2) */
-static inline abi_long do_bsd_link(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_link(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p1, *p2;
@@ -432,7 +424,7 @@ static inline abi_long do_bsd_link(abi_long arg1, abi_long arg2)
 }
 
 /* linkat(2) */
-static inline abi_long do_bsd_linkat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_linkat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4, abi_long arg5)
 {
     abi_long ret;
@@ -446,7 +438,7 @@ static inline abi_long do_bsd_linkat(abi_long arg1, abi_long arg2,
 }
 
 /* unlink(2) */
-static inline abi_long do_bsd_unlink(abi_long arg1)
+static abi_long do_bsd_unlink(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -459,7 +451,7 @@ static inline abi_long do_bsd_unlink(abi_long arg1)
 }
 
 /* unlinkat(2) */
-static inline abi_long do_bsd_unlinkat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_unlinkat(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
     abi_long ret;
@@ -473,7 +465,7 @@ static inline abi_long do_bsd_unlinkat(abi_long arg1, abi_long arg2,
 }
 
 /* mkdir(2) */
-static inline abi_long do_bsd_mkdir(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_mkdir(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -487,7 +479,7 @@ static inline abi_long do_bsd_mkdir(abi_long arg1, abi_long arg2)
 
 
 /* mkdirat(2) */
-static inline abi_long do_bsd_mkdirat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_mkdirat(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
     abi_long ret;
@@ -502,7 +494,7 @@ static inline abi_long do_bsd_mkdirat(abi_long arg1, abi_long arg2,
 
 
 /* rmdir(2) */
-static inline abi_long do_bsd_rmdir(abi_long arg1)
+static abi_long do_bsd_rmdir(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -515,7 +507,7 @@ static inline abi_long do_bsd_rmdir(abi_long arg1)
 }
 
 /* undocumented __getcwd(char *buf, size_t len)  system call */
-static inline abi_long do_bsd___getcwd(abi_long arg1, abi_long arg2)
+static abi_long do_bsd___getcwd(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -531,21 +523,21 @@ static inline abi_long do_bsd___getcwd(abi_long arg1, abi_long arg2)
 }
 
 /* dup(2) */
-static inline abi_long do_bsd_dup(abi_long arg1)
+static abi_long do_bsd_dup(abi_long arg1)
 {
 
     return get_errno(dup(arg1));
 }
 
 /* dup2(2) */
-static inline abi_long do_bsd_dup2(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_dup2(abi_long arg1, abi_long arg2)
 {
 
     return get_errno(dup2(arg1, arg2));
 }
 
 /* truncate(2) */
-static inline abi_long do_bsd_truncate(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_truncate(void *cpu_env, abi_long arg1,
         abi_long arg2, abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -563,7 +555,7 @@ static inline abi_long do_bsd_truncate(void *cpu_env, abi_long arg1,
 }
 
 /* ftruncate(2) */
-static inline abi_long do_bsd_ftruncate(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_ftruncate(void *cpu_env, abi_long arg1,
         abi_long arg2, abi_long arg3, abi_long arg4)
 {
 
@@ -575,7 +567,7 @@ static inline abi_long do_bsd_ftruncate(void *cpu_env, abi_long arg1,
 }
 
 /* acct(2) */
-static inline abi_long do_bsd_acct(abi_long arg1)
+static abi_long do_bsd_acct(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -591,7 +583,7 @@ static inline abi_long do_bsd_acct(abi_long arg1)
 }
 
 /* sync(2) */
-static inline abi_long do_bsd_sync(void)
+static abi_long do_bsd_sync(void)
 {
 
     sync();
@@ -599,7 +591,7 @@ static inline abi_long do_bsd_sync(void)
 }
 
 /* mount(2) */
-static inline abi_long do_bsd_mount(abi_long arg1, abi_long arg2, abi_long arg3,
+static abi_long do_bsd_mount(abi_long arg1, abi_long arg2, abi_long arg3,
         abi_long arg4)
 {
     abi_long ret;
@@ -621,7 +613,7 @@ static inline abi_long do_bsd_mount(abi_long arg1, abi_long arg2, abi_long arg3,
 }
 
 /* unmount(2) */
-static inline abi_long do_bsd_unmount(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_unmount(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -634,7 +626,7 @@ static inline abi_long do_bsd_unmount(abi_long arg1, abi_long arg2)
 }
 
 /* nmount(2) */
-static inline abi_long do_bsd_nmount(abi_long arg1, abi_long count,
+static abi_long do_bsd_nmount(abi_long arg1, abi_long count,
         abi_long flags)
 {
     abi_long ret;
@@ -651,7 +643,7 @@ static inline abi_long do_bsd_nmount(abi_long arg1, abi_long count,
 }
 
 /* symlink(2) */
-static inline abi_long do_bsd_symlink(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_symlink(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p1, *p2;
@@ -664,7 +656,7 @@ static inline abi_long do_bsd_symlink(abi_long arg1, abi_long arg2)
 }
 
 /* symlinkat(2) */
-static inline abi_long do_bsd_symlinkat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_symlinkat(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
     abi_long ret;
@@ -678,7 +670,7 @@ static inline abi_long do_bsd_symlinkat(abi_long arg1, abi_long arg2,
 }
 
 /* readlink(2) */
-static inline abi_long do_bsd_readlink(CPUArchState *env, abi_long arg1,
+static abi_long do_bsd_readlink(CPUArchState *env, abi_long arg1,
         abi_long arg2, abi_long arg3)
 {
     abi_long ret;
@@ -706,7 +698,7 @@ static inline abi_long do_bsd_readlink(CPUArchState *env, abi_long arg1,
 }
 
 /* readlinkat(2) */
-static inline abi_long do_bsd_readlinkat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_readlinkat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -726,7 +718,7 @@ static inline abi_long do_bsd_readlinkat(abi_long arg1, abi_long arg2,
 }
 
 /* chmod(2) */
-static inline abi_long do_bsd_chmod(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_chmod(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -739,14 +731,14 @@ static inline abi_long do_bsd_chmod(abi_long arg1, abi_long arg2)
 }
 
 /* fchmod(2) */
-static inline abi_long do_bsd_fchmod(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_fchmod(abi_long arg1, abi_long arg2)
 {
 
     return get_errno(fchmod(arg1, arg2));
 }
 
 /* lchmod(2) */
-static inline abi_long do_bsd_lchmod(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_lchmod(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -759,7 +751,7 @@ static inline abi_long do_bsd_lchmod(abi_long arg1, abi_long arg2)
 }
 
 /* fchmodat(2) */
-static inline abi_long do_bsd_fchmodat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_fchmodat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -773,7 +765,7 @@ static inline abi_long do_bsd_fchmodat(abi_long arg1, abi_long arg2,
 }
 
 /* pre-ino64 mknod(2) */
-static inline abi_long do_bsd_freebsd11_mknod(abi_long arg1, abi_long arg2, abi_long arg3)
+static abi_long do_bsd_freebsd11_mknod(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     void *p;
@@ -786,7 +778,7 @@ static inline abi_long do_bsd_freebsd11_mknod(abi_long arg1, abi_long arg2, abi_
 }
 
 /* pre-ino64 mknodat(2) */
-static inline abi_long do_bsd_freebsd11_mknodat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_freebsd11_mknodat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
     abi_long ret;
@@ -801,7 +793,7 @@ static inline abi_long do_bsd_freebsd11_mknodat(abi_long arg1, abi_long arg2,
 
 #ifdef BSD_HAVE_INO64
 /* post-ino64 mknodat(2) */
-static inline abi_long do_bsd_mknodat(void *cpu_env, abi_long arg1,
+static abi_long do_bsd_mknodat(void *cpu_env, abi_long arg1,
         abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5,
         abi_long arg6)
 {
@@ -822,7 +814,7 @@ static inline abi_long do_bsd_mknodat(void *cpu_env, abi_long arg1,
 #endif
 
 /* chown(2) */
-static inline abi_long do_bsd_chown(abi_long arg1, abi_long arg2, abi_long arg3)
+static abi_long do_bsd_chown(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     void *p;
@@ -835,7 +827,7 @@ static inline abi_long do_bsd_chown(abi_long arg1, abi_long arg2, abi_long arg3)
 }
 
 /* fchown(2) */
-static inline abi_long do_bsd_fchown(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_fchown(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
 
@@ -843,7 +835,7 @@ static inline abi_long do_bsd_fchown(abi_long arg1, abi_long arg2,
 }
 
 /* lchown(2) */
-static inline abi_long do_bsd_lchown(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_lchown(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
     abi_long ret;
@@ -857,7 +849,7 @@ static inline abi_long do_bsd_lchown(abi_long arg1, abi_long arg2,
 }
 
 /* fchownat(2) */
-static inline abi_long do_bsd_fchownat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_fchownat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4, abi_long arg5)
 {
     abi_long ret;
@@ -871,7 +863,7 @@ static inline abi_long do_bsd_fchownat(abi_long arg1, abi_long arg2,
 }
 
 /* chflags(2) */
-static inline abi_long do_bsd_chflags(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_chflags(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -884,7 +876,7 @@ static inline abi_long do_bsd_chflags(abi_long arg1, abi_long arg2)
 }
 
 /* lchflags(2) */
-static inline abi_long do_bsd_lchflags(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_lchflags(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -897,14 +889,14 @@ static inline abi_long do_bsd_lchflags(abi_long arg1, abi_long arg2)
 }
 
 /* fchflags(2) */
-static inline abi_long do_bsd_fchflags(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_fchflags(abi_long arg1, abi_long arg2)
 {
 
     return get_errno(fchflags(arg1, arg2));
 }
 
 /* chroot(2) */
-static inline abi_long do_bsd_chroot(abi_long arg1)
+static abi_long do_bsd_chroot(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -917,14 +909,14 @@ static inline abi_long do_bsd_chroot(abi_long arg1)
 }
 
 /* flock(2) */
-static inline abi_long do_bsd_flock(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_flock(abi_long arg1, abi_long arg2)
 {
 
     return get_errno(flock(arg1, arg2));
 }
 
 /* mkfifo(2) */
-static inline abi_long do_bsd_mkfifo(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_mkfifo(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -937,7 +929,7 @@ static inline abi_long do_bsd_mkfifo(abi_long arg1, abi_long arg2)
 }
 
 /* mkfifoat(2) */
-static inline abi_long do_bsd_mkfifoat(abi_long arg1, abi_long arg2,
+static abi_long do_bsd_mkfifoat(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
     abi_long ret;
@@ -951,7 +943,7 @@ static inline abi_long do_bsd_mkfifoat(abi_long arg1, abi_long arg2,
 }
 
 /* pathconf(2) */
-static inline abi_long do_bsd_pathconf(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_pathconf(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -964,7 +956,7 @@ static inline abi_long do_bsd_pathconf(abi_long arg1, abi_long arg2)
 }
 
 /* lpathconf(2) */
-static inline abi_long do_bsd_lpathconf(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_lpathconf(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -977,14 +969,14 @@ static inline abi_long do_bsd_lpathconf(abi_long arg1, abi_long arg2)
 }
 
 /* fpathconf(2) */
-static inline abi_long do_bsd_fpathconf(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_fpathconf(abi_long arg1, abi_long arg2)
 {
 
     return get_errno(fpathconf(arg1, arg2));
 }
 
 /* undelete(2) */
-static inline abi_long do_bsd_undelete(abi_long arg1)
+static abi_long do_bsd_undelete(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -997,7 +989,7 @@ static inline abi_long do_bsd_undelete(abi_long arg1)
 }
 
 /* poll(2) */
-static inline abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
+static abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
         abi_long arg2, abi_long arg3)
 {
     abi_long ret;
@@ -1049,7 +1041,7 @@ static inline abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
 }
 
 /* lseek(2) */
-static inline abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
+static abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4, abi_long arg5)
 {
     abi_long ret;
@@ -1081,7 +1073,7 @@ static inline abi_long do_bsd_lseek(void *cpu_env, abi_long arg1, abi_long arg2,
 }
 
 /* pipe(2) */
-static inline abi_long do_bsd_pipe(void *cpu_env, abi_ulong pipedes)
+static abi_long do_bsd_pipe(void *cpu_env, abi_ulong pipedes)
 {
     abi_long ret;
     int host_pipe[2];
@@ -1104,7 +1096,7 @@ static inline abi_long do_bsd_pipe(void *cpu_env, abi_ulong pipedes)
 }
 
 /* swapon(2) */
-static inline abi_long do_bsd_swapon(abi_long arg1)
+static abi_long do_bsd_swapon(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -1118,7 +1110,7 @@ static inline abi_long do_bsd_swapon(abi_long arg1)
 
 #ifdef TARGET_FREEBSD_NR_freebsd13_swapoff
 /* swapoff(2) */
-static inline abi_long do_freebsd13_swapoff(abi_long arg1)
+static abi_long do_freebsd13_swapoff(abi_long arg1)
 {
     abi_long ret;
     void *p;
@@ -1132,7 +1124,7 @@ static inline abi_long do_freebsd13_swapoff(abi_long arg1)
 #endif
 
 /* swapoff(2) */
-static inline abi_long do_bsd_swapoff(abi_long arg1, abi_long arg2)
+static abi_long do_bsd_swapoff(abi_long arg1, abi_long arg2)
 {
     abi_long ret;
     void *p;

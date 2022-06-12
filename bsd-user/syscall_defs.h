@@ -946,4 +946,13 @@ type safe_##name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, \
 #define safe_ioctl(...) safe_syscall(SYS_ioctl, __VA_ARGS__)
 #define safe_fcntl(...) safe_syscall(SYS_fcntl, __VA_ARGS__)
 
+struct target_pollfd {
+    int32_t fd;         /* file descriptor */
+    int16_t events;     /* requested events */
+    int16_t revents;    /* returned events */
+};
+
+#define target_to_host_bitmask(x, tbl) (x)
+#define host_to_target_bitmask(x, tbl) (x)
+
 #endif /* SYSCALL_DEFS_H */
