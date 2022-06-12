@@ -875,7 +875,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
 #if TARGET_FREEBSD_NR_freebsd13_swapoff
     case TARGET_FREEBSD_NR_freebsd13_swapoff: /* freebsd13_swapoff(2) */
-        ret = do_bsd_swapoff(arg1, 0);
+        ret = do_freebsd13_swapoff(arg1);
         break;
 #endif
 
