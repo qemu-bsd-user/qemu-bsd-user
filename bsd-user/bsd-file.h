@@ -309,20 +309,6 @@ static abi_long do_bsd_revoke(abi_long arg1)
     return ret;
 }
 
-/* creat(2) (obsolete) */
-static abi_long do_bsd_creat(abi_long arg1, abi_long arg2)
-{
-    abi_long ret;
-    void *p;
-
-    LOCK_PATH(p, arg1);
-    ret = get_errno(safe_open(path(p), O_CREAT | O_TRUNC | O_WRONLY, arg2));
-    UNLOCK_PATH(p, arg1);
-
-    return ret;
-}
-
-
 /* access(2) */
 static abi_long do_bsd_access(abi_long arg1, abi_long arg2)
 {
