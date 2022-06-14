@@ -212,6 +212,13 @@ S: Maintained
 F: target/hppa/
 F: disas/hppa.c
 
+LoongArch TCG CPUs
+M: Song Gao <gaosong@loongson.cn>
+M: Xiaojuan Yang <yangxiaojuan@loongson.cn>
+S: Maintained
+F: target/loongarch/
+F: tests/tcg/loongarch64/
+
 M68K TCG CPUs
 M: Laurent Vivier <laurent@vivier.eu>
 S: Maintained
@@ -239,7 +246,8 @@ F: docs/system/cpu-models-mips.rst.inc
 F: tests/tcg/mips/
 
 MIPS TCG CPUs (nanoMIPS ISA)
-S: Orphan
+M: Stefan Pejic <stefan.pejic@syrmia.com>
+S: Maintained
 F: disas/nanomips.*
 F: target/mips/tcg/*nanomips*
 
@@ -1115,6 +1123,23 @@ F: include/hw/misc/lasi.h
 F: include/hw/net/lasi_82596.h
 F: include/hw/pci-host/dino.h
 F: pc-bios/hppa-firmware.img
+
+LoongArch Machines
+------------------
+Virt
+M: Xiaojuan Yang <yangxiaojuan@loongson.cn>
+M: Song Gao <gaosong@loongson.cn>
+S: Maintained
+F: docs/system/loongarch/loongson3.rst
+F: configs/targets/loongarch64-softmmu.mak
+F: configs/devices/loongarch64-softmmu/default.mak
+F: hw/loongarch/
+F: include/hw/loongarch/virt.h
+F: include/hw/intc/loongarch_*.h
+F: hw/intc/loongarch_*.c
+F: include/hw/pci-host/ls7a.h
+F: hw/rtc/ls7a_rtc.c
+F: gdb-xml/loongarch*.xml
 
 M68K Machines
 -------------
@@ -2174,6 +2199,7 @@ Generic Loader
 M: Alistair Francis <alistair@alistair23.me>
 S: Maintained
 F: hw/core/generic-loader.c
+F: hw/core/uboot_image.h
 F: include/hw/core/generic-loader.h
 F: docs/system/generic-loader.rst
 

@@ -266,12 +266,6 @@ void unlock_iovec(struct iovec *vec, abi_ulong target_addr,
     g_free(vec);
 }
 
-/* stub for arm semihosting support */
-abi_long do_brk(abi_ulong new_brk)
-{
-    return do_obreak(new_brk);
-}
-
 /*
  * All errnos that freebsd_syscall() returns must be -TARGET_<errcode>.
  */
@@ -1874,8 +1868,11 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     default:
         qemu_log_mask(LOG_UNIMP, "Unsupported syscall: %d\n", num);
+#if 0
         ret = get_errno(syscall(num, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
                     arg8));
+#endif
+        ret = -TARGET_ENOSYS;
         break;
     }
 

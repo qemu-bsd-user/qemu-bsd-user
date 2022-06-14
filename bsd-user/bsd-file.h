@@ -200,8 +200,7 @@ static abi_long do_bsd_pwrite(void *cpu_env, abi_long arg1,
 }
 
 /* writev(2) */
-static abi_long do_bsd_writev(abi_long arg1, abi_long arg2,
-        abi_long arg3)
+static abi_long do_bsd_writev(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     struct iovec *vec = lock_iovec(VERIFY_READ, arg2, arg3, 1);

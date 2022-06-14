@@ -38,7 +38,6 @@ static inline abi_long do_bsd_exit(void *cpu_env, abi_long arg1)
 #endif
     gdb_exit(arg1);
     qemu_plugin_user_exit();
-    /* XXX: should free thread stack and CPU env here  */
     _exit(arg1);
 
     return 0;
