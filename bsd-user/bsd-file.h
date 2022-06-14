@@ -69,7 +69,6 @@ extern struct iovec *lock_iovec(int type, abi_ulong target_addr, int count,
         int copy);
 extern void unlock_iovec(struct iovec *vec, abi_ulong target_addr, int count,
         int copy);
-extern int __getcwd(char *path, size_t len);
 
 int safe_open(const char *path, int flags, mode_t mode);
 int safe_openat(int fd, const char *path, int flags, mode_t mode);
@@ -495,7 +494,7 @@ static abi_long do_bsd___getcwd(abi_long arg1, abi_long arg2)
     if (p == NULL) {
         return -TARGET_EFAULT;
     }
-    ret = __getcwd(p, arg2);
+    ret = safe_syscall(SYS___getcwd, p, arg2);
     unlock_user(p, arg1, ret == 0 ? strlen(p) + 1 : 0);
 
     return get_errno(ret);
