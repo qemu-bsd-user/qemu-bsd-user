@@ -270,28 +270,24 @@ static abi_long do_bsd_openat(abi_long arg1, abi_long arg2,
 /* close(2) */
 static abi_long do_bsd_close(abi_long arg1)
 {
-
     return get_errno(close(arg1));
 }
 
 /* fdatasync(2) */
 static abi_long do_bsd_fdatasync(abi_long arg1)
 {
-
     return get_errno(fdatasync(arg1));
 }
 
 /* fsync(2) */
 static abi_long do_bsd_fsync(abi_long arg1)
 {
-
     return get_errno(fsync(arg1));
 }
 
 /* closefrom(2) */
 static abi_long do_bsd_closefrom(abi_long arg1)
 {
-
     closefrom(arg1);  /* returns void */
     return get_errno(0);
 }
@@ -365,7 +361,6 @@ static abi_long do_bsd_chdir(abi_long arg1)
 /* fchdir(2) */
 static abi_long do_bsd_fchdir(abi_long arg1)
 {
-
     return get_errno(fchdir(arg1));
 }
 
@@ -463,7 +458,6 @@ static abi_long do_bsd_mkdir(abi_long arg1, abi_long arg2)
     return ret;
 }
 
-
 /* mkdirat(2) */
 static abi_long do_bsd_mkdirat(abi_long arg1, abi_long arg2,
         abi_long arg3)
@@ -477,7 +471,6 @@ static abi_long do_bsd_mkdirat(abi_long arg1, abi_long arg2,
 
     return ret;
 }
-
 
 /* rmdir(2) */
 static abi_long do_bsd_rmdir(abi_long arg1)
@@ -511,14 +504,12 @@ static abi_long do_bsd___getcwd(abi_long arg1, abi_long arg2)
 /* dup(2) */
 static abi_long do_bsd_dup(abi_long arg1)
 {
-
     return get_errno(dup(arg1));
 }
 
 /* dup2(2) */
 static abi_long do_bsd_dup2(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(dup2(arg1, arg2));
 }
 
@@ -544,7 +535,6 @@ static abi_long do_bsd_truncate(void *cpu_env, abi_long arg1,
 static abi_long do_bsd_ftruncate(void *cpu_env, abi_long arg1,
         abi_long arg2, abi_long arg3, abi_long arg4)
 {
-
     if (regpairs_aligned(cpu_env) != 0) {
         arg2 = arg3;
         arg3 = arg4;
@@ -571,7 +561,6 @@ static abi_long do_bsd_acct(abi_long arg1)
 /* sync(2) */
 static abi_long do_bsd_sync(void)
 {
-
     sync();
     return 0;
 }
@@ -719,7 +708,6 @@ static abi_long do_bsd_chmod(abi_long arg1, abi_long arg2)
 /* fchmod(2) */
 static abi_long do_bsd_fchmod(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(fchmod(arg1, arg2));
 }
 
@@ -816,7 +804,6 @@ static abi_long do_bsd_chown(abi_long arg1, abi_long arg2, abi_long arg3)
 static abi_long do_bsd_fchown(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
-
     return get_errno(fchown(arg1, arg2, arg3));
 }
 
@@ -877,7 +864,6 @@ static abi_long do_bsd_lchflags(abi_long arg1, abi_long arg2)
 /* fchflags(2) */
 static abi_long do_bsd_fchflags(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(fchflags(arg1, arg2));
 }
 
@@ -897,7 +883,6 @@ static abi_long do_bsd_chroot(abi_long arg1)
 /* flock(2) */
 static abi_long do_bsd_flock(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(flock(arg1, arg2));
 }
 
@@ -957,7 +942,6 @@ static abi_long do_bsd_lpathconf(abi_long arg1, abi_long arg2)
 /* fpathconf(2) */
 static abi_long do_bsd_fpathconf(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(fpathconf(arg1, arg2));
 }
 
