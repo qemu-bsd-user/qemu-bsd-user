@@ -31,10 +31,6 @@
 #ifdef MSGMAX
 static int bsd_msgmax = MSGMAX;
 #else
-#if !defined(__FreeBSD__)
-#error Unsure how to proceed, no MSGMAX
-#endif
-
 static int bsd_msgmax;
 #endif
 
@@ -42,7 +38,6 @@ static int bsd_msgmax;
 static inline abi_long do_bsd_quotactl(abi_ulong path, abi_long cmd,
         __unused abi_ulong target_addr)
 {
-
     qemu_log("qemu: Unsupported syscall quotactl()\n");
     return -TARGET_ENOSYS;
 }
@@ -50,7 +45,6 @@ static inline abi_long do_bsd_quotactl(abi_ulong path, abi_long cmd,
 /* reboot(2) */
 static inline abi_long do_bsd_reboot(abi_long how)
 {
-
     qemu_log("qemu: Unsupported syscall reboot()\n");
     return -TARGET_ENOSYS;
 }
@@ -66,7 +60,7 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
         return -TARGET_EINVAL;
     }
 
-    host_uuid = (struct uuid *)g_malloc(count * sizeof(struct uuid));
+    host_uuid = g_malloc(count * sizeof(struct uuid));
 
     if (host_uuid == NULL) {
         return -TARGET_ENOMEM;
@@ -98,7 +92,6 @@ out:
 static inline abi_long do_bsd_semget(abi_long key, int nsems,
         int target_flags)
 {
-
     return get_errno(semget(key, nsems,
                 target_to_host_bitmask(target_flags, ipc_flags_tbl)));
 }
@@ -184,11 +177,13 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
     switch (host_cmd) {
     case GETVAL:
     case SETVAL:
-        /* In 64 bit cross-endian situations, we will erroneously pick up
-         * the wrong half of the union for the "val" element.  To rectify
-         * this, the entire 8-byte structure is byteswapped, followed by
-         * a swap of the 4 byte val field. In other cases, the data is
-         * already in proper host byte order. */
+        /*
+         * In 64 bit cross-endian situations, we will erroneously pick up the
+         * wrong half of the union for the "val" element.  To rectify this, the
+         * entire 8-byte structure is byteswapped, followed by a swap of the 4
+         * byte val field. In other cases, the data is already in proper host
+         * byte order.
+         */
         if (sizeof(target_su.val) != (sizeof(target_su.buf))) {
             target_su.buf = tswapal(target_su.buf);
             arg.val = tswap32(target_su.val);
@@ -294,17 +289,18 @@ struct kern_mymsg {
 
 static inline abi_long bsd_validate_msgsz(abi_ulong msgsz)
 {
-
     /* Fetch msgmax the first time we need it. */
     if (bsd_msgmax == 0) {
         size_t len = sizeof(bsd_msgmax);
 
-        if (sysctlbyname("kern.ipc.msgmax", &bsd_msgmax, &len, NULL, 0) == -1)
+        if (sysctlbyname("kern.ipc.msgmax", &bsd_msgmax, &len, NULL, 0) == -1) {
             return -TARGET_EINVAL;
+        }
     }
 
-    if (msgsz > bsd_msgmax)
+    if (msgsz > bsd_msgmax) {
         return -TARGET_EINVAL;
+    }
     return 0;
 }
 
@@ -317,12 +313,13 @@ static inline abi_long do_bsd_msgsnd(int msqid, abi_long msgp,
     abi_long ret;
 
     ret = bsd_validate_msgsz(msgsz);
-    if (is_error(ret))
+    if (is_error(ret)) {
         return ret;
+    }
     if (!lock_user_struct(VERIFY_READ, target_mb, msgp, 0)) {
         return -TARGET_EFAULT;
     }
-    host_mb = g_malloc(msgsz+sizeof(long));
+    host_mb = g_malloc(msgsz + sizeof(long));
     host_mb->mtype = (abi_long) tswapal(target_mb->mtype);
     memcpy(host_mb->mtext, target_mb->mtext, msgsz);
     ret = get_errno(msgsnd(msqid, host_mb, msgsz, msgflg));
@@ -338,7 +335,7 @@ static inline abi_long do_bsd_msgget(abi_long key, abi_long msgflag)
     abi_long ret;
 
     ret = get_errno(msgget(key, msgflag));
-    return (ret);
+    return ret;
 }
 
 /* msgrcv(2) */
@@ -351,12 +348,13 @@ static inline abi_long do_bsd_msgrcv(int msqid, abi_long msgp,
     abi_long ret = 0;
 
     ret = bsd_validate_msgsz(msgsz);
-    if (is_error(ret))
+    if (is_error(ret)) {
         return ret;
+    }
     if (!lock_user_struct(VERIFY_WRITE, target_mb, msgp, 0)) {
         return -TARGET_EFAULT;
     }
-    host_mb = g_malloc(msgsz+sizeof(long));
+    host_mb = g_malloc(msgsz + sizeof(long));
     ret = get_errno(msgrcv(msqid, host_mb, msgsz, tswapal(msgtyp), msgflg));
     if (ret > 0) {
         abi_ulong target_mtext_addr = msgp + sizeof(abi_ulong);
@@ -368,8 +366,9 @@ static inline abi_long do_bsd_msgrcv(int msqid, abi_long msgp,
         memcpy(target_mb->mtext, host_mb->mtext, ret);
         unlock_user(target_mtext, target_mtext_addr, ret);
     }
-    if (!is_error(ret))
+    if (!is_error(ret)) {
         target_mb->mtype = tswapal(host_mb->mtype);
+    }
 end:
     if (target_mb != NULL) {
         unlock_user_struct(target_mb, msgp, 1);
@@ -381,7 +380,6 @@ end:
 /* getdtablesize(2) */
 static inline abi_long do_bsd_getdtablesize(void)
 {
-
     return get_errno(getdtablesize());
 }
 

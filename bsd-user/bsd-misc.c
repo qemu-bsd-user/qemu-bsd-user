@@ -66,7 +66,7 @@ abi_long target_to_host_semarray(int semid, unsigned short **host_array,
     nsems = semid_ds.sem_nsems;
     *host_array = (unsigned short *)malloc(nsems * sizeof(unsigned short));
     array = lock_user(VERIFY_READ, target_addr,
-        nsems*sizeof(unsigned short), 1);
+        nsems * sizeof(unsigned short), 1);
     if (array == NULL) {
         free(*host_array);
         return -TARGET_EFAULT;
@@ -98,7 +98,7 @@ abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
 
     nsems = semid_ds.sem_nsems;
     array = (unsigned short *)lock_user(VERIFY_WRITE, target_addr,
-        nsems*sizeof(unsigned short), 0);
+        nsems * sizeof(unsigned short), 0);
     if (array == NULL) {
         free(*host_array);
         return -TARGET_EFAULT;
@@ -227,4 +227,3 @@ abi_long host_to_target_msqid_ds(abi_ulong target_addr,
 
     return 0;
 }
-
