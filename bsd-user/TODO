@@ -18,7 +18,9 @@ https://patchew.org/QEMU/20210706234932.356913-1-richard.henderson@linaro.org/
 
 7. TARGET_SZSIGCODE cleanup
 8. arm instruction emulation?
-9. look at changes to cpu_loop on a per-arch basis to supportthe new
-   arm_cpu_record_sigbus and arm_cpu_record_sigsegv. These are in
-   linux-user/{arm,aarch64,i386,x86_64,riscv,ppp}
-10. Turn off / remove mips.
+9. safe_* system call stuff for all system calls
+10. Refactor really per-os
+11. Look at automatic pointers for lock/unlock iovec
+12. static inline junk
+13. in do_bsd_readlink, need to revisit the test for
+    "/proc/curproc/file" when on !FreeBSD
