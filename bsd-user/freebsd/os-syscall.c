@@ -32,8 +32,11 @@
 #include "qemu/cutils.h"
 #include "qemu/path.h"
 #include <sys/syscall.h>
+#include <sys/mount.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
+#include <poll.h>
 #include <utime.h>
 
 #include "qemu.h"

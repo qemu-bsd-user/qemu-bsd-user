@@ -20,10 +20,6 @@
 #ifndef BSD_FILE_H
 #define BSD_FILE_H
 
-#include <sys/types.h>
-#include <sys/mount.h>
-#include <poll.h>
-
 #include "qemu/path.h"
 
 #define LOCK_PATH(p, arg)                   \
