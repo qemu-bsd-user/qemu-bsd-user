@@ -51,16 +51,6 @@ do {                                        \
     unlock_user(p1, arg1, 0);               \
 } while (0)
 
-#ifndef BSD_HAVE_INO64
-#define freebsd11_mknod         mknod
-#define freebsd11_mknodat       mknodat
-#else
-int freebsd11_mknod(char *path, mode_t mode, uint32_t dev);
-__sym_compat(mknod, freebsd11_mknod, FBSD_1.0);
-int freebsd11_mknodat(int fd, char *path, mode_t mode, uint32_t dev);
-__sym_compat(mknodat, freebsd11_mknodat, FBSD_1.1);
-#endif
-
 extern struct iovec *lock_iovec(int type, abi_ulong target_addr, int count,
         int copy);
 extern void unlock_iovec(struct iovec *vec, abi_ulong target_addr, int count,
@@ -568,8 +558,8 @@ static abi_long do_bsd_mount(abi_long arg1, abi_long arg2, abi_long arg3,
 
     LOCK_PATH2(p1, arg1, p2, arg2);
     /*
-     * XXX arg4 should be locked, but it isn't clear how to do that
-     * since it's it may be not be a NULL-terminated string.
+     * XXX arg4 should be locked, but it isn't clear how to do that since it may
+     * be not be a NULL-terminated string.
      */
     if (arg4 == 0) {
         ret = get_errno(mount(p1, p2, arg3, NULL)); /* XXX path(p2)? */
@@ -651,15 +641,14 @@ static abi_long do_bsd_readlink(CPUArchState *env, abi_long arg1,
         UNLOCK_PATH(p1, arg1);
         return -TARGET_EFAULT;
     }
-#ifdef __FreeBSD__
     if (strcmp(p1, "/proc/curproc/file") == 0) {
         CPUState *cpu = env_cpu(env);
         TaskState *ts = (TaskState *)cpu->opaque;
         strncpy(p2, ts->bprm->fullpath, arg3);
         ret = MIN((abi_long)strlen(ts->bprm->fullpath), arg3);
-    } else
-#endif
-    ret = get_errno(readlink(path(p1), p2, arg3));
+    } else {
+        ret = get_errno(readlink(path(p1), p2, arg3));
+    }
     unlock_user(p2, arg2, ret);
     UNLOCK_PATH(p1, arg1);
 
@@ -739,7 +728,7 @@ static abi_long do_bsd_freebsd11_mknod(abi_long arg1, abi_long arg2, abi_long ar
     void *p;
 
     LOCK_PATH(p, arg1);
-    ret = get_errno(freebsd11_mknod(p, arg2, arg3)); /* XXX path(p)? */
+    ret = get_errno(syscall(SYS_freebsd11_mknod, p, arg2, arg3));
     UNLOCK_PATH(p, arg1);
 
     return ret;
@@ -753,13 +742,12 @@ static abi_long do_bsd_freebsd11_mknodat(abi_long arg1, abi_long arg2,
     void *p;
 
     LOCK_PATH(p, arg2);
-    ret = get_errno(freebsd11_mknodat(arg1, p, arg3, arg4));
+    ret = get_errno(syscall(SYS_freebsd11_mknodat, arg1, p, arg3, arg4));
     UNLOCK_PATH(p, arg2);
 
     return ret;
 }
 
-#ifdef BSD_HAVE_INO64
 /* post-ino64 mknodat(2) */
 static abi_long do_bsd_mknodat(void *cpu_env, abi_long arg1,
         abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5,
@@ -779,7 +767,6 @@ static abi_long do_bsd_mknodat(void *cpu_env, abi_long arg1,
 
     return ret;
 }
-#endif
 
 /* chown(2) */
 static abi_long do_bsd_chown(abi_long arg1, abi_long arg2, abi_long arg3)
