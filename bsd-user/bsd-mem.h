@@ -17,7 +17,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*--
+/*
  * Copyright (c) 1982, 1986, 1993
  *      The Regents of the University of California.  All rights reserved.
  *
@@ -67,20 +67,18 @@ static inline abi_long do_bsd_mmap(void *cpu_env, abi_long arg1, abi_long arg2,
     abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6, abi_long arg7,
     abi_long arg8)
 {
-
     if (regpairs_aligned(cpu_env) != 0) {
-       arg6 = arg7;
-       arg7 = arg8;
+        arg6 = arg7;
+        arg7 = arg8;
     }
     return get_errno(target_mmap(arg1, arg2, arg3,
-                target_to_host_bitmask(arg4, mmap_flags_tbl), arg5,
-                target_arg64(arg6, arg7)));
+                                 target_to_host_bitmask(arg4, mmap_flags_tbl),
+                                 arg5, target_arg64(arg6, arg7)));
 }
 
 /* munmap(2) */
 static inline abi_long do_bsd_munmap(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(target_munmap(arg1, arg2));
 }
 
@@ -88,14 +86,12 @@ static inline abi_long do_bsd_munmap(abi_long arg1, abi_long arg2)
 static inline abi_long do_bsd_mprotect(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
-
     return get_errno(target_mprotect(arg1, arg2, arg3));
 }
 
 /* msync(2) */
 static inline abi_long do_bsd_msync(abi_long addr, abi_long len, abi_long flags)
 {
-
     if (!access_ok(VERIFY_WRITE, addr, len)) {
         /* XXX Should be EFAULT, but FreeBSD seems to get this wrong. */
         return -TARGET_ENOMEM;
@@ -107,28 +103,24 @@ static inline abi_long do_bsd_msync(abi_long addr, abi_long len, abi_long flags)
 /* mlock(2) */
 static inline abi_long do_bsd_mlock(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(mlock(g2h_untagged(arg1), arg2));
 }
 
 /* munlock(2) */
 static inline abi_long do_bsd_munlock(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(munlock(g2h_untagged(arg1), arg2));
 }
 
 /* mlockall(2) */
 static inline abi_long do_bsd_mlockall(abi_long arg1)
 {
-
     return get_errno(mlockall(arg1));
 }
 
 /* munlockall(2) */
 static inline abi_long do_bsd_munlockall(void)
 {
-
     return get_errno(munlockall());
 }
 
@@ -149,7 +141,6 @@ static inline abi_long do_bsd_madvise(abi_long arg1, abi_long arg2,
 static inline abi_long do_bsd_minherit(abi_long addr, abi_long len,
         abi_long inherit)
 {
-
     return get_errno(minherit(g2h_untagged(addr), len, inherit));
 }
 
@@ -176,8 +167,12 @@ static inline abi_long do_bsd_mincore(abi_ulong target_addr, abi_ulong len,
     return ret;
 }
 
-//#define DEBUGF_BRK(message, args...) do { fprintf(stderr, (message), ## args); } while (0)
+#ifdef DO_DEBUG
+#define DEBUGF_BRK(message, args...) \
+    do { fprintf(stderr, (message), ## args); } while (0)
+#else
 #define DEBUGF_BRK(message, args...)
+#endif
 
 /* do_brk() must return target values and target errnos. */
 static inline abi_long do_obreak(abi_ulong new_brk)
@@ -197,38 +192,43 @@ static inline abi_long do_obreak(abi_ulong new_brk)
         return bsd_target_brk;
     }
 
-    /* If the new brk is less than the highest page reserved to the
-     * target heap allocation, set it and we're almost done...  */
+    /*
+     * If the new brk is less than the highest page reserved to the target heap
+     * allocation, set it and we're almost done...
+     */
     if (new_brk <= brk_page) {
-        /* Heap contents are initialized to zero, as for anonymous
-         * mapped pages.  */
+        /*
+         * Heap contents are initialized to zero, as for anonymous mapped pages.
+         */
         if (new_brk > bsd_target_brk) {
             memset(g2h_untagged(bsd_target_brk), 0, new_brk - bsd_target_brk);
         }
         bsd_target_brk = new_brk;
-        DEBUGF_BRK(TARGET_ABI_FMT_lx " (new_brk <= brk_page)\n", bsd_target_brk);
+        DEBUGF_BRK(TARGET_ABI_FMT_lx " (new_brk <= brk_page)\n",
+                   bsd_target_brk);
         return bsd_target_brk;
     }
 
-    /* We need to allocate more memory after the brk... Note that
-     * we don't use MAP_FIXED because that will map over the top of
-     * any existing mapping (like the one with the host libc or qemu
-     * itself); instead we treat "mapped but at wrong address" as
-     * a failure and unmap again.
+    /*
+     * We need to allocate more memory after the brk... Note that we don't use
+     * MAP_FIXED because that will map over the top of any existing mapping
+     * (like the one with the host libc or qemu itself); instead we treat
+     * "mapped but at wrong address" as a failure and unmap again.
      */
     new_alloc_size = HOST_PAGE_ALIGN(new_brk - brk_page);
     mapped_addr = get_errno(target_mmap(brk_page, new_alloc_size,
-                                        PROT_READ|PROT_WRITE,
-                                        MAP_ANON|MAP_PRIVATE, -1, 0));
+                                        PROT_READ | PROT_WRITE,
+                                        MAP_ANON | MAP_PRIVATE, -1, 0));
 
     if (mapped_addr == brk_page) {
-        /* Heap contents are initialized to zero, as for anonymous
-         * mapped pages.  Technically the new pages are already
-         * initialized to zero since they *are* anonymous mapped
-         * pages, however we have to take care with the contents that
-         * come from the remaining part of the previous page: it may
-         * contains garbage data due to a previous heap usage (grown
-         * then shrunken).  */
+        /*
+         * Heap contents are initialized to zero, as for anonymous mapped pages.
+         * Technically the new pages are already initialized to zero since they
+         * *are* anonymous mapped pages, however we have to take care with the
+         * contents that come from the remaining part of the previous page: it
+         * may contains garbage data due to a previous heap usage (grown then
+         * shrunken).
+         */
         memset(g2h_untagged(bsd_target_brk), 0, brk_page - bsd_target_brk);
 
         bsd_target_brk = new_brk;
@@ -237,14 +237,14 @@ static inline abi_long do_obreak(abi_ulong new_brk)
             bsd_target_brk);
         return bsd_target_brk;
     } else if (mapped_addr != -1) {
-        /* Mapped but at wrong address, meaning there wasn't actually
-         * enough space for this brk.
+        /*
+         * Mapped but at wrong address, meaning there wasn't actually enough
+         * space for this brk.
          */
         target_munmap(mapped_addr, new_alloc_size);
         mapped_addr = -1;
         DEBUGF_BRK(TARGET_ABI_FMT_lx " (mapped_addr != -1)\n", bsd_target_brk);
-    }
-    else {
+    } else {
         DEBUGF_BRK(TARGET_ABI_FMT_lx " (otherwise)\n", bsd_target_brk);
     }
 
@@ -259,15 +259,10 @@ static inline abi_long do_bsd_shm_open(abi_ulong arg1, abi_long arg2,
     int ret;
     void *p;
 
-#ifdef SHM_ANON
-#define SHM_PATH(p) (p) == SHM_ANON ? (p) : path(p)
+#define SHM_PATH(p) ((p) == SHM_ANON ? (p) : path(p))
     if (arg1 == (uintptr_t)SHM_ANON) {
         p = SHM_ANON;
-    } else
-#else
-#define SHM_PATH(p) path(p)
-#endif
-    {
+    } else {
         p = lock_user_string(arg1);
         if (p == NULL) {
             return -TARGET_EFAULT;
@@ -276,10 +271,7 @@ static inline abi_long do_bsd_shm_open(abi_ulong arg1, abi_long arg2,
     ret = get_errno(shm_open(SHM_PATH(p),
                 target_to_host_bitmask(arg2, fcntl_flags_tbl), arg3));
 
-#ifdef SHM_ANON
-    if (p != SHM_ANON)
-#endif
-    {
+    if (p != SHM_ANON) {
         unlock_user(p, arg1, 0);
     }
 
@@ -307,7 +299,6 @@ static inline abi_long do_bsd_shm_unlink(abi_ulong arg1)
 static inline abi_long do_bsd_shmget(abi_long arg1, abi_ulong arg2,
         abi_long arg3)
 {
-
     return get_errno(shmget(arg1, arg2, arg3));
 }
 
@@ -374,7 +365,7 @@ static inline abi_long do_bsd_shmat(int shmid, abi_ulong shmaddr, int shmflg)
             host_raddr = (void *)-1;
         } else {
             host_raddr = shmat(shmid, g2h_untagged(mmap_start),
-                shmflg /* | SHM_REMAP */);
+                shmflg); /* | SHM_REMAP XXX WHY? */
         }
     }
 
