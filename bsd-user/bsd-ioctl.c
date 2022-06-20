@@ -209,8 +209,9 @@ typedef struct IOCTLEntry IOCTLEntry;
 #define MAX_STRUCT_SIZE 4096
 
 static abi_long do_ioctl_unsupported(__unused const IOCTLEntry *ie,
-		__unused uint8_t *buf_temp,  __unused int fd,
-		__unused abi_long cmd, __unused abi_long arg);
+                                     __unused uint8_t *buf_temp,
+                                     __unused int fd, __unused abi_long cmd,
+                                     __unused abi_long arg);
 
 static abi_long do_ioctl_in6_ifreq_sockaddr_int(const IOCTLEntry *ie,
         uint8_t *buf_temp, int fd, abi_long cmd, abi_long arg);
@@ -232,39 +233,39 @@ static IOCTLEntry ioctl_entries[] = {
 
 static void log_unsupported_ioctl(unsigned long cmd)
 {
-	gemu_log("cmd=0x%08lx dir=", cmd);
-	switch (cmd & IOC_DIRMASK) {
-	case IOC_VOID:
-		gemu_log("VOID ");
-		break;
-	case IOC_OUT:
-		gemu_log("OUT ");
-		break;
-	case IOC_IN:
-		gemu_log("IN  ");
-		break;
-	case IOC_INOUT:
-		gemu_log("INOUT");
-		break;
-	default:
-		gemu_log("%01lx ???", (cmd & IOC_DIRMASK) >> 29);
-		break;
-	}
-	gemu_log(" '%c' %3d %lu\n", (char)IOCGROUP(cmd), (int)(cmd & 0xff), IOCPARM_LEN(cmd));
+    gemu_log("cmd=0x%08lx dir=", cmd);
+    switch (cmd & IOC_DIRMASK) {
+    case IOC_VOID:
+        gemu_log("VOID ");
+        break;
+    case IOC_OUT:
+        gemu_log("OUT ");
+        break;
+    case IOC_IN:
+        gemu_log("IN  ");
+        break;
+    case IOC_INOUT:
+        gemu_log("INOUT");
+        break;
+    default:
+        gemu_log("%01lx ???", (cmd & IOC_DIRMASK) >> 29);
+        break;
+    }
+    gemu_log(" '%c' %3d %lu\n", (char)IOCGROUP(cmd), (int)(cmd & 0xff),
+             IOCPARM_LEN(cmd));
 }
 
 static abi_long do_ioctl_unsupported(__unused const IOCTLEntry *ie,
-		__unused uint8_t *buf_temp,  __unused int fd,
-		__unused abi_long cmd, __unused abi_long arg)
+                                     __unused uint8_t *buf_temp,
+                                     __unused int fd, __unused abi_long cmd,
+                                     __unused abi_long arg)
 {
-
-	return -TARGET_ENXIO;
+    return -TARGET_ENXIO;
 }
 
 static void target_to_host_sockaddr_in6(struct sockaddr_in6 *hsa_in6,
         struct target_sockaddr_in6 *tsa_in6)
 {
-
     __get_user(hsa_in6->sin6_len, &tsa_in6->sin6_len);
     __get_user(hsa_in6->sin6_family, &tsa_in6->sin6_family);
     __get_user(hsa_in6->sin6_port, &tsa_in6->sin6_port);
@@ -287,9 +288,10 @@ static abi_long do_ioctl_in6_ifreq_sockaddr_int(const IOCTLEntry *ie,
     struct in6_ifreq hin6ifreq;
     struct sockaddr_in6 *hsa_in6 = &hin6ifreq.ifr_ifru.ifru_addr;
 
-    tin6ifreq = lock_user(VERIFY_WRITE, arg, sizeof (*tin6ifreq), 0);
-    if (tin6ifreq == NULL)
+    tin6ifreq = lock_user(VERIFY_WRITE, arg, sizeof(*tin6ifreq), 0);
+    if (tin6ifreq == NULL) {
         return -TARGET_EFAULT;
+    }
     memcpy(hin6ifreq.ifr_name, tin6ifreq->ifr_name, IFNAMSIZ);
     tsa_in6 = &tin6ifreq->ifr_ifru.ifru_addr;
     target_to_host_sockaddr_in6(hsa_in6, tsa_in6);
@@ -316,8 +318,8 @@ abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg)
     ie = ioctl_entries;
     for (;;) {
         if (ie->target_cmd == 0) {
-	    gemu_log("Qemu unsupported ioctl: ");
-	    log_unsupported_ioctl(cmd);
+            gemu_log("QEMU unsupported ioctl: ");
+            log_unsupported_ioctl(cmd);
             return -TARGET_ENOSYS;
         }
         if (ie->target_cmd == cmd) {
@@ -396,8 +398,8 @@ abi_long do_bsd_ioctl(int fd, abi_long cmd, abi_long arg)
         break;
 
     default:
-	gemu_log("Qemu unknown ioctl: type=%d ", arg_type[0]);
-	log_unsupported_ioctl(cmd);
+        gemu_log("QEMU unknown ioctl: type=%d ", arg_type[0]);
+        log_unsupported_ioctl(cmd);
         ret = -TARGET_ENOSYS;
         break;
     }
