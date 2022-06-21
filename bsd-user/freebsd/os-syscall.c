@@ -119,6 +119,10 @@ safe_syscall6(ssize_t, sendto, int, fd, const void *, buf, size_t, len, int,
 safe_syscall3(ssize_t, recvmsg, int, s, struct msghdr *, msg, int, flags);
 safe_syscall3(ssize_t, sendmsg, int, s, const struct msghdr *, msg, int, flags);
 
+safe_syscall4(int, ppoll, struct pollfd *, fds, nfds_t, nfds,
+              const struct timespec * restrict, timeout,
+              const sigset_t * restrict, newsigmask);
+
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 safe_syscall6(ssize_t, copy_file_range, int, infd, off_t *, inoffp, int, outfd,
     off_t *, outoffp, size_t, len, unsigned int, flags);
@@ -841,7 +845,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_poll: /* poll(2) */
-        ret = do_bsd_poll(cpu_env, arg1, arg2, arg3);
+        ret = do_bsd_poll(arg1, arg2, arg3);
         break;
 
     case TARGET_FREEBSD_NR_ppoll: /* ppoll(2) */

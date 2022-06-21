@@ -69,6 +69,10 @@ ssize_t safe_pwrite(int fd, void *buf, size_t nbytes, off_t offset);
 ssize_t safe_writev(int fd, const struct iovec *iov, int iovcnt);
 ssize_t safe_pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
 
+int safe_ppoll(struct pollfd *fds, nfds_t nfds,
+               const struct timespec * restrict timeout,
+               const sigset_t * restrict newsigmask);
+
 /* read(2) */
 static abi_long do_bsd_read(abi_long arg1, abi_long arg2, abi_long arg3)
 {
@@ -940,17 +944,14 @@ static abi_long do_bsd_undelete(abi_long arg1)
 }
 
 /* poll(2) */
-static abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
-        abi_long arg2, abi_long arg3)
+static abi_long do_bsd_poll(abi_long arg1, abi_long arg2, abi_long arg3)
 {
     abi_long ret;
     nfds_t i, nfds = arg2;
     int timeout = arg3;
     struct pollfd *pfd;
     struct target_pollfd *target_pfd;
-    CPUState *cpu = env_cpu(env);
-    TaskState *ts = (TaskState *)cpu->opaque;
-    sigset_t mask, omask;
+    struct timespec ts, *pts = NULL;
 
     target_pfd = lock_user(VERIFY_WRITE, arg1,
             sizeof(struct target_pollfd) * nfds, 1);
@@ -963,23 +964,13 @@ static abi_long do_bsd_poll(CPUArchState *env, abi_long arg1,
         pfd[i].events = tswap16(target_pfd[i].events);
     }
 
-    sigfillset(&mask);
-    sigprocmask(SIG_BLOCK, &mask, &omask);
-    if (ts->signal_pending) {
-        sigprocmask(SIG_SETMASK, &omask, NULL);
-        /* We have a signal pending so don't block in poll(). */
-        ret = get_errno(poll(pfd, nfds, 0));
-    } else {
-        struct timespec *tsptr = NULL, tspec;
-
-        if (timeout != INFTIM) {
-            tspec.tv_sec = timeout / 1000;
-            tspec.tv_nsec = (timeout % 1000) * 1000000;
-            tsptr = &tspec;
-        }
-        ret = get_errno(ppoll(pfd, nfds, tsptr, &omask));
-        sigprocmask(SIG_SETMASK, &omask, NULL);
+    if (timeout != INFTIM) {
+        ts.tv_sec = timeout / 1000;
+        ts.tv_nsec = (timeout % 1000) * 1000000;
+        pts = &ts;
     }
+
+    ret = get_errno(safe_ppoll(pfd, nfds, pts, NULL));
 
     if (!is_error(ret)) {
         for (i = 0; i < nfds; i++) {
