@@ -952,6 +952,7 @@ struct target_pollfd {
     int16_t revents;    /* returned events */
 };
 
+/* So far all target and host bitmasks are the same */
 #define target_to_host_bitmask(x, tbl) (x)
 #define host_to_target_bitmask(x, tbl) (x)
 

@@ -32,8 +32,9 @@
 #include "qemu/cutils.h"
 #include "qemu/path.h"
 #include <sys/syscall.h>
-#include <sys/mount.h>
+#include <sys/cdefs.h>
 #include <sys/param.h>
+#include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #include <poll.h>
@@ -774,11 +775,9 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_freebsd11_mknodat(arg1, arg2, arg3, arg4);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_mknodat: /* mknodat(2) */
         ret = do_bsd_mknodat(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_chown: /* chown(2) */
         ret = do_bsd_chown(arg1, arg2, arg3);
