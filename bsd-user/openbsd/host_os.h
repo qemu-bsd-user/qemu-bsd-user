@@ -23,9 +23,4 @@
 
 #define HOST_DEFAULT_BSD_TYPE target_openbsd
 
-static inline void save_proc_pathname(char *argv0)
-{
-    /* XXX */
-}
-
 #endif /*!__HOST_OS_H_ */

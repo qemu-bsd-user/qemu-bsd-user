@@ -27,20 +27,4 @@
 
 #define HOST_DEFAULT_BSD_TYPE target_freebsd
 
-static inline void save_proc_pathname(char *argv0)
-{
-    int mib[4];
-    size_t len;
-
-    mib[0] = CTL_KERN;
-    mib[1] = KERN_PROC;
-    mib[2] = KERN_PROC_PATHNAME;
-    mib[3] = -1;
-
-    len = PATH_MAX;
-    if (sysctl(mib, 4, qemu_proc_pathname, &len, NULL, 0)) {
-        perror("sysctl");
-    }
-}
-
 #endif /*!__HOST_OS_H_ */
