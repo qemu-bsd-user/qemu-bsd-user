@@ -25,6 +25,10 @@
 
 #include "bsd-proc.h"
 
+#ifndef STACK_GROWS_DOWN
+#define STACK_GROWS_DOWN 1
+#endif
+
 /* this flag is uneffective under linux too, should be deleted */
 #ifndef MAP_DENYWRITE
 #define MAP_DENYWRITE 0
@@ -75,7 +79,9 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
                                           struct image_info *info)
 {
         abi_ulong features, sp;
+        abi_ulong u_argc, u_argv, u_envp, u_auxv;
         int size;
+        int i;
         const int n = sizeof(elf_addr_t);
 
         target_auxents_sz = 0;
@@ -83,14 +89,35 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
         /*
          * Force 16 byte _final_ alignment here for generality.
          */
-        sp = sp & ~(abi_ulong)15;
+        //sp = sp & ~(abi_ulong)15;
+        if (STACK_GROWS_DOWN) {
+            sp = QEMU_ALIGN_DOWN(sp, 16);
+        } else {
+            sp = QEMU_ALIGN_UP(sp, 16);
+        }
+
         size = (DLINFO_ITEMS + 1) * 2;
         size += envc + argc + 2;
         size += 1;                      /* argc itself */
         size *= n;
-        if (size & 15) {
-            sp -= 16 - (size & 15);
+
+
+//         if (size & 15) {
+//             sp -= 16 - (size & 15);
+//         }
+        /* Allocate space and finalize stack alignment for entry now.  */
+        if (STACK_GROWS_DOWN) {
+            u_argc = QEMU_ALIGN_DOWN(sp - size, 16);
+            sp = u_argc;
+        } else {
+            u_argc = sp;
+            sp = QEMU_ALIGN_UP(sp + size, 16);
         }
+
+        u_argv = u_argc + n;
+        u_envp = u_argv + (argc + 1) * n;
+        info->arg_start = u_argv;
+        info->arg_end = u_argv + argc * n;
 
         /*
          * FreeBSD defines elf_addr_t as Elf32_Off / Elf64_Off
@@ -134,7 +161,24 @@ static abi_ulong target_create_elf_tables(abi_ulong p, int argc, int envc,
 #endif
 #undef NEW_AUX_ENT
 
-        sp = loader_build_argptr(envc, argc, sp, stringp);
+        put_user_ual(argc, u_argc);
+
+        p = info->arg_strings;
+        for (i = 0; i < argc; ++i) {
+            put_user_ual(p, u_argv);
+            u_argv += n;
+            p += target_strlen(p) + 1;
+        }
+        put_user_ual(0, u_argv);
+
+        p = info->env_strings;
+        for (i = 0; i < envc; ++i) {
+            put_user_ual(p, u_envp);
+            u_envp += n;
+            p += target_strlen(p) + 1;
+        }
+        put_user_ual(0, u_envp);
+
         return sp;
 }
 
