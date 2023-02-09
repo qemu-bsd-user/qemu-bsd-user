@@ -29,41 +29,6 @@
 #include <net/if.h>     /* For *_msghdr */
 #include <net/if_dl.h>  /* For sockaddr_dl */
 
-/* Undef all the macros from sys/user.h that conflict with qemu. */
-#undef CPUID_ACPI
-#undef CPUID_APIC
-#undef CPUID_CMOV
-#undef CPUID_CX8
-#undef CPUID_DE
-#undef CPUID_FXSR
-#undef CPUID_IA64
-#undef CPUID_PAE
-#undef CPUID_PAT
-#undef CPUID_PGE
-#undef CPUID_PSE
-#undef CPUID_MCA
-#undef CPUID_MCE
-#undef CPUID_MMX
-#undef CPUID_MSR
-#undef CPUID_MTRR
-#undef CPUID_PBE
-#undef CPUID_PSE36
-#undef CPUID_SS
-#undef CPUID_SEP
-#undef CPUID_SSE
-#undef CPUID_SSE2
-#undef CPUID_TM
-#undef CPUID_TSC
-#undef CPUID_VME
-#undef MCG_STATUS_EIPV
-#undef MCG_STATUS_MCIP
-#undef MCG_STATUS_RIPV
-#undef MSR_IA32_FEATURE_CONTROL
-#undef MSR_IA32_PRED_CMD
-#undef MSR_IA32_SPEC_CTRL
-#undef MSR_IA32_XSS
-#undef MSR_MTRRcap
-
 #include <string.h>
 
 #include "qemu.h"
