@@ -1057,27 +1057,19 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
     case CTL_KERN:
         switch (snamep[1]) {
         case KERN_USRSTACK:
-#if TARGET_USRSTACK != 0
             if (oldlen) {
                 (*(abi_ulong *)holdp) = tswapal(TARGET_USRSTACK);
             }
             holdlen = sizeof(abi_ulong);
             ret = 0;
-#else
-            ret = -TARGET_ENOENT;
-#endif
             goto out;
 
         case KERN_PS_STRINGS:
-#if defined(TARGET_PS_STRINGS)
             if (oldlen) {
                 (*(abi_ulong *)holdp) = tswapal(TARGET_PS_STRINGS);
             }
             holdlen = sizeof(abi_ulong);
             ret = 0;
-#else
-            ret = -TARGET_ENOENT;
-#endif
             goto out;
 
         case KERN_PROC:
