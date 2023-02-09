@@ -891,9 +891,12 @@ abi_long target_madvise(abi_ulong start, abi_ulong len_in, int advice)
      * anonymous mappings. In this case passthrough is safe, so do it.
      */
     mmap_lock();
-    if ((advice & MADV_DONTNEED) &&
+    if (advice == MADV_DONTNEED &&
         can_passthrough_madv_dontneed(start, end)) {
         ret = get_errno(madvise(g2h_untagged(start), len, MADV_DONTNEED));
+        if (ret == 0) {
+            page_reset_target_data(start, start + len);
+        }
     }
     mmap_unlock();
 

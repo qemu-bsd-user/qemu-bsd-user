@@ -38,15 +38,6 @@ typedef struct SemihostingConsole {
 
 static SemihostingConsole console;
 
-int qemu_semihosting_log_out(const char *s, int len)
-{
-    if (console.chr) {
-        return qemu_chr_write_all(console.chr, (uint8_t *) s, len);
-    } else {
-        return write(STDERR_FILENO, s, len);
-    }
-}
-
 #define FIFO_SIZE   1024
 
 static int console_can_read(void *opaque)
@@ -120,7 +111,8 @@ int qemu_semihosting_console_read(CPUState *cs, void *buf, int len)
 int qemu_semihosting_console_write(void *buf, int len)
 {
     if (console.chr) {
-        return qemu_chr_write_all(console.chr, (uint8_t *)buf, len);
+        int r = qemu_chr_write_all(console.chr, (uint8_t *)buf, len);
+        return r < 0 ? 0 : r;
     } else {
         return fwrite(buf, 1, len, stderr);
     }
