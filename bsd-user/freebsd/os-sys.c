@@ -1198,7 +1198,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
          * this is right and otherwise matches the jail/environment we're
          * operating out of.
          *
-         * If we can't find the expected ARCH tag, fallback to armv6 as a
+         * If we can't find the expected ARCH tag, fallback to armv7 as a
          * sensible default.
          */
         char *machine_arch;
