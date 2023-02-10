@@ -1225,15 +1225,15 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
             ret = 0;
             goto out;
 #if defined(TARGET_ARM)
-    case HW_FLOATINGPT:
-        if (oldlen) {
-#ifdef ARM_FEATURE_VFP /* XXX FIXME XXX */
-          if (env->features & ((1ULL << ARM_FEATURE_VFP)|
-              (1ULL << ARM_FEATURE_VFP3)|
-              (1ULL << ARM_FEATURE_VFP4)))
-              *(int32_t *)holdp = 1;
-          else
-              *(int32_t *)holdp = 0;
+        case HW_FLOATINGPT:
+            if (oldlen) {
+#ifdef ARM_FEATURE_VFP /* XXX FIXME XXX -- hangover from old arm feature conversion bfa8a370d2f5d4ed03f7a7e2987982f15fe73758 */
+                if (env->features & ((1ULL << ARM_FEATURE_VFP)|
+                                     (1ULL << ARM_FEATURE_VFP3)|
+                                     (1ULL << ARM_FEATURE_VFP4)))
+                    *(int32_t *)holdp = 1;
+                else
+                    *(int32_t *)holdp = 0;
 #else
           *(int32_t *)holdp = 1;
 #endif
