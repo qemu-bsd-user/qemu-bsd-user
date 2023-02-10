@@ -1856,6 +1856,10 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     default:
         qemu_log_mask(LOG_UNIMP, "Unsupported syscall: %d\n", num);
+        if (bsd_user_strict) {
+            printf("Unimplemented system call %d\n", num);
+            abort();
+        }
 #if 0
         ret = get_errno(syscall(num, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
                     arg8));

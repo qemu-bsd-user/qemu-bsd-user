@@ -109,6 +109,8 @@ unsigned long reserved_va = MAX_RESERVED_VA;
 unsigned long reserved_va;
 #endif
 
+bool bsd_user_strict = false;	/* Abort for unimplemned things */
+
 const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
 const char *qemu_uname_release;
 char qemu_proc_pathname[PATH_MAX];  /* full path to exeutable */
@@ -440,6 +442,8 @@ int main(int argc, char **argv)
             trace_opt_parse(optarg);
         } else if (!strcmp(r, "0")) {
             argv0 = argv[optind++];
+        } else if (!strcmp(r, "strict")) {
+            bsd_user_strict = true;
         } else {
             usage();
         }
