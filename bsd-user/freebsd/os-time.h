@@ -729,7 +729,6 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1, abi_ulong arg2
     return ret;
 }
 
-#ifdef BSD_HAVE_KEVENT64
 /* kevent(2) */
 static inline abi_long do_freebsd_kevent(abi_long arg1, abi_ulong arg2,
         abi_long arg3, abi_ulong arg4, abi_long arg5, abi_long arg6)
@@ -814,7 +813,6 @@ static inline abi_long do_freebsd_kevent(abi_long arg1, abi_ulong arg2,
     }
     return ret;
 }
-#endif
 
 /* sigtimedwait(2) */
 static inline abi_long do_freebsd_sigtimedwait(abi_ulong arg1, abi_ulong arg2,

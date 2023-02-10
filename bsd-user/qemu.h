@@ -19,8 +19,6 @@
 
 #include <sys/param.h>
 
-#define BSD_HAVE_KEVENT64
-
 #include "qemu/osdep.h"
 #include "cpu.h"
 #include "qemu/units.h"
