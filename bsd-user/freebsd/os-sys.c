@@ -275,7 +275,7 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
     __put_user(hkif->kf_ref_count, &tkif->kf_ref_count);
     __put_user(hkif->kf_flags, &tkif->kf_flags);
     __put_user(hkif->kf_offset, &tkif->kf_offset);
-    switch(type) {
+    switch (type) {
     case TARGET_KF_TYPE_FIFO:
     case TARGET_KF_TYPE_SHM:
     case TARGET_KF_TYPE_VNODE:
@@ -305,12 +305,12 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
         __put_user(hkif->kf_un.kf_sock.kf_sock_protocol0,
                 &tkif->kf_un.kf_sock.kf_sock_protocol0);
 /*  XXX - Implement copy function for sockaddr_storage
-	host_to_target_copy_sockaddr_storage(
-	        &hkif->kf_un.kf_file.kf_sa_local,
-	        &kif->kf_un.kf_file.kf_sa_local);
-	host_to_target_copy_sockaddr_storage(
-	        &hkif->kf_un.kf_file.kf_sa_peer,
-	        &kif->kf_un.kf_file.kf_sa_peer);
+        host_to_target_copy_sockaddr_storage(
+                &hkif->kf_un.kf_file.kf_sa_local,
+                &kif->kf_un.kf_file.kf_sa_local);
+        host_to_target_copy_sockaddr_storage(
+                &hkif->kf_un.kf_file.kf_sa_peer,
+                &kif->kf_un.kf_file.kf_sa_peer);
 */
         __put_user(hkif->kf_un.kf_sock.kf_sock_pcb,
                 &tkif->kf_un.kf_sock.kf_sock_pcb);
@@ -380,8 +380,9 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
     struct kinfo_file *kf, kif;
     struct target_kinfo_file target_kif;
 
-    if (tlen == NULL)
+    if (tlen == NULL) {
         return -TARGET_EINVAL;
+    }
 
     len = 0;
     mib[0] = CTL_KERN;
@@ -390,16 +391,18 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
     mib[3] = pid;
 
     ret = get_errno(sysctl(mib, 4, NULL, &len, NULL, 0));
-    if (is_error(ret))
+    if (is_error(ret)) {
         return ret;
+    }
     if (tkif == NULL) {
         *tlen = len;
         return ret;
     }
     len = len * 4 / 3;
     buf = g_malloc(len);
-    if (buf == NULL)
+    if (buf == NULL) {
         return -TARGET_ENOMEM;
+    }
 
     /*
      * Count the number of records.
@@ -439,7 +442,7 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
         kf = (struct kinfo_file *)(uintptr_t)bp;
         sz = kf->kf_structsize;
         /* Copy/expand into a zeroed buffer */
-        memset(&kif, 0, sizeof (kif));
+        memset(&kif, 0, sizeof(kif));
         memcpy(&kif, kf, sz);
         /* Byte swap and copy into a target buffer. */
         host_to_target_kinfo_file(&target_kif, &kif);
@@ -494,8 +497,9 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
     struct kinfo_vmentry *kve, kvme;
     struct target_kinfo_vmentry target_kvme;
 
-    if (tlen == NULL)
+    if (tlen == NULL) {
         return -TARGET_EINVAL;
+    }
 
     len = 0;
     mib[0] = CTL_KERN;
@@ -504,16 +508,18 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
     mib[3] = pid;
 
     ret = get_errno(sysctl(mib, 4, NULL, &len, NULL, 0));
-    if (is_error(ret))
+    if (is_error(ret)) {
         return ret;
+    }
     if (tkve == NULL) {
         *tlen = len;
         return ret;
     }
     len = len * 4 / 3;
     buf = g_malloc(len);
-    if (buf == NULL)
+    if (buf == NULL) {
         return -TARGET_ENOMEM;
+    }
 
     /*
      * Count the number of records.
@@ -553,7 +559,7 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
         kve = (struct kinfo_vmentry *)(uintptr_t)bp;
         sz = kve->kve_structsize;
         /* Copy/expand into a zeroed buffer */
-        memset(&kvme, 0, sizeof (kvme));
+        memset(&kvme, 0, sizeof(kvme));
         memcpy(&kvme, kve, sz);
         /* Byte swap and copy into a target aligned buffer. */
         host_to_target_kinfo_vmentry(&target_kvme, &kvme);
@@ -575,17 +581,20 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
 #define rtprintf(...) printf(__VA_ARGS__)
 
 static void
-hexdump(const char *prefix, const void *sbuf, int len) 
+hexdump(const char *prefix, const void *sbuf, int len)
 {
     const char *buf = sbuf;
     int i;
-    for (i=0; i<len; i++) {
-        if (i && (i&7)==0)
+    for (i = 0; i < len; i++) {
+        if (i && (i & 7) == 0) {
             printf(" ");
-        if (i && (i&15)==0)
+        }
+        if (i && (i & 15) == 0) {
             printf("\n");
-        if ((i&15)==0)
+        }
+        if ((i & 15) == 0) {
             printf("%s: ", prefix);
+        }
         rtprintf("%02X ", (unsigned char)buf[i]);
     }
     rtprintf("\n");
@@ -593,34 +602,45 @@ hexdump(const char *prefix, const void *sbuf, int len)
 
 #else
 static void
-hexdump(const char *prefix, const void *sbuf, int len) 
+hexdump(const char *prefix, const void *sbuf, int len)
 {
 }
 #define rtprintf(...)
 #endif
 
 /* Assign byteswapped value to target, autodetecting size. */
-#define PUT(t,v) switch(sizeof(t)) {   \
-  case 1: t=v; break;                  \
-  case 2: t=tswap16(v); break;         \
-  case 4: t=tswap32(v); break;         \
-  case 8: t=tswap64(v); break;         \
-  default: abort();                    \
-}
+#define PUT(t, v)                  \
+    switch (sizeof(t)) {           \
+    case 1:                        \
+        t = v;                     \
+        break;                     \
+    case 2:                        \
+        t = tswap16(v);            \
+        break;                     \
+    case 4:                        \
+        t = tswap32(v);            \
+        break;                     \
+    case 8:                        \
+        t = tswap64(v);            \
+        break;                     \
+    default:                       \
+        abort();                   \
+    }
 
 /* SA_SIZE macro, adjusted for target word size. */
 #define TARGET_SA_SIZE(sa)                               \
  ((!(sa) || ((struct sockaddr *)(sa))->sa_len == 0) ?    \
    sizeof(abi_long)            :                         \
-   1 + ( (((struct sockaddr *)(sa))->sa_len - 1) | (sizeof(abi_long) - 1) ) \
+   1 + ((((struct sockaddr *)(sa))->sa_len - 1) | (sizeof(abi_long) - 1)) \
  )
 
-/* Given a bitmap of sockaddr types, and a pointer to the host buffer,
-   realign the sockaddr's into the target buffer, and byteswap field members
-   as needed.  Return value is the length of the repacked buffer.
-*/
+/*
+ * Given a bitmap of sockaddr types, and a pointer to the host buffer, realign
+ * the sockaddr's into the target buffer, and byteswap field members as needed.
+ * Return value is the length of the repacked buffer.
+ */
 static int
-host_to_target_copy_sockaddrs(int addrs, char *hbuf, char *tbuf) 
+host_to_target_copy_sockaddrs(int addrs, char *hbuf, char *tbuf)
 {
     int tlen = 0;
     int i;
@@ -629,14 +649,16 @@ host_to_target_copy_sockaddrs(int addrs, char *hbuf, char *tbuf)
     rtprintf("copy_sockaddrs: host=%p, target=%p\n", hbuf, tbuf);
 
     for (i = 0; i < RTAX_MAX; i++) {
-		/* If the bitmap for this sockaddr type is clear, skip it. */
-        if ((addrs & (1 << i)) == 0)
+        /* If the bitmap for this sockaddr type is clear, skip it. */
+        if ((addrs & (1 << i)) == 0) {
             continue;
+        }
 
         sa = (struct sockaddr *)hbuf;
 
-        rtprintf("sockaddr, addr=%02X, family=%d, hlen=%d, hsize=%ld, tsize=%ld\n", 
-            (1<<i), sa->sa_family, sa->sa_len, 
+        rtprintf(
+            "sockaddr, addr=%02X, family=%d, hlen=%d, hsize=%ld, tsize=%ld\n",
+            (1 << i), sa->sa_family, sa->sa_len,
             SA_SIZE(sa), TARGET_SA_SIZE(sa));
 
         memcpy(tbuf, hbuf, SA_SIZE(sa));
@@ -649,7 +671,7 @@ host_to_target_copy_sockaddrs(int addrs, char *hbuf, char *tbuf)
             PUT(dl->sdl_index, dl->sdl_index);
             break;
         }
-            
+
         case AF_INET6: {
             struct sockaddr_in6 *sin6;
             sin6 = (struct sockaddr_in6 *)tbuf;
@@ -664,7 +686,7 @@ host_to_target_copy_sockaddrs(int addrs, char *hbuf, char *tbuf)
         hexdump("sh", hbuf, SA_SIZE(sa));
         hexdump("st", tbuf, TARGET_SA_SIZE(sa));
 
-		/* Increment pointers and counters by the appropriate amounts. */
+        /* Increment pointers and counters by the appropriate amounts. */
         hbuf += SA_SIZE(sa);
         tbuf += TARGET_SA_SIZE(sa);
         tlen += TARGET_SA_SIZE(sa);
@@ -674,63 +696,71 @@ host_to_target_copy_sockaddrs(int addrs, char *hbuf, char *tbuf)
 
 static abi_long
 do_sysctl_net_routetable_iflistl(int32_t *snamep, size_t namelen, size_t olen,
-        char *tbuf, size_t *tlen)
+                                 char *tbuf, size_t *tlen)
 {
     abi_long ret;
-    
+
     char *bp, *ep, *tp;
     struct rt_msghdr *rtm, *trtm;
     char *buf = NULL;
     size_t len;
-    
+
     /* NET_RT_IFLISTL */
-            
-    /* This sysctl returns a blob composed of a list of *_msghdr structs (of
-     * a few different types and sizes), each followed by a list of
-     * sockaddr_* structs (of a few different types and sizes).  Many
-     * members in each struct will need to be byte-swapped, and
-     * unfortunately, the sockaddr structs are aligned in a MD way, so the
-     * byteswapping can't be done in-place.  We have to rebuild a new
-     * correctly-aligned blob to pass back to the target.
+
+    /*
+     * This sysctl returns a blob composed of a list of *_msghdr structs (of a
+     * few different types and sizes), each followed by a list of sockaddr_*
+     * structs (of a few different types and sizes).  Many members in each
+     * struct will need to be byte-swapped, and unfortunately, the sockaddr
+     * structs are aligned in a MD way, so the byteswapping can't be done
+     * in-place.  We have to rebuild a new correctly-aligned blob to pass back
+     * to the target.
      */
 
-    rtprintf("in sysctl1, olen=%zd, tlen=%zd, tbuf=%p\n", 
-        olen, *tlen, tbuf);
+    rtprintf("in sysctl1, olen=%zd, tlen=%zd, tbuf=%p\n",
+             olen, *tlen, tbuf);
 
-	/* extend target's requested size by 25% to be on the safe side, even
-       though repacking for a 32-bit target shrinks the blob.  */
-    len = *tlen * 4 / 3; 
+    /*
+     * extend target's requested size by 25% to be on the safe side, even though
+     * repacking for a 32-bit target shrinks the blob.
+     */
+    len = *tlen * 4 / 3;
     if (len && tbuf) {
         buf = g_malloc(len);
-        if (buf == NULL)
+        if (buf == NULL) {
             return -TARGET_ENOMEM;
+        }
         memset(buf, 0, len);
     }
 
-    rtprintf("in sysctl2, len=%zd, buf=%p\n", 
-        len, buf);
+    rtprintf("in sysctl2, len=%zd, buf=%p\n",
+             len, buf);
     ret = get_errno(sysctl(snamep, namelen, buf, &len, NULL, 0));
-    rtprintf("in sysctl3, ret=%ld, len=%zd\n", 
-        ret, len);
+    rtprintf("in sysctl3, ret=%ld, len=%zd\n",
+             ret, len);
 
-	/* If the target was just probing for a good size to use, extend that by
-	   25% too.  */
+    /*
+     * If the target was just probing for a good size to use, extend that by 25%
+     * too.
+     */
     if (olen == 0 || tbuf == NULL) {
         *tlen = len * 4 / 3;
         return ret;
     }
-    
+
     if (is_error(ret)) {
         g_free(buf);
         return ret;
     }
 
-    rtprintf("in sysctl4, len=%zd, tlen=%zd, buf=%p, tbuf = %p\n", 
-        len, *tlen, buf, tbuf);
+    rtprintf("in sysctl4, len=%zd, tlen=%zd, buf=%p, tbuf = %p\n",
+             len, *tlen, buf, tbuf);
 
-	/* Loop through the blob, picking off routing messages and copying them to
-	   tbuf, swapping struct members as needed. */
-   
+    /*
+     * Loop through the blob, picking off routing messages and copying them to
+     * tbuf, swapping struct members as needed.
+     */
+
     bp = buf;
     ep = buf + len;
     tp = tbuf;
@@ -739,24 +769,26 @@ do_sysctl_net_routetable_iflistl(int32_t *snamep, size_t namelen, size_t olen,
         int tmsglen;
         rtm = (struct rt_msghdr *)bp;
         trtm = (struct rt_msghdr *)tp;
-        
+
         rtprintf("before, host=%p, target=%p, msglen=%d\n",
-            bp, tp, rtm->rtm_msglen);
+                 bp, tp, rtm->rtm_msglen);
         hexdump("h", rtm, rtm->rtm_msglen);
-        
-        switch(rtm->rtm_type) {
+
+        switch (rtm->rtm_type) {
         case RTM_IFINFO: {
             struct if_msghdrl *ifm, *tifm;
             ifm = (struct if_msghdrl *)bp;
             tifm = (struct if_msghdrl *)tp;
 
-            rtprintf("interface. index=%d, msglen=%d, len=%d, data_off=%d\n",  
-            ifm->ifm_index, ifm->ifm_msglen, ifm->ifm_len, ifm->ifm_data_off);
+            rtprintf("interface. index=%d, msglen=%d, len=%d, data_off=%d\n",
+                     ifm->ifm_index, ifm->ifm_msglen, ifm->ifm_len,
+                     ifm->ifm_data_off);
 
             memcpy(tifm, ifm, sizeof(*ifm));
             /* copy and repack sockaddrs */
-            sa_len = host_to_target_copy_sockaddrs(ifm->ifm_addrs, 
-                IF_MSGHDRL_RTA(ifm), IF_MSGHDRL_RTA(tifm));
+            sa_len = host_to_target_copy_sockaddrs(ifm->ifm_addrs,
+                                                   IF_MSGHDRL_RTA(ifm),
+                                                   IF_MSGHDRL_RTA(tifm));
 
             /* byteswap */
             PUT(tifm->ifm_addrs, ifm->ifm_addrs);
@@ -781,7 +813,7 @@ do_sysctl_net_routetable_iflistl(int32_t *snamep, size_t namelen, size_t olen,
             PUT(tifm->ifm_data.ifi_oqdrops, ifm->ifm_data.ifi_oqdrops);
             PUT(tifm->ifm_data.ifi_noproto, ifm->ifm_data.ifi_noproto);
             PUT(tifm->ifm_data.ifi_hwassist, ifm->ifm_data.ifi_hwassist);
-        
+
             /* set target msglen */
             tmsglen = ifm->ifm_len + sa_len;
             PUT(tifm->ifm_msglen, tmsglen);
@@ -792,15 +824,17 @@ do_sysctl_net_routetable_iflistl(int32_t *snamep, size_t namelen, size_t olen,
             ifam = (struct ifa_msghdrl *)bp;
             tifam = (struct ifa_msghdrl *)tp;
 
-            rtprintf("address. index=%d, msglen=%d, len=%d, data_off=%d\n", 
-            ifam->ifam_index, ifam->ifam_msglen, ifam->ifam_len, ifam->ifam_data_off);
+            rtprintf("address. index=%d, msglen=%d, len=%d, data_off=%d\n",
+                     ifam->ifam_index, ifam->ifam_msglen, ifam->ifam_len,
+                     ifam->ifam_data_off);
 
             memcpy(tifam, ifam, sizeof(*ifam));
 
             /* copy and repack sockaddrs */
-            sa_len = host_to_target_copy_sockaddrs(ifam->ifam_addrs, IFA_MSGHDRL_RTA(ifam),
-                IFA_MSGHDRL_RTA(tifam));
-            
+            sa_len = host_to_target_copy_sockaddrs(ifam->ifam_addrs,
+                                                   IFA_MSGHDRL_RTA(ifam),
+                                                   IFA_MSGHDRL_RTA(tifam));
+
             /* byteswap */
             PUT(tifam->ifam_addrs, ifam->ifam_addrs);
             PUT(tifam->ifam_flags, ifam->ifam_flags);
@@ -825,52 +859,54 @@ do_sysctl_net_routetable_iflistl(int32_t *snamep, size_t namelen, size_t olen,
             PUT(tifam->ifam_data.ifi_oqdrops, ifam->ifam_data.ifi_oqdrops);
             PUT(tifam->ifam_data.ifi_noproto, ifam->ifam_data.ifi_noproto);
             PUT(tifam->ifam_data.ifi_hwassist, ifam->ifam_data.ifi_hwassist);
-        
+
             /* set target msglen */
             tmsglen = ifam->ifam_len + sa_len;
             PUT(tifam->ifam_msglen, tmsglen);
 
             break;
         }
-            
+
         default:
-            /* can't happen, since the kernel only generates RTM_IFINFO and
-               RTM_NEWADDR messages for this sysctl, but if it does, don't
-               copy the message.  */
-            tmsglen = 0; 
+            /*
+             * can't happen, since the kernel only generates RTM_IFINFO and
+             * RTM_NEWADDR messages for this sysctl, but if it does, don't
+             * copy the message.
+             */
+            tmsglen = 0;
             break;
         }
-        
+
         rtprintf("after, msglen = %d\n", tmsglen);
         hexdump("t", trtm, tmsglen);
-        
+
         bp += rtm->rtm_msglen;
         tp += tmsglen;
     }
-    
+
     len = tp - tbuf;
     memcpy(buf, tbuf, len);
-    *tlen = len; 
-    
+    *tlen = len;
+
     rtprintf("in sysctl, tlen = %zd\n", len);
     hexdump("z", buf, len);
     fflush(stdout);
-    
+
     return ret;
 }
 
 /*
- * XXX The following should maybe go some place else.  Also, see the note
- * about using "thunk" for sysctl's that pass data using structures.
+ * The following should maybe go some place else.  Also, see the note about
+ * using "thunk" for sysctl's that pass data using structures.
  */
 /* From sys/mount.h: */
 struct target_xvfsconf {
-	abi_ulong vfc_vfsops;		/* filesystem op vector - not used */
-	char vfc_name[16];		/* filesystem type name */
-	int32_t  vfc_typenum;		/* historic fs type number */
-	int32_t  vfc_refcount;		/* number mounted of this type */
-	int32_t  vfc_flags;		/* permanent flags */
-	abi_ulong vfc_next;		/* next int list - not used */
+    abi_ulong vfc_vfsops;       /* filesystem op vector - not used */
+    char vfc_name[16];          /* filesystem type name */
+    int32_t  vfc_typenum;       /* historic fs type number */
+    int32_t  vfc_refcount;      /* number mounted of this type */
+    int32_t  vfc_flags;         /* permanent flags */
+    abi_ulong vfc_next;         /* next int list - not used */
 };
 
 /* vfc_flag definitions */
@@ -889,39 +925,47 @@ host_to_target_vfc_flags(int flags)
 {
     int ret = 0;
 
-    if (flags & VFCF_STATIC)
-	ret |= TARGET_VFCF_STATIC;
-    if (flags & VFCF_NETWORK)
-	ret |= TARGET_VFCF_NETWORK;
-    if (flags & VFCF_READONLY)
-	ret |= TARGET_VFCF_READONLY;
-    if (flags & VFCF_SYNTHETIC)
-	ret |= TARGET_VFCF_SYNTHETIC;
-    if (flags & VFCF_LOOPBACK)
-	ret |= TARGET_VFCF_LOOPBACK;
-    if (flags & VFCF_UNICODE)
-	ret |= TARGET_VFCF_UNICODE;
-    if (flags & VFCF_JAIL)
-	ret |= TARGET_VFCF_JAIL;
-    if (flags & VFCF_DELEGADMIN)
-	ret |= TARGET_VFCF_DELEGADMIN;
+    if (flags & VFCF_STATIC) {
+        ret |= TARGET_VFCF_STATIC;
+    }
+    if (flags & VFCF_NETWORK) {
+        ret |= TARGET_VFCF_NETWORK;
+    }
+    if (flags & VFCF_READONLY) {
+        ret |= TARGET_VFCF_READONLY;
+    }
+    if (flags & VFCF_SYNTHETIC) {
+        ret |= TARGET_VFCF_SYNTHETIC;
+    }
+    if (flags & VFCF_LOOPBACK) {
+        ret |= TARGET_VFCF_LOOPBACK;
+    }
+    if (flags & VFCF_UNICODE) {
+        ret |= TARGET_VFCF_UNICODE;
+    }
+    if (flags & VFCF_JAIL) {
+        ret |= TARGET_VFCF_JAIL;
+    }
+    if (flags & VFCF_DELEGADMIN) {
+        ret |= TARGET_VFCF_DELEGADMIN;
+    }
 #ifdef VFCF_SBRDY
-    if (flags & VFCF_SBDRY)
-	ret |= TARGET_VFCF_SBDRY;
+    if (flags & VFCF_SBDRY) {
+        ret |= TARGET_VFCF_SBDRY;
+    }
 #endif
-
     return ret;
 }
 
 /*
- * XXX this uses the undocumented oidfmt interface to find the kind of
- * a requested sysctl, see /sys/kern/kern_sysctl.c:sysctl_sysctl_oidfmt()
- * (compare to src/sbin/sysctl/sysctl.c)
+ * This uses the undocumented oidfmt interface to find the kind of a requested
+ * sysctl, see /sys/kern/kern_sysctl.c:sysctl_sysctl_oidfmt() (compare to
+ * src/sbin/sysctl/sysctl.c)
  */
 static int
 oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
 {
-    int qoid[CTL_MAXNAME+2];
+    int qoid[CTL_MAXNAME + 2];
     uint8_t buf[BUFSIZ];
     int i;
     size_t j;
@@ -948,7 +992,7 @@ oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
 
 /*
  * try and convert sysctl return data for the target.
- * XXX doesn't handle CTLTYPE_OPAQUE and CTLTYPE_STRUCT.
+ * Note: doesn't handle CTLTYPE_OPAQUE and CTLTYPE_STRUCT.
  */
 static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
 {
@@ -961,28 +1005,28 @@ static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
 #ifdef TARGET_ABI32
     case CTLTYPE_LONG:
     case CTLTYPE_ULONG:
-	/* If the sysctl has a type of long/ulong but seems to be bigger
-	 * than these data types, its probably an array.  Double check that
-	 * its evenly divisible by the size of long and convert holdp to 
-	 * a series of 32bit elements instead, adjusting holdlen to the new
-	 * size.
-	 */
-	if ((*holdlen > sizeof(abi_ulong)) && ((*holdlen % sizeof(abi_ulong)) == 0) ) {
-		int array_size = *holdlen / sizeof(long);
-		int i;
-		if (holdp) {
-			for (i = 0; i < array_size; i++) {
-				((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
-			}
-			*holdlen = array_size * sizeof(abi_ulong);
-		} else {
-			*holdlen = sizeof(abi_ulong);
-		}
-		
-	} else {
-        	*(uint32_t *)holdp = tswap32(*(long *)holdp);
-		*holdlen = sizeof(uint32_t);
-	}
+        /*
+         * If the sysctl has a type of long/ulong but seems to be bigger than
+         * these data types, its probably an array.  Double check that its
+         * evenly divisible by the size of long and convert holdp to a series of
+         * 32bit elements instead, adjusting holdlen to the new size.
+         */
+        if ((*holdlen > sizeof(abi_ulong)) &&
+            ((*holdlen % sizeof(abi_ulong)) == 0)) {
+            int array_size = *holdlen / sizeof(long);
+            int i;
+            if (holdp) {
+                for (i = 0; i < array_size; i++) {
+                    ((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
+                }
+                *holdlen = array_size * sizeof(abi_ulong);
+            } else {
+                *holdlen = sizeof(abi_ulong);
+            }
+        } else {
+            *(uint32_t *)holdp = tswap32(*(long *)holdp);
+            *holdlen = sizeof(uint32_t);
+        }
         break;
 #else
     case CTLTYPE_LONG:
@@ -1001,7 +1045,6 @@ static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
         break;
 
     default:
-        /* XXX unhandled */
         return -1;
     }
     return 0;
@@ -1026,8 +1069,8 @@ static inline void sysctl_oidfmt(uint32_t *holdp)
 }
 
 static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
-        int32_t namelen, void *holdp, size_t *holdlenp, void *hnewp,
-        size_t newlen)
+                                      int32_t namelen, void *holdp, size_t *holdlenp, void *hnewp,
+                                      size_t newlen)
 {
     uint32_t kind = 0;
 #if TARGET_ABI_BITS != HOST_LONG_BITS
@@ -1101,17 +1144,17 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
             case KERN_PROC_RUID:
             case KERN_PROC_RUID | KERN_PROC_INC_THREAD:
                 ret = do_sysctl_kern_getprocs(snamep[2], snamep[3], oldlen,
-                        holdp, &holdlen);
+                                              holdp, &holdlen);
                 goto out;
 
             case KERN_PROC_FILEDESC:
                 ret = do_sysctl_kern_proc_filedesc(snamep[3], oldlen, holdp,
-                        &holdlen);
+                                                   &holdlen);
                 goto out;
 
             case KERN_PROC_VMMAP:
                 ret = do_sysctl_kern_proc_vmmap(snamep[3], oldlen, holdp,
-                        &holdlen);
+                                                &holdlen);
                 goto out;
 
             default:
@@ -1130,51 +1173,52 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 
         if (!oid_vfs_conflist) {
             int real_oid[CTL_MAXNAME+2];
-        size_t len = sizeof(real_oid) / sizeof(int);
+            size_t len = sizeof(real_oid) / sizeof(int);
 
-        if (sysctlnametomib("vfs.conflist", real_oid, &len) >= 0)
-            oid_vfs_conflist = real_oid[1];
+            if (sysctlnametomib("vfs.conflist", real_oid, &len) >= 0) {
+                oid_vfs_conflist = real_oid[1];
+            }
         }
 
         if (oid_vfs_conflist && snamep[1] == oid_vfs_conflist) {
-        struct xvfsconf *xvfsp;
-        struct target_xvfsconf *txp;
-        int cnt, i;
+            struct xvfsconf *xvfsp;
+            struct target_xvfsconf *txp;
+            int cnt, i;
 
-        if (sysctlbyname("vfs.conflist", NULL, &holdlen, NULL, 0) < 0) {
-            ret = -1;
-            goto out;
-        }
-        if (!holdp) {
+            if (sysctlbyname("vfs.conflist", NULL, &holdlen, NULL, 0) < 0) {
+                ret = -1;
+                goto out;
+            }
+            if (!holdp) {
+                ret = 0;
+                goto out;
+            }
+            xvfsp = g_malloc(holdlen);
+            if (xvfsp == NULL) {
+                ret = -TARGET_ENOMEM;
+                goto out;
+            }
+            if (sysctlbyname("vfs.conflist", xvfsp, &holdlen, NULL, 0) < 0) {
+                g_free(xvfsp);
+                ret = -1;
+                goto out;
+            }
+            cnt = holdlen / sizeof(struct xvfsconf);
+            holdlen = cnt * sizeof(struct target_xvfsconf);
+            txp = (struct target_xvfsconf *)holdp;
+            for (i = 0; i < cnt; i++) {
+                txp[i].vfc_vfsops = 0;
+                strlcpy(txp[i].vfc_name, xvfsp[i].vfc_name,
+                        sizeof(txp[i].vfc_name));
+                txp[i].vfc_typenum = tswap32(xvfsp[i].vfc_typenum);
+                txp[i].vfc_refcount = tswap32(xvfsp[i].vfc_refcount);
+                txp[i].vfc_flags = tswap32(
+                    host_to_target_vfc_flags(xvfsp[i].vfc_flags));
+                txp[i].vfc_next = 0;
+            }
+            g_free(xvfsp);
             ret = 0;
             goto out;
-        }
-        xvfsp = (struct xvfsconf *)g_malloc(holdlen);
-        if (xvfsp == NULL) {
-            ret = -TARGET_ENOMEM;
-            goto out;
-        }
-        if (sysctlbyname("vfs.conflist", xvfsp, &holdlen, NULL, 0) < 0){
-            g_free(xvfsp);
-            ret = -1;
-            goto out;
-        }
-        cnt = holdlen / sizeof(struct xvfsconf);
-        holdlen = cnt * sizeof(struct target_xvfsconf);
-        txp = (struct target_xvfsconf *)holdp;
-        for (i = 0; i < cnt; i++) {
-            txp[i].vfc_vfsops = 0;
-            strlcpy(txp[i].vfc_name, xvfsp[i].vfc_name,
-            sizeof(txp[i].vfc_name));
-            txp[i].vfc_typenum = tswap32(xvfsp[i].vfc_typenum);
-            txp[i].vfc_refcount = tswap32(xvfsp[i].vfc_refcount);
-            txp[i].vfc_flags = tswap32(
-            host_to_target_vfc_flags(xvfsp[i].vfc_flags));
-            txp[i].vfc_next = 0;
-            }
-        g_free(xvfsp);
-        ret = 0;
-        goto out;
         }
     }
     break;
@@ -1182,38 +1226,41 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
     case CTL_HW:
         switch (snamep[1]) {
         case HW_MACHINE:
-        holdlen = sizeof(TARGET_HW_MACHINE);
-        if (holdp)
-        strlcpy(holdp, TARGET_HW_MACHINE, oldlen);
+            holdlen = sizeof(TARGET_HW_MACHINE);
+            if (holdp) {
+                strlcpy(holdp, TARGET_HW_MACHINE, oldlen);
+            }
             ret = 0;
             goto out;
 
         case HW_MACHINE_ARCH:
         {
 #ifdef	TARGET_ARM
-        /*
-         * For ARM, we'll try to grab the MACHINE_ARCH from the ELF that we are
-         * currently emulating. It should have a .note containing the
-         * MACHINE_ARCH that this binary has been compiled for, so we'll assume
-         * this is right and otherwise matches the jail/environment we're
-         * operating out of.
-         *
-         * If we can't find the expected ARCH tag, fallback to armv7 as a
-         * sensible default.
-         */
-        char *machine_arch;
-        if (get_target_arch(ts, &machine_arch) == 0) {
-            holdlen = strlen(machine_arch);
-            if (holdp)
-                strlcpy(holdp, machine_arch, oldlen);
-            free(machine_arch);
-            ret = 0;
-            goto out;
-        }
+            /*
+             * For ARM, we'll try to grab the MACHINE_ARCH from the ELF that we are
+             * currently emulating. It should have a .note containing the
+             * MACHINE_ARCH that this binary has been compiled for, so we'll assume
+             * this is right and otherwise matches the jail/environment we're
+             * operating out of.
+             *
+             * If we can't find the expected ARCH tag, fallback to armv7 as a
+             * sensible default.
+             */
+            char *machine_arch;
+            if (get_target_arch(ts, &machine_arch) == 0) {
+                holdlen = strlen(machine_arch);
+                if (holdp) {
+                    strlcpy(holdp, machine_arch, oldlen);
+                }
+                free(machine_arch);
+                ret = 0;
+                goto out;
+            }
 #endif
-        holdlen = sizeof(TARGET_HW_MACHINE_ARCH);
-        if (holdp)
-        strlcpy(holdp, TARGET_HW_MACHINE_ARCH, oldlen);
+            holdlen = sizeof(TARGET_HW_MACHINE_ARCH);
+            if (holdp) {
+                strlcpy(holdp, TARGET_HW_MACHINE_ARCH, oldlen);
+            }
             ret = 0;
             goto out;
         }
@@ -1235,103 +1282,106 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                 else
                     *(int32_t *)holdp = 0;
 #else
-          *(int32_t *)holdp = 1;
+                *(int32_t *)holdp = 1;
 #endif
-        }
-        holdlen = sizeof(int32_t);
-        ret = 0;
-        goto out;
+            }
+            holdlen = sizeof(int32_t);
+            ret = 0;
+            goto out;
 #endif
 
 
 #if TARGET_ABI_BITS != HOST_LONG_BITS
-    case HW_PHYSMEM:
-    case HW_USERMEM:
-    case HW_REALMEM:
-        holdlen = sizeof(abi_ulong);
-        ret = 0;
+        case HW_PHYSMEM:
+        case HW_USERMEM:
+        case HW_REALMEM:
+            holdlen = sizeof(abi_ulong);
+            ret = 0;
 
-        if (oldlen) {
-            int mib[2] = {snamep[0], snamep[1]};
-        unsigned long lvalue;
-        size_t len = sizeof(lvalue);
+            if (oldlen) {
+                int mib[2] = {snamep[0], snamep[1]};
+                unsigned long lvalue;
+                size_t len = sizeof(lvalue);
 
-        if (sysctl(mib, 2, &lvalue, &len, NULL, 0) == -1 ) {
-            ret = -1;
-        } else {
-            if (((unsigned long)maxmem) < lvalue)
-                lvalue = maxmem;
-            (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
-        }
-        }
-        goto out;
+                if (sysctl(mib, 2, &lvalue, &len, NULL, 0) == -1) {
+                    ret = -1;
+                } else {
+                    if (((unsigned long)maxmem) < lvalue) {
+                        lvalue = maxmem;
+                    }
+                    (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
+                }
+            }
+            goto out;
 #endif
 
         default:
-            {
-                static int oid_hw_availpages;
-                static int oid_hw_pagesizes;
+        {
+            static int oid_hw_availpages;
+            static int oid_hw_pagesizes;
 
-                if (!oid_hw_availpages) {
-                    int real_oid[CTL_MAXNAME+2];
-                    size_t len = sizeof(real_oid) / sizeof(int);
+            if (!oid_hw_availpages) {
+                int real_oid[CTL_MAXNAME + 2];
+                size_t len = sizeof(real_oid) / sizeof(int);
 
-                    if (sysctlnametomib("hw.availpages", real_oid, &len) >= 0)
-                        oid_hw_availpages = real_oid[1];
+                if (sysctlnametomib("hw.availpages", real_oid, &len) >= 0) {
+                    oid_hw_availpages = real_oid[1];
                 }
-                if (!oid_hw_pagesizes) {
-                    int real_oid[CTL_MAXNAME+2];
-                    size_t len = sizeof(real_oid) / sizeof(int);
-
-                    if (sysctlnametomib("hw.pagesizes", real_oid, &len) >= 0)
-                        oid_hw_pagesizes = real_oid[1];
-                }
-
-                if (oid_hw_availpages && snamep[1] == oid_hw_availpages) {
-                    long lvalue;
-                    size_t len = sizeof(lvalue);
-
-                    if (sysctlbyname("hw.availpages", &lvalue, &len, NULL, 0)
-                            == -1) {
-                        ret = -1;
-                    } else {
-                        if (oldlen) {
-#if TARGET_ABI_BITS != HOST_LONG_BITS
-                            abi_ulong maxpages = maxmem / (abi_ulong)getpagesize();
-                            if (((unsigned long)maxpages) < lvalue)
-                                lvalue = maxpages;
-#endif
-                            (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
-                        }
-                        holdlen = sizeof(abi_ulong);
-                        ret = 0;
-                    }
-                    goto out;
-                }
-
-                if (oid_hw_pagesizes && snamep[1] == oid_hw_pagesizes) {
-                    // XXX some targets do superpages now too... */
-                    if (oldlen) {
-                        (*(abi_ulong *)holdp) = tswapal((abi_ulong)getpagesize());
-                        ((abi_ulong *)holdp)[1] = 0;
-                    }
-                    holdlen = sizeof(abi_ulong) * 2;
-                    ret = 0;
-                    goto out;
-                }
-                break;
             }
+            if (!oid_hw_pagesizes) {
+                int real_oid[CTL_MAXNAME + 2];
+                size_t len = sizeof(real_oid) / sizeof(int);
+
+                if (sysctlnametomib("hw.pagesizes", real_oid, &len) >= 0) {
+                    oid_hw_pagesizes = real_oid[1];
+                }
+            }
+
+            if (oid_hw_availpages && snamep[1] == oid_hw_availpages) {
+                long lvalue;
+                size_t len = sizeof(lvalue);
+
+                if (sysctlbyname("hw.availpages", &lvalue, &len, NULL, 0) == -1) {
+                    ret = -1;
+                } else {
+                    if (oldlen) {
+#if TARGET_ABI_BITS != HOST_LONG_BITS
+                        abi_ulong maxpages = maxmem / (abi_ulong)getpagesize();
+                        if (((unsigned long)maxpages) < lvalue) {
+                            lvalue = maxpages;
+                        }
+#endif
+                        (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
+                    }
+                    holdlen = sizeof(abi_ulong);
+                    ret = 0;
+                }
+                goto out;
+            }
+
+            if (oid_hw_pagesizes && snamep[1] == oid_hw_pagesizes) {
+                if (oldlen) {
+                    (*(abi_ulong *)holdp) = tswapal((abi_ulong)getpagesize());
+                    ((abi_ulong *)holdp)[1] = 0;
+                }
+                holdlen = sizeof(abi_ulong) * 2;
+                ret = 0;
+                goto out;
+            }
+            break;
+        }
         }
         break;
-        
+
     case CTL_NET:
         if (snamep[1] == PF_ROUTE && snamep[2] == 0 && snamep[3] == 0 &&
             snamep[4] == NET_RT_IFLISTL && snamep[5] == 0) {
-            ret = do_sysctl_net_routetable_iflistl(snamep, namelen, oldlen, holdp, &holdlen);
+            ret = do_sysctl_net_routetable_iflistl(snamep, namelen, oldlen,
+                                                   holdp, &holdlen);
             goto out;
         }
         break;
-        
+
     default:
         break;
     }
@@ -1341,18 +1391,24 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 
         /*
          * In case we are retrieving the argument vectors with kvm_getargv,
-         * remove the interpreter name and the interpreter prefix from the argument vectors
+         * remove the interpreter name and the interpreter prefix from the
+         * argument vectors
          */
-        if (snamep[0] == CTL_KERN && snamep[1] == KERN_PROC && snamep[2] == KERN_PROC_ARGS) {
+        if (snamep[0] == CTL_KERN && snamep[1] == KERN_PROC &&
+            snamep[2] == KERN_PROC_ARGS) {
             int len;
 
-            /* remove the interpreter name (1st arg: /usr/local/bin/qemu-xxx-static) */
+            /*
+             * remove the interpreter name (1st arg:
+             * /usr/local/bin/qemu-xxx-static)
+             */
             len = strlen(holdp);
             memcpy(holdp, holdp + len + 1, holdlen - len - 1);
             holdlen = holdlen - len - 1;
 
-            /* if the 2nd arg is "-L" remove it and
-             * remove the 3rd arg (interpreter prefix: /usr/gnemul/qemu-xxx)
+            /*
+             * if the 2nd arg is "-L" remove it and remove the 3rd arg
+             * (interpreter prefix: /usr/gnemul/qemu-xxx)
              */
             if (strncmp(holdp, "-L", 2) == 0) {
                 memcpy(holdp, holdp + 3, holdlen - 3);
@@ -1364,8 +1420,8 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
             }
         }
 
-        if (0 == snamep[0] && (2 == snamep[1] || 3 == snamep[1] ||
-                    4 == snamep[1])) {
+        if (0 == snamep[0] &&
+            (2 == snamep[1] || 3 == snamep[1] || 4 == snamep[1])) {
             switch (snamep[1]) {
             case 2:
             case 3:
@@ -1386,7 +1442,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 #ifdef DEBUG
     else {
         printf("sysctl(mib[0]=%d, mib[1]=%d, mib[3]=%d...) returned %d\n",
-        snamep[0], snamep[1], snamep[2], (int)ret);
+               snamep[0], snamep[1], snamep[2], (int)ret);
     }
 #endif
 
@@ -1400,13 +1456,13 @@ out:
  * Unfortunately, because we have to fake some sysctls, we can't do that.
  */
 abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
-        int32_t namelen, abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp,
-        abi_ulong newlen)
+                                 int32_t namelen, abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp,
+                                 abi_ulong newlen)
 {
     abi_long ret;
     void *holdp = NULL, *hnewp = NULL;
     char *snamep;
-    int oid[CTL_MAXNAME+2];
+    int oid[CTL_MAXNAME + 2];
     size_t holdlen, oidplen;
     abi_ulong oldlen = 0;
 
@@ -1439,7 +1495,7 @@ abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
     }
 
     ret = do_freebsd_sysctl_oid(env, oid, oidplen, holdp, &holdlen, hnewp,
-        newlen);
+                                newlen);
 
     if (oldlenp) {
         put_user_ual(holdlen, oldlenp);
@@ -1450,7 +1506,7 @@ abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
         unlock_user(hnewp, newp, 0);
     }
 
-    return (ret);
+    return ret;
 }
 
 abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
