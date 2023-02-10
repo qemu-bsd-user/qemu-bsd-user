@@ -19,7 +19,6 @@
 
 #include <sys/param.h>
 
-#define BSD_HAVE_INO64
 #define BSD_HAVE_KEVENT64
 
 #include "qemu/osdep.h"

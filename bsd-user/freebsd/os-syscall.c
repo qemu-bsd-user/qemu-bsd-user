@@ -911,21 +911,17 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd11_fstat(arg1, arg2);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_fstat: /* fstat(2) */
         ret = do_freebsd_fstat(arg1, arg2);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_fstatat: /* fstatat(2) */
         ret = do_freebsd11_fstatat(arg1, arg2, arg3, arg4);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_fstatat: /* fstatat(2) */
         ret = do_freebsd_fstatat(arg1, arg2, arg3, arg4);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_nstat: /* undocumented */
         ret = do_freebsd11_nstat(arg1, arg2);
@@ -955,61 +951,49 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd11_fhstat(arg1, arg2);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_fhstat: /* fhstat(2) */
         ret = do_freebsd_fhstat(arg1, arg2);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_fhstatfs: /* fhstatfs(2) */
         ret = do_freebsd11_fhstatfs(arg1, arg2);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_fhstatfs: /* fhstatfs(2) */
         ret = do_freebsd_fhstatfs(arg1, arg2);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_statfs: /* statfs(2) */
         ret = do_freebsd11_statfs(arg1, arg2);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_statfs: /* statfs(2) */
         ret = do_freebsd_statfs(arg1, arg2);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_fstatfs: /* fstatfs(2) */
         ret = do_freebsd11_fstatfs(arg1, arg2);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_fstatfs: /* fstatfs(2) */
         ret = do_freebsd_fstatfs(arg1, arg2);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_getfsstat: /* getfsstat(2) */
         ret = do_freebsd11_getfsstat(arg1, arg2, arg3);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_getfsstat: /* getfsstat(2) */
         ret = do_freebsd_getfsstat(arg1, arg2, arg3);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_getdents: /* getdents(2) */
         ret = do_freebsd11_getdents(arg1, arg2, arg3);
         break;
 
-#ifdef BSD_HAVE_INO64
     case TARGET_FREEBSD_NR_getdirentries: /* getdirentries(2) */
         ret = do_freebsd_getdirentries(arg1, arg2, arg3, arg4);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_freebsd11_getdirentries: /* getdirentries(2) */
         ret = do_freebsd11_getdirentries(arg1, arg2, arg3, arg4);

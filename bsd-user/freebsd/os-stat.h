@@ -31,29 +31,6 @@
 
 #include "qemu-os.h"
 
-#ifndef BSD_HAVE_INO64
-#define freebsd11_dirent	dirent
-
-#define	freebsd11_stat		stat
-#define	freebsd11_lstat		lstat
-#define	freebsd11_fstat		fstat
-#define	freebsd11_fstatat	fstatat
-#define	freebsd11_nstat		nstat
-#define	freebsd11_nfstat	nfstat
-#define	freebsd11_nlstat	nlstat
-#define	freebsd11_fhstat	fhstat
-#define	freebsd11_fhstatfs	fhstatfs
-#define	freebsd11_statfs	statfs
-#define	freebsd11_fstatfs	fstatfs
-#define	freebsd11_getfsstat	getfsstat
-#define	freebsd11_getdents	getdents
-#define	freebsd11_getdirentries	getdirentries
-
-/* undocumented nstat system calls */
-int nstat(const char *path, struct stat *sb);
-int nlstat(const char *path, struct stat *sb);
-int nfstat(int fd, struct stat *sb);
-#else
 int freebsd11_stat(const char *path, struct freebsd11_stat *stat);
 __sym_compat(stat, freebsd11_stat, FBSD_1.0);
 int freebsd11_lstat(const char *path, struct freebsd11_stat *stat);
@@ -87,7 +64,6 @@ int freebsd11_nlstat(const char *path, struct freebsd11_stat *sb);
 __sym_compat(nlstat, freebsd11_nlstat, FBSD_1.0);
 int freebsd11_nfstat(int fd, struct freebsd11_stat *sb);
 __sym_compat(nfstat, freebsd11_nfstat, FBSD_1.0);
-#endif
 
 /* stat(2) */
 static inline abi_long do_freebsd11_stat(abi_long arg1, abi_long arg2)
@@ -134,7 +110,6 @@ static inline abi_long do_freebsd11_fstat(abi_long arg1, abi_long arg2)
     return ret;
 }
 
-#ifdef BSD_HAVE_INO64
 /* fstat(2) */
 static inline abi_long do_freebsd_fstat(abi_long arg1, abi_long arg2)
 {
@@ -147,7 +122,6 @@ static inline abi_long do_freebsd_fstat(abi_long arg1, abi_long arg2)
     }
     return ret;
 }
-#endif
 
 /* fstatat(2) */
 static inline abi_long do_freebsd11_fstatat(abi_long arg1, abi_long arg2,
@@ -166,7 +140,6 @@ static inline abi_long do_freebsd11_fstatat(abi_long arg1, abi_long arg2,
     return ret;
 }
 
-#ifdef BSD_HAVE_INO64
 /* fstatat(2) */
 static inline abi_long do_freebsd_fstatat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
@@ -183,7 +156,6 @@ static inline abi_long do_freebsd_fstatat(abi_long arg1, abi_long arg2,
     }
     return ret;
 }
-#endif
 
 /* undocummented nstat(char *path, struct nstat *ub) syscall */
 static abi_long do_freebsd11_nstat(abi_long arg1, abi_long arg2)
@@ -294,7 +266,6 @@ static inline abi_long do_freebsd11_fhstat(abi_long arg1, abi_long arg2)
     return h2t_freebsd11_stat(arg2, &host_sb);
 }
 
-#ifdef BSD_HAVE_INO64
 /* fhstat(2) */
 static inline abi_long do_freebsd_fhstat(abi_long arg1, abi_long arg2)
 {
@@ -312,7 +283,6 @@ static inline abi_long do_freebsd_fhstat(abi_long arg1, abi_long arg2)
     }
     return h2t_freebsd_stat(arg2, &host_sb);
 }
-#endif
 
 /* fhstatfs(2) */
 static inline abi_long do_freebsd11_fhstatfs(abi_ulong target_fhp_addr,
@@ -333,7 +303,6 @@ static inline abi_long do_freebsd11_fhstatfs(abi_ulong target_fhp_addr,
     return h2t_freebsd11_statfs(target_stfs_addr, &host_stfs);
 }
 
-#ifdef BSD_HAVE_INO64
 /* fhstatfs(2) */
 static inline abi_long do_freebsd_fhstatfs(abi_ulong target_fhp_addr,
         abi_ulong target_stfs_addr)
@@ -352,7 +321,6 @@ static inline abi_long do_freebsd_fhstatfs(abi_ulong target_fhp_addr,
     }
     return h2t_freebsd_statfs(target_stfs_addr, &host_stfs);
 }
-#endif
 
 /* statfs(2) */
 static inline abi_long do_freebsd11_statfs(abi_long arg1, abi_long arg2)
@@ -371,7 +339,6 @@ static inline abi_long do_freebsd11_statfs(abi_long arg1, abi_long arg2)
     return h2t_freebsd11_statfs(arg2, &host_stfs);
 }
 
-#ifdef BSD_HAVE_INO64
 /* statfs(2) */
 static inline abi_long do_freebsd_statfs(abi_long arg1, abi_long arg2)
 {
@@ -388,7 +355,6 @@ static inline abi_long do_freebsd_statfs(abi_long arg1, abi_long arg2)
 
     return h2t_freebsd_statfs(arg2, &host_stfs);
 }
-#endif
 
 /* fstatfs(2) */
 static inline abi_long do_freebsd11_fstatfs(abi_long fd, abi_ulong target_addr)
@@ -403,7 +369,7 @@ static inline abi_long do_freebsd11_fstatfs(abi_long fd, abi_ulong target_addr)
 
     return h2t_freebsd11_statfs(target_addr, &host_stfs);
 }
-#ifdef BSD_HAVE_INO64
+
 /* fstatfs(2) */
 static inline abi_long do_freebsd_fstatfs(abi_long fd, abi_ulong target_addr)
 {
@@ -417,7 +383,6 @@ static inline abi_long do_freebsd_fstatfs(abi_long fd, abi_ulong target_addr)
 
     return h2t_freebsd_statfs(target_addr, &host_stfs);
 }
-#endif
 
 /* getfsstat(2) */
 static inline abi_long do_freebsd11_getfsstat(abi_ulong target_addr,
@@ -457,7 +422,6 @@ static inline abi_long do_freebsd11_getfsstat(abi_ulong target_addr,
     return ret;
 }
 
-#ifdef BSD_HAVE_INO64
 /* getfsstat(2) */
 static inline abi_long do_freebsd_getfsstat(abi_ulong target_addr,
         abi_long bufsize, abi_long flags)
@@ -495,7 +459,6 @@ static inline abi_long do_freebsd_getfsstat(abi_ulong target_addr,
     }
     return ret;
 }
-#endif
 
 /* getdents(2) */
 static inline abi_long do_freebsd11_getdents(abi_long arg1,
@@ -567,7 +530,6 @@ static inline abi_long do_freebsd11_getdirentries(abi_long arg1,
     return ret;
 }
 
-#ifdef BSD_HAVE_INO64
 /* getdirecentries(2) */
 static inline abi_long do_freebsd_getdirentries(abi_long arg1,
         abi_ulong arg2, abi_long nbytes, abi_ulong arg4)
@@ -608,7 +570,6 @@ static inline abi_long do_freebsd_getdirentries(abi_long arg1,
     }
     return ret;
 }
-#endif
 
 /* fcntl(2) */
 static inline abi_long do_freebsd_fcntl(abi_long arg1, abi_long arg2,

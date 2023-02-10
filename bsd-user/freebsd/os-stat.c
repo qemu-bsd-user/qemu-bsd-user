@@ -65,7 +65,6 @@ abi_long h2t_freebsd11_stat(abi_ulong target_addr,
     return 0;
 }
 
-#ifdef BSD_HAVE_INO64
 abi_long h2t_freebsd_stat(abi_ulong target_addr,
         struct stat *host_st)
 {
@@ -109,7 +108,6 @@ abi_long h2t_freebsd_stat(abi_ulong target_addr,
 
     return 0;
 }
-#endif
 
 abi_long h2t_freebsd11_nstat(abi_ulong target_addr,
         struct freebsd11_stat *host_st)
@@ -223,7 +221,6 @@ abi_long h2t_freebsd11_statfs(abi_ulong target_addr,
     return 0;
 }
 
-#ifdef BSD_HAVE_INO64
 abi_long h2t_freebsd_statfs(abi_ulong target_addr,
         struct statfs *host_statfs)
 {
@@ -261,7 +258,6 @@ abi_long h2t_freebsd_statfs(abi_ulong target_addr,
     unlock_user_struct(target_statfs, target_addr, 1);
     return 0;
 }
-#endif
 
 /*
  * fcntl cmd conversion

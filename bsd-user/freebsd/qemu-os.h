@@ -35,11 +35,6 @@
 
 #include <time.h>
 
-#ifndef BSD_HAVE_INO64
-#define	freebsd11_stat		stat
-#define	freebsd11_statfs	statfs
-#endif
-
 struct freebsd11_stat;
 
 /* os-time.c */
@@ -87,12 +82,10 @@ abi_long h2t_freebsd_fhandle(abi_ulong target_addr, fhandle_t *host_fh);
 abi_long h2t_freebsd11_statfs(abi_ulong target_addr,
     struct freebsd11_statfs *host_statfs);
 abi_long target_to_host_fcntl_cmd(int cmd);
-#ifdef BSD_HAVE_INO64
 abi_long h2t_freebsd_stat(abi_ulong target_addr,
         struct stat *host_st);
 abi_long h2t_freebsd_statfs(abi_ulong target_addr,
     struct statfs *host_statfs);
-#endif
 
 /* os-thread.c */
 abi_long t2h_freebsd_rtprio(struct rtprio *host_rtp, abi_ulong target_addr);

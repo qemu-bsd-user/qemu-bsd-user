@@ -525,7 +525,6 @@ struct target_freebsd11_stat {
 #define __STAT_TIME_T_EXT       1
 #endif
 
-#ifdef BSD_HAVE_INO64
 struct target_stat {
         uint64_t  st_dev;               /* inode's device */
         uint64_t  st_ino;               /* inode's number */
@@ -559,7 +558,6 @@ struct target_stat {
         uint64_t  st_gen;               /* file generation number */
         uint64_t  st_spare[10];
 };
-#endif
 
 
 /* struct nstat is the same as stat above but without the st_lspare field */
@@ -626,7 +624,6 @@ struct target_freebsd11_statfs {
     char     f_mntonname[88];      /* dir on which mounted*/
 };
 
-#ifdef BSD_HAVE_INO64
 struct target_statfs {
         uint32_t f_version;             /* structure version number */
         uint32_t f_type;                /* type of filesystem */
@@ -651,7 +648,6 @@ struct target_statfs {
         char      f_mntfromname[1024];  /* mounted filesystem */
         char      f_mntonname[1024];    /* directory on which mounted */
 };
-#endif
 
 /* File identifier. These are unique per filesystem on a single machine. */
 #define TARGET_MAXFIDSZ     16
