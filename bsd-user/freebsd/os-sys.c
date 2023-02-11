@@ -1090,8 +1090,8 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
     case CTL_MACHDEP:
         switch (snamep[1]) {
         case 1:    /* CPU_CACHELINE */
-            holdlen = sizeof(uint32_t);
-            (*(uint32_t *)holdp) = tswap32(env->dcache_line_size);
+            holdlen = sizeof(abi_uint);
+            (*(abi_uint *)holdp) = tswap32(env->dcache_line_size);
             ret = 0;
             goto out;
         }
