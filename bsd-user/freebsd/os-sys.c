@@ -40,6 +40,99 @@
 #include "target_os_vmparam.h"
 #include "target_os_user.h"
 
+/*
+ * Length for the fixed length types.
+ * 0 means variable length for strings and structures
+ * Compare with sys/kern_sysctl.c ctl_size
+ * Note: Not all types appear to be used in-tree.
+ */
+static const int target_ctl_size[CTLTYPE+1] = {
+	[CTLTYPE_INT] = sizeof(abi_int),
+	[CTLTYPE_UINT] = sizeof(abi_uint),
+	[CTLTYPE_LONG] = sizeof(abi_long),
+	[CTLTYPE_ULONG] = sizeof(abi_ulong),
+	[CTLTYPE_S8] = sizeof(int8_t),
+	[CTLTYPE_S16] = sizeof(int16_t),
+	[CTLTYPE_S32] = sizeof(int32_t),
+	[CTLTYPE_S64] = sizeof(int64_t),
+	[CTLTYPE_U8] = sizeof(uint8_t),
+	[CTLTYPE_U16] = sizeof(uint16_t),
+	[CTLTYPE_U32] = sizeof(uint32_t),
+	[CTLTYPE_U64] = sizeof(uint64_t),
+};
+
+static const int host_ctl_size[CTLTYPE+1] = {
+	[CTLTYPE_INT] = sizeof(int),
+	[CTLTYPE_UINT] = sizeof(u_int),
+	[CTLTYPE_LONG] = sizeof(long),
+	[CTLTYPE_ULONG] = sizeof(u_long),
+	[CTLTYPE_S8] = sizeof(int8_t),
+	[CTLTYPE_S16] = sizeof(int16_t),
+	[CTLTYPE_S32] = sizeof(int32_t),
+	[CTLTYPE_S64] = sizeof(int64_t),
+	[CTLTYPE_U8] = sizeof(uint8_t),
+	[CTLTYPE_U16] = sizeof(uint16_t),
+	[CTLTYPE_U32] = sizeof(uint32_t),
+	[CTLTYPE_U64] = sizeof(uint64_t),
+};
+
+#ifdef TARGET_ABI32
+/*
+ * Limit the amount of available memory to be most of the 32-bit address
+ * space. 0x100c000 was arrived at through trial and error as a good
+ * definition of 'most'.
+ */
+static const abi_ulong target_max_mem = UINT32_MAX - 0x100c000 + 1;
+
+static abi_ulong cap_memory(uint64_t mem)
+{
+    if (((unsigned long)target_max_mem) < mem) {
+        mem = target_max_mem;
+    }
+
+    return mem;
+}
+#endif
+
+static unsigned long host_page_size;
+
+static abi_ulong scale_to_target_pages(uint64_t pages)
+{
+    if (host_page_size == 0) {
+        host_page_size = getpagesize();
+    }
+
+    pages = muldiv64(pages, host_page_size, TARGET_PAGE_SIZE);
+#ifdef TARGET_ABI32
+    abi_ulong maxpages = target_max_mem / (abi_ulong)TARGET_PAGE_SIZE;
+
+    if (((unsigned long)maxpages) < pages) {
+        pages = maxpages;
+    }
+#endif
+    return pages;
+}
+
+#ifdef TARGET_ABI32
+static abi_long h2t_long_sat(long l)
+{
+    if (l > INT32_MAX) {
+        l = INT32_MAX;
+    } else if (l < INT32_MIN) {
+        l = INT32_MIN;
+    }
+    return l;
+}
+
+static abi_ulong h2t_ulong_sat(u_long ul)
+{
+    if (ul > UINT32_MAX) {
+        ul = UINT32_MAX;
+    }
+    return ul;
+}
+#endif
+
 #ifdef TARGET_ARM
 /* For reading target arch */
 #include <libelf.h>
@@ -970,8 +1063,8 @@ oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
     int i;
     size_t j;
 
-    qoid[0] = 0;
-    qoid[1] = 4;
+    qoid[0] = CTL_SYSCTL;
+    qoid[1] = CTL_SYSCTL_OIDFMT;
     memcpy(qoid + 2, oid, len * sizeof(int));
 
     j = sizeof(buf);
@@ -991,63 +1084,90 @@ oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
 }
 
 /*
- * try and convert sysctl return data for the target.
- * Note: doesn't handle CTLTYPE_OPAQUE and CTLTYPE_STRUCT.
+ * Convert the old value from host to target.
+ *
+ * For LONG and ULONG on ABI32, we need to 'down convert' the 8 byte quantities
+ * to 4 bytes. The caller setup a buffer in host memory to get this data from
+ * the kernel and pass it to us. We do the down conversion and adjust the length
+ * so the caller knows what to write as the returned length into the target when
+ * it copies the down converted values into the target.
+ *
+ * For normal integral types, we just need to byte swap. No size changes.
+ *
+ * For strings and node data, there's no conversion needed.
+ *
+ * For opaque data, per sysctl OID converts take care of it.
  */
-static int sysctl_oldcvt(void *holdp, size_t *holdlen, uint32_t kind)
+static void h2t_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
 {
-    switch (kind & CTLTYPE) {
-    case CTLTYPE_INT:
-    case CTLTYPE_UINT:
-        *(uint32_t *)holdp = tswap32(*(uint32_t *)holdp);
-        break;
+    size_t len;
+    int hlen, tlen;
+    uint8_t *hp, *tp;
 
-#ifdef TARGET_ABI32
-    case CTLTYPE_LONG:
-    case CTLTYPE_ULONG:
-        /*
-         * If the sysctl has a type of long/ulong but seems to be bigger than
-         * these data types, its probably an array.  Double check that its
-         * evenly divisible by the size of long and convert holdp to a series of
-         * 32bit elements instead, adjusting holdlen to the new size.
-         */
-        if ((*holdlen > sizeof(abi_ulong)) &&
-            ((*holdlen % sizeof(abi_ulong)) == 0)) {
-            int array_size = *holdlen / sizeof(long);
-            int i;
-            if (holdp) {
-                for (i = 0; i < array_size; i++) {
-                    ((uint32_t *)holdp)[i] = tswap32(((long *)holdp)[i]);
-                }
-                *holdlen = array_size * sizeof(abi_ulong);
-            } else {
-                *holdlen = sizeof(abi_ulong);
-            }
-        } else {
-            *(uint32_t *)holdp = tswap32(*(long *)holdp);
-            *holdlen = sizeof(uint32_t);
-        }
-        break;
-#else
-    case CTLTYPE_LONG:
-        *(uint64_t *)holdp = tswap64(*(long *)holdp);
-        break;
-    case CTLTYPE_ULONG:
-        *(uint64_t *)holdp = tswap64(*(unsigned long *)holdp);
-        break;
-#endif
-    case CTLTYPE_U64:
-    case CTLTYPE_S64:
-        *(uint64_t *)holdp = tswap64(*(uint64_t *)holdp);
-        break;
+    /*
+     * Although rare, we can have arrays of sysctl. Both sysctl_old_ddb in
+     * kern_sysctl.c and show_var in sbin/sysctl/sysctl.c have code that loops
+     * this way.  *holdlen has been set by the kernel to the host's length.
+     * Only LONG and ULONG on ABI32 have different sizes: see below.
+     */
+    hp = (uint8_t *)holdp;
+    tp = hp;
+    len = 0;
+    hlen = host_ctl_size[kind & CTLTYPE];
+    tlen = target_ctl_size[kind & CTLTYPE];
 
-    case CTLTYPE_STRING:
-        break;
-
-    default:
-        return -1;
+    /*
+     * hlen == 0 for CTLTYPE_STRING and CTLTYPE_NODE, which need no conversion
+     * as well as CTLTYPE_OPAQUE, which needs special converters.
+     */
+    if (hlen == 0) {
+        return;
     }
-    return 0;
+
+    while (len < *holdlen) {
+        if (hlen == tlen) {
+            switch (hlen) {
+            case 1:
+                /* Nothing needed, since no byteswapping */
+                break;
+            case 2:
+                *(uint16_t *)tp = tswap16(*(uint16_t *)hp);
+                break;
+            case 4:
+                *(uint32_t *)tp = tswap32(*(uint32_t *)hp);
+                break;
+            case 8:
+                *(uint64_t *)tp = tswap64(*(uint64_t *)hp);
+                break;
+            }
+        }
+#ifdef TARGET_ABI32
+        else {
+            /*
+             * Saturating assignment for the only two types that differ between
+             * 32-bit and 64-bit machines. All other integral types have the
+             * same, fixed size and will be converted w/o loss of precision
+             * in the above switch.
+             */
+            switch (kind & CTLTYPE) {
+            case CTLTYPE_LONG:
+                *(abi_long *)tp = tswap32(h2t_long_sat(*(long *)hp));
+                break;
+            case CTLTYPE_ULONG:
+                *(abi_ulong *)tp = tswap32(h2t_ulong_sat(*(u_long *)hp));
+                break;
+            }
+        }
+#endif
+        tp += tlen;
+        hp += hlen;
+        len += hlen;
+    }
+#ifdef TARGET_ABI32
+    if (hlen != tlen) {
+        *holdlen = (*holdlen / hlen) * tlen;
+    }
+#endif
 }
 
 /*
@@ -1068,52 +1188,16 @@ static inline void sysctl_oidfmt(uint32_t *holdp)
     holdp[0] = tswap32(holdp[0]);
 }
 
-
-#ifdef TARGET_ABI32
-/*
- * Limit the amount of available memory to be most of the 32-bit address
- * space. 0x100c000 was arrived at through trial an error.
- */
-static const abi_ulong target_max_mem = UINT32_MAX - 0x100c000 + 1;
-
-static abi_ulong cap_memory(uint64_t mem)
-{
-    if (((unsigned long)target_max_mem) < mem) {
-        mem = target_max_mem;
-    }
-
-    return mem;
-}
-#endif
-
-static unsigned long host_page_size;
-
-static abi_ulong scale_to_target_pages(uint64_t pages)
-{
-    if (host_page_size == 0) {
-        host_page_size = getpagesize();
-    }
-
-    pages = muldiv64(pages, host_page_size, TARGET_PAGE_SIZE);
-#ifdef TARGET_ABI32
-    abi_ulong maxpages = target_max_mem / (abi_ulong)TARGET_PAGE_SIZE;
-
-    if (((unsigned long)maxpages) < pages) {
-        pages = maxpages;
-    }
-#endif
-    return pages;
-}
-
 static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                                       int32_t namelen, void *holdp, size_t *holdlenp, void *hnewp,
                                       size_t newlen)
 {
     uint32_t kind = 0;
-#ifdef TARGET_ABI32
-#endif
     abi_long ret;
     size_t holdlen, oldlen;
+#ifdef TARGET_ABI32
+    void *old_holdp;
+#endif
     CPUState *cpu = env_cpu(env);
     TaskState *ts = (TaskState *)cpu->opaque;
 
@@ -1310,16 +1394,8 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 #if defined(TARGET_ARM)
         case HW_FLOATINGPT:
             if (oldlen) {
-#ifdef ARM_FEATURE_VFP /* XXX FIXME XXX -- hangover from old arm feature conversion bfa8a370d2f5d4ed03f7a7e2987982f15fe73758 */
-                if (env->features & ((1ULL << ARM_FEATURE_VFP)|
-                                     (1ULL << ARM_FEATURE_VFP3)|
-                                     (1ULL << ARM_FEATURE_VFP4)))
-                    *(int32_t *)holdp = 1;
-                else
-                    *(int32_t *)holdp = 0;
-#else
-                *(int32_t *)holdp = 1;
-#endif
+                ARMCPU *cpu2 = env_archcpu(env);
+                *(abi_int *)holdp = cpu_isar_feature(aa32_vfp, cpu2);
             }
             holdlen = sizeof(int32_t);
             ret = 0;
@@ -1415,6 +1491,21 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
         break;
     }
 
+#ifdef TARGET_ABI32
+    /*
+     * For long and ulong with a 64-bit host and a 32-bit target we have to do
+     * special things. holdlen here is the length provided by the target to the
+     * system call. So we allocate a buffer twice as large because longs are twice
+     * as big on the host which will be writing them. In h2t_old_sysctl we'll adjust
+     * them and adjust the length.
+     */
+    if (kind == CTLTYPE_LONG || kind == CTLTYPE_ULONG) {
+        old_holdp = holdp;
+        holdlen = holdlen * 2;
+        holdp = g_malloc(holdlen);
+    }
+#endif
+
     ret = get_errno(sysctl(snamep, namelen, holdp, &holdlen, hnewp, newlen));
     if (!ret && (holdp != 0)) {
 
@@ -1449,23 +1540,47 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
             }
         }
 
-        if (0 == snamep[0] &&
-            (2 == snamep[1] || 3 == snamep[1] || 4 == snamep[1])) {
+        if (snamep[0] == CTL_SYSCTL) {
             switch (snamep[1]) {
-            case 2:
-            case 3:
-                /* Handle the undocumented name2oid special case. */
+            case CTL_SYSCTL_NEXT:
+            case CTL_SYSCTL_NAME2OID:
+            case CTL_SYSCTL_NEXTNOSKIP:
+                /*
+                 * All of these return an OID array, so we need to convert to
+                 * target.
+                 */
                 sysctl_name2oid(holdp, holdlen);
                 break;
 
-            case 4:
-            default:
+            case CTL_SYSCTL_OIDFMT:
                 /* Handle oidfmt */
                 sysctl_oidfmt(holdp);
                 break;
+            case CTL_SYSCTL_OIDDESCR:
+            case CTL_SYSCTL_OIDLABEL:
+            default:
+                /* Handle it based on the type */
+                h2t_old_sysctl(holdp, &holdlen, kind);
+                /* NB: None of these are LONG or ULONG */
+                break;
             }
         } else {
-            sysctl_oldcvt(holdp, &holdlen, kind);
+            /*
+             * Need to convert from host to target. All the weird special cases
+             * are handled above.
+             */
+            h2t_old_sysctl(holdp, &holdlen, kind);
+#ifdef TARGET_ABI32
+            /*
+             * For the 32-bit on 64-bit case, for longs we need to copy the
+             * now-converted buffer to the target and free the buffer.
+             */
+            if (kind == CTLTYPE_LONG || kind == CTLTYPE_ULONG) {
+                memcpy(old_holdp, holdp, holdlen);
+                g_free(holdp);
+                holdp = old_holdp;
+            }
+#endif
         }
     }
 #ifdef DEBUG
@@ -1488,52 +1603,58 @@ abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
                                  int32_t namelen, abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp,
                                  abi_ulong newlen)
 {
-    abi_long ret;
+    abi_long ret = -TARGET_EFAULT;
     void *holdp = NULL, *hnewp = NULL;
-    char *snamep;
+    char *snamep = NULL;
     int oid[CTL_MAXNAME + 2];
     size_t holdlen, oidplen;
     abi_ulong oldlen = 0;
 
+    /* oldlenp is read/write, pre-check here for write */
     if (oldlenp) {
-        if (get_user_ual(oldlen, oldlenp)) {
-            return -TARGET_EFAULT;
+        if (!access_ok(VERIFY_WRITE, oldlenp, sizeof(abi_ulong)) ||
+            get_user_ual(oldlen, oldlenp)) {
+            goto out;
         }
     }
     snamep = lock_user_string(namep);
     if (snamep == NULL) {
-        return -TARGET_EFAULT;
+        goto out;
     }
     if (newp) {
         hnewp = lock_user(VERIFY_READ, newp, newlen, 1);
         if (hnewp == NULL) {
-            return -TARGET_EFAULT;
+            goto out;
         }
     }
     if (oldp) {
         holdp = lock_user(VERIFY_WRITE, oldp, oldlen, 0);
         if (holdp == NULL) {
-            return -TARGET_EFAULT;
+            goto out;
         }
     }
     holdlen = oldlen;
 
     oidplen = sizeof(oid) / sizeof(int);
     if (sysctlnametomib(snamep, oid, &oidplen) != 0) {
-        return -TARGET_EINVAL;
+        ret = -TARGET_EINVAL;
+        goto out;
     }
 
     ret = do_freebsd_sysctl_oid(env, oid, oidplen, holdp, &holdlen, hnewp,
-                                newlen);
+        newlen);
 
-    if (oldlenp) {
+    /*
+     * writeability pre-checked above. __sysctl(2) returns ENOMEM and updates
+     * oldlenp for the proper size to use.
+     */
+    if (oldlenp && (ret == 0 || ret == -TARGET_ENOMEM)) {
         put_user_ual(holdlen, oldlenp);
     }
+out:
     unlock_user(snamep, namep, 0);
-    unlock_user(holdp, oldp, holdlen);
-    if (hnewp) {
-        unlock_user(hnewp, newp, 0);
-    }
+    unlock_user(holdp, oldp, ret == 0 ? holdlen : 0);
+    unlock_user(hnewp, newp, 0);
 
     return ret;
 }
@@ -1541,49 +1662,54 @@ abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
 abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
         abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp, abi_ulong newlen)
 {
-    abi_long ret;
+    abi_long ret = -TARGET_EFAULT;
     void *hnamep, *holdp = NULL, *hnewp = NULL;
     size_t holdlen;
     abi_ulong oldlen = 0;
     int32_t *snamep = g_malloc(sizeof(int32_t) * namelen), *p, *q, i;
 
+    /* oldlenp is read/write, pre-check here for write */
     if (oldlenp) {
-        if (get_user_ual(oldlen, oldlenp)) {
-            return -TARGET_EFAULT;
+        if (!access_ok(VERIFY_WRITE, oldlenp, sizeof(abi_ulong)) ||
+            get_user_ual(oldlen, oldlenp)) {
+            goto out;
         }
     }
     hnamep = lock_user(VERIFY_READ, namep, namelen, 1);
     if (hnamep == NULL) {
-        return -TARGET_EFAULT;
+        goto out;
     }
     if (newp) {
         hnewp = lock_user(VERIFY_READ, newp, newlen, 1);
         if (hnewp == NULL) {
-            return -TARGET_EFAULT;
+            goto out;
         }
     }
     if (oldp) {
         holdp = lock_user(VERIFY_WRITE, oldp, oldlen, 0);
         if (holdp == NULL) {
-            return -TARGET_EFAULT;
+            goto out;
         }
     }
     holdlen = oldlen;
-    for (p = hnamep, q = snamep, i = 0; i < namelen; p++, i++) {
-        *q++ = tswap32(*p);
+    for (p = hnamep, q = snamep, i = 0; i < namelen; p++, i++, q++) {
+        *q = tswap32(*p);
     }
 
     ret = do_freebsd_sysctl_oid(env, snamep, namelen, holdp, &holdlen, hnewp,
         newlen);
 
-    if (oldlenp) {
+    /*
+     * writeability pre-checked above. __sysctl(2) returns ENOMEM and updates
+     * oldlenp for the proper size to use.
+     */
+    if (oldlenp && (ret == 0 || ret == -TARGET_ENOMEM)) {
         put_user_ual(holdlen, oldlenp);
     }
     unlock_user(hnamep, namep, 0);
     unlock_user(holdp, oldp, holdlen);
-    if (hnewp) {
-        unlock_user(hnewp, newp, 0);
-    }
+    unlock_user(holdp, oldp, ret == 0 ? holdlen : 0);
+out:
     g_free(snamep);
     return ret;
 }
