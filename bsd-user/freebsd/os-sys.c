@@ -1068,13 +1068,49 @@ static inline void sysctl_oidfmt(uint32_t *holdp)
     holdp[0] = tswap32(holdp[0]);
 }
 
+
+#ifdef TARGET_ABI32
+/*
+ * Limit the amount of available memory to be most of the 32-bit address
+ * space. 0x100c000 was arrived at through trial an error.
+ */
+static const abi_ulong target_max_mem = UINT32_MAX - 0x100c000 + 1;
+
+static abi_ulong cap_memory(uint64_t mem)
+{
+    if (((unsigned long)target_max_mem) < mem) {
+        mem = target_max_mem;
+    }
+
+    return mem;
+}
+#endif
+
+static unsigned long host_page_size;
+
+static abi_ulong scale_to_target_pages(uint64_t pages)
+{
+    if (host_page_size == 0) {
+        host_page_size = getpagesize();
+    }
+
+    pages = muldiv64(pages, host_page_size, TARGET_PAGE_SIZE);
+#ifdef TARGET_ABI32
+    abi_ulong maxpages = target_max_mem / (abi_ulong)TARGET_PAGE_SIZE;
+
+    if (((unsigned long)maxpages) < pages) {
+        pages = maxpages;
+    }
+#endif
+    return pages;
+}
+
 static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                                       int32_t namelen, void *holdp, size_t *holdlenp, void *hnewp,
                                       size_t newlen)
 {
     uint32_t kind = 0;
-#if TARGET_ABI_BITS != HOST_LONG_BITS
-    const abi_ulong maxmem = -0x100c000;
+#ifdef TARGET_ABI32
 #endif
     abi_long ret;
     size_t holdlen, oldlen;
@@ -1291,7 +1327,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 #endif
 
 
-#if TARGET_ABI_BITS != HOST_LONG_BITS
+#ifdef TARGET_ABI32
         case HW_PHYSMEM:
         case HW_USERMEM:
         case HW_REALMEM:
@@ -1306,9 +1342,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                 if (sysctl(mib, 2, &lvalue, &len, NULL, 0) == -1) {
                     ret = -1;
                 } else {
-                    if (((unsigned long)maxmem) < lvalue) {
-                        lvalue = maxmem;
-                    }
+                    lvalue = cap_memory(lvalue);
                     (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
                 }
             }
@@ -1345,12 +1379,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                     ret = -1;
                 } else {
                     if (oldlen) {
-#if TARGET_ABI_BITS != HOST_LONG_BITS
-                        abi_ulong maxpages = maxmem / (abi_ulong)getpagesize();
-                        if (((unsigned long)maxpages) < lvalue) {
-                            lvalue = maxpages;
-                        }
-#endif
+                        lvalue = scale_to_target_pages(lvalue);
                         (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
                     }
                     holdlen = sizeof(abi_ulong);
@@ -1361,7 +1390,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 
             if (oid_hw_pagesizes && snamep[1] == oid_hw_pagesizes) {
                 if (oldlen) {
-                    (*(abi_ulong *)holdp) = tswapal((abi_ulong)getpagesize());
+                    (*(abi_ulong *)holdp) = tswapal((abi_ulong)TARGET_PAGE_SIZE);
                     ((abi_ulong *)holdp)[1] = 0;
                 }
                 holdlen = sizeof(abi_ulong) * 2;
