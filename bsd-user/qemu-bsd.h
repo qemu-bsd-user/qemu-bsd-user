@@ -51,7 +51,7 @@ abi_long host_to_target_rusage(abi_ulong target_addr,
 abi_long host_to_target_wrusage(abi_ulong target_addr,
         const struct __wrusage *wrusage);
 int host_to_target_waitstatus(int status);
-void h2t_rusage(const struct rusage *rusage,
+void h2g_rusage(const struct rusage *rusage,
         struct target_freebsd_rusage *target_rusage);
 
 /* bsd-socket.c */

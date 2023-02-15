@@ -46,7 +46,7 @@
  * Compare with sys/kern_sysctl.c ctl_size
  * Note: Not all types appear to be used in-tree.
  */
-static const int target_ctl_size[CTLTYPE+1] = {
+static const int guest_ctl_size[CTLTYPE+1] = {
 	[CTLTYPE_INT] = sizeof(abi_int),
 	[CTLTYPE_UINT] = sizeof(abi_uint),
 	[CTLTYPE_LONG] = sizeof(abi_long),
@@ -82,39 +82,28 @@ static const int host_ctl_size[CTLTYPE+1] = {
  * space. 0x100c000 was arrived at through trial and error as a good
  * definition of 'most'.
  */
-static const abi_ulong target_max_mem = UINT32_MAX - 0x100c000 + 1;
+static const abi_ulong guest_max_mem = UINT32_MAX - 0x100c000 + 1;
 
 static abi_ulong cap_memory(uint64_t mem)
 {
-    if (((unsigned long)target_max_mem) < mem) {
-        mem = target_max_mem;
-    }
-
-    return mem;
+    return MIN(guest_max_mem, mem);
 }
 #endif
 
-static unsigned long host_page_size;
-
-static abi_ulong scale_to_target_pages(uint64_t pages)
+static abi_ulong scale_to_guest_pages(uint64_t pages)
 {
-    if (host_page_size == 0) {
-        host_page_size = getpagesize();
-    }
-
-    pages = muldiv64(pages, host_page_size, TARGET_PAGE_SIZE);
+    /* Scale pages from host to guest */
+    pages = muldiv64(pages, qemu_real_host_page_size(), TARGET_PAGE_SIZE);
 #ifdef TARGET_ABI32
-    abi_ulong maxpages = target_max_mem / (abi_ulong)TARGET_PAGE_SIZE;
-
-    if (((unsigned long)maxpages) < pages) {
-        pages = maxpages;
-    }
+    /* cap pages if need be */
+    pages = MIN(pages, guest_max_mem / (abi_ulong)TARGET_PAGE_SIZE);
 #endif
     return pages;
 }
 
 #ifdef TARGET_ABI32
-static abi_long h2t_long_sat(long l)
+/* Used only for TARGET_ABI32 */
+static abi_long h2g_long_sat(long l)
 {
     if (l > INT32_MAX) {
         l = INT32_MAX;
@@ -124,12 +113,9 @@ static abi_long h2t_long_sat(long l)
     return l;
 }
 
-static abi_ulong h2t_ulong_sat(u_long ul)
+static abi_ulong h2g_ulong_sat(u_long ul)
 {
-    if (ul > UINT32_MAX) {
-        ul = UINT32_MAX;
-    }
-    return ul;
+    return MIN(ul, UINT32_MAX);
 }
 #endif
 
@@ -294,8 +280,8 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
 
     memcpy(&tki->ki_pri, &hki->ki_pri, sizeof(struct target_priority));
 
-    h2t_rusage(&hki->ki_rusage, &tki->ki_rusage);
-    h2t_rusage(&hki->ki_rusage_ch, &tki->ki_rusage_ch);
+    h2g_rusage(&hki->ki_rusage, &tki->ki_rusage);
+    h2g_rusage(&hki->ki_rusage_ch, &tki->ki_rusage_ch);
 
     __put_user(((uintptr_t)hki->ki_pcb), &tki->ki_pcb);
     __put_user(((uintptr_t)hki->ki_kstack), &tki->ki_kstack);
@@ -1055,8 +1041,7 @@ host_to_target_vfc_flags(int flags)
  * sysctl, see /sys/kern/kern_sysctl.c:sysctl_sysctl_oidfmt() (compare to
  * src/sbin/sysctl/sysctl.c)
  */
-static int
-oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
+static int oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
 {
     int qoid[CTL_MAXNAME + 2];
     uint8_t buf[BUFSIZ];
@@ -1084,7 +1069,7 @@ oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
 }
 
 /*
- * Convert the old value from host to target.
+ * Convert the old value from host to guest.
  *
  * For LONG and ULONG on ABI32, we need to 'down convert' the 8 byte quantities
  * to 4 bytes. The caller setup a buffer in host memory to get this data from
@@ -1098,11 +1083,11 @@ oidfmt(int *oid, int len, char *fmt, uint32_t *kind)
  *
  * For opaque data, per sysctl OID converts take care of it.
  */
-static void h2t_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
+static void h2g_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
 {
     size_t len;
-    int hlen, tlen;
-    uint8_t *hp, *tp;
+    int hlen, glen;
+    uint8_t *hp, *gp;
 
     /*
      * Although rare, we can have arrays of sysctl. Both sysctl_old_ddb in
@@ -1110,11 +1095,10 @@ static void h2t_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
      * this way.  *holdlen has been set by the kernel to the host's length.
      * Only LONG and ULONG on ABI32 have different sizes: see below.
      */
-    hp = (uint8_t *)holdp;
-    tp = hp;
+    gp = hp = (uint8_t *)holdp;
     len = 0;
     hlen = host_ctl_size[kind & CTLTYPE];
-    tlen = target_ctl_size[kind & CTLTYPE];
+    glen = guest_ctl_size[kind & CTLTYPE];
 
     /*
      * hlen == 0 for CTLTYPE_STRING and CTLTYPE_NODE, which need no conversion
@@ -1125,24 +1109,26 @@ static void h2t_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
     }
 
     while (len < *holdlen) {
-        if (hlen == tlen) {
+        if (hlen == glen) {
             switch (hlen) {
             case 1:
-                /* Nothing needed, since no byteswapping */
+                /* Nothing needed: no byteswapping and assigning in place */
                 break;
             case 2:
-                *(uint16_t *)tp = tswap16(*(uint16_t *)hp);
+                *(uint16_t *)gp = tswap16(*(uint16_t *)hp);
                 break;
             case 4:
-                *(uint32_t *)tp = tswap32(*(uint32_t *)hp);
+                *(uint32_t *)gp = tswap32(*(uint32_t *)hp);
                 break;
             case 8:
-                *(uint64_t *)tp = tswap64(*(uint64_t *)hp);
+                *(uint64_t *)gp = tswap64(*(uint64_t *)hp);
                 break;
+            default:
+                g_assert_not_reached();
             }
         }
-#ifdef TARGET_ABI32
         else {
+#ifdef TARGET_ABI32
             /*
              * Saturating assignment for the only two types that differ between
              * 32-bit and 64-bit machines. All other integral types have the
@@ -1151,21 +1137,25 @@ static void h2t_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
              */
             switch (kind & CTLTYPE) {
             case CTLTYPE_LONG:
-                *(abi_long *)tp = tswap32(h2t_long_sat(*(long *)hp));
+                *(abi_long *)gp = tswap32(h2g_long_sat(*(long *)hp));
                 break;
             case CTLTYPE_ULONG:
-                *(abi_ulong *)tp = tswap32(h2t_ulong_sat(*(u_long *)hp));
+                *(abi_ulong *)gp = tswap32(h2g_ulong_sat(*(u_long *)hp));
                 break;
+            default:
+                g_assert_not_reached();
             }
-        }
+#else
+            g_assert_not_reached();
 #endif
-        tp += tlen;
+        }
+        gp += glen;
         hp += hlen;
         len += hlen;
     }
 #ifdef TARGET_ABI32
-    if (hlen != tlen) {
-        *holdlen = (*holdlen / hlen) * tlen;
+    if (hlen != glen) {
+        *holdlen = (*holdlen / hlen) * glen;
     }
 #endif
 }
@@ -1189,8 +1179,8 @@ static inline void sysctl_oidfmt(uint32_t *holdp)
 }
 
 static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
-                                      int32_t namelen, void *holdp, size_t *holdlenp, void *hnewp,
-                                      size_t newlen)
+        int32_t namelen, void *holdp, size_t *holdlenp, void *hnewp,
+        size_t newlen)
 {
     uint32_t kind = 0;
     abi_long ret;
@@ -1386,7 +1376,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
         }
         case HW_NCPU:
             if (oldlen) {
-                (*(int32_t *)holdp) = tswap32(bsd_get_ncpu());
+                (*(abi_int *)holdp) = tswap32(bsd_get_ncpu());
             }
             holdlen = sizeof(int32_t);
             ret = 0;
@@ -1397,7 +1387,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                 ARMCPU *cpu2 = env_archcpu(env);
                 *(abi_int *)holdp = cpu_isar_feature(aa32_vfp, cpu2);
             }
-            holdlen = sizeof(int32_t);
+            holdlen = sizeof(abi_int);
             ret = 0;
             goto out;
 #endif
@@ -1455,7 +1445,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
                     ret = -1;
                 } else {
                     if (oldlen) {
-                        lvalue = scale_to_target_pages(lvalue);
+                        lvalue = scale_to_guest_pages(lvalue);
                         (*(abi_ulong *)holdp) = tswapal((abi_ulong)lvalue);
                     }
                     holdlen = sizeof(abi_ulong);
@@ -1496,7 +1486,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
      * For long and ulong with a 64-bit host and a 32-bit target we have to do
      * special things. holdlen here is the length provided by the target to the
      * system call. So we allocate a buffer twice as large because longs are twice
-     * as big on the host which will be writing them. In h2t_old_sysctl we'll adjust
+     * as big on the host which will be writing them. In h2g_old_sysctl we'll adjust
      * them and adjust the length.
      */
     if (kind == CTLTYPE_LONG || kind == CTLTYPE_ULONG) {
@@ -1560,7 +1550,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
             case CTL_SYSCTL_OIDLABEL:
             default:
                 /* Handle it based on the type */
-                h2t_old_sysctl(holdp, &holdlen, kind);
+                h2g_old_sysctl(holdp, &holdlen, kind);
                 /* NB: None of these are LONG or ULONG */
                 break;
             }
@@ -1569,7 +1559,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
              * Need to convert from host to target. All the weird special cases
              * are handled above.
              */
-            h2t_old_sysctl(holdp, &holdlen, kind);
+            h2g_old_sysctl(holdp, &holdlen, kind);
 #ifdef TARGET_ABI32
             /*
              * For the 32-bit on 64-bit case, for longs we need to copy the
@@ -1596,12 +1586,15 @@ out:
 }
 
 /*
- * This syscall was created to make sysctlbyname(3) more efficient.
- * Unfortunately, because we have to fake some sysctls, we can't do that.
+ * This syscall was created to make sysctlbyname(3) more efficient, but we can't
+ * really provide it in bsd-user.  Notably, we must always translate the names
+ * independently since some sysctl values have to be faked for the target
+ * environment, so it still has to break down to two syscalls for the underlying
+ * implementation.
  */
 abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
-                                 int32_t namelen, abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp,
-                                 abi_ulong newlen)
+        int32_t namelen, abi_ulong oldp, abi_ulong oldlenp, abi_ulong newp,
+        abi_ulong newlen)
 {
     abi_long ret = -TARGET_EFAULT;
     void *holdp = NULL, *hnewp = NULL;
@@ -1635,7 +1628,7 @@ abi_long do_freebsd_sysctlbyname(CPUArchState *env, abi_ulong namep,
     }
     holdlen = oldlen;
 
-    oidplen = sizeof(oid) / sizeof(int);
+    oidplen = ARRAY_SIZE(oid);
     if (sysctlnametomib(snamep, oid, &oidplen) != 0) {
         ret = -TARGET_EINVAL;
         goto out;
@@ -1707,7 +1700,6 @@ abi_long do_freebsd_sysctl(CPUArchState *env, abi_ulong namep, int32_t namelen,
         put_user_ual(holdlen, oldlenp);
     }
     unlock_user(hnamep, namep, 0);
-    unlock_user(holdp, oldp, holdlen);
     unlock_user(holdp, oldp, ret == 0 ? holdlen : 0);
 out:
     g_free(snamep);

@@ -115,7 +115,7 @@ abi_llong host_to_target_rlim(rlim_t rlim)
     return result;
 }
 
-void h2t_rusage(const struct rusage *rusage,
+void h2g_rusage(const struct rusage *rusage,
 	struct target_freebsd_rusage *target_rusage)
 {
     __put_user(rusage->ru_utime.tv_sec, &target_rusage->ru_utime.tv_sec);
@@ -148,7 +148,7 @@ abi_long host_to_target_rusage(abi_ulong target_addr,
     if (!lock_user_struct(VERIFY_WRITE, target_rusage, target_addr, 0)) {
         return -TARGET_EFAULT;
     }
-    h2t_rusage(rusage, target_rusage);
+    h2g_rusage(rusage, target_rusage);
     unlock_user_struct(target_rusage, target_addr, 1);
 
     return 0;
@@ -162,8 +162,8 @@ abi_long host_to_target_wrusage(abi_ulong target_addr,
     if (!lock_user_struct(VERIFY_WRITE, target_wrusage, target_addr, 0)) {
         return -TARGET_EFAULT;
     }
-    h2t_rusage(&wrusage->wru_self, &target_wrusage->wru_self);
-    h2t_rusage(&wrusage->wru_children, &target_wrusage->wru_children);
+    h2g_rusage(&wrusage->wru_self, &target_wrusage->wru_self);
+    h2g_rusage(&wrusage->wru_children, &target_wrusage->wru_children);
     unlock_user_struct(target_wrusage, target_addr, 1);
 
     return 0;
