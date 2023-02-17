@@ -48,7 +48,7 @@
  * Compare with sys/kern_sysctl.c ctl_size
  * Note: Not all types appear to be used in-tree.
  */
-static const int guest_ctl_size[CTLTYPE+1] = {
+static const int guest_ctl_size[CTLTYPE + 1] = {
 	[CTLTYPE_INT] = sizeof(abi_int),
 	[CTLTYPE_UINT] = sizeof(abi_uint),
 	[CTLTYPE_LONG] = sizeof(abi_long),
@@ -63,7 +63,7 @@ static const int guest_ctl_size[CTLTYPE+1] = {
 	[CTLTYPE_U64] = sizeof(uint64_t),
 };
 
-static const int host_ctl_size[CTLTYPE+1] = {
+static const int host_ctl_size[CTLTYPE + 1] = {
 	[CTLTYPE_INT] = sizeof(int),
 	[CTLTYPE_UINT] = sizeof(u_int),
 	[CTLTYPE_LONG] = sizeof(long),
@@ -1124,8 +1124,7 @@ static void h2g_old_sysctl(void *holdp, size_t *holdlen, uint32_t kind)
             default:
                 g_assert_not_reached();
             }
-        }
-        else {
+        } else {
 #ifdef TARGET_ABI32
             /*
              * Saturating assignment for the only two types that differ between
@@ -1483,9 +1482,9 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
     /*
      * For long and ulong with a 64-bit host and a 32-bit target we have to do
      * special things. holdlen here is the length provided by the target to the
-     * system call. So we allocate a buffer twice as large because longs are twice
-     * as big on the host which will be writing them. In h2g_old_sysctl we'll adjust
-     * them and adjust the length.
+     * system call. So we allocate a buffer twice as large because longs are
+     * twice as big on the host which will be writing them. In h2g_old_sysctl
+     * we'll adjust them and adjust the length.
      */
     if (kind == CTLTYPE_LONG || kind == CTLTYPE_ULONG) {
         old_holdp = holdp;
