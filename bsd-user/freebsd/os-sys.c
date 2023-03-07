@@ -453,7 +453,7 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
         struct target_kinfo_file *tkif, size_t *tlen)
 {
     abi_long ret;
-    int mib[4], cnt, sz;
+    int mib[4], sz;
     size_t len;
     char *buf, *bp, *eb, *tp;
     struct kinfo_file *kf, kif;
@@ -497,13 +497,11 @@ do_sysctl_kern_proc_filedesc(int pid, size_t olen,
         return ret;
     }
     *tlen = len;
-    cnt = 0;
     bp = buf;
     eb = buf + len;
     while (bp < eb) {
         kf = (struct kinfo_file *)(uintptr_t)bp;
         bp += kf->kf_structsize;
-        cnt++;
     }
     if (olen < *tlen) {
         g_free(buf);
@@ -570,7 +568,7 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
         struct target_kinfo_vmentry *tkve, size_t *tlen)
 {
     abi_long ret;
-    int mib[4], cnt, sz;
+    int mib[4], sz;
     size_t len;
     char *buf, *bp, *eb, *tp;
     struct kinfo_vmentry *kve, kvme;
@@ -614,13 +612,11 @@ do_sysctl_kern_proc_vmmap(int pid, size_t olen,
         return ret;
     }
     *tlen = len;
-    cnt = 0;
     bp = buf;
     eb = buf + len;
     while (bp < eb) {
         kve = (struct kinfo_vmentry *)(uintptr_t)bp;
         bp += kve->kve_structsize;
-        cnt++;
     }
     if (olen < *tlen) {
         g_free(buf);
