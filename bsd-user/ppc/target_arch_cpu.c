@@ -14,6 +14,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+#include "qemu/osdep.h"
+
 #include "target_arch.h"
 
 static inline uint64_t cpu_ppc_get_tb(CPUPPCState *env)

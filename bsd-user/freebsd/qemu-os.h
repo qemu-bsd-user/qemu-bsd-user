@@ -20,20 +20,15 @@
 #ifndef QEMU_OS_H
 #define QEMU_OS_H
 
-#define _WANT_FREEBSD11_STAT
-#define _WANT_FREEBSD11_STATFS
-#define _WANT_FREEBSD11_DIRENT
-#include <sys/types.h>
+/* qemu/osdep.h pulls in the rest */
+
 #include <sys/acl.h>
 #include <sys/mount.h>
 #include <sys/timex.h>
 #include <sys/rtprio.h>
 #include <sys/select.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <netinet/in.h>
-
-#include <time.h>
 
 struct freebsd11_stat;
 

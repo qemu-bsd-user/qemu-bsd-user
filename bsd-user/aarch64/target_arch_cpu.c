@@ -16,8 +16,8 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
+#include "qemu/osdep.h"
 
-#include <stdio.h>
 #include "target_arch.h"
 
 /* See cpu_set_user_tls() in arm64/arm64/vm_machdep.c */

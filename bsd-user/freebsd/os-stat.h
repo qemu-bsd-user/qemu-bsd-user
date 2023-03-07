@@ -20,17 +20,6 @@
 #ifndef BSD_USER_FREEBSD_OS_STAT_H
 #define BSD_USER_FREEBSD_OS_STAT_H
 
-#define _WANT_FREEBSD11_STAT
-#define _WANT_FREEBSD11_STATFS
-#define _WANT_FREEBSD11_DIRENT
-#include <sys/types.h>
-#include <sys/ucred.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <dirent.h>
-
-#include "qemu-os.h"
-
 int freebsd11_stat(const char *path, struct freebsd11_stat *stat);
 __sym_compat(stat, freebsd11_stat, FBSD_1.0);
 int freebsd11_lstat(const char *path, struct freebsd11_stat *stat);

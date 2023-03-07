@@ -16,13 +16,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-
-#define _WANT_FREEBSD11_STAT
-#define _WANT_FREEBSD11_STATFS
-#define _WANT_FREEBSD11_DIRENT
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/mount.h>
+#include "qemu/osdep.h"
 
 #include "qemu.h"
 #include "qemu-os.h"

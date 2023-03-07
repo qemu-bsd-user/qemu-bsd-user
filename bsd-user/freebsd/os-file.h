@@ -20,18 +20,9 @@
 #ifndef FREEBSD_OS_FILE_H
 #define FREEBSD_OS_FILE_H
 
-#define _WANT_FREEBSD11_STAT
-#define _WANT_FREEBSD11_STATFS
-#define _WANT_FREEBSD11_DIRENT
-#include <sys/stat.h>
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 #include <sys/specialfd.h>
 #endif
-
-#include <aio.h>
-#include <unistd.h>
-
-#include "qemu-os.h"
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 int __sys___specialfd(int, const void *, size_t);

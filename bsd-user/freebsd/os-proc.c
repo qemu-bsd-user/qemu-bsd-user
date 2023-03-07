@@ -16,19 +16,13 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+#include "qemu/osdep.h"
 
-#define _WANT_FREEBSD11_STAT
-#define _WANT_FREEBSD11_STATFS
-#define _WANT_FREEBSD11_DIRENT
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
-#include <sys/unistd.h>
-#include <sys/socket.h>
 struct kinfo_proc;
 #include <libprocstat.h>
-#include <string.h>
 
 #include "qemu.h"
 
