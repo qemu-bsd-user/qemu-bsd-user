@@ -18,6 +18,7 @@
  */
 #include "qemu/osdep.h"
 
+#include "qemu/osdep.h"
 #include "qemu.h"
 #include "target_arch_sysarch.h"
 #include "signal-common.h"

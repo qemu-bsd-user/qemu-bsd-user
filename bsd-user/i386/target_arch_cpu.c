@@ -18,8 +18,6 @@
  */
 #include "qemu/osdep.h"
 
-#include <sys/types.h>
-
 #include "cpu.h"
 #include "qemu.h"
 #include "qemu/timer.h"

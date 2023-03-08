@@ -55,10 +55,11 @@
 #include "hw/hyperv/vmbus-bridge.h"
 
 /* Supported chipsets: */
+#include "hw/southbridge/ich9.h"
 #include "hw/southbridge/piix.h"
 #include "hw/acpi/pcihp.h"
 #include "hw/i386/fw_cfg.h"
-#include "hw/i386/ich9.h"
+#include "hw/i386/pc.h"
 #include "hw/pci/pci_bus.h"
 #include "hw/pci-host/i440fx.h"
 #include "hw/pci-host/q35.h"
@@ -76,7 +77,6 @@
 
 #include "hw/acpi/hmat.h"
 #include "hw/acpi/viot.h"
-#include "hw/acpi/cxl.h"
 
 #include CONFIG_DEVICES
 
@@ -1514,7 +1514,6 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
                 aml_append(pkg, aml_eisaid("PNP0A03"));
                 aml_append(dev, aml_name_decl("_CID", pkg));
                 aml_append(dev, aml_name_decl("_ADR", aml_int(0)));
-                aml_append(dev, aml_name_decl("_UID", aml_int(bus_num)));
                 build_cxl_osc_method(dev);
             } else if (pci_bus_is_express(bus)) {
                 aml_append(dev, aml_name_decl("_HID", aml_eisaid("PNP0A08")));

@@ -20,11 +20,7 @@
 #ifndef BSD_PROC_H
 #define BSD_PROC_H
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/resource.h>
-#include <unistd.h>
 
 #include "qemu-bsd.h"
 

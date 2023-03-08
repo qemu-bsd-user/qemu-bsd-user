@@ -19,8 +19,7 @@
  */
 #include "qemu/osdep.h"
 
-#include <sys/types.h>
-#include <sys/time.h>
+#include "qemu/osdep.h"
 #include <sys/resource.h>
 #include <sys/sysctl.h>
 
