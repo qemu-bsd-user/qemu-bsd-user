@@ -52,6 +52,7 @@
 #include "hw/nvram/fw_cfg.h"
 #include "qemu/cutils.h"
 #include "hw/acpi/acpi_aml_interface.h"
+#include "trace.h"
 
 /*****************************************************************************/
 /* ICH9 LPC PCI to ISA bridge */
@@ -162,6 +163,7 @@ static void ich9_cc_write(void *opaque, hwaddr addr,
 {
     ICH9LPCState *lpc = (ICH9LPCState *)opaque;
 
+    trace_ich9_cc_write(addr, val, len);
     ich9_cc_addr_len(&addr, &len);
     memcpy(lpc->chip_config + addr, &val, len);
     pci_bus_fire_intx_routing_notifier(pci_get_bus(&lpc->d));
@@ -177,6 +179,7 @@ static uint64_t ich9_cc_read(void *opaque, hwaddr addr,
     uint32_t val = 0;
     ich9_cc_addr_len(&addr, &len);
     memcpy(&val, lpc->chip_config + addr, len);
+    trace_ich9_cc_read(addr, val, len);
     return val;
 }
 
@@ -789,7 +792,7 @@ static const VMStateDescription vmstate_ich9_lpc = {
 };
 
 static Property ich9_lpc_properties[] = {
-    DEFINE_PROP_BOOL("noreboot", ICH9LPCState, pin_strap.spkr_hi, true),
+    DEFINE_PROP_BOOL("noreboot", ICH9LPCState, pin_strap.spkr_hi, false),
     DEFINE_PROP_BOOL("smm-compat", ICH9LPCState, pm.smm_compat, false),
     DEFINE_PROP_BIT64("x-smi-broadcast", ICH9LPCState, smi_host_features,
                       ICH9_LPC_SMI_F_BROADCAST_BIT, true),
@@ -810,7 +813,6 @@ static void ich9_send_gpe(AcpiDeviceIf *adev, AcpiEventStatusBits ev)
 static void build_ich9_isa_aml(AcpiDevAmlIf *adev, Aml *scope)
 {
     Aml *field;
-    BusChild *kid;
     ICH9LPCState *s = ICH9_LPC_DEVICE(adev);
     BusState *bus = BUS(s->isa_bus);
     Aml *sb_scope = aml_scope("\\_SB");
@@ -832,9 +834,7 @@ static void build_ich9_isa_aml(AcpiDevAmlIf *adev, Aml *scope)
     aml_append(sb_scope, field);
     aml_append(scope, sb_scope);
 
-    QTAILQ_FOREACH(kid, &bus->children, sibling) {
-            call_dev_aml_func(DEVICE(kid->child), scope);
-    }
+    qbus_build_aml(bus, scope);
 }
 
 static void ich9_lpc_class_init(ObjectClass *klass, void *data)

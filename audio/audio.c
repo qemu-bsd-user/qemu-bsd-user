@@ -28,8 +28,10 @@
 #include "monitor/monitor.h"
 #include "qemu/timer.h"
 #include "qapi/error.h"
+#include "qapi/clone-visitor.h"
 #include "qapi/qobject-input-visitor.h"
 #include "qapi/qapi-visit-audio.h"
+#include "qapi/qapi-commands-audio.h"
 #include "qemu/cutils.h"
 #include "qemu/module.h"
 #include "qemu/help_option.h"
@@ -2035,29 +2037,47 @@ void audio_create_pdos(Audiodev *dev)
     switch (dev->driver) {
 #define CASE(DRIVER, driver, pdo_name)                              \
     case AUDIODEV_DRIVER_##DRIVER:                                  \
-        if (!dev->u.driver.has_in) {                                \
+        if (!dev->u.driver.in) {                                    \
             dev->u.driver.in = g_malloc0(                           \
                 sizeof(Audiodev##pdo_name##PerDirectionOptions));   \
-            dev->u.driver.has_in = true;                            \
         }                                                           \
-        if (!dev->u.driver.has_out) {                               \
+        if (!dev->u.driver.out) {                                   \
             dev->u.driver.out = g_malloc0(                          \
                 sizeof(Audiodev##pdo_name##PerDirectionOptions));   \
-            dev->u.driver.has_out = true;                           \
         }                                                           \
         break
 
         CASE(NONE, none, );
+#ifdef CONFIG_AUDIO_ALSA
         CASE(ALSA, alsa, Alsa);
+#endif
+#ifdef CONFIG_AUDIO_COREAUDIO
         CASE(COREAUDIO, coreaudio, Coreaudio);
+#endif
+#ifdef CONFIG_DBUS_DISPLAY
         CASE(DBUS, dbus, );
+#endif
+#ifdef CONFIG_AUDIO_DSOUND
         CASE(DSOUND, dsound, );
+#endif
+#ifdef CONFIG_AUDIO_JACK
         CASE(JACK, jack, Jack);
+#endif
+#ifdef CONFIG_AUDIO_OSS
         CASE(OSS, oss, Oss);
+#endif
+#ifdef CONFIG_AUDIO_PA
         CASE(PA, pa, Pa);
+#endif
+#ifdef CONFIG_AUDIO_SDL
         CASE(SDL, sdl, Sdl);
+#endif
+#ifdef CONFIG_AUDIO_SNDIO
         CASE(SNDIO, sndio, );
+#endif
+#ifdef CONFIG_SPICE
         CASE(SPICE, spice, );
+#endif
         CASE(WAV, wav, );
 
     case AUDIODEV_DRIVER__MAX:
@@ -2312,4 +2332,14 @@ size_t audio_rate_get_bytes(RateCtl *rate, struct audio_pcm_info *info,
     audio_rate_add_bytes(rate, bytes);
 
     return bytes;
+}
+
+AudiodevList *qmp_query_audiodevs(Error **errp)
+{
+    AudiodevList *ret = NULL;
+    AudiodevListEntry *e;
+    QSIMPLEQ_FOREACH(e, &audiodevs, next) {
+        QAPI_LIST_PREPEND(ret, QAPI_CLONE(Audiodev, e->dev));
+    }
+    return ret;
 }

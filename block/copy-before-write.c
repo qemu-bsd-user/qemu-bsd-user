@@ -32,6 +32,7 @@
 #include "block/block_int.h"
 #include "block/qdict.h"
 #include "block/block-copy.h"
+#include "block/dirty-bitmap.h"
 
 #include "block/copy-before-write.h"
 #include "block/reqlist.h"
@@ -432,7 +433,7 @@ static int cbw_open(BlockDriverState *bs, QDict *options, int flags,
         return -EINVAL;
     }
 
-    if (opts->has_bitmap) {
+    if (opts->bitmap) {
         bitmap = block_dirty_bitmap_lookup(opts->bitmap->node,
                                            opts->bitmap->name, NULL, errp);
         if (!bitmap) {
@@ -522,7 +523,6 @@ BlockDriverState *bdrv_cbw_append(BlockDriverState *source,
                                   BlockCopyState **bcs,
                                   Error **errp)
 {
-    ERRP_GUARD();
     BDRVCopyBeforeWriteState *state;
     BlockDriverState *top;
     QDict *opts;

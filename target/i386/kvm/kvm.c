@@ -37,6 +37,7 @@
 #include "exec/gdbstub.h"
 #include "qemu/host-utils.h"
 #include "qemu/main-loop.h"
+#include "qemu/ratelimit.h"
 #include "qemu/config-file.h"
 #include "qemu/error-report.h"
 #include "qemu/memalign.h"
@@ -5689,7 +5690,6 @@ static void kvm_arch_set_notify_window(Object *obj, Visitor *v,
                                        Error **errp)
 {
     KVMState *s = KVM_STATE(obj);
-    Error *error = NULL;
     uint32_t value;
 
     if (s->fd != -1) {
@@ -5697,9 +5697,7 @@ static void kvm_arch_set_notify_window(Object *obj, Visitor *v,
         return;
     }
 
-    visit_type_uint32(v, name, &value, &error);
-    if (error) {
-        error_propagate(errp, error);
+    if (!visit_type_uint32(v, name, &value, errp)) {
         return;
     }
 

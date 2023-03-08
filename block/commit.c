@@ -123,13 +123,13 @@ static int coroutine_fn commit_run(Job *job, Error **errp)
     QEMU_AUTO_VFREE void *buf = NULL;
     int64_t len, base_len;
 
-    len = blk_getlength(s->top);
+    len = blk_co_getlength(s->top);
     if (len < 0) {
         return len;
     }
     job_progress_set_remaining(&s->common.job, len);
 
-    base_len = blk_getlength(s->base);
+    base_len = blk_co_getlength(s->base);
     if (base_len < 0) {
         return base_len;
     }
@@ -155,8 +155,8 @@ static int coroutine_fn commit_run(Job *job, Error **errp)
             break;
         }
         /* Copy if allocated above the base */
-        ret = bdrv_is_allocated_above(blk_bs(s->top), s->base_overlay, true,
-                                      offset, COMMIT_BUFFER_SIZE, &n);
+        ret = blk_co_is_allocated_above(s->top, s->base_overlay, true,
+                                        offset, COMMIT_BUFFER_SIZE, &n);
         copy = (ret > 0);
         trace_commit_one_iteration(s, offset, n, ret);
         if (copy) {

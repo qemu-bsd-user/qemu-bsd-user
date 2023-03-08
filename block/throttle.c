@@ -18,6 +18,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "block/block-io.h"
+#include "block/block_int.h"
 #include "block/throttle-groups.h"
 #include "qemu/module.h"
 #include "qemu/option.h"
@@ -104,9 +106,9 @@ static void throttle_close(BlockDriverState *bs)
 }
 
 
-static int64_t throttle_getlength(BlockDriverState *bs)
+static int64_t coroutine_fn throttle_co_getlength(BlockDriverState *bs)
 {
-    return bdrv_getlength(bs->file->bs);
+    return bdrv_co_getlength(bs->file->bs);
 }
 
 static int coroutine_fn throttle_co_preadv(BlockDriverState *bs,
@@ -214,7 +216,7 @@ static void throttle_reopen_abort(BDRVReopenState *reopen_state)
     reopen_state->opaque = NULL;
 }
 
-static void coroutine_fn throttle_co_drain_begin(BlockDriverState *bs)
+static void throttle_drain_begin(BlockDriverState *bs)
 {
     ThrottleGroupMember *tgm = bs->opaque;
     if (qatomic_fetch_inc(&tgm->io_limits_disabled) == 0) {
@@ -222,7 +224,7 @@ static void coroutine_fn throttle_co_drain_begin(BlockDriverState *bs)
     }
 }
 
-static void coroutine_fn throttle_co_drain_end(BlockDriverState *bs)
+static void throttle_drain_end(BlockDriverState *bs)
 {
     ThrottleGroupMember *tgm = bs->opaque;
     assert(tgm->io_limits_disabled);
@@ -245,7 +247,7 @@ static BlockDriver bdrv_throttle = {
 
     .bdrv_child_perm                    =   bdrv_default_perms,
 
-    .bdrv_getlength                     =   throttle_getlength,
+    .bdrv_co_getlength                  =   throttle_co_getlength,
 
     .bdrv_co_preadv                     =   throttle_co_preadv,
     .bdrv_co_pwritev                    =   throttle_co_pwritev,
@@ -261,8 +263,8 @@ static BlockDriver bdrv_throttle = {
     .bdrv_reopen_commit                 =   throttle_reopen_commit,
     .bdrv_reopen_abort                  =   throttle_reopen_abort,
 
-    .bdrv_co_drain_begin                =   throttle_co_drain_begin,
-    .bdrv_co_drain_end                  =   throttle_co_drain_end,
+    .bdrv_drain_begin                   =   throttle_drain_begin,
+    .bdrv_drain_end                     =   throttle_drain_end,
 
     .is_filter                          =   true,
     .strong_runtime_opts                =   throttle_strong_runtime_opts,

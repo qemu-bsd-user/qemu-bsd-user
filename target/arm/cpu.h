@@ -309,6 +309,7 @@ typedef struct CPUArchState {
             };
             uint64_t sctlr_el[4];
         };
+        uint64_t vsctlr; /* Virtualization System control register. */
         uint64_t cpacr_el1; /* Architectural feature access control register */
         uint64_t cptr_el[4];  /* ARMv8 feature trap registers */
         uint32_t c1_xscaleauxcr; /* XScale auxiliary control register.  */
@@ -478,7 +479,7 @@ typedef struct CPUArchState {
         };
         uint64_t c14_cntfrq; /* Counter Frequency register */
         uint64_t c14_cntkctl; /* Timer Control register */
-        uint32_t cnthctl_el2; /* Counter/Timer Hyp Control register */
+        uint64_t cnthctl_el2; /* Counter/Timer Hyp Control register */
         uint64_t cntvoff_el2; /* Counter Virtual Offset register */
         ARMGenericTimer c14_timer[NUM_GTIMERS];
         uint32_t c15_cpar; /* XScale Coprocessor Access Register */
@@ -494,6 +495,7 @@ typedef struct CPUArchState {
         uint64_t dbgbcr[16]; /* breakpoint control registers */
         uint64_t dbgwvr[16]; /* watchpoint value registers */
         uint64_t dbgwcr[16]; /* watchpoint control registers */
+        uint64_t dbgclaim;   /* DBGCLAIM bits */
         uint64_t mdscr_el1;
         uint64_t oslsr_el1; /* OS Lock Status */
         uint64_t osdlr_el1; /* OS DoubleLock status */
@@ -527,6 +529,16 @@ typedef struct CPUArchState {
         uint64_t disr_el1;
         uint64_t vdisr_el2;
         uint64_t vsesr_el2;
+
+        /*
+         * Fine-Grained Trap registers. We store these as arrays so the
+         * access checking code doesn't have to manually select
+         * HFGRTR_EL2 vs HFDFGRTR_EL2 etc when looking up the bit to test.
+         * FEAT_FGT2 will add more elements to these arrays.
+         */
+        uint64_t fgt_read[2]; /* HFGRTR, HDFGRTR */
+        uint64_t fgt_write[2]; /* HFGWTR, HDFGWTR */
+        uint64_t fgt_exec[1]; /* HFGITR */
     } cp15;
 
     struct {
@@ -745,8 +757,11 @@ typedef struct CPUArchState {
          */
         uint32_t *rbar[M_REG_NUM_BANKS];
         uint32_t *rlar[M_REG_NUM_BANKS];
+        uint32_t *hprbar;
+        uint32_t *hprlar;
         uint32_t mair0[M_REG_NUM_BANKS];
         uint32_t mair1[M_REG_NUM_BANKS];
+        uint32_t hprselr;
     } pmsav8;
 
     /* v8M SAU */
@@ -906,6 +921,8 @@ struct ArchCPU {
     bool has_mpu;
     /* PMSAv7 MPU number of supported regions */
     uint32_t pmsav7_dregion;
+    /* PMSAv8 MPU number of supported hyp regions */
+    uint32_t pmsav8r_hdregion;
     /* v8M SAU number of supported regions */
     uint32_t sau_sregion;
 
@@ -1117,7 +1134,7 @@ int aarch64_cpu_gdb_write_register(CPUState *cpu, uint8_t *buf, int reg);
 void aarch64_sve_narrow_vq(CPUARMState *env, unsigned vq);
 void aarch64_sve_change_el(CPUARMState *env, int old_el,
                            int new_el, bool el0_a64);
-void arm_reset_sve_state(CPUARMState *env);
+void aarch64_set_svcr(CPUARMState *env, uint64_t new, uint64_t mask);
 
 /*
  * SVE registers are encoded in KVM's memory in an endianness-invariant format.
@@ -3153,6 +3170,8 @@ FIELD(TBFLAG_ANY, FPEXC_EL, 8, 2)
 /* Memory operations require alignment: SCTLR_ELx.A or CCR.UNALIGN_TRP */
 FIELD(TBFLAG_ANY, ALIGN_MEM, 10, 1)
 FIELD(TBFLAG_ANY, PSTATE__IL, 11, 1)
+FIELD(TBFLAG_ANY, FGT_ACTIVE, 12, 1)
+FIELD(TBFLAG_ANY, FGT_SVC, 13, 1)
 
 /*
  * Bit usage when in AArch32 state, both A- and M-profile.
@@ -3227,6 +3246,7 @@ FIELD(TBFLAG_A64, PSTATE_ZA, 23, 1)
 FIELD(TBFLAG_A64, SVL, 24, 4)
 /* Indicates that SME Streaming mode is active, and SMCR_ELx.FA64 is not. */
 FIELD(TBFLAG_A64, SME_TRAP_NONSTREAMING, 28, 1)
+FIELD(TBFLAG_A64, FGT_ERET, 29, 1)
 
 /*
  * Helpers for using the above.
@@ -3757,6 +3777,16 @@ static inline bool isar_feature_aa32_tts2uxn(const ARMISARegisters *id)
     return FIELD_EX32(id->id_mmfr4, ID_MMFR4, XNX) != 0;
 }
 
+static inline bool isar_feature_aa32_half_evt(const ARMISARegisters *id)
+{
+    return FIELD_EX32(id->id_mmfr4, ID_MMFR4, EVT) >= 1;
+}
+
+static inline bool isar_feature_aa32_evt(const ARMISARegisters *id)
+{
+    return FIELD_EX32(id->id_mmfr4, ID_MMFR4, EVT) >= 2;
+}
+
 static inline bool isar_feature_aa32_dit(const ARMISARegisters *id)
 {
     return FIELD_EX32(id->id_pfr0, ID_PFR0, DIT) != 0;
@@ -4029,6 +4059,16 @@ static inline bool isar_feature_aa64_ids(const ARMISARegisters *id)
     return FIELD_EX64(id->id_aa64mmfr2, ID_AA64MMFR2, IDS) != 0;
 }
 
+static inline bool isar_feature_aa64_half_evt(const ARMISARegisters *id)
+{
+    return FIELD_EX64(id->id_aa64mmfr2, ID_AA64MMFR2, EVT) >= 1;
+}
+
+static inline bool isar_feature_aa64_evt(const ARMISARegisters *id)
+{
+    return FIELD_EX64(id->id_aa64mmfr2, ID_AA64MMFR2, EVT) >= 2;
+}
+
 static inline bool isar_feature_aa64_bti(const ARMISARegisters *id)
 {
     return FIELD_EX64(id->id_aa64pfr1, ID_AA64PFR1, BT) != 0;
@@ -4135,6 +4175,11 @@ static inline bool isar_feature_aa64_tgran64_2(const ARMISARegisters *id)
 {
     unsigned t = FIELD_EX64(id->id_aa64mmfr0, ID_AA64MMFR0, TGRAN64_2);
     return t >= 2 || (t == 0 && isar_feature_aa64_tgran64(id));
+}
+
+static inline bool isar_feature_aa64_fgt(const ARMISARegisters *id)
+{
+    return FIELD_EX64(id->id_aa64mmfr0, ID_AA64MMFR0, FGT) != 0;
 }
 
 static inline bool isar_feature_aa64_ccidx(const ARMISARegisters *id)
@@ -4311,6 +4356,16 @@ static inline bool isar_feature_any_debugv8p2(const ARMISARegisters *id)
 static inline bool isar_feature_any_ras(const ARMISARegisters *id)
 {
     return isar_feature_aa64_ras(id) || isar_feature_aa32_ras(id);
+}
+
+static inline bool isar_feature_any_half_evt(const ARMISARegisters *id)
+{
+    return isar_feature_aa64_half_evt(id) || isar_feature_aa32_half_evt(id);
+}
+
+static inline bool isar_feature_any_evt(const ARMISARegisters *id)
+{
+    return isar_feature_aa64_evt(id) || isar_feature_aa32_evt(id);
 }
 
 /*

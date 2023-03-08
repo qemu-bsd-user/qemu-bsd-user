@@ -2285,15 +2285,16 @@ exit:
     return ret;
 }
 
-static int vmdk_create_extent(const char *filename, int64_t filesize,
-                              bool flat, bool compress, bool zeroed_grain,
-                              BlockBackend **pbb,
-                              QemuOpts *opts, Error **errp)
+static int coroutine_fn vmdk_create_extent(const char *filename,
+                                           int64_t filesize, bool flat,
+                                           bool compress, bool zeroed_grain,
+                                           BlockBackend **pbb,
+                                           QemuOpts *opts, Error **errp)
 {
     int ret;
     BlockBackend *blk = NULL;
 
-    ret = bdrv_create_file(filename, opts, errp);
+    ret = bdrv_co_create_file(filename, opts, errp);
     if (ret < 0) {
         goto exit;
     }
@@ -2366,14 +2367,14 @@ static int filename_decompose(const char *filename, char *path, char *prefix,
  *           non-split format.
  * idx >= 1: get the n-th extent if in a split subformat
  */
-typedef BlockBackend *(*vmdk_create_extent_fn)(int64_t size,
-                                               int idx,
-                                               bool flat,
-                                               bool split,
-                                               bool compress,
-                                               bool zeroed_grain,
-                                               void *opaque,
-                                               Error **errp);
+typedef BlockBackend * coroutine_fn (*vmdk_create_extent_fn)(int64_t size,
+                                                             int idx,
+                                                             bool flat,
+                                                             bool split,
+                                                             bool compress,
+                                                             bool zeroed_grain,
+                                                             void *opaque,
+                                                             Error **errp);
 
 static void vmdk_desc_add_extent(GString *desc,
                                  const char *extent_line_fmt,
@@ -2616,7 +2617,7 @@ typedef struct {
     QemuOpts *opts;
 } VMDKCreateOptsData;
 
-static BlockBackend *vmdk_co_create_opts_cb(int64_t size, int idx,
+static BlockBackend * coroutine_fn vmdk_co_create_opts_cb(int64_t size, int idx,
                                             bool flat, bool split, bool compress,
                                             bool zeroed_grain, void *opaque,
                                             Error **errp)
@@ -2768,10 +2769,11 @@ exit:
     return ret;
 }
 
-static BlockBackend *vmdk_co_create_cb(int64_t size, int idx,
-                                       bool flat, bool split, bool compress,
-                                       bool zeroed_grain, void *opaque,
-                                       Error **errp)
+static BlockBackend * coroutine_fn vmdk_co_create_cb(int64_t size, int idx,
+                                                     bool flat, bool split,
+                                                     bool compress,
+                                                     bool zeroed_grain,
+                                                     void *opaque, Error **errp)
 {
     int ret;
     BlockDriverState *bs;
@@ -2821,7 +2823,6 @@ static BlockBackend *vmdk_co_create_cb(int64_t size, int idx,
 static int coroutine_fn vmdk_co_create(BlockdevCreateOptions *create_options,
                                        Error **errp)
 {
-    int ret;
     BlockdevCreateOptionsVmdk *opts;
 
     opts = &create_options->u.vmdk;
@@ -2829,24 +2830,19 @@ static int coroutine_fn vmdk_co_create(BlockdevCreateOptions *create_options,
     /* Validate options */
     if (!QEMU_IS_ALIGNED(opts->size, BDRV_SECTOR_SIZE)) {
         error_setg(errp, "Image size must be a multiple of 512 bytes");
-        ret = -EINVAL;
-        goto out;
+        return -EINVAL;
     }
 
-    ret = vmdk_co_do_create(opts->size,
-                            opts->subformat,
-                            opts->adapter_type,
-                            opts->backing_file,
-                            opts->hwversion,
-                            opts->toolsversion,
-                            false,
-                            opts->zeroed_grain,
-                            vmdk_co_create_cb,
-                            opts, errp);
-    return ret;
-
-out:
-    return ret;
+    return vmdk_co_do_create(opts->size,
+                             opts->subformat,
+                             opts->adapter_type,
+                             opts->backing_file,
+                             opts->hwversion,
+                             opts->toolsversion,
+                             false,
+                             opts->zeroed_grain,
+                             vmdk_co_create_cb,
+                             opts, errp);
 }
 
 static void vmdk_close(BlockDriverState *bs)
@@ -2860,14 +2856,15 @@ static void vmdk_close(BlockDriverState *bs)
     error_free(s->migration_blocker);
 }
 
-static int64_t vmdk_get_allocated_file_size(BlockDriverState *bs)
+static int64_t coroutine_fn
+vmdk_co_get_allocated_file_size(BlockDriverState *bs)
 {
     int i;
     int64_t ret = 0;
     int64_t r;
     BDRVVmdkState *s = bs->opaque;
 
-    ret = bdrv_get_allocated_file_size(bs->file->bs);
+    ret = bdrv_co_get_allocated_file_size(bs->file->bs);
     if (ret < 0) {
         return ret;
     }
@@ -2875,7 +2872,7 @@ static int64_t vmdk_get_allocated_file_size(BlockDriverState *bs)
         if (s->extents[i].file == bs->file) {
             continue;
         }
-        r = bdrv_get_allocated_file_size(s->extents[i].file->bs);
+        r = bdrv_co_get_allocated_file_size(s->extents[i].file->bs);
         if (r < 0) {
             return r;
         }
@@ -2901,12 +2898,12 @@ static int vmdk_has_zero_init(BlockDriverState *bs)
     return 1;
 }
 
-static ImageInfo *vmdk_get_extent_info(VmdkExtent *extent)
+static VmdkExtentInfo *vmdk_get_extent_info(VmdkExtent *extent)
 {
-    ImageInfo *info = g_new0(ImageInfo, 1);
+    VmdkExtentInfo *info = g_new0(VmdkExtentInfo, 1);
 
     bdrv_refresh_filename(extent->file->bs);
-    *info = (ImageInfo){
+    *info = (VmdkExtentInfo){
         .filename         = g_strdup(extent->file->bs->filename),
         .format           = g_strdup(extent->type),
         .virtual_size     = extent->sectors * BDRV_SECTOR_SIZE,
@@ -2985,7 +2982,7 @@ static ImageInfoSpecific *vmdk_get_specific_info(BlockDriverState *bs,
     int i;
     BDRVVmdkState *s = bs->opaque;
     ImageInfoSpecific *spec_info = g_new0(ImageInfoSpecific, 1);
-    ImageInfoList **tail;
+    VmdkExtentInfoList **tail;
 
     *spec_info = (ImageInfoSpecific){
         .type = IMAGE_INFO_SPECIFIC_KIND_VMDK,
@@ -3015,7 +3012,8 @@ static bool vmdk_extents_type_eq(const VmdkExtent *a, const VmdkExtent *b)
            (a->flat || a->cluster_sectors == b->cluster_sectors);
 }
 
-static int vmdk_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
+static int coroutine_fn
+vmdk_co_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
 {
     int i;
     BDRVVmdkState *s = bs->opaque;
@@ -3128,11 +3126,11 @@ static BlockDriver bdrv_vmdk = {
     .bdrv_co_create_opts          = vmdk_co_create_opts,
     .bdrv_co_create               = vmdk_co_create,
     .bdrv_co_block_status         = vmdk_co_block_status,
-    .bdrv_get_allocated_file_size = vmdk_get_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = vmdk_co_get_allocated_file_size,
     .bdrv_has_zero_init           = vmdk_has_zero_init,
     .bdrv_get_specific_info       = vmdk_get_specific_info,
     .bdrv_refresh_limits          = vmdk_refresh_limits,
-    .bdrv_get_info                = vmdk_get_info,
+    .bdrv_co_get_info             = vmdk_co_get_info,
     .bdrv_gather_child_options    = vmdk_gather_child_options,
 
     .is_format                    = true,

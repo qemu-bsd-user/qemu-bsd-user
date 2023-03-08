@@ -327,9 +327,10 @@ static int coroutine_fn vdi_co_check(BlockDriverState *bs, BdrvCheckResult *res,
     return 0;
 }
 
-static int vdi_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
+static int coroutine_fn
+vdi_co_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
 {
-    /* TODO: vdi_get_info would be needed for machine snapshots.
+    /* TODO: vdi_co_get_info would be needed for machine snapshots.
        vm_state_offset is still missing. */
     BDRVVdiState *s = (BDRVVdiState *)bs->opaque;
     logout("\n");
@@ -934,7 +935,7 @@ static int coroutine_fn vdi_co_create_opts(BlockDriver *drv,
     qdict = qemu_opts_to_qdict_filtered(opts, NULL, &vdi_create_opts, true);
 
     /* Create and open the file (protocol layer) */
-    ret = bdrv_create_file(filename, opts, errp);
+    ret = bdrv_co_create_file(filename, opts, errp);
     if (ret < 0) {
         goto done;
     }
@@ -1049,7 +1050,7 @@ static BlockDriver bdrv_vdi = {
     .bdrv_co_pwritev    = vdi_co_pwritev,
 #endif
 
-    .bdrv_get_info = vdi_get_info,
+    .bdrv_co_get_info = vdi_co_get_info,
 
     .is_format = true,
     .create_opts = &vdi_create_opts,

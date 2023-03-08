@@ -53,6 +53,7 @@
 #define TYPE_RISCV_CPU_SIFIVE_E51       RISCV_CPU_TYPE_NAME("sifive-e51")
 #define TYPE_RISCV_CPU_SIFIVE_U34       RISCV_CPU_TYPE_NAME("sifive-u34")
 #define TYPE_RISCV_CPU_SIFIVE_U54       RISCV_CPU_TYPE_NAME("sifive-u54")
+#define TYPE_RISCV_CPU_THEAD_C906       RISCV_CPU_TYPE_NAME("thead-c906")
 #define TYPE_RISCV_CPU_HOST             RISCV_CPU_TYPE_NAME("host")
 
 #if defined(TARGET_RISCV32)
@@ -63,6 +64,10 @@
 
 #define RV(x) ((target_ulong)1 << (x - 'A'))
 
+/*
+ * Consider updating register_cpu_props() when adding
+ * new MISA bits here.
+ */
 #define RVI RV('I')
 #define RVE RV('E') /* E and I are mutually exclusive */
 #define RVM RV('M')
@@ -309,10 +314,6 @@ struct CPUArchState {
     target_ulong sscratch;
     target_ulong mscratch;
 
-    /* temporary htif regs */
-    uint64_t mfromhost;
-    uint64_t mtohost;
-
     /* Sstc CSRs */
     uint64_t stimecmp;
 
@@ -329,6 +330,9 @@ struct CPUArchState {
     target_ulong tdata3[RV_MAX_TRIGGERS];
     struct CPUBreakpoint *cpu_breakpoint[RV_MAX_TRIGGERS];
     struct CPUWatchpoint *cpu_watchpoint[RV_MAX_TRIGGERS];
+    QEMUTimer *itrigger_timer[RV_MAX_TRIGGERS];
+    int64_t last_icount;
+    bool itrigger_enabled;
 
     /* machine specific rdtime callback */
     uint64_t (*rdtime_fn)(void *);
@@ -366,6 +370,9 @@ struct CPUArchState {
 
     /* CSRs for execution enviornment configuration */
     uint64_t menvcfg;
+    uint64_t mstateen[SMSTATEEN_MAX_COUNT];
+    uint64_t hstateen[SMSTATEEN_MAX_COUNT];
+    uint64_t sstateen[SMSTATEEN_MAX_COUNT];
     target_ulong senvcfg;
     uint64_t henvcfg;
 #endif
@@ -395,7 +402,7 @@ OBJECT_DECLARE_CPU_TYPE(RISCVCPU, RISCVCPUClass, RISCV_CPU)
 /**
  * RISCVCPUClass:
  * @parent_realize: The parent class' realize handler.
- * @parent_reset: The parent class' reset handler.
+ * @parent_phases: The parent class' reset phase handlers.
  *
  * A RISCV CPU model.
  */
@@ -404,7 +411,7 @@ struct RISCVCPUClass {
     CPUClass parent_class;
     /*< public >*/
     DeviceRealize parent_realize;
-    DeviceReset parent_reset;
+    ResettablePhases parent_phases;
 };
 
 struct RISCVCPUConfig {
@@ -441,11 +448,13 @@ struct RISCVCPUConfig {
     bool ext_ifencei;
     bool ext_icsr;
     bool ext_zihintpause;
+    bool ext_smstateen;
     bool ext_sstc;
     bool ext_svinval;
     bool ext_svnapot;
     bool ext_svpbmt;
     bool ext_zdinx;
+    bool ext_zawrs;
     bool ext_zfh;
     bool ext_zfhmin;
     bool ext_zfinx;
@@ -465,6 +474,17 @@ struct RISCVCPUConfig {
     uint64_t mimpid;
 
     /* Vendor-specific custom extensions */
+    bool ext_xtheadba;
+    bool ext_xtheadbb;
+    bool ext_xtheadbs;
+    bool ext_xtheadcmo;
+    bool ext_xtheadcondmov;
+    bool ext_xtheadfmemidx;
+    bool ext_xtheadfmv;
+    bool ext_xtheadmac;
+    bool ext_xtheadmemidx;
+    bool ext_xtheadmempair;
+    bool ext_xtheadsync;
     bool ext_XVentanaCondOps;
 
     uint8_t pmu_num;
@@ -621,6 +641,8 @@ FIELD(TB_FLAGS, PM_MASK_ENABLED, 22, 1)
 FIELD(TB_FLAGS, PM_BASE_ENABLED, 23, 1)
 FIELD(TB_FLAGS, VTA, 24, 1)
 FIELD(TB_FLAGS, VMA, 25, 1)
+/* Native debug itrigger */
+FIELD(TB_FLAGS, ITRIGGER, 26, 1)
 
 #ifdef TARGET_RISCV32
 #define riscv_cpu_mxl(env)  ((void)(env), MXL_RV32)

@@ -202,7 +202,7 @@ static void quorum_report_bad(QuorumOpType type, uint64_t offset,
         msg = strerror(-ret);
     }
 
-    qapi_event_send_quorum_report_bad(type, !!msg, msg, node_name, start_sector,
+    qapi_event_send_quorum_report_bad(type, msg, node_name, start_sector,
                                       end_sector - start_sector);
 }
 
@@ -754,19 +754,19 @@ static int coroutine_fn quorum_co_pwrite_zeroes(BlockDriverState *bs,
                              flags | BDRV_REQ_ZERO_WRITE);
 }
 
-static int64_t quorum_getlength(BlockDriverState *bs)
+static int64_t coroutine_fn quorum_co_getlength(BlockDriverState *bs)
 {
     BDRVQuorumState *s = bs->opaque;
     int64_t result;
     int i;
 
     /* check that all file have the same length */
-    result = bdrv_getlength(s->children[0]->bs);
+    result = bdrv_co_getlength(s->children[0]->bs);
     if (result < 0) {
         return result;
     }
     for (i = 1; i < s->num_children; i++) {
-        int64_t value = bdrv_getlength(s->children[i]->bs);
+        int64_t value = bdrv_co_getlength(s->children[i]->bs);
         if (value < 0) {
             return value;
         }
@@ -1283,7 +1283,7 @@ static BlockDriver bdrv_quorum = {
 
     .bdrv_co_flush                      = quorum_co_flush,
 
-    .bdrv_getlength                     = quorum_getlength,
+    .bdrv_co_getlength                  = quorum_co_getlength,
 
     .bdrv_co_preadv                     = quorum_co_preadv,
     .bdrv_co_pwritev                    = quorum_co_pwritev,

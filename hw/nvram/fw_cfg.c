@@ -201,7 +201,7 @@ static void fw_cfg_bootsplash(FWCfgState *s)
     }
 
     /* insert splash file if user configurated */
-    if (current_machine->boot_config.has_splash) {
+    if (current_machine->boot_config.splash) {
         const char *boot_splash_filename = current_machine->boot_config.splash;
         filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, boot_splash_filename);
         if (filename == NULL) {
@@ -739,6 +739,15 @@ void fw_cfg_add_bytes(FWCfgState *s, uint16_t key, void *data, size_t len)
 {
     trace_fw_cfg_add_bytes(key, trace_key_name(key), len);
     fw_cfg_add_bytes_callback(s, key, NULL, NULL, NULL, data, len, true);
+}
+
+void *fw_cfg_read_bytes_ptr(FWCfgState *s, uint16_t key)
+{
+    int arch = !!(key & FW_CFG_ARCH_LOCAL);
+
+    key &= FW_CFG_ENTRY_MASK;
+    assert(key < fw_cfg_max_entry(s));
+    return s->entries[arch][key].data;
 }
 
 void fw_cfg_add_string(FWCfgState *s, uint16_t key, const char *value)
