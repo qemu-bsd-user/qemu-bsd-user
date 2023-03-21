@@ -1,1 +1,0 @@
-/* XXX NetBSD socket related helpers */
