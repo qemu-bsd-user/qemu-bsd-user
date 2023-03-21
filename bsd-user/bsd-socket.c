@@ -30,7 +30,7 @@
  * socket conversion
  */
 abi_long target_to_host_sockaddr(struct sockaddr *addr, abi_ulong target_addr,
-        socklen_t len)
+                                 socklen_t len)
 {
     const socklen_t unix_maxlen = sizeof(struct sockaddr_un);
     sa_family_t sa_family;
@@ -54,7 +54,7 @@ abi_long target_to_host_sockaddr(struct sockaddr *addr, abi_ulong target_addr,
         if (len < unix_maxlen && len > 0) {
             char *cp = (char *)target_saddr;
 
-            if (cp[len-1] && !cp[len]) {
+            if (cp[len - 1] && !cp[len]) {
                 len++;
             }
         }
@@ -72,7 +72,7 @@ abi_long target_to_host_sockaddr(struct sockaddr *addr, abi_ulong target_addr,
 }
 
 abi_long host_to_target_sockaddr(abi_ulong target_addr, struct sockaddr *addr,
-        socklen_t len)
+                                 socklen_t len)
 {
     struct target_sockaddr *target_saddr;
 
@@ -89,7 +89,7 @@ abi_long host_to_target_sockaddr(abi_ulong target_addr, struct sockaddr *addr,
 }
 
 abi_long target_to_host_ip_mreq(struct ip_mreqn *mreqn, abi_ulong target_addr,
-        socklen_t len)
+                                socklen_t len)
 {
     struct target_ip_mreqn *target_smreqn;
 

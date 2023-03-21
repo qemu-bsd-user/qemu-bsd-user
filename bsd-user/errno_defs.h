@@ -154,7 +154,7 @@
 
 #include "special-errno.h"
 
-//_Static_assert(TARGET_ERESTART == QEMU_ERESTARTSYS,
-//               "TARGET_ERESTART and QEMU_ERESTARTSYS expected to match");
+_Static_assert(TARGET_ERESTART == QEMU_ERESTARTSYS,
+               "TARGET_ERESTART and QEMU_ERESTARTSYS expected to match");
 
 #endif /* ERRNO_DEFS_H */

@@ -70,8 +70,8 @@ ssize_t safe_writev(int fd, const struct iovec *iov, int iovcnt);
 ssize_t safe_pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
 
 int safe_ppoll(struct pollfd *fds, nfds_t nfds,
-               const struct timespec * restrict timeout,
-               const sigset_t * restrict newsigmask);
+               const struct timespec *restrict timeout,
+               const sigset_t *restrict newsigmask);
 
 /* read(2) */
 static abi_long do_bsd_read(abi_long arg1, abi_long arg2, abi_long arg3)

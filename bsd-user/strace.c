@@ -50,8 +50,8 @@ print_raw_param(const char *fmt, abi_long param, int last)
 }
 
 static void print_sysctl(const struct syscallname *name, abi_long arg1,
-        abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5,
-        abi_long arg6)
+                         abi_long arg2, abi_long arg3, abi_long arg4,
+                         abi_long arg5, abi_long arg6)
 {
     uint32_t i;
     int32_t *namep;
@@ -72,8 +72,8 @@ static void print_sysctl(const struct syscallname *name, abi_long arg1,
 }
 
 static void print_execve(const struct syscallname *name, abi_long arg1,
-        abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5,
-        abi_long arg6)
+                         abi_long arg2, abi_long arg3, abi_long arg4,
+                         abi_long arg5, abi_long arg6)
 {
     abi_ulong arg_ptr_addr;
     char *s;
@@ -97,7 +97,8 @@ static void print_execve(const struct syscallname *name, abi_long arg1,
         if (!arg_addr) {
             break;
         }
-        if ((s = lock_user_string(arg_addr))) {
+        s = lock_user_string(arg_addr);
+        if (s) {
             gemu_log("\"%s\",", s);
             unlock_user(s, arg_addr, 0);
         }
@@ -106,8 +107,8 @@ static void print_execve(const struct syscallname *name, abi_long arg1,
 }
 
 static void print_ioctl(const struct syscallname *name,
-        abi_long arg1, abi_long arg2, abi_long arg3, abi_long arg4,
-        abi_long arg5, abi_long arg6)
+                        abi_long arg1, abi_long arg2, abi_long arg3,
+                        abi_long arg4, abi_long arg5, abi_long arg6)
 {
     /* Decode the ioctl request */
     gemu_log("%s(%d, 0x%0lx { IO%s%s GRP:0x%x('%c') CMD:%d LEN:%d }, 0x"
@@ -125,8 +126,8 @@ static void print_ioctl(const struct syscallname *name,
 }
 
 static void print_sysarch(const struct syscallname *name, abi_long arg1,
-        abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5,
-        abi_long arg6)
+                          abi_long arg2, abi_long arg3, abi_long arg4,
+                          abi_long arg5, abi_long arg6)
 {
     /* This is os dependent. */
     do_os_print_sysarch(name, arg1, arg2, arg3, arg4, arg5, arg6);
@@ -160,15 +161,16 @@ static const struct syscallname openbsd_scnames[] = {
 };
 
 static void print_syscall(int num, const struct syscallname *scnames,
-        unsigned int nscnames, abi_long arg1, abi_long arg2, abi_long arg3,
-        abi_long arg4, abi_long arg5, abi_long arg6)
+                          unsigned int nscnames, abi_long arg1, abi_long arg2,
+                          abi_long arg3, abi_long arg4, abi_long arg5,
+                          abi_long arg6)
 {
     unsigned int i;
-    const char *format="%s(" TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld ","
+    const char *format = "%s(" TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld ","
         TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld ","
         TARGET_ABI_FMT_ld ")";
 
-    gemu_log("%d ", getpid() );
+    gemu_log("%d ", getpid());
 
     for (i = 0; i < nscnames; i++) {
         if (scnames[i].nr == num) {
@@ -176,8 +178,10 @@ static void print_syscall(int num, const struct syscallname *scnames,
                 scnames[i].call(&scnames[i], arg1, arg2, arg3, arg4, arg5,
                         arg6);
             } else {
-                /* XXX: this format system is broken because it uses
-                   host types and host pointers for strings */
+                /*
+                 * XXX: this format system is broken because it uses
+                 * host types and host pointers for strings
+                 */
                 if (scnames[i].format != NULL) {
                     format = scnames[i].format;
                 }
@@ -191,7 +195,8 @@ static void print_syscall(int num, const struct syscallname *scnames,
 }
 
 static void print_syscall_ret(int num, abi_long ret,
-        const struct syscallname *scnames, unsigned int nscnames)
+                              const struct syscallname *scnames,
+                              unsigned int nscnames)
 {
     unsigned int i;
 
@@ -216,44 +221,38 @@ static void print_syscall_ret(int num, abi_long ret,
  * The public interface to this module.
  */
 void print_freebsd_syscall(int num, abi_long arg1, abi_long arg2, abi_long arg3,
-        abi_long arg4, abi_long arg5, abi_long arg6)
+                           abi_long arg4, abi_long arg5, abi_long arg6)
 {
-
     print_syscall(num, freebsd_scnames, ARRAY_SIZE(freebsd_scnames), arg1, arg2,
             arg3, arg4, arg5, arg6);
 }
 
 void print_freebsd_syscall_ret(int num, abi_long ret)
 {
-
     print_syscall_ret(num, ret, freebsd_scnames, ARRAY_SIZE(freebsd_scnames));
 }
 
 void print_netbsd_syscall(int num, abi_long arg1, abi_long arg2, abi_long arg3,
-        abi_long arg4, abi_long arg5, abi_long arg6)
+                          abi_long arg4, abi_long arg5, abi_long arg6)
 {
-
     print_syscall(num, netbsd_scnames, ARRAY_SIZE(netbsd_scnames),
                   arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 void print_netbsd_syscall_ret(int num, abi_long ret)
 {
-
     print_syscall_ret(num, ret, netbsd_scnames, ARRAY_SIZE(netbsd_scnames));
 }
 
 void print_openbsd_syscall(int num, abi_long arg1, abi_long arg2, abi_long arg3,
-        abi_long arg4, abi_long arg5, abi_long arg6)
+                           abi_long arg4, abi_long arg5, abi_long arg6)
 {
-
     print_syscall(num, openbsd_scnames, ARRAY_SIZE(openbsd_scnames), arg1, arg2,
-            arg3, arg4, arg5, arg6);
+                  arg3, arg4, arg5, arg6);
 }
 
 void print_openbsd_syscall_ret(int num, abi_long ret)
 {
-
     print_syscall_ret(num, ret, openbsd_scnames, ARRAY_SIZE(openbsd_scnames));
 }
 

@@ -86,7 +86,6 @@ static inline abi_long do_bsd_setgroups(abi_long gidsetsize, abi_long arg2)
 /* umask(2) */
 static inline abi_long do_bsd_umask(abi_long arg1)
 {
-
     return get_errno(umask(arg1));
 }
 
@@ -197,120 +196,103 @@ static inline abi_long do_bsd_setrlimit(abi_long arg1, abi_ulong arg2)
 /* getpid(2) */
 static inline abi_long do_bsd_getpid(void)
 {
-
     return get_errno(getpid());
 }
 
 /* getppid(2) */
 static inline abi_long do_bsd_getppid(void)
 {
-
     return get_errno(getppid());
 }
 
 /* getuid(2) */
 static inline abi_long do_bsd_getuid(void)
 {
-
     return get_errno(getuid());
 }
 
 /* geteuid(2) */
 static inline abi_long do_bsd_geteuid(void)
 {
-
     return get_errno(geteuid());
 }
 
 /* getgid(2) */
 static inline abi_long do_bsd_getgid(void)
 {
-
     return get_errno(getgid());
 }
 
 /* getegid(2) */
 static inline abi_long do_bsd_getegid(void)
 {
-
     return get_errno(getegid());
 }
 
 /* setuid(2) */
 static inline abi_long do_bsd_setuid(abi_long arg1)
 {
-
     return get_errno(setuid(arg1));
 }
 
 /* seteuid(2) */
 static inline abi_long do_bsd_seteuid(abi_long arg1)
 {
-
     return get_errno(seteuid(arg1));
 }
 
 /* setgid(2) */
 static inline abi_long do_bsd_setgid(abi_long arg1)
 {
-
     return get_errno(setgid(arg1));
 }
 
 /* setegid(2) */
 static inline abi_long do_bsd_setegid(abi_long arg1)
 {
-
     return get_errno(setegid(arg1));
 }
 
 /* getpgid(2) */
 static inline abi_long do_bsd_getpgid(pid_t pid)
 {
-
     return get_errno(getpgid(pid));
 }
 
 /* setpgid(2) */
 static inline abi_long do_bsd_setpgid(int pid, int pgrp)
 {
-
     return get_errno(setpgid(pid, pgrp));
 }
 
 /* getpgrp(2) */
 static inline abi_long do_bsd_getpgrp(void)
 {
-
     return get_errno(getpgrp());
 }
 
 /* setreuid(2) */
 static inline abi_long do_bsd_setreuid(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(setreuid(arg1, arg2));
 }
 
 /* setregid(2) */
 static inline abi_long do_bsd_setregid(abi_long arg1, abi_long arg2)
 {
-
     return get_errno(setregid(arg1, arg2));
 }
 
 /* setresgid(2) */
 static inline abi_long do_bsd_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
-
-	return get_errno(setresgid(rgid, egid, sgid));
+    return get_errno(setresgid(rgid, egid, sgid));
 }
 
 /* setresuid(2) */
 static inline abi_long do_bsd_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
-
-	return get_errno(setresuid(ruid, euid, suid));
+    return get_errno(setresuid(ruid, euid, suid));
 }
 
 /* getresuid(2) */
@@ -338,7 +320,7 @@ static inline abi_long do_bsd_getresuid(abi_ulong arg1, abi_ulong arg2,
 
 /* getresgid(2) */
 static inline abi_long do_bsd_getresgid(abi_ulong arg1, abi_ulong arg2,
-        abi_ulong arg3)
+                                        abi_ulong arg3)
 {
     abi_long ret;
     uid_t ruid, euid, suid;
@@ -362,29 +344,25 @@ static inline abi_long do_bsd_getresgid(abi_ulong arg1, abi_ulong arg2,
 /* getsid(2) */
 static inline abi_long do_bsd_getsid(abi_long arg1)
 {
-
     return get_errno(getsid(arg1));
 }
 
 /* setsid(2) */
 static inline abi_long do_bsd_setsid(void)
 {
-
     return get_errno(setsid());
 }
 
 /* issetugid(2) */
 static inline abi_long do_bsd_issetugid(void)
 {
-
     return get_errno(issetugid());
 }
 
 /* profil(2) */
 static inline abi_long do_bsd_profil(abi_long arg1, abi_long arg2,
-        abi_long arg3, abi_long arg4)
+                                     abi_long arg3, abi_long arg4)
 {
-
     qemu_log("qemu: Unsupported syscall profil()\n");
     return -TARGET_ENOSYS;
 }
@@ -392,9 +370,8 @@ static inline abi_long do_bsd_profil(abi_long arg1, abi_long arg2,
 
 /* ktrace(2) */
 static inline abi_long do_bsd_ktrace(abi_long arg1, abi_long arg2,
-        abi_long arg3, abi_long arg4)
+                                     abi_long arg3, abi_long arg4)
 {
-
     qemu_log("qemu: Unsupported syscall ktrace()\n");
     return -TARGET_ENOSYS;
 }
@@ -402,7 +379,6 @@ static inline abi_long do_bsd_ktrace(abi_long arg1, abi_long arg2,
 /* utrace(2) */
 static inline abi_long do_bsd_utrace(abi_long arg1, abi_long arg2)
 {
-
     qemu_log("qemu: Unsupported syscall ptrace()\n");
     return -TARGET_ENOSYS;
 }
@@ -412,7 +388,6 @@ static inline abi_long do_bsd_utrace(abi_long arg1, abi_long arg2)
 static inline abi_long do_bsd_ptrace(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
-
     qemu_log("qemu: Unsupported syscall ptrace()\n");
     return -TARGET_ENOSYS;
 }
@@ -439,31 +414,27 @@ static inline abi_long do_bsd_getpriority(abi_long which, abi_long who)
 
 /* setpriority(2) */
 static inline abi_long do_bsd_setpriority(abi_long which, abi_long who,
-        abi_long prio)
+                                          abi_long prio)
 {
-
     return get_errno(setpriority(which, who, prio));
 }
 
 /* sched_yield(2) */
 static inline abi_long do_bsd_sched_yield(void)
 {
-
-	return get_errno(sched_yield());
+    return get_errno(sched_yield());
 }
 
 /* sched_get_priority_min(2) */
 static inline abi_long do_bsd_sched_get_priority_min(int policy)
 {
-
-	return get_errno(sched_get_priority_min(policy));
+    return get_errno(sched_get_priority_min(policy));
 }
 
 /* sched_get_priority_max(2) */
 static inline abi_long do_bsd_sched_get_priority_max(int policy)
 {
-
-	return get_errno(sched_get_priority_max(policy));
+    return get_errno(sched_get_priority_max(policy));
 }
 
 int bsd_get_ncpu(void);

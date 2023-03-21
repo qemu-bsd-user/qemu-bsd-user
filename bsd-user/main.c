@@ -58,10 +58,10 @@ int singlestep;
  * but seems to produce good results in tests to date.
  */
 # if HOST_LONG_BITS >= 64
-uintptr_t guest_base = 0x800000000ul;	/* at 32GB */
+uintptr_t guest_base = 0x800000000ul;    /* at 32GB */
 bool have_guest_base = true;
 #else
-uintptr_t guest_base;	/* TODO: use sysctl to find big enough hole */
+uintptr_t guest_base;    /* TODO: use sysctl to find big enough hole */
 bool have_guest_base;
 #endif
 static const char *cpu_model;
@@ -107,7 +107,7 @@ unsigned long reserved_va = MAX_RESERVED_VA;
 unsigned long reserved_va;
 #endif
 
-bool bsd_user_strict = false;	/* Abort for unimplemned things */
+bool bsd_user_strict;                /* Abort for unimplemned things */
 
 const char *interp_prefix = CONFIG_QEMU_INTERP_PREFIX;
 const char *qemu_uname_release;

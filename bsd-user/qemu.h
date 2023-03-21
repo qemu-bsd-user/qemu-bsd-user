@@ -178,12 +178,6 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
                             abi_long arg2, abi_long arg3, abi_long arg4,
                             abi_long arg5, abi_long arg6, abi_long arg7,
                             abi_long arg8);
-abi_long do_netbsd_syscall(void *cpu_env, int num, abi_long arg1,
-                           abi_long arg2, abi_long arg3, abi_long arg4,
-                           abi_long arg5, abi_long arg6);
-abi_long do_openbsd_syscall(void *cpu_env, int num, abi_long arg1,
-                            abi_long arg2, abi_long arg3, abi_long arg4,
-                            abi_long arg5, abi_long arg6);
 void gemu_log(const char *fmt, ...) G_GNUC_PRINTF(1, 2);
 extern __thread CPUState *thread_cpu;
 void cpu_loop(CPUArchState *env);
@@ -329,7 +323,8 @@ abi_long freebsd_umtx_robust_list(abi_ulong target_addr, size_t rbsize);
 static inline int access_ok(int type, abi_ulong addr, abi_ulong size)
 {
     return page_check_range((target_ulong)addr, size,
-                            (type == VERIFY_READ) ? PAGE_READ : (PAGE_READ | PAGE_WRITE)) == 0;
+                            (type == VERIFY_READ) ? PAGE_READ :
+                                (PAGE_READ | PAGE_WRITE)) == 0;
 }
 
 /*
@@ -583,7 +578,8 @@ target_arg64(uint64_t word0, uint64_t word1)
 #endif /* TARGET_ABI_BITS != 32 */
 
 /* ARM EABI and 32-bit powerpc have aligned even on pairs of registers */
-static inline int regpairs_aligned(void *cpu_env) {
+static inline int regpairs_aligned(void *cpu_env)
+{
 #if TARGET_ABI_BITS == 32 && !defined(TARGET_I386)
     return 1;
 #else

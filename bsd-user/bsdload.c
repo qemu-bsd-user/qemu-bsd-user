@@ -98,7 +98,6 @@ static int prepare_binprm(struct bsd_binprm *bprm)
 abi_ulong loader_build_argptr(int envc, int argc, abi_ulong sp,
                               abi_ulong stringp)
 {
-//    TaskState *ts = (TaskState *)thread_cpu->opaque;
     int n = sizeof(abi_ulong);
     abi_ulong envp;
     abi_ulong argv;
@@ -110,14 +109,12 @@ abi_ulong loader_build_argptr(int envc, int argc, abi_ulong sp,
     sp -= n;
     /* FIXME - handle put_user() failures */
     put_user_ual(argc, sp);
-//    ts->info->arg_start = stringp;
     while (argc-- > 0) {
         /* FIXME - handle put_user() failures */
         put_user_ual(stringp, argv);
         argv += n;
         stringp += target_strlen(stringp) + 1;
     }
-//    ts->info->arg_end = stringp;
     /* FIXME - handle put_user() failures */
     put_user_ual(0, argv);
     while (envc-- > 0) {

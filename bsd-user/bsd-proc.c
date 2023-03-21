@@ -20,9 +20,7 @@
 
 #include <sys/param.h>
 #include <sys/types.h>
-#ifdef __FreeBSD__
 #include <sys/cpuset.h>
-#endif
 #include <sys/resource.h>
 #include <sys/wait.h>
 
@@ -117,7 +115,7 @@ abi_llong host_to_target_rlim(rlim_t rlim)
 }
 
 void h2g_rusage(const struct rusage *rusage,
-	struct target_freebsd_rusage *target_rusage)
+                struct target_freebsd_rusage *target_rusage)
 {
     __put_user(rusage->ru_utime.tv_sec, &target_rusage->ru_utime.tv_sec);
     __put_user(rusage->ru_utime.tv_usec, &target_rusage->ru_utime.tv_usec);
@@ -156,7 +154,7 @@ abi_long host_to_target_rusage(abi_ulong target_addr,
 }
 
 abi_long host_to_target_wrusage(abi_ulong target_addr,
-	const struct __wrusage *wrusage)
+                                const struct __wrusage *wrusage)
 {
     struct target_freebsd__wrusage *target_wrusage;
 
@@ -192,19 +190,19 @@ bsd_get_ncpu(void)
 {
     static int ncpu = -1;
 
-    if (ncpu != -1)
-        return (ncpu);
-#ifdef __FreeBSD__
+    if (ncpu != -1) {
+        return ncpu;
+    }
     if (ncpu == -1) {
         cpuset_t mask;
 
         CPU_ZERO(&mask);
 
         if (cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, sizeof(mask),
-            &mask) == 0)
+                               &mask) == 0) {
             ncpu = CPU_COUNT(&mask);
+        }
     }
-#endif
 #ifdef _SC_NPROCESSORS_ONLN
     if (ncpu == -1)
         ncpu = sysconf(_SC_NPROCESSORS_ONLN);
@@ -215,14 +213,15 @@ bsd_get_ncpu(void)
         size_t sz;
 
         sz = sizeof(ncpu);
-        if (sysctl(mib, 2, &ncpu, &sz, NULL, NULL) == -1)
+        if (sysctl(mib, 2, &ncpu, &sz, NULL, NULL) == -1) {
             ncpu = -1;
+        }
     }
 #endif
     if (ncpu == -1) {
         gemu_log("XXX Missing bsd_get_ncpu() implementation\n");
         ncpu = 1;
     }
-    return (ncpu);
+    return ncpu;
 }
 

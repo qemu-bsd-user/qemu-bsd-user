@@ -157,39 +157,6 @@ struct target_sched_param {
 /*
  *  sys/mman.h
  */
-#define TARGET_FREEBSD_MAP_RESERVED0080 0x0080  /* previously misimplemented
-                                                   MAP_INHERIT */
-#define TARGET_FREEBSD_MAP_RESERVED0100 0x0100  /* previously unimplemented
-                                                   MAP_NOEXTEND */
-#define TARGET_FREEBSD_MAP_STACK        0x0400  /* region grows down, like a
-                                                   stack */
-#define TARGET_FREEBSD_MAP_NOSYNC       0x0800  /* page to but do not sync
-                                                   underlying file */
-
-#define TARGET_FREEBSD_MAP_FLAGMASK     0x1ff7
-
-#define TARGET_NETBSD_MAP_INHERIT       0x0080  /* region is retained after
-                                                   exec */
-#define TARGET_NETBSD_MAP_TRYFIXED      0x0400 /* attempt hint address, even
-                                                  within break */
-#define TARGET_NETBSD_MAP_WIRED         0x0800  /* mlock() mapping when it is
-                                                   established */
-
-#define TARGET_NETBSD_MAP_STACK         0x2000  /* allocated from memory, swap
-                                                   space (stack) */
-
-#define TARGET_NETBSD_MAP_FLAGMASK      0x3ff7
-
-#define TARGET_OPENBSD_MAP_INHERIT      0x0080  /* region is retained after
-                                                   exec */
-#define TARGET_OPENBSD_MAP_NOEXTEND     0x0100  /* for MAP_FILE, don't change
-                                                   file size */
-#define TARGET_OPENBSD_MAP_TRYFIXED     0x0400  /* attempt hint address,
-                                                   even within heap */
-
-#define TARGET_OPENBSD_MAP_FLAGMASK     0x17f7
-
-/* XXX */
 #define TARGET_BSD_MAP_FLAGMASK         0x3ff7
 
 /*
@@ -292,11 +259,7 @@ struct target_freebsd_kevent {
 /*
  *  sys/resource.h
  */
-#if defined(__FreeBSD__)
 #define TARGET_RLIM_INFINITY    RLIM_INFINITY
-#else
-#define TARGET_RLIM_INFINITY    ((abi_ulong)-1)
-#endif
 
 #define TARGET_RLIMIT_CPU       0
 #define TARGET_RLIMIT_FSIZE     1
@@ -405,7 +368,7 @@ struct target_freebsd__wrusage {
 #define TARGET_SOL_SOCKET       0xffff  /* options for socket level */
 
 #ifndef CMSG_ALIGN
-#define CMSG_ALIGN(len) (((len)+sizeof(long)-1) & ~(sizeof(long)-1))
+#define CMSG_ALIGN(len) (((len) + sizeof(long) - 1) & ~(sizeof(long) - 1))
 #endif
 
 /*
@@ -416,8 +379,7 @@ struct target_msghdr {
     int32_t     msg_namelen;    /* Length of name */
     abi_long    msg_iov;        /* Data blocks */
     int32_t     msg_iovlen;     /* Number of blocks */
-    abi_long    msg_control;    /* Per protocol magic
-                                   (eg BSD file descriptor passing) */
+    abi_long    msg_control;    /* Per protocol magic (eg BSD fd passing) */
     int32_t     msg_controllen; /* Length of cmsg list */
     int32_t     msg_flags;      /* flags on received message */
 };
@@ -452,10 +414,12 @@ struct target_cmsghdr {
                                __target_cmsg_nxthdr(mhdr, cmsg, cmsg_start)
 #define TARGET_CMSG_ALIGN(len) (((len) + TARGET_ALIGNBYTES) \
                                & (size_t) ~TARGET_ALIGNBYTES)
-#define TARGET_CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + TARGET_CMSG_ALIGN(sizeof(struct target_cmsghdr)))
-#define TARGET_CMSG_SPACE(len) (TARGET_CMSG_ALIGN(sizeof(struct target_cmsghdr)) + \
-                                TARGET_CMSG_ALIGN(len))
-#define TARGET_CMSG_LEN(len) (TARGET_CMSG_ALIGN(sizeof(struct target_cmsghdr)) + (len))
+#define TARGET_CMSG_DATA(cmsg) \
+    ((unsigned char *)(cmsg) + TARGET_CMSG_ALIGN(sizeof(struct target_cmsghdr)))
+#define TARGET_CMSG_SPACE(len) \
+    (TARGET_CMSG_ALIGN(sizeof(struct target_cmsghdr)) + TARGET_CMSG_ALIGN(len))
+#define TARGET_CMSG_LEN(len) \
+    (TARGET_CMSG_ALIGN(sizeof(struct target_cmsghdr)) + (len))
 
 static inline struct target_cmsghdr *
 __target_cmsg_nxthdr(struct target_msghdr *__mhdr,
@@ -464,10 +428,10 @@ __target_cmsg_nxthdr(struct target_msghdr *__mhdr,
 {
     struct target_cmsghdr *__ptr;
 
-    __ptr = (struct target_cmsghdr *)((unsigned char *) __cmsg
-                                      + TARGET_CMSG_ALIGN(tswap32(__cmsg->cmsg_len)));
-    if ((unsigned long)((char *)(__ptr+1) - (char *)__cmsg_start)
-        > tswap32(__mhdr->msg_controllen)) {
+    __ptr = (struct target_cmsghdr *)((unsigned char *) __cmsg +
+        TARGET_CMSG_ALIGN(tswap32(__cmsg->cmsg_len)));
+    if ((unsigned long)((char *)(__ptr + 1) - (char *)__cmsg_start) >
+        tswap32(__mhdr->msg_controllen)) {
         /* No more entries.  */
         return (struct target_cmsghdr *)0;
     }
@@ -522,7 +486,7 @@ struct target_freebsd11_stat {
 } __packed;
 
 #if defined(__i386__)
-#define __STAT_TIME_T_EXT       1
+#define TARGET_HAS_STAT_TIME_T_EXT       1
 #endif
 
 struct target_stat {
@@ -535,19 +499,19 @@ struct target_stat {
         uint32_t  st_gid;               /* group ID of the file's group */
         int32_t   st_padding1;
         uint64_t  st_rdev;              /* device type */
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
         int32_t   st_atim_ext;
 #endif
         struct  target_freebsd_timespec st_atim; /* time of last access */
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
         int32_t   st_mtim_ext;
 #endif
         struct  target_freebsd_timespec st_mtim; /* time of last data modification */
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
         __int32_t st_ctim_ext;
 #endif
         struct  target_freebsd_timespec st_ctim;/* time of last file status change */
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
         __int32_t st_btim_ext;
 #endif
         struct  target_freebsd_timespec st_birthtim;   /* time of file creation */
@@ -644,7 +608,7 @@ struct target_statfs {
         uint32_t f_owner;               /* user that mounted the filesystem */
         target_freebsd_fsid_t f_fsid;   /* filesystem id */
         char      f_charspare[80];      /* spare string space */
-        char      f_fstypename[16]; 	/* filesystem type name */
+        char      f_fstypename[16];     /* filesystem type name */
         char      f_mntfromname[1024];  /* mounted filesystem */
         char      f_mntonname[1024];    /* directory on which mounted */
 };
@@ -702,7 +666,7 @@ struct target_freebsd_flock {
 
 /* sys/unistd.h */
 /* user: vfork(2) semantics, clear signals */
-#define	TARGET_RFSPAWN		(1U<<31)
+#define TARGET_RFSPAWN (1U << 31)
 
 /* sys/specialfd.h */
 enum target_specialfd_type {

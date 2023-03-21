@@ -24,7 +24,7 @@
 
 /* sigaction(2) */
 static inline abi_long do_bsd_sigaction(abi_long arg1, abi_long arg2,
-        abi_long arg3)
+                                        abi_long arg3)
 {
     abi_long ret;
     struct target_sigaction *old_act, act, oact, *pact;
@@ -57,7 +57,7 @@ static inline abi_long do_bsd_sigaction(abi_long arg1, abi_long arg2,
 
 /* sigprocmask(2) */
 static inline abi_long do_bsd_sigprocmask(abi_long arg1, abi_ulong arg2,
-        abi_ulong arg3)
+                                          abi_ulong arg3)
 {
     abi_long ret;
     void *p;
@@ -143,7 +143,7 @@ static inline abi_long do_bsd_sigpending(abi_long arg1)
 
 /* sigsuspend(2) */
 static inline abi_long do_bsd_sigsuspend(void *cpu_env, abi_long arg1,
-        abi_long arg2)
+                                         abi_long arg2)
 {
     CPUState *cpu = env_cpu(cpu_env);
     TaskState *ts = cpu->opaque;
@@ -169,7 +169,6 @@ static inline abi_long do_bsd_sigsuspend(void *cpu_env, abi_long arg1,
 /* sigreturn(2) */
 static inline abi_long do_bsd_sigreturn(void *cpu_env, abi_long arg1)
 {
-
     return do_sigreturn(cpu_env, arg1);
 }
 
@@ -180,7 +179,7 @@ static inline abi_long do_bsd_sigreturn(void *cpu_env, abi_long arg1)
 
 /* sigwait(2) */
 static inline abi_long do_bsd_sigwait(abi_ulong arg1, abi_ulong arg2,
-        abi_long arg3)
+                                      abi_long arg3)
 {
     abi_long ret;
     void *p;
@@ -228,7 +227,7 @@ static inline abi_long do_bsd_sigwaitinfo(abi_ulong arg1, abi_ulong arg2)
 
 /* sigqueue(2) */
 static inline abi_long do_bsd_sigqueue(abi_long arg1, abi_long arg2,
-        abi_ulong arg3)
+                                       abi_ulong arg3)
 {
     union sigval value;
     target_sigval_t *tvalue = (target_sigval_t *)&arg3;
@@ -241,24 +240,21 @@ static inline abi_long do_bsd_sigqueue(abi_long arg1, abi_long arg2,
 
 /* sigaltstck(2) */
 static inline abi_long do_bsd_sigaltstack(void *cpu_env, abi_ulong arg1,
-        abi_ulong arg2)
+                                          abi_ulong arg2)
 {
-
     return do_sigaltstack(arg1, arg2, get_sp_from_cpustate(cpu_env));
 }
 
 /* kill(2) */
 static inline abi_long do_bsd_kill(abi_long pid, abi_long sig)
 {
-
     return get_errno(kill(pid, target_to_host_signal(sig)));
 }
 
 /* killpg(2) */
 static inline abi_long do_bsd_killpg(abi_long pg, abi_long sig)
 {
-
-    return get_errno(killpg(pg, target_to_host_signal(sig)));
+   return get_errno(killpg(pg, target_to_host_signal(sig)));
 }
 
 #endif /* BSD_SIGNAL_H */

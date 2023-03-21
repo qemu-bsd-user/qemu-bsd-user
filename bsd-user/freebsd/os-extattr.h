@@ -27,7 +27,8 @@
 
 /* extattrctl() */
 static inline abi_long do_freebsd_extattrctl(abi_ulong arg1, abi_ulong arg2,
-        abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+                                             abi_ulong arg3, abi_ulong arg4,
+                                             abi_ulong arg5)
 {
     abi_long ret;
     void *p, *a, *f;
@@ -57,7 +58,10 @@ static inline abi_long do_freebsd_extattrctl(abi_ulong arg1, abi_ulong arg2,
 
 /* extattr_set_file(2) */
 static inline abi_long do_freebsd_extattr_set_file(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+                                                   abi_long arg2,
+                                                   abi_ulong arg3,
+                                                   abi_ulong arg4,
+                                                   abi_ulong arg5)
 {
     abi_long ret;
     void *p, *a, *d;
@@ -87,7 +91,10 @@ static inline abi_long do_freebsd_extattr_set_file(abi_ulong arg1,
 
 /* extattr_get_file(2) */
 static inline abi_long do_freebsd_extattr_get_file(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+                                                   abi_long arg2,
+                                                   abi_ulong arg3,
+                                                   abi_ulong arg4,
+                                                   abi_ulong arg5)
 {
     abi_long ret;
     void *p, *a, *d;
@@ -121,7 +128,8 @@ static inline abi_long do_freebsd_extattr_get_file(abi_ulong arg1,
 
 /* extattr_delete_file(2) */
 static inline abi_long do_freebsd_extattr_delete_file(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3)
+                                                      abi_long arg2,
+                                                      abi_ulong arg3)
 {
     abi_long ret;
     void *p, *a;
@@ -143,8 +151,9 @@ static inline abi_long do_freebsd_extattr_delete_file(abi_ulong arg1,
 }
 
 /* extattr_set_fd(2) */
-static inline abi_long do_freebsd_extattr_set_fd(abi_long arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+static inline abi_long do_freebsd_extattr_set_fd(abi_long arg1, abi_long arg2,
+                                                 abi_ulong arg3, abi_ulong arg4,
+                                                 abi_ulong arg5)
 {
     abi_long ret;
     void *a, *d;
@@ -166,8 +175,9 @@ static inline abi_long do_freebsd_extattr_set_fd(abi_long arg1,
 }
 
 /* extattr_get_fd(2) */
-static inline abi_long do_freebsd_extattr_get_fd(abi_long arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+static inline abi_long do_freebsd_extattr_get_fd(abi_long arg1, abi_long arg2,
+                                                 abi_ulong arg3, abi_ulong arg4,
+                                                 abi_ulong arg5)
 {
     abi_long ret;
     void *a, *d;
@@ -195,7 +205,8 @@ static inline abi_long do_freebsd_extattr_get_fd(abi_long arg1,
 
 /* extattr_delete_fd(2) */
 static inline abi_long do_freebsd_extattr_delete_fd(abi_long arg1,
-        abi_long arg2, abi_ulong arg3)
+                                                    abi_long arg2,
+                                                    abi_ulong arg3)
 {
     abi_long ret;
     void *a;
@@ -212,7 +223,10 @@ static inline abi_long do_freebsd_extattr_delete_fd(abi_long arg1,
 
 /* extattr_get_link(2) */
 static inline abi_long do_freebsd_extattr_get_link(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+                                                   abi_long arg2,
+                                                   abi_ulong arg3,
+                                                   abi_ulong arg4,
+                                                   abi_ulong arg5)
 {
     abi_long ret;
     void  *p, *a, *d;
@@ -244,7 +258,10 @@ static inline abi_long do_freebsd_extattr_get_link(abi_ulong arg1,
 
 /* extattr_set_link(2) */
 static inline abi_long do_freebsd_extattr_set_link(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
+                                                   abi_long arg2,
+                                                   abi_ulong arg3,
+                                                   abi_ulong arg4,
+                                                   abi_ulong arg5)
 {
     abi_long ret;
     void  *p, *a, *d;
@@ -274,7 +291,8 @@ static inline abi_long do_freebsd_extattr_set_link(abi_ulong arg1,
 
 /* extattr_delete_link(2) */
 static inline abi_long do_freebsd_extattr_delete_link(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3)
+                                                      abi_long arg2,
+                                                      abi_ulong arg3)
 {
     abi_long ret;
     void *p, *a;
@@ -297,7 +315,7 @@ static inline abi_long do_freebsd_extattr_delete_link(abi_ulong arg1,
 
 /* extattr_list_fd(2) */
 static inline abi_long do_freebsd_extattr_list_fd(abi_long arg1, abi_long arg2,
-        abi_ulong arg3, abi_ulong arg4)
+                                                  abi_ulong arg3, abi_ulong arg4)
 {
     abi_long ret;
     void *d;
@@ -316,8 +334,8 @@ static inline abi_long do_freebsd_extattr_list_fd(abi_long arg1, abi_long arg2,
 }
 
 /* extattr_list_file(2) */
-static inline abi_long do_freebsd_extattr_list_file(abi_long arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4)
+static inline abi_long do_freebsd_extattr_list_file(abi_long arg1, abi_long arg2,
+                                                    abi_ulong arg3, abi_ulong arg4)
 {
     abi_long ret;
     void *p, *d;
@@ -343,8 +361,8 @@ static inline abi_long do_freebsd_extattr_list_file(abi_long arg1,
 }
 
 /* extattr_list_link(2) */
-static inline abi_long do_freebsd_extattr_list_link(abi_long arg1,
-        abi_long arg2, abi_ulong arg3, abi_ulong arg4)
+static inline abi_long do_freebsd_extattr_list_link(abi_long arg1, abi_long arg2,
+                                                    abi_ulong arg3, abi_ulong arg4)
 {
     abi_long ret;
     void *p, *d;
@@ -375,7 +393,7 @@ static inline abi_long do_freebsd_extattr_list_link(abi_long arg1,
 
 /* __acl_aclcheck_fd(int filedes, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_aclcheck_fd(abi_long arg1, abi_long arg2,
-       abi_ulong arg3)
+                                                   abi_ulong arg3)
 {
     abi_long ret;
     struct acl host_acl;
@@ -395,7 +413,8 @@ static inline abi_long do_freebsd__acl_aclcheck_fd(abi_long arg1, abi_long arg2,
 
 /* __acl_aclcheck_file(const char *path, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_aclcheck_file(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3)
+                                                     abi_long arg2,
+                                                     abi_ulong arg3)
 {
     abi_long ret;
     void *p;
@@ -418,7 +437,8 @@ static inline abi_long do_freebsd__acl_aclcheck_file(abi_ulong arg1,
 
 /* __acl_aclcheck_link(const char *path, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_aclcheck_link(abi_ulong arg1,
-        abi_long arg2, abi_ulong arg3)
+                                                     abi_long arg2,
+                                                     abi_ulong arg3)
 {
     abi_long ret;
     void *p;
@@ -457,7 +477,7 @@ static inline abi_long do_freebsd__acl_delete_fd(abi_long arg1, abi_long arg2)
 
 /* int __acl_delete_file(const char *path, acl_type_t type); */
 static inline abi_long do_freebsd__acl_delete_file(abi_ulong arg1,
-        abi_long arg2)
+                                                   abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -479,7 +499,7 @@ static inline abi_long do_freebsd__acl_delete_file(abi_ulong arg1,
 
 /* int __acl_delete_link(const char *path, acl_type_t type); */
 static inline abi_long do_freebsd__acl_delete_link(abi_ulong arg1,
-        abi_long arg2)
+                                                   abi_long arg2)
 {
     abi_long ret;
     void *p;
@@ -501,13 +521,13 @@ static inline abi_long do_freebsd__acl_delete_link(abi_ulong arg1,
 
 /* int __acl_get_fd(int filedes, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_get_fd(abi_long arg1, abi_long arg2,
-        abi_ulong arg3)
+                                              abi_ulong arg3)
 {
     abi_long ret;
     acl_type_t type;
     struct acl host_acl;
 
-    bzero(&host_acl, sizeof(struct acl));
+    memset(&host_acl, 0, sizeof(struct acl));
     host_acl.acl_maxcnt = ACL_MAX_ENTRIES;
 
     ret = t2h_freebsd_acl_type(&type, arg2);
@@ -524,19 +544,19 @@ static inline abi_long do_freebsd__acl_get_fd(abi_long arg1, abi_long arg2,
 
 /* __acl_get_file(const char *path, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_get_file(abi_ulong arg1, abi_long arg2,
-       abi_ulong arg3)
+                                                abi_ulong arg3)
 {
     abi_long ret;
     void *p;
     acl_type_t type;
     struct acl host_acl;
 
-    bzero(&host_acl, sizeof(struct acl));
+    memset(&host_acl, 0, sizeof(struct acl));
     host_acl.acl_maxcnt = ACL_MAX_ENTRIES;
 
     ret = t2h_freebsd_acl_type(&type, arg2);
     if (is_error(ret)) {
-	return ret;
+        return ret;
     }
     p = lock_user_string(arg1);
     if (p == NULL) {
@@ -553,14 +573,14 @@ static inline abi_long do_freebsd__acl_get_file(abi_ulong arg1, abi_long arg2,
 
 /* int __acl_get_link(const char *path, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_get_link(abi_ulong arg1, abi_long arg2,
-       abi_ulong arg3)
+                                                abi_ulong arg3)
 {
     abi_long ret;
     void *p;
     acl_type_t type;
     struct acl host_acl;
 
-    bzero(&host_acl, sizeof(struct acl));
+    memset(&host_acl, 0, sizeof(struct acl));
     host_acl.acl_maxcnt = ACL_MAX_ENTRIES;
 
     ret = t2h_freebsd_acl_type(&type, arg2);
@@ -582,7 +602,7 @@ static inline abi_long do_freebsd__acl_get_link(abi_ulong arg1, abi_long arg2,
 
 /* int __acl_set_fd(int filedes, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_set_fd(abi_long arg1, abi_long arg2,
-        abi_ulong arg3)
+                                              abi_ulong arg3)
 {
     abi_long ret;
     acl_type_t type;
@@ -602,7 +622,7 @@ static inline abi_long do_freebsd__acl_set_fd(abi_long arg1, abi_long arg2,
 
 /* int __acl_set_file(const char *path, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_set_file(abi_ulong arg1, abi_long arg2,
-       abi_ulong arg3)
+                                                abi_ulong arg3)
 {
     abi_long ret;
     void *p;
@@ -628,7 +648,7 @@ static inline abi_long do_freebsd__acl_set_file(abi_ulong arg1, abi_long arg2,
 
 /* int __acl_set_link(const char *path, acl_type_t type, struct acl *aclp); */
 static inline abi_long do_freebsd__acl_set_link(abi_ulong arg1, abi_long arg2,
-       abi_ulong arg3)
+                                                abi_ulong arg3)
 {
     abi_long ret;
     void *p;

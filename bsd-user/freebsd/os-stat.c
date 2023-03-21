@@ -77,17 +77,17 @@ abi_long h2t_freebsd_stat(abi_ulong target_addr,
     __put_user(host_st->st_rdev, &target_st->st_rdev);
     __put_user(host_st->st_atim.tv_sec, &target_st->st_atim.tv_sec);
     __put_user(host_st->st_atim.tv_nsec, &target_st->st_atim.tv_nsec);
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
 /*    __put_user(host_st->st_mtim_ext, &target_st->st_mtim_ext); XXX */
 #endif
     __put_user(host_st->st_mtim.tv_sec, &target_st->st_mtim.tv_sec);
     __put_user(host_st->st_mtim.tv_nsec, &target_st->st_mtim.tv_nsec);
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
 /*    __put_user(host_st->st_ctim_ext, &target_st->st_ctim_ext); XXX */
 #endif
     __put_user(host_st->st_ctim.tv_sec, &target_st->st_ctim.tv_sec);
     __put_user(host_st->st_ctim.tv_nsec, &target_st->st_ctim.tv_nsec);
-#ifdef  __STAT_TIME_T_EXT
+#ifdef TARGET_HAS_STAT_TIME_T_EXT
 /*    __put_user(host_st->st_birthtim_ext, &target_st->st_birthtim_ext); XXX */
 #endif
     __put_user(host_st->st_birthtim.tv_sec, &target_st->st_birthtim.tv_sec);

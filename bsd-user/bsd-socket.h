@@ -28,19 +28,19 @@
 #include "qemu-bsd.h"
 
 ssize_t safe_recvfrom(int s, void *buf, size_t len, int flags,
-    struct sockaddr * restrict from, socklen_t * restrict fromlen);
+    struct sockaddr *restrict from, socklen_t *restrict fromlen);
 ssize_t safe_sendto(int s, const void *buf, size_t len, int flags,
     const struct sockaddr *to, socklen_t tolen);
 int safe_select(int nfds, fd_set *readfs, fd_set *writefds, fd_set *exceptfds,
     struct timeval *timeout);
-int safe_pselect(int nfds, fd_set * restrict readfds,
-    fd_set * restrict writefds, fd_set * restrict exceptfds,
-    const struct timespec * restrict timeout,
-    const sigset_t * restrict newsigmask);
+int safe_pselect(int nfds, fd_set *restrict readfds,
+    fd_set *restrict writefds, fd_set *restrict exceptfds,
+    const struct timespec *restrict timeout,
+    const sigset_t *restrict newsigmask);
 
 /* bind(2) */
 static inline abi_long do_bsd_bind(int sockfd, abi_ulong target_addr,
-        socklen_t addrlen)
+                                   socklen_t addrlen)
 {
     abi_long ret;
     void *addr;
@@ -60,7 +60,7 @@ static inline abi_long do_bsd_bind(int sockfd, abi_ulong target_addr,
 
 /* connect(2) */
 static inline abi_long do_bsd_connect(int sockfd, abi_ulong target_addr,
-        socklen_t addrlen)
+                                      socklen_t addrlen)
 {
     abi_long ret;
     void *addr;
@@ -68,7 +68,7 @@ static inline abi_long do_bsd_connect(int sockfd, abi_ulong target_addr,
     if ((int)addrlen < 0) {
         return -TARGET_EINVAL;
     }
-    addr = alloca(addrlen+1);
+    addr = alloca(addrlen + 1);
 
     ret = target_to_host_sockaddr(addr, target_addr, addrlen);
 
@@ -81,7 +81,7 @@ static inline abi_long do_bsd_connect(int sockfd, abi_ulong target_addr,
 
 /* accept(2) */
 static inline abi_long do_bsd_accept(int fd, abi_ulong target_addr,
-        abi_ulong target_addrlen_addr)
+                                     abi_ulong target_addrlen_addr)
 {
     socklen_t addrlen;
     void *addr;
@@ -114,7 +114,7 @@ static inline abi_long do_bsd_accept(int fd, abi_ulong target_addr,
 
 /* getpeername(2) */
 static inline abi_long do_bsd_getpeername(int fd, abi_ulong target_addr,
-        abi_ulong target_addrlen_addr)
+                                          abi_ulong target_addrlen_addr)
 {
     socklen_t addrlen;
     void *addr;
@@ -142,7 +142,7 @@ static inline abi_long do_bsd_getpeername(int fd, abi_ulong target_addr,
 
 /* getsockname(2) */
 static inline abi_long do_bsd_getsockname(int fd, abi_ulong target_addr,
-        abi_ulong target_addrlen_addr)
+                                          abi_ulong target_addrlen_addr)
 {
     socklen_t addrlen;
     void *addr;
@@ -171,7 +171,7 @@ static inline abi_long do_bsd_getsockname(int fd, abi_ulong target_addr,
 
 /* socketpair(2) */
 static inline abi_long do_bsd_socketpair(int domain, int type, int protocol,
-        abi_ulong target_tab_addr)
+                                         abi_ulong target_tab_addr)
 {
     int tab[2];
     abi_long ret;
@@ -191,7 +191,8 @@ static inline abi_long do_bsd_socketpair(int domain, int type, int protocol,
 
 /* sendto(2) */
 static inline abi_long do_bsd_sendto(int fd, abi_ulong msg, size_t len,
-        int flags, abi_ulong target_addr, socklen_t addrlen)
+                                     int flags, abi_ulong target_addr,
+                                     socklen_t addrlen)
 {
     struct sockaddr *saddr;
     void *host_msg;
@@ -221,7 +222,8 @@ static inline abi_long do_bsd_sendto(int fd, abi_ulong msg, size_t len,
 
 /* recvfrom(2) */
 static inline abi_long do_bsd_recvfrom(int fd, abi_ulong msg, size_t len,
-        int flags, abi_ulong target_addr, abi_ulong target_addrlen)
+                                       int flags, abi_ulong target_addr,
+                                       abi_ulong target_addrlen)
 {
     socklen_t addrlen;
     struct sockaddr *saddr;
@@ -266,16 +268,14 @@ fail:
 
 /* socket(2) */
 static inline abi_long do_bsd_socket(abi_long domain, abi_long type,
-        abi_long protocol)
+                                     abi_long protocol)
 {
-
     return get_errno(socket(domain, type, protocol));
 }
 
 /* shutdown(2) */
 static inline abi_long do_bsd_shutdown(abi_long s, abi_long how)
 {
-
     return get_errno(shutdown(s, how));
 }
 
