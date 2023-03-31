@@ -100,6 +100,7 @@ The following starts the jail and then shows how to jexec into it to get a shell
 prompt:
 
 .. code-block:: shell
+
   # poudriere jail -s -j 132armv7
   # jls
   <listing of the jails to get the jail number>
