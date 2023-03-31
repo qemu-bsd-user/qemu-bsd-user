@@ -22,12 +22,14 @@ account. It's better to work not as root, but you will need root from time to
 time. I recommend that you install (# are commands as root, % are commands as user)
 
 .. code-block:: shell
+
   # pkg bootstrap
   # pkg install git pkgconf bzip2 ninja bash gmake gsed gettext gnutls jpeg-turbo png sdl2 libxkbcommon mesa-libs zstd libslirp sndio python libproxy meson pixman bison
   # pkg install qemu-user-static
   # pkg install poudriere
   # rehash
-  # service start qemu-user-static
+  # sysrc qemu_user_static_enable=YES
+  # service qemu_user_static start
 
 This will install all the prerequisites to successfully build. Except the last
 one, that will install FreeBSD's qemu-user-static package, which will setup
@@ -39,6 +41,7 @@ Next, you'll need to clone this repo. I like to use the directory 'bsd-user'
 for the fork and 'qemu' for the upstream project. The rest 
 
 .. code-block:: shell
+
   % mkdir git
   % cd git
   % git clone -b blitz  https://github.com/qemu-bsd-user/qemu-bsd-user.git bsd-user
@@ -67,7 +70,8 @@ build package. There's a number of tutorials on poduriere online, so I won't
 repeat them here. I will show how to build a jail, however
 
 .. code-block:: shell
-  # poudirere jail -c -j 132armv7 -a arm.armv7 -m git+ssh -v releng/13.2
+
+  # poudriere jail -c -j 132armv7 -a arm.armv7 -m git+ssh -v releng/13.2
 
 Here we're building a armv7 tree. For armv7 in 13.2 and earlier, you have to
 build from sources. This takes a while.
@@ -77,10 +81,13 @@ Note about packages
 These instructions have people install qemu-user-static so that the binmiscctl
 commands are executed at boot. /usr/local/bin/qemu-$ARCH-user is copied over
 (see below), so after installing it, I usually do the following:
+
 .. code-block:: shell
+
   # cd /usr/local/bin
   # mv qemu-arm-static qemu-arm-static.3.1
   # ln -s qemu-arm-static.3.1 qemu-arm-static
+
 so that the binary is a symlink. Later, when I want to test, I copy my qemu-arm
 that I build (more on that later) into either
 /usr/local/bin/qemu-arm-static.bsd-user or /usr/local/bin/qemu-arm-static.up
@@ -93,7 +100,7 @@ The following starts the jail and then shows how to jexec into it to get a shell
 prompt:
 
 .. code-block:: shell
-  # poudirere jail -s -j 132armv7
+  # poudriere jail -s -j 132armv7
   # jls
   <listing of the jails to get the jail number>
   # jexec X
