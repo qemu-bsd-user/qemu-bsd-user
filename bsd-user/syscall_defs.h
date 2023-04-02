@@ -25,30 +25,7 @@
 
 #include "errno_defs.h"
 
-#include "freebsd/syscall_nr.h"
-#include "netbsd/syscall_nr.h"
-#include "openbsd/syscall_nr.h"
-
-/*
- * machine/_types.h
- * or x86/_types.h
- */
-
-/*
- * time_t seems to be very inconsistly defined for the different *BSD's...
- *
- * FreeBSD uses a 64bits time_t except on i386
- * so we have to add a special case here.
- *
- * On NetBSD time_t is always defined as an int64_t.  On OpenBSD time_t
- * is always defined as an int.
- *
- */
-#if (!defined(TARGET_I386))
-typedef int64_t target_freebsd_time_t;
-#else
-typedef int32_t target_freebsd_time_t;
-#endif
+#include "os-syscall.h"
 
 struct target_iovec {
     abi_long iov_base;   /* Starting address */
@@ -101,8 +78,8 @@ struct target_semid_ds {
     struct target_ipc_perm sem_perm; /* operation permission struct */
     abi_ulong   sem_base;   /* pointer to first semaphore in set */
     uint16_t    sem_nsems;  /* number of sems in set */
-    target_freebsd_time_t   sem_otime;  /* last operation time */
-    target_freebsd_time_t   sem_ctime;  /* times measured in secs */
+    target_time_t   sem_otime;  /* last operation time */
+    target_time_t   sem_ctime;  /* times measured in secs */
 };
 
 /*
@@ -114,9 +91,9 @@ struct target_shmid_ds {
     int32_t     shm_lpid;   /* process ID of last shared memory op */
     int32_t     shm_cpid;   /* process ID of creator */
     int32_t     shm_nattch; /* number of current attaches */
-    target_freebsd_time_t shm_atime;  /* time of last shmat() */
-    target_freebsd_time_t shm_dtime;  /* time of last shmdt() */
-    target_freebsd_time_t shm_ctime;  /* time of last change by shmctl() */
+    target_time_t shm_atime;  /* time of last shmat() */
+    target_time_t shm_dtime;  /* time of last shmdt() */
+    target_time_t shm_ctime;  /* time of last change by shmctl() */
 };
 
 #define N_BSD_SHM_REGIONS   32
@@ -137,9 +114,9 @@ struct target_msqid_ds {
     abi_ulong   msg_qbytes; /* max # of bytes on the queue */
     int32_t     msg_lspid;  /* pid of last msgsnd() */
     int32_t     msg_lrpid;  /* pid of last msgrcv() */
-    target_freebsd_time_t   msg_stime;  /* time of last msgsnd() */
-    target_freebsd_time_t   msg_rtime;  /* time of last msgrcv() */
-    target_freebsd_time_t   msg_ctime;  /* time of last msgctl() */
+    target_time_t   msg_stime;  /* time of last msgsnd() */
+    target_time_t   msg_rtime;  /* time of last msgrcv() */
+    target_time_t   msg_ctime;  /* time of last msgctl() */
 };
 
 struct target_msgbuf {
@@ -164,11 +141,9 @@ struct target_sched_param {
  * sys/timex.h
  */
 
-typedef abi_long target_freebsd_suseconds_t;
-
 /* compare to sys/timespec.h */
 struct target_freebsd_timespec {
-    target_freebsd_time_t   tv_sec;     /* seconds */
+    target_time_t   tv_sec;     /* seconds */
     abi_long                tv_nsec;    /* and nanoseconds */
 #if !defined(TARGET_I386) && TARGET_ABI_BITS == 32
     abi_long _pad;
@@ -186,8 +161,8 @@ struct target_freebsd__umtx_time {
 };
 
 struct target_freebsd_timeval {
-    target_freebsd_time_t       tv_sec; /* seconds */
-    target_freebsd_suseconds_t  tv_usec;/* and microseconds */
+    target_time_t       tv_sec; /* seconds */
+    target_suseconds_t  tv_usec;/* and microseconds */
 #if !defined(TARGET_I386) && TARGET_ABI_BITS == 32
     abi_long _pad;
 #endif

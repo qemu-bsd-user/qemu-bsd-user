@@ -45,8 +45,8 @@ struct target_sockaddr_in6 {
 };
 
 struct target_in6_addrlifetime {
-	target_freebsd_time_t ia6t_expire;
-	target_freebsd_time_t ia6t_preferred;
+	target_time_t ia6t_expire;
+	target_time_t ia6t_preferred;
 	u_int32_t ia6t_vltime;
 	u_int32_t ia6t_pltime;
 };
