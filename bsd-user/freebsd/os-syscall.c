@@ -1857,6 +1857,27 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 }
 
 /*
+ * An array of all of the syscalls we know about
+ */
+static const struct syscallname freebsd_scnames[] = {
+#include "freebsd/strace.list"
+};
+
+static void print_freebsd_syscall(int num, abi_long arg1, abi_long arg2, abi_long arg3,
+                                  abi_long arg4, abi_long arg5, abi_long arg6)
+{
+
+    print_syscall(num, freebsd_scnames, ARRAY_SIZE(freebsd_scnames), arg1, arg2,
+                  arg3, arg4, arg5, arg6);
+}
+
+static void print_freebsd_syscall_ret(int num, abi_long ret)
+{
+
+    print_syscall_ret(num, ret, freebsd_scnames, ARRAY_SIZE(freebsd_scnames));
+}
+
+/*
  * do_freebsd_syscall() should always have a single exit point at the end so
  * that actions, such as logging of syscall results, can be performed. This
  * as a wrapper around freebsd_syscall() so that actually happens. Since
