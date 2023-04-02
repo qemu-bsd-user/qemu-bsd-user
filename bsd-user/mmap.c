@@ -631,12 +631,6 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int prot,
             goto fail;
         }
 
-        /* Reject the mapping if any page within the range is mapped */
-        if ((flags & MAP_EXCL) && page_check_range(start, len, 0) < 0) {
-            errno = EINVAL;
-            goto fail;
-        }
-
         /* handle the start of the mapping */
         if (start > real_start) {
             if (real_end == real_start + qemu_host_page_size) {
