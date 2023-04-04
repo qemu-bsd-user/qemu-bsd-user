@@ -167,6 +167,7 @@ static void usage(void)
            "\n" QEMU_COPYRIGHT "\n"
            "usage: qemu-" TARGET_NAME " [options] program [arguments...]\n"
            "BSD CPU emulator (compiled for %s emulation)\n"
+           "qemu-bsd-user fork\n"
            "\n"
            "Standard options:\n"
            "-h                print this help\n"
