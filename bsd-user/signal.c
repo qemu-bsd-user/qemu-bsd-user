@@ -363,17 +363,22 @@ abi_long target_to_host_sigevent(struct sigevent *host_sevp,
     return 0;
 }
 
-/* Returns 1 if given signal should dump core if not handled. */
+/*
+ * Returns 1 if given signal should dump core if not handled.
+ * Compare with kern_sig.c sigproptbl[].
+ */
 static int core_dump_signal(int sig)
 {
     switch (sig) {
-    case TARGET_SIGABRT:
-    case TARGET_SIGFPE:
-    case TARGET_SIGILL:
     case TARGET_SIGQUIT:
-    case TARGET_SIGSEGV:
+    case TARGET_SIGILL:
     case TARGET_SIGTRAP:
+    case TARGET_SIGABRT:
+    case TARGET_SIGEMT:
+    case TARGET_SIGFPE:
+    case TARGET_SIGSEGV:
     case TARGET_SIGBUS:
+    case TARGET_SIGSYS:
         return 1;
     default:
         return 0;
