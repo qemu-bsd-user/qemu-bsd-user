@@ -1320,4 +1320,3 @@ out:
 }
 
 #endif /* USE_ELF_CORE_DUMP */
-
