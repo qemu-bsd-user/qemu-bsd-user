@@ -20,9 +20,9 @@
 
 #include "qemu/osdep.h"
 #include "qemu.h"
+#include "qemu-bsd.h"
 #include "target_arch_sysarch.h"
 #include "signal-common.h"
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
@@ -32,9 +32,6 @@
 #include <net/if_dl.h>  /* For sockaddr_dl */
 
 #include <string.h>
-
-#include "qemu.h"
-#include "qemu-bsd.h"
 
 #include "bsd-proc.h"
 
