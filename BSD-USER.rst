@@ -123,4 +123,46 @@ into the jail w/o updating the symlink so that all the other command work. We
 recommend --static so that one can do this w/o needing to copy libraries over as
 well.
 
+Building Test Binaries Without The Jail
+=======================================
+
+Since you've created the jail, you have a 'sysroot' that you can use to build
+binaries. Let's say you want to build hello-armv7 from hello.c.
+
+.. codeblock:: shell
+
+% cc -target freebsd-armv7 --sysroot /vidpool/qemu/jails/jails/131armv7 -o hello-armv7
+
+Will do the trick.
+
+Running Without The Jail
+========================
+
+Sometimes it is desirable to run qemu to test without running in the jail. You
+will still need to create the jail, as outlined above, but you don't need to
+start it. You'll need to get the 'root' of the jail for this step. Use
+`poudriere jail -l` to get a list of all your jails, and to find the root
+
+.. codeblock:: shell
+
+# joudriere jail -l
+JAILNAME        VERSION                              ARCH      METHOD  TIMESTAMP           PATH
+131armv7        13.2-RC3 1302001 d9bf9d732           arm.armv7 git+ssh 2023-03-18 13:54:23 /vidpool/qemu/jails/jails/131armv7
+#
+
+In this case, it's the PATH column.
+
+You'll can test binaries either inside or outside the jail. You'll run qemu-user
+directly to do this test. Let's say you have a 'hello world' binary that you're
+trying to debug. For example, if you're debugging an arm binary using the above
+jail:
+
+.. codeblock:: shell
+
+% cd qemu/00-qemu
+% <build-here>
+% qemu-arm -L /vidpool/qemu/jails/jails/131armv7 hello-arm
+
+whill run it looking in the jail's root directory for all the dynamic parts of
+the binary (ld-elf.so, libc.so, etc).
 
