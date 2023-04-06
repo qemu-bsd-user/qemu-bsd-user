@@ -22,9 +22,7 @@
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 #include <sys/specialfd.h>
-#endif
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 int __sys___specialfd(int, const void *, size_t);
 #endif
 
@@ -96,23 +94,23 @@ static abi_long do_freebsd_aio_mlock(__unused abi_ulong iocb)
 static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
 {
     int host_pipe[2];
-    int host_ret = pipe2(host_pipe, flags); /* XXXss - flags should be
-											   translated from target to host. */
+    int host_ret = pipe2(host_pipe, flags);
+    /* XXXss - flags should be translated from target to host. */
 
     if (is_error(host_ret)) {
 		return get_errno(host_ret);
     }
-	/*
-	 * XXX pipe2() returns it's second FD by copying it back to
-	 * userspace and not in a second register like pipe(2):
-	 * set_second_rval(cpu_env, host_pipe[1]);
-	 *
-	 * Copy the FD's back to userspace:
-	 */
-	if (put_user_s32(host_pipe[0], pipedes) ||
-		put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
-		return -TARGET_EFAULT;
-	}
+
+    /*
+     * pipe2() returns it's second FD by copying it back to userspace and not in
+     * a second register like pipe(2): set_second_rval(cpu_env, host_pipe[1]);
+     *
+     * Copy the FD's back to userspace:
+     */
+    if (put_user_s32(host_pipe[0], pipedes) ||
+        put_user_s32(host_pipe[1], pipedes + sizeof(host_pipe[0]))) {
+        return -TARGET_EFAULT;
+    }
     return 0;
 }
 
