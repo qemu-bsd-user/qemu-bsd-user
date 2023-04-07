@@ -31,6 +31,13 @@
 
 #define target_to_host_bitmask(x, tbl) (x)
 
+/*
+ * An array of all of the syscalls we know about
+ */
+static const struct syscallname freebsd_scnames[] = {
+#include "freebsd/strace.list"
+};
+
 /* BSD independent syscall shims */
 #include "bsd-file.h"
 #include "bsd-ioctl.h"
@@ -457,82 +464,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     case TARGET_FREEBSD_NR___setugid: /* undocumented */
         ret = do_freebsd___setugid(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_jail: /* jail(2) */
-        ret = do_freebsd_jail(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_jail_attach: /* jail_attach(2) */
-        ret = do_freebsd_jail_attach(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_jail_remove: /* jail_remove(2) */
-        ret = do_freebsd_jail_remove(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_jail_get: /* jail_get(2) */
-        ret = do_freebsd_jail_get(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_jail_set: /* jail_set(2) */
-        ret = do_freebsd_jail_set(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_cap_enter: /* cap_enter(2) */
-        ret = do_freebsd_cap_enter();
-        break;
-
-    case TARGET_FREEBSD_NR_cap_getmode: /* cap_getmode(2) */
-        ret = do_freebsd_cap_getmode(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_cap_rights_limit: /* cap_rights_limit(2) */
-        ret = do_freebsd_cap_rights_limit(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_cap_ioctls_limit: /* cap_ioctls_limit(2) */
-        ret = do_freebsd_cap_ioctls_limit(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_cap_ioctls_get: /* cap_ioctls_get(2) */
-        ret = do_freebsd_cap_ioctls_get(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_cap_fcntls_limit: /* cap_fcntls_limit(2) */
-        ret = do_freebsd_cap_fcntls_limit(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_cap_fcntls_get: /* cap_fcntls_get(2) */
-        ret = do_freebsd_cap_fcntls_get(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_audit: /* audit(2) */
-        ret = do_freebsd_audit(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_auditon: /* auditon(2) */
-        ret = do_freebsd_auditon(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_getaudit: /* getaudit(2) */
-        ret = do_freebsd_getaudit(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_setaudit: /* setaudit(2) */
-        ret = do_freebsd_setaudit(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_getaudit_addr: /* getaudit_addr(2) */
-        ret = do_freebsd_getaudit_addr(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_setaudit_addr: /* setaudit_addr(2) */
-        ret = do_freebsd_setaudit_addr(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_auditctl: /* auditctl(2) */
-        ret = do_freebsd_auditctl(arg1);
         break;
 
     case TARGET_FREEBSD_NR_utrace: /* utrace(2) */
@@ -1163,10 +1094,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_ktimer_gettime(arg1, arg2);
         break;
 
-    case TARGET_FREEBSD_NR_ktimer_getoverrun: /* timer_getoverrun(2) */
-        ret = do_freebsd_ktimer_getoverrun(arg1);
-        break;
-
     case TARGET_FREEBSD_NR_select: /* select(2) */
         ret = do_freebsd_select(cpu_env, arg1, arg2, arg3, arg4, arg5);
         break;
@@ -1333,32 +1260,9 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_setfib(arg1);
         break;
 
-    case TARGET_FREEBSD_NR_sctp_peeloff: /* sctp_peeloff(2) */
-        ret = do_freebsd_sctp_peeloff(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_sctp_generic_sendmsg: /* sctp_generic_sendmsg(2) */
-        ret = do_freebsd_sctp_generic_sendmsg(arg1, arg2, arg2, arg4, arg5,
-                arg6, arg7);
-        break;
-
-    case TARGET_FREEBSD_NR_sctp_generic_recvmsg: /* sctp_generic_recvmsg(2) */
-        ret = do_freebsd_sctp_generic_recvmsg(arg1, arg2, arg2, arg4, arg5,
-                arg6, arg7);
-        break;
-
-    case TARGET_FREEBSD_NR_sendfile: /* sendfile(2) */
-        ret = do_freebsd_sendfile(arg1, arg2, arg2, arg4, arg5, arg6, arg7,
-                arg8);
-        break;
-
         /*
          * thread system calls
          */
-    case TARGET_FREEBSD_NR_thr_create: /* thr_create(2) */
-        ret = do_freebsd_thr_create(cpu_env, arg1, arg2, arg3);
-        break;
-
     case TARGET_FREEBSD_NR_thr_new: /* thr_new(2) */
         ret = do_freebsd_thr_new(cpu_env, arg1, arg2);
         break;
@@ -1641,121 +1545,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_cpuset_setaffinity(arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
-    case TARGET_FREEBSD_NR_cpuset_getdomain: /* cpuset_getdomain(2) */
-        ret = do_freebsd_cpuset_getdomain(arg1, arg2, arg3, arg4, arg5, arg6);
-        break;
-
-    case TARGET_FREEBSD_NR_cpuset_setdomain: /* cpuset_setdomain(2) */
-        ret = do_freebsd_cpuset_setdomain(arg1, arg2, arg3, arg4, arg5, arg6);
-        break;
-
-
-        /*
-         * FreeBSD kernel module
-         */
-    case TARGET_FREEBSD_NR_modfnext: /* modfnext(2) */
-        ret = do_freebsd_modfnext(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_modfind: /* modfind(2) */
-        ret = do_freebsd_modfind(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_kldload: /* kldload(2) */
-        ret = do_freebsd_kldload(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_kldunload: /* kldunload(2) */
-        ret = do_freebsd_kldunload(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_kldunloadf: /* kldunloadf(2) */
-        ret = do_freebsd_kldunloadf(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_kldfind: /* kldfind(2) */
-        ret = do_freebsd_kldfind(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_kldnext: /* kldnext(2) */
-        ret = do_freebsd_kldnext(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_kldstat: /* kldstat(2) */
-        ret = do_freebsd_kldstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_kldfirstmod: /* kldfirstmod(2) */
-        ret = do_freebsd_kldfirstmod(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_kldsym: /* kldsym(2) */
-        ret = do_freebsd_kldsym(arg1, arg2, arg3);
-        break;
-
-        /*
-         * FreeBSD resource controls (undocumented except for rctl(8)
-         * and rctl.conf(5) )
-         */
-    case TARGET_FREEBSD_NR_rctl_get_racct: /* rctl_get_racct() */
-        ret = do_freebsd_rctl_get_racct(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_rctl_get_rules: /* rctl_get_rules() */
-        ret = do_freebsd_rctl_get_rules(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_rctl_add_rule: /* rctl_add_rule() */
-        ret = do_freebsd_rctl_add_rule(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_rctl_remove_rule: /* rctl_remove_rule() */
-        ret = do_freebsd_rctl_remove_rule(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_rctl_get_limits: /* rctl_get_limits() */
-        ret = do_freebsd_rctl_get_limits(arg1, arg2, arg3, arg4);
-        break;
-
-        /*
-         * FreeBSD Mandatory Access Control
-         */
-    case TARGET_FREEBSD_NR___mac_get_proc: /* __mac_get_proc() */
-        ret = do_freebsd___mac_get_proc(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_set_proc: /* __mac_set_proc() */
-        ret = do_freebsd___mac_set_proc(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_get_fd: /* __mac_get_fd() */
-        ret = do_freebsd___mac_get_fd(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_set_fd: /* __mac_set_fd() */
-        ret = do_freebsd___mac_set_fd(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_get_file: /* __mac_get_file() */
-        ret = do_freebsd___mac_get_proc(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_set_file: /* __mac_set_file() */
-        ret = do_freebsd___mac_set_file(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_get_link: /* __mac_get_link() */
-        ret = do_freebsd___mac_get_link(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR___mac_set_link: /* __mac_set_link() */
-        ret = do_freebsd___mac_set_link(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_mac_syscall: /* mac_syscall() */
-        ret = do_freebsd_mac_syscall(arg1, arg2, arg3);
-        break;
-
         /*
          * FreeBSD additional posix support
          */
@@ -1765,10 +1554,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     case TARGET_FREEBSD_NR_posix_openpt: /* posix_openpt(2) */
         ret = do_freebsd_posix_openpt(arg1);
-        break;
-
-    case TARGET_FREEBSD_NR_posix_fadvise: /* posix_fadvise(2) */
-        ret = do_freebsd_posix_fadvise(arg1, arg2, arg3, arg4);
         break;
 
         /*
@@ -1790,10 +1575,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_getdtablesize();
         break;
 
-    case TARGET_FREEBSD_NR_kenv: /* kenv(2) */
-        ret = do_freebsd_kenv(arg1, arg2, arg2, arg4);
-        break;
-
     case TARGET_FREEBSD_NR_break:
         ret = do_obreak(arg1);
         break;
@@ -1804,46 +1585,20 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 #endif
 
-	/*
-	 * Asynchronous I/O
-	 */
-    case  TARGET_FREEBSD_NR_aio_read: /* aio_read(2) */
-	ret = do_freebsd_aio_read(arg1);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_write: /* aio_write(2) */
-	ret = do_freebsd_aio_write(arg1);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_suspend: /* aio_suspend(2) */
-	ret = do_freebsd_aio_suspend(arg1, arg2, arg3);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_cancel: /* aio_cancel(2) */
-	ret = do_freebsd_aio_cancel(arg1, arg2);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_error: /* aio_error(2) */
-	ret = do_freebsd_aio_error(arg1);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_waitcomplete: /* aio_waitcomplete(2) */
-	ret = do_freebsd_aio_waitcomplete(arg1, arg2);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_fsync: /* aio_fsync(2) */
-	ret = do_freebsd_aio_fsync(arg1, arg2);
-	break;
-
-    case  TARGET_FREEBSD_NR_aio_mlock: /* aio_mlock(2) */
-	ret = do_freebsd_aio_mlock(arg1);
-	break;
-
     default:
-        qemu_log_mask(LOG_UNIMP, "Unsupported syscall: %d\n", num);
-        if (bsd_user_strict) {
-            printf("Unimplemented system call %d\n", num);
-            abort();
+    {
+        int i;
+
+        for (i = 0; i < ARRAY_SIZE(freebsd_scnames); i++) {
+            if (freebsd_scnames[i].nr == num)
+                break;
+        }
+        if (i == ARRAY_SIZE(freebsd_scnames)) {
+            /* _mask(LOG_UNIMP, maybe? */
+            qemu_log("Unsupported syscall #%d\n", num);
+        } else {
+            /* _mask(LOG_UNIMP, maybe? */
+            qemu_log("Unsupported syscall %s()\n", freebsd_scnames[i].name);
         }
 #if 0
         ret = get_errno(syscall(num, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
@@ -1851,17 +1606,11 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 #endif
         ret = -TARGET_ENOSYS;
         break;
+            }
     }
 
     return ret;
 }
-
-/*
- * An array of all of the syscalls we know about
- */
-static const struct syscallname freebsd_scnames[] = {
-#include "freebsd/strace.list"
-};
 
 /*
  * do_freebsd_syscall() should always have a single exit point at the end so

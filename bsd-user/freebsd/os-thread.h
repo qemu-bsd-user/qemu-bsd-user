@@ -42,14 +42,6 @@ int safe__umtx_op(void *, int, unsigned long, void *, void *);
 #define QEMU_UMTX_OP(n) (n)
 #endif
 
-static inline abi_long do_freebsd_thr_create(CPUArchState *env,
-        abi_ulong target_ctx, abi_ulong target_id, int flags)
-{
-
-    qemu_log("qemu: Unsupported syscall thr_create()\n");
-    return -TARGET_ENOSYS;
-}
-
 static inline abi_long do_freebsd_thr_self(abi_ulong target_id)
 {
     abi_long ret;

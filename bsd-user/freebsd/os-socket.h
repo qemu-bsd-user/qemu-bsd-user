@@ -681,44 +681,6 @@ static inline abi_long do_freebsd_setfib(abi_long fib)
     return get_errno(setfib(fib));
 }
 
-/* sctp_peeloff(2) */
-static inline abi_long do_freebsd_sctp_peeloff(abi_long s, abi_ulong id)
-{
-
-    qemu_log("qemu: Unsupported syscall sctp_peeloff()\n");
-    return -TARGET_ENOSYS;
-}
-
-/* sctp_generic_sendmsg(2) */
-static inline abi_long do_freebsd_sctp_generic_sendmsg(abi_long s,
-        abi_ulong target_msg, abi_long msglen, abi_ulong target_to,
-        abi_ulong len, abi_ulong target_sinfo, abi_long flags)
-{
-
-    qemu_log("qemu: Unsupported syscall sctp_generic_sendmsg()\n");
-    return -TARGET_ENOSYS;
-}
-
-/* sctp_generic_recvmsg(2) */
-static inline abi_long do_freebsd_sctp_generic_recvmsg(abi_long s,
-        abi_ulong target_iov, abi_long iovlen, abi_ulong target_from,
-        abi_ulong fromlen, abi_ulong target_sinfo, abi_ulong target_msgflags)
-{
-
-    qemu_log("qemu: Unsupported syscall sctp_generic_recvmsg()\n");
-    return -TARGET_ENOSYS;
-}
-
-/* sendfile(2) */
-static inline abi_long do_freebsd_sendfile(abi_long fd, abi_long s,
-        abi_ulong arg3, abi_ulong arg4, abi_ulong nbytes, abi_ulong target_hdtr,
-        abi_ulong target_sbytes, abi_long flags)
-{
-
-    qemu_log("qemu: Unsupported syscall sendfile()\n");
-    return -TARGET_ENOSYS;
-}
-
 /* bindat(2) */
 static inline abi_long do_freebsd_bindat(int fd, int sockfd,
 	abi_ulong target_addr, socklen_t addrlen)

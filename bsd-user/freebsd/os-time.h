@@ -437,14 +437,6 @@ static inline abi_long do_freebsd_ktimer_gettime(abi_long arg1, abi_long arg2)
     return (ret);
 }
 
-/* timer_getoverrun(2) */
-static inline abi_long do_freebsd_ktimer_getoverrun(abi_long arg1)
-{
-
-    qemu_log("qemu: Unsupported syscall ktimer_getoverrun()\n");
-    return -TARGET_ENOSYS;
-}
-
 /* select(2) */
 static inline abi_long do_freebsd_select(CPUArchState *env, int n,
 	abi_ulong rfd_addr, abi_ulong wfd_addr, abi_ulong efd_addr,
