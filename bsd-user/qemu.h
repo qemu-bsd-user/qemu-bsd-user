@@ -81,26 +81,11 @@ struct emulated_sigtable {
 typedef struct TaskState {
     pid_t ts_tid;     /* tid (or pid) of this task */
 
-    struct TaskState *next;
-    struct bsd_binprm *bprm;
     struct image_info *info;
+    struct bsd_binprm *bprm;
 
     struct emulated_sigtable sync_signal;
-    /*
-     * TODO: Since we block all signals while returning to the main CPU
-     * loop, this needn't be an array
-     */
     struct emulated_sigtable sigtab[TARGET_NSIG];
-    /*
-     * Nonzero if process_pending_signals() needs to do something (either
-     * handle a pending signal or unblock signals).
-     * This flag is written from a signal handler so should be accessed via
-     * the qatomic_read() and qatomic_set() functions. (It is not accessed
-     * from multiple threads.)
-     */
-    int signal_pending;
-    /* True if we're leaving a sigsuspend and sigsuspend_mask is valid. */
-    bool in_sigsuspend;
     /*
      * This thread's signal mask, as requested by the guest program.
      * The actual signal mask of this thread may differ:
@@ -113,6 +98,17 @@ typedef struct TaskState {
      * currently in the middle of such a syscall
      */
     sigset_t sigsuspend_mask;
+    /* True if we're leaving a sigsuspend and sigsuspend_mask is valid. */
+    bool in_sigsuspend;
+
+    /*
+     * Nonzero if process_pending_signals() needs to do something (either
+     * handle a pending signal or unblock signals).
+     * This flag is written from a signal handler so should be accessed via
+     * the qatomic_read() and qatomic_set() functions. (It is not accessed
+     * from multiple threads.)
+     */
+    int signal_pending;
 
     /* This thread's sigaltstack, if it has one */
     struct target_sigaltstack sigaltstack_used;
