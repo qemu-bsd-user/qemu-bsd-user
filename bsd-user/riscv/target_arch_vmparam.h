@@ -45,4 +45,9 @@ static inline void set_second_rval(CPURISCVState *state, abi_ulong retval2)
     state->gpr[xA1] = retval2;
 }
 
+static inline abi_ulong get_second_rval(CPURISCVState *state)
+{
+    return state->gpr[xA1];
+}
+
 #endif /* TARGET_ARCH_VMPARAM_H */

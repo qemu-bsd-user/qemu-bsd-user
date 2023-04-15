@@ -46,4 +46,9 @@ static inline void set_second_rval(CPUARMState *state, abi_ulong retval2)
     state->regs[1] = retval2;
 }
 
+static inline abi_ulong get_second_rval(CPUARMState *state)
+{
+    return state->regs[1];
+}
+
 #endif /* TARGET_ARCH_VMPARAM_H */

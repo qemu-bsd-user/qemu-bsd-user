@@ -63,7 +63,12 @@ static inline abi_ulong get_sp_from_cpustate(CPUARMState *state)
 
 static inline void set_second_rval(CPUARMState *state, abi_ulong retval2)
 {
-    state->xregs[1] = retval2; /* XXX ??? */
+    state->xregs[1] = retval2; /* XXX not really used on 64-bit arch */
+}
+
+static inline abi_ulong get_second_rval(CPUARMState *state)
+{
+    return state->xregs[1];
 }
 
 #endif /* TARGET_ARCH_VMPARAM_H */

@@ -44,4 +44,9 @@ static inline void set_second_rval(CPUX86State *state, abi_ulong retval2)
     state->regs[R_EDX] = retval2;
 }
 
+static inline abi_ulong get_second_rval(CPUX86State *state)
+{
+    return state->regs[R_EDX];
+}
+
 #endif /* TARGET_ARCH_VMPARAM_H */

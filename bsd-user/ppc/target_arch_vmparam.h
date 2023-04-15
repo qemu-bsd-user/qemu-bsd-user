@@ -53,4 +53,9 @@ static inline void set_second_rval(CPUPPCState *state, abi_ulong retval2)
     state->gpr[4] = retval2;
 }
 
+static inline abi_ulong get_second_rval(CPUPPCState *state)
+{
+    return state->gpr[4];
+}
+
 #endif /* TARGET_ARCH_VMPARAM_H */
