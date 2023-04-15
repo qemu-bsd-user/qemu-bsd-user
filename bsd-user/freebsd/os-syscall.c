@@ -28,15 +28,10 @@
 #include "qemu.h"
 #include "signal-common.h"
 #include "user/syscall-trace.h"
+#include "truss_hdr.h"
+#include "systruss.h"
 
 #define target_to_host_bitmask(x, tbl) (x)
-
-/*
- * An array of all of the syscalls we know about
- */
-static const struct syscallname freebsd_scnames[] = {
-#include "freebsd/strace.list"
-};
 
 /* BSD independent syscall shims */
 #include "bsd-file.h"
@@ -1587,18 +1582,15 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 
     default:
     {
-        int i;
+        const char *name;
 
-        for (i = 0; i < ARRAY_SIZE(freebsd_scnames); i++) {
-            if (freebsd_scnames[i].nr == num)
-                break;
-        }
-        if (i == ARRAY_SIZE(freebsd_scnames)) {
+        name = decoded_syscalls[num].name;
+        if (name == NULL) {
             /* _mask(LOG_UNIMP, maybe? */
             qemu_log("Unsupported syscall #%d\n", num);
         } else {
             /* _mask(LOG_UNIMP, maybe? */
-            qemu_log("Unsupported syscall %s()\n", freebsd_scnames[i].name);
+            qemu_log("Unsupported syscall %s()\n", name);
         }
 #if 0
         ret = get_errno(syscall(num, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
@@ -1624,18 +1616,18 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
                             abi_long arg8)
 {
     CPUState *cpu = env_cpu(cpu_env);
+    TaskState *ts = cpu->opaque;
     abi_long ret;
 
     trace_guest_user_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
     if (do_strace) {
-        print_syscall(num, freebsd_scnames, ARRAY_SIZE(freebsd_scnames), arg1, arg2,
-                      arg3, arg4, arg5, arg6);
+        record_syscall(ts, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
     }
 
     ret = freebsd_syscall(cpu_env, num, arg1, arg2, arg3, arg4, arg5, arg6,
                           arg7, arg8);
     if (do_strace) {
-        print_syscall_ret(num, ret, freebsd_scnames, ARRAY_SIZE(freebsd_scnames));
+        record_syscall_ret(ts, num, ret, get_second_rval(cpu_env));
     }
     trace_guest_user_syscall_ret(cpu, num, ret);
 

@@ -25,8 +25,6 @@
 
 #include "os-strace.h"  /* OS dependent strace print functions */
 
-int do_strace;
-
 /*
  * Utility functions
  */

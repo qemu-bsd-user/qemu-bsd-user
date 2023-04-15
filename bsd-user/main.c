@@ -19,7 +19,6 @@
  */
 #include "qemu/osdep.h"
 
-#include "qemu/osdep.h"
 #include <sys/resource.h>
 #include <sys/sysctl.h>
 
@@ -49,6 +48,8 @@
 #include "target_arch_cpu.h"
 
 int singlestep;
+
+int do_strace;
 
 /*
  * Going hand in hand with the va space needed (see below), we need

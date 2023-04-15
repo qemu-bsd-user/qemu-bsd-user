@@ -18,7 +18,6 @@ bsd_user_ss.add(files(
   'mmap.c',
   'thunk.c',
   'signal.c',
-  'strace.c',
   'uaccess.c',
 ))
 

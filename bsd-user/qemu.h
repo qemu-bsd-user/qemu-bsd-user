@@ -76,6 +76,18 @@ struct emulated_sigtable {
 };
 
 /*
+ * A little bit of glue to allow system call recording
+ */
+struct syscall_decode;
+struct current_syscall {
+	const struct syscall_decode *sc;
+	unsigned int number;
+	unsigned int nargs;
+	abi_long args[10];
+	char *s_args[10];	/* the printable arguments */
+};
+
+/*
  * NOTE: we force a big alignment so that the stack stored after is aligned too
  */
 typedef struct TaskState {
@@ -109,6 +121,12 @@ typedef struct TaskState {
      * from multiple threads.)
      */
     int signal_pending;
+
+    /* Tracing state */
+    struct current_syscall cs;
+    int in_syscall;
+    char trace_buf[128];
+    FILE *outfile;
 
     /* This thread's sigaltstack, if it has one */
     struct target_sigaltstack sigaltstack_used;
@@ -211,9 +229,9 @@ void print_syscall(int num, const struct syscallname *scnames,
                    unsigned int nscnames, abi_long arg1, abi_long arg2,
                    abi_long arg3, abi_long arg4, abi_long arg5,
                    abi_long arg6);
-void print_syscall_ret(int num, abi_long ret,
-                       const struct syscallname *scnames,
-                       unsigned int nscnames);
+//void print_syscall_ret(int num, abi_long ret,
+//                       const struct syscallname *scnames,
+//                       unsigned int nscnames);
 void print_syscall_ret_addr(const struct syscallname *name, abi_long ret);
 /**
  * print_taken_signal:

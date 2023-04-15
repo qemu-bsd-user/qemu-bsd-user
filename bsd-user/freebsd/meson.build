@@ -7,4 +7,5 @@ bsd_user_ss.add(files(
   'os-syscall.c',
   'os-thread.c',
   'os-time.c',
+  'truss.c'
 ))
