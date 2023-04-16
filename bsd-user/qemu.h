@@ -383,54 +383,37 @@ static inline int access_ok(int type, abi_ulong addr, abi_ulong size)
 #define PRAGMA_REENABLE_PACKED_WARNING
 #endif
 
-#define __put_user(x, hptr)\
-({\
-    PRAGMA_DISABLE_PACKED_WARNING;\
-    int size = sizeof(*hptr);\
-    switch (size) {\
-    case 1:\
-        *(uint8_t *)(hptr) = (uint8_t)(typeof(*hptr))(x);\
-        break;\
-    case 2:\
-        *(uint16_t *)(hptr) = tswap16((typeof(*hptr))(x));\
-        break;\
-    case 4:\
-        *(uint32_t *)(hptr) = tswap32((typeof(*hptr))(x));\
-        break;\
-    case 8:\
-        *(uint64_t *)(hptr) = tswap64((typeof(*hptr))(x));\
-        break;\
-    default:\
-        abort();\
-    } \
-    PRAGMA_REENABLE_PACKED_WARNING;\
-    0;\
-})
+#define __put_user_e(x, hptr, e)                                            \
+    do {                                                                    \
+        PRAGMA_DISABLE_PACKED_WARNING;                                      \
+        (__builtin_choose_expr(sizeof(*(hptr)) == 1, stb_p,                 \
+        __builtin_choose_expr(sizeof(*(hptr)) == 2, stw_##e##_p,            \
+        __builtin_choose_expr(sizeof(*(hptr)) == 4, stl_##e##_p,            \
+        __builtin_choose_expr(sizeof(*(hptr)) == 8, stq_##e##_p, abort))))  \
+            ((hptr), (x)), (void)0);                                        \
+        PRAGMA_REENABLE_PACKED_WARNING;                                     \
+    } while (0)
 
-#define __get_user(x, hptr) \
-({\
-    PRAGMA_DISABLE_PACKED_WARNING;\
-    int size = sizeof(*hptr);\
-    switch (size) {\
-    case 1:\
-        x = (typeof(*hptr))*(uint8_t *)(hptr);\
-        break;\
-    case 2:\
-        x = (typeof(*hptr))tswap16(*(uint16_t *)(hptr));\
-        break;\
-    case 4:\
-        x = (typeof(*hptr))tswap32(*(uint32_t *)(hptr));\
-        break;\
-    case 8:\
-        x = (typeof(*hptr))tswap64(*(uint64_t *)(hptr));\
-        break;\
-    default:\
-        x = 0;\
-        abort();\
-    } \
-    PRAGMA_REENABLE_PACKED_WARNING;\
-    0;\
-})
+#define __get_user_e(x, hptr, e)                                            \
+    do {                                                                    \
+        PRAGMA_DISABLE_PACKED_WARNING;                                      \
+        ((x) = (typeof(*hptr))(                                             \
+        __builtin_choose_expr(sizeof(*(hptr)) == 1, ldub_p,                 \
+        __builtin_choose_expr(sizeof(*(hptr)) == 2, lduw_##e##_p,           \
+        __builtin_choose_expr(sizeof(*(hptr)) == 4, ldl_##e##_p,            \
+        __builtin_choose_expr(sizeof(*(hptr)) == 8, ldq_##e##_p, abort))))  \
+            (hptr)), (void)0);                                              \
+        PRAGMA_REENABLE_PACKED_WARNING;                                     \
+    } while (0)
+
+
+#if TARGET_BIG_ENDIAN
+# define __put_user(x, hptr)  __put_user_e(x, hptr, be)
+# define __get_user(x, hptr)  __get_user_e(x, hptr, be)
+#else
+# define __put_user(x, hptr)  __put_user_e(x, hptr, le)
+# define __get_user(x, hptr)  __get_user_e(x, hptr, le)
+#endif
 
 /*
  * put_user()/get_user() take a guest address and check access
@@ -439,34 +422,33 @@ static inline int access_ok(int type, abi_ulong addr, abi_ulong size)
  * has been passed by address.  These internally perform locking and unlocking
  * on the data type.
  */
-#define put_user(x, gaddr, target_type)                                 \
-({                                                                      \
-    abi_ulong __gaddr = (gaddr);                                        \
-    target_type *__hptr;                                                \
-    abi_long __ret;                                                     \
-    __hptr = lock_user(VERIFY_WRITE, __gaddr, sizeof(target_type), 0);  \
-    if (__hptr) {                                                       \
-        __ret = __put_user((x), __hptr);                                \
-        unlock_user(__hptr, __gaddr, sizeof(target_type));              \
-    } else                                                              \
-        __ret = -TARGET_EFAULT;                                         \
-    __ret;                                                              \
+#define put_user(x, gaddr, target_type)					\
+({									\
+    abi_ulong __gaddr = (gaddr);					\
+    target_type *__hptr;						\
+    abi_long __ret = 0;							\
+    if ((__hptr = lock_user(VERIFY_WRITE, __gaddr, sizeof(target_type), 0))) { \
+        __put_user((x), __hptr);				\
+        unlock_user(__hptr, __gaddr, sizeof(target_type));		\
+    } else								\
+        __ret = -TARGET_EFAULT;						\
+    __ret;								\
 })
 
-#define get_user(x, gaddr, target_type)                                 \
-({                                                                      \
-    abi_ulong __gaddr = (gaddr);                                        \
-    target_type *__hptr;                                                \
-    abi_long __ret;                                                     \
-    __hptr = lock_user(VERIFY_READ, __gaddr, sizeof(target_type), 1);   \
-    if (__hptr) {                                                       \
-        __ret = __get_user((x), __hptr);                                \
-        unlock_user(__hptr, __gaddr, 0);                                \
-    } else {                                                            \
-        (x) = 0;                                                        \
-        __ret = -TARGET_EFAULT;                                         \
-    }                                                                   \
-    __ret;                                                              \
+#define get_user(x, gaddr, target_type)					\
+({									\
+    abi_ulong __gaddr = (gaddr);					\
+    target_type *__hptr;						\
+    abi_long __ret = 0;							\
+    if ((__hptr = lock_user(VERIFY_READ, __gaddr, sizeof(target_type), 1))) { \
+        __get_user((x), __hptr);				\
+        unlock_user(__hptr, __gaddr, 0);				\
+    } else {								\
+        /* avoid warning */						\
+        (x) = 0;							\
+        __ret = -TARGET_EFAULT;						\
+    }									\
+    __ret;								\
 })
 
 #define put_user_ual(x, gaddr) put_user((x), (gaddr), abi_ulong)
