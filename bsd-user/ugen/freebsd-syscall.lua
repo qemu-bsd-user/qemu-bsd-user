@@ -14,14 +14,16 @@ local FreeBSDSyscall = {}
 
 FreeBSDSyscall.__index = FreeBSDSyscall
 
-function FreeBSDSyscall:new(sysfile, config)
+function FreeBSDSyscall:new(obj, sysfile, config)
 	local this = {
 		sysfile = sysfile,
 		config = config,
 	}
-	setmetatable(this, self)
-
-	return this
+	obj = obj or this
+	setmetatable(obj, self)
+	self.__index = self
+	
+	return obj
 end
 
 return FreeBSDSyscall
