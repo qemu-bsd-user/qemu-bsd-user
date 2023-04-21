@@ -27,6 +27,8 @@ function FreeBSDSyscall:parse_sysfile()
 		return
 	end
 
+	self.syscalls = { }
+
 	local fh = io.open(file)
 	if fh == nil then
 		print("Failed to open " .. file)
@@ -37,16 +39,18 @@ function FreeBSDSyscall:parse_sysfile()
 	local defs = ""
 	local s
 	for line in fh:lines() do
-		-- Strip any comments
-		line = line:gsub(commentExpr, "")
-		if line == "" then
-			-- nothing blank line
+		line = line:gsub(commentExpr, "")		-- Strip any comments
+
+		-- Note can't use pure pattern matching here because of the 's' test
+		-- and this is shorter than a generic pattern matching pattern
+		if line == nil or line == "" then
+			-- nothing blank line or end of file
 		elseif s ~= nil then
 			-- If we have a partial system call object
 			-- s, then feed it one more line
 			if s:add(line) then
 				-- append to syscall list
-				self.syscalls:insert(s)
+				table.insert(self.syscalls, s)
 				s = nil
 			end
 		elseif line:match("^%s*%$") then
@@ -84,8 +88,7 @@ function FreeBSDSyscall:new(obj)
 	obj = obj or { }
 	setmetatable(obj, self)
 	self.__index = self
-	
-	obj.syscalls = { }
+
 	obj:parse_sysfile()
 
 	return obj

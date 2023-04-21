@@ -59,6 +59,12 @@ end
 -- The parsed syscall table
 local tbl = FreeBSDSyscall:new{sysfile = sysfile, config = config}
 
+for k,v in pairs(tbl) do
+	print(k)
+end
+print(#tbl.syscalls)
+
+
 -- We need to generate several files
 -- Generate prototypes for all the functions generated below
 -- Generate a system call cable for all these functions
