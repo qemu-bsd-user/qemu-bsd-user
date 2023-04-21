@@ -9,6 +9,7 @@ local syscall = {}
 syscall.__index = syscall
 
 function syscall:add(line)
+	local words = gmatch("%S+")
 -- XXX start here --
 	return true -- object is complete
 end
