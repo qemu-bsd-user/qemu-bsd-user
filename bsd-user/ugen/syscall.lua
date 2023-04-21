@@ -54,16 +54,11 @@ function syscall:add(line)
 		return false
 	end
 
-	if self.expect_rbrace then
-		if not line:match("}$") then
-			abort(1, "Expected '}' found '" .. line .. "' instead.")
-		end
-		self.expect_brace = false
-		return true
+	-- Wrapping up, can only get } here
+	if not line:match("}$") then
+		abort(1, "Expected '}' found '" .. line .. "' instead.")
 	end
-
-	abort(1, "This is impossible: " .. line)
-	return true -- object is complete
+	return true
 end
 
 function syscall:new(obj)
