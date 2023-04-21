@@ -57,7 +57,7 @@ if configfile ~= nil then
 end
 
 -- The parsed syscall table
-local tbl = FreeBSDSyscall:new(sysfile, config)
+local tbl = FreeBSDSyscall:new{sysfile = sysfile, config = config}
 
 -- We need to generate several files
 -- Generate prototypes for all the functions generated below

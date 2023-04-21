@@ -11,14 +11,16 @@
 -- Copyright (c) 2019 Kyle Evans <kevans@FreeBSD.org>
 
 local lfs = require("lfs")
+local syscall = require("syscall")
 
 local FreeBSDSyscall = {}
 
 FreeBSDSyscall.__index = FreeBSDSyscall
 
-local function parse_sysfile()
+function FreeBSDSyscall:parse_sysfile()
 	local file = self.sysfile
 	local config = self.config
+	local commentExpr = "^%s*;.*"
 
 	if file == nil then
 		print "No file"
@@ -31,10 +33,12 @@ local function parse_sysfile()
 		return {}
 	end
 
-	local incs, defs, s
+	local incs = ""
+	local defs = ""
+	local s
 	for line in fh:lines() do
 		-- Strip any comments
-		line = nextline:gsub(commentExpr, "")
+		line = line:gsub(commentExpr, "")
 		if line == "" then
 			-- nothing blank line
 		elseif s ~= nil then
@@ -51,7 +55,7 @@ local function parse_sysfile()
 			incs = incs .. line .. "\n"
 		elseif line:match("%%ABI_HEADERS%%") then
 			local h= self.config.abi_headers
-			if h ~= "" then
+			if h ~= nil and h ~= "" then
 				incs = incs .. h .. "\n"
 			end
 		elseif line:match("^#%s*define") then
@@ -62,7 +66,7 @@ local function parse_sysfile()
 			s = syscall:new()
 			if s:add(line) then
 				-- append to syscall list
-				self.syscalls:insert(s)
+				table.insert(self.syscalls, s)
 				s = nil
 			end
 		end
@@ -76,17 +80,13 @@ local function parse_sysfile()
 	self.defines = defs
 end
 
-function FreeBSDSyscall:new(obj, sysfile, config)
-	local this = {
-		sysfile = sysfile,
-		config = config,
-		syscalls = { }
-	}
+function FreeBSDSyscall:new(obj)
 	obj = obj or { }
 	setmetatable(obj, self)
 	self.__index = self
 	
-	self:parse_sysfile()
+	obj.syscalls = { }
+	obj:parse_sysfile()
 
 	return obj
 end

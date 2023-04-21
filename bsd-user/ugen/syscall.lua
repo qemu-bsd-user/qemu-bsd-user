@@ -9,7 +9,7 @@ local syscall = {}
 syscall.__index = syscall
 
 function syscall:add(line)
-	local words = gmatch("%S+")
+	local words = line:gmatch("%S+")
 -- XXX start here --
 	return true -- object is complete
 end
@@ -18,6 +18,8 @@ function syscall:new(obj)
 	obj = obj or { }
 	setmetatable(obj, self)
 	self.__index = self
+
+	return obj
 end
 
 return syscall
