@@ -4,6 +4,8 @@
 -- Copyright (c) 2023 Warner Losh <imp@bsdimp.com>
 --
 
+args = require("args")
+
 local syscall = {}
 
 syscall.__index = syscall
@@ -38,32 +40,17 @@ function syscall:add(line)
 		return false
 	end
 
-	if not self.expect_rparen and not self.expect_rbrace then
+	if not self.expect_rbrace then
 		-- We're looking for (another) argument
 		-- xxx copout for the moment and just snarf the argument
 		-- some have trailing , on last arg
 		if line:match("%);$") then
-			print("Warning: " .. self.name .. " malformed args")
 			self.expect_rbrace = true
 			return false
 		end
 
-		local arg = line:gsub("^%s+","")
+		local arg = args:new({ }, line)
 		table.insert(self.args, arg)
-		if not arg:match(",$") or arg == "..." then
-			self.expect_rparen = true
-		end
-		return false
-	end
-
-	assert(self.expect_rparen ~= self.expect_rbrace) -- They nest... so only one is true
-
-	if self.expect_rparen then
-		if not line:match("%);$") then
-			abort(1, "Expected ');' found '" .. line .. "' instead.")
-		end
-		self.expect_rparen = false
-		self.expect_rbrace = true
 		return false
 	end
 
@@ -84,7 +71,6 @@ function syscall:new(obj)
 	setmetatable(obj, self)
 	self.__index = self
 
-	self.expect_rparen = false
 	self.expect_rbrace = false
 	self.args = { }
 
