@@ -601,14 +601,18 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
     sigset_t *set_ptr;
     void *p;
 
-    target_pfd = lock_user(VERIFY_WRITE, arg1,
-            sizeof(struct target_pollfd) * nfds, 1);
+    if (nfds > 0) {
+        target_pfd = lock_user(VERIFY_WRITE, arg1,
+                               sizeof(struct target_pollfd) * nfds, 1);
 	if (!target_pfd)
-        return -TARGET_EFAULT;
-    pfd = alloca(sizeof(struct pollfd) * nfds);
-    for (i = 0; i < nfds; i++) {
-        pfd[i].fd = tswap32(target_pfd[i].fd);
-        pfd[i].events = tswap16(target_pfd[i].events);
+            return -TARGET_EFAULT;
+        pfd = alloca(sizeof(struct pollfd) * nfds);
+        for (i = 0; i < nfds; i++) {
+            pfd[i].fd = tswap32(target_pfd[i].fd);
+            pfd[i].events = tswap16(target_pfd[i].events);
+        }
+    } else {
+        pfd = NULL;
     }
 
     /* Unlike poll(), ppoll() uses struct timespec. */
@@ -639,7 +643,8 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
         for (i = 0; i < nfds; i++)
             target_pfd[i].revents = tswap16(pfd[i].revents);
     }
-    unlock_user(target_pfd, arg1, sizeof(struct target_pollfd) * nfds);
+    if (nfds > 0)
+        unlock_user(target_pfd, arg1, sizeof(struct target_pollfd) * nfds);
 
     return ret;
 }
