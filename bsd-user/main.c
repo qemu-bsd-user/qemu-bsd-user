@@ -86,8 +86,6 @@ unsigned long target_dflssiz = TARGET_DFLSSIZ;   /* initial data size limit */
 unsigned long target_maxssiz = TARGET_MAXSSIZ;   /* max stack size */
 unsigned long target_sgrowsiz = TARGET_SGROWSIZ; /* amount to grow stack */
 
-char qemu_proc_pathname[PATH_MAX];  /* full path to exeutable */
-
 /* Helper routines for implementing atomic operations. */
 
 void fork_start(void)
@@ -286,8 +284,6 @@ int main(int argc, char **argv)
 
     if (argc <= 1)
         usage();
-
-    save_proc_pathname(argv[0]);
 
     module_call_init(MODULE_INIT_TRACE);
     qemu_init_cpu_list();
