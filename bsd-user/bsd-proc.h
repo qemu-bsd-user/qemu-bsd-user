@@ -23,6 +23,7 @@
 #include <sys/resource.h>
 
 #include "qemu-bsd.h"
+#include "gdbstub/syscalls.h"
 
 extern int _getlogin(char*, int);
 

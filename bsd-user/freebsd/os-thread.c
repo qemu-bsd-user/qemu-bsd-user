@@ -27,6 +27,7 @@
 #include "target_arch_thread.h"
 #include "tcg/tcg.h"
 #include "exec/exec-all.h"
+#include "exec/tb-flush.h"
 
 #include "os-thread.h"
 
