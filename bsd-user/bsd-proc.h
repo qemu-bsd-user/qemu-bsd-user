@@ -24,6 +24,7 @@
 
 #include "qemu-bsd.h"
 #include "gdbstub/syscalls.h"
+#include "qemu/plugin.h"
 
 extern int _getlogin(char*, int);
 
