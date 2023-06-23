@@ -1126,15 +1126,21 @@ GString *ram_block_format(void)
     GString *buf = g_string_new("");
 
     RCU_READ_LOCK_GUARD();
-    g_string_append_printf(buf, "%24s %8s  %18s %18s %18s\n",
-                           "Block Name", "PSize", "Offset", "Used", "Total");
+    g_string_append_printf(buf, "%24s %8s  %18s %18s %18s %18s %3s\n",
+                           "Block Name", "PSize", "Offset", "Used", "Total",
+                           "HVA", "RO");
+
     RAMBLOCK_FOREACH(block) {
         psize = size_to_str(block->page_size);
         g_string_append_printf(buf, "%24s %8s  0x%016" PRIx64 " 0x%016" PRIx64
-                               " 0x%016" PRIx64 "\n", block->idstr, psize,
+                               " 0x%016" PRIx64 " 0x%016" PRIx64 " %3s\n",
+                               block->idstr, psize,
                                (uint64_t)block->offset,
                                (uint64_t)block->used_length,
-                               (uint64_t)block->max_length);
+                               (uint64_t)block->max_length,
+                               (uint64_t)(uintptr_t)block->host,
+                               block->mr->readonly ? "ro" : "rw");
+
         g_free(psize);
     }
 
@@ -2927,6 +2933,8 @@ void cpu_register_map_client(QEMUBH *bh)
     qemu_mutex_lock(&map_client_list_lock);
     client->bh = bh;
     QLIST_INSERT_HEAD(&map_client_list, client, link);
+    /* Write map_client_list before reading in_use.  */
+    smp_mb();
     if (!qatomic_read(&bounce.in_use)) {
         cpu_notify_map_clients_locked();
     }
@@ -3116,6 +3124,7 @@ void address_space_unmap(AddressSpace *as, void *buffer, hwaddr len,
     qemu_vfree(bounce.buffer);
     bounce.buffer = NULL;
     memory_region_unref(bounce.mr);
+    /* Clear in_use before reading map_client_list.  */
     qatomic_mb_set(&bounce.in_use, false);
     cpu_notify_map_clients();
 }

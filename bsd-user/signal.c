@@ -21,6 +21,7 @@
 
 #include "qemu/log.h"
 #include "qemu.h"
+#include "gdbstub/user.h"
 #include "signal-common.h"
 #include "os-time.h"
 #include "trace.h"
