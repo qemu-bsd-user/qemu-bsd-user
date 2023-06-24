@@ -237,8 +237,8 @@ unsigned long last_brk;
 static abi_ulong mmap_find_vma_reserved(abi_ulong start, abi_ulong size,
                                         abi_ulong alignment)
 {
-    abi_ulong addr;
-    abi_ulong end_addr;
+    uint64_t addr;
+    uint64_t end_addr;
     int prot;
     int looped = 0;
 
