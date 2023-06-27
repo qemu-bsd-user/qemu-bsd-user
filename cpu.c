@@ -284,7 +284,7 @@ const char *parse_cpu_option(const char *cpu_option)
     return cpu_type;
 }
 
-void list_cpus(const char *optarg)
+void list_cpus(void)
 {
     /* XXX: implement xxx_cpu_list for targets that still miss it */
 #if defined(cpu_list)
@@ -425,6 +425,11 @@ bool target_words_bigendian(void)
 #else
     return false;
 #endif
+}
+
+const char *target_name(void)
+{
+    return TARGET_NAME;
 }
 
 void page_size_init(void)

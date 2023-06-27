@@ -23,11 +23,13 @@
 #include "block/dirty-bitmap.h"
 #include "migration/misc.h"
 #include "migration.h"
+#include "migration-stats.h"
 #include "migration/register.h"
 #include "qemu-file.h"
 #include "migration/vmstate.h"
 #include "sysemu/block-backend.h"
 #include "trace.h"
+#include "options.h"
 
 #define BLK_MIG_BLOCK_SIZE           (1ULL << 20)
 #define BDRV_SECTORS_PER_DIRTY_CHUNK (BLK_MIG_BLOCK_SIZE >> BDRV_SECTOR_BITS)
@@ -416,7 +418,7 @@ static int init_blk_migration(QEMUFile *f)
         bmds->bulk_completed = 0;
         bmds->total_sectors = sectors;
         bmds->completed_sectors = 0;
-        bmds->shared_base = migrate_use_block_incremental();
+        bmds->shared_base = migrate_block_incremental();
 
         assert(i < num_bs);
         bmds_bs[i].bmds = bmds;
@@ -624,7 +626,7 @@ static int flush_blks(QEMUFile *f)
 
     blk_mig_lock();
     while ((blk = QSIMPLEQ_FIRST(&block_mig_state.blk_list)) != NULL) {
-        if (qemu_file_rate_limit(f)) {
+        if (migration_rate_exceeded(f)) {
             break;
         }
         if (blk->ret < 0) {
@@ -746,8 +748,7 @@ static int block_save_setup(QEMUFile *f, void *opaque)
 static int block_save_iterate(QEMUFile *f, void *opaque)
 {
     int ret;
-    int64_t last_bytes = qemu_file_total_transferred(f);
-    int64_t delta_bytes;
+    uint64_t last_bytes = qemu_file_transferred(f);
 
     trace_migration_block_save("iterate", block_mig_state.submitted,
                                block_mig_state.transferred);
@@ -762,7 +763,7 @@ static int block_save_iterate(QEMUFile *f, void *opaque)
     /* control the rate of transfer */
     blk_mig_lock();
     while (block_mig_state.read_done * BLK_MIG_BLOCK_SIZE <
-           qemu_file_get_rate_limit(f) &&
+           migration_rate_get() &&
            block_mig_state.submitted < MAX_PARALLEL_IO &&
            (block_mig_state.submitted + block_mig_state.read_done) <
            MAX_IO_BUFFERS) {
@@ -799,14 +800,8 @@ static int block_save_iterate(QEMUFile *f, void *opaque)
     }
 
     qemu_put_be64(f, BLK_MIG_FLAG_EOS);
-    delta_bytes = qemu_file_total_transferred(f) - last_bytes;
-    if (delta_bytes > 0) {
-        return 1;
-    } else if (delta_bytes < 0) {
-        return -1;
-    } else {
-        return 0;
-    }
+    uint64_t delta_bytes = qemu_file_transferred(f) - last_bytes;
+    return (delta_bytes > 0);
 }
 
 /* Called with iothread lock taken.  */
@@ -1000,7 +995,7 @@ static int block_load(QEMUFile *f, void *opaque, int version_id)
 
 static bool block_is_active(void *opaque)
 {
-    return migrate_use_block();
+    return migrate_block();
 }
 
 static SaveVMHandlers savevm_block_handlers = {

@@ -17,6 +17,7 @@
 #include "qemu/guest-random.h"
 #include "qemu/units.h"
 #include "qemu/selfmap.h"
+#include "qemu/lockable.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "target_signal.h"
@@ -961,9 +962,7 @@ static void elf_core_copy_regs(target_elf_gregset_t *regs, const CPUPPCState *en
     (*regs)[36] = tswapreg(env->lr);
     (*regs)[37] = tswapreg(cpu_read_xer(env));
 
-    for (i = 0; i < ARRAY_SIZE(env->crf); i++) {
-        ccr |= env->crf[i] << (32 - ((i + 1) * 4));
-    }
+    ccr = ppc_get_cr(env);
     (*regs)[38] = tswapreg(ccr);
 }
 
@@ -3329,9 +3328,10 @@ static void load_elf_interp(const char *filename, struct image_info *info,
 
 static int symfind(const void *s0, const void *s1)
 {
-    target_ulong addr = *(target_ulong *)s0;
     struct elf_sym *sym = (struct elf_sym *)s1;
+    __typeof(sym->st_value) addr = *(uint64_t *)s0;
     int result = 0;
+
     if (addr < sym->st_value) {
         result = -1;
     } else if (addr >= sym->st_value + sym->st_size) {
@@ -3340,7 +3340,7 @@ static int symfind(const void *s0, const void *s1)
     return result;
 }
 
-static const char *lookup_symbolxx(struct syminfo *s, target_ulong orig_addr)
+static const char *lookup_symbolxx(struct syminfo *s, uint64_t orig_addr)
 {
 #if ELF_CLASS == ELFCLASS32
     struct elf_sym *syms = s->disas_symtab.elf32;
@@ -4239,14 +4239,14 @@ static int fill_note_info(struct elf_note_info *info,
         info->notes_size += note_size(&info->notes[i]);
 
     /* read and fill status of all threads */
-    cpu_list_lock();
-    CPU_FOREACH(cpu) {
-        if (cpu == thread_cpu) {
-            continue;
+    WITH_QEMU_LOCK_GUARD(&qemu_cpu_list_lock) {
+        CPU_FOREACH(cpu) {
+            if (cpu == thread_cpu) {
+                continue;
+            }
+            fill_thread_info(info, cpu->env_ptr);
         }
-        fill_thread_info(info, cpu->env_ptr);
     }
-    cpu_list_unlock();
 
     return (0);
 }

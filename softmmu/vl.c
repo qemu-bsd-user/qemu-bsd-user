@@ -182,6 +182,7 @@ static const char *log_file;
 static bool list_data_dirs;
 static const char *qtest_chrdev;
 static const char *qtest_log;
+static bool opt_one_insn_per_tb;
 
 static int has_defaults = 1;
 static int default_serial = 1;
@@ -2220,7 +2221,19 @@ static int do_configure_accelerator(void *opaque, QemuOpts *opts, Error **errp)
     qemu_opt_foreach(opts, accelerator_set_property,
                      accel,
                      &error_fatal);
-
+    /*
+     * If legacy -singlestep option is set, honour it for TCG and
+     * silently ignore for any other accelerator (which is how this
+     * option has always behaved).
+     */
+    if (opt_one_insn_per_tb) {
+        /*
+         * This will always succeed for TCG, and we want to ignore
+         * the error from trying to set a nonexistent property
+         * on any other accelerator.
+         */
+        object_property_set_bool(OBJECT(accel), "one-insn-per-tb", true, NULL);
+    }
     ret = accel_init_machine(accel, current_machine);
     if (ret < 0) {
         if (!qtest_with_kvm || ret != -ENOENT) {
@@ -2432,7 +2445,7 @@ static void qemu_process_help_options(void)
      * to say '-cpu help -machine something'.
      */
     if (cpu_option && is_help_option(cpu_option)) {
-        list_cpus(cpu_option);
+        list_cpus();
         exit(0);
     }
 
@@ -2955,7 +2968,7 @@ void qemu_init(int argc, char **argv)
                 qdict_put_str(machine_opts_dict, "firmware", optarg);
                 break;
             case QEMU_OPTION_singlestep:
-                singlestep = 1;
+                opt_one_insn_per_tb = true;
                 break;
             case QEMU_OPTION_S:
                 autostart = 0;
@@ -3584,12 +3597,17 @@ void qemu_init(int argc, char **argv)
     }
 
     /*
+     * Create backends before creating migration objects, so that it can
+     * check against compatibilities on the backend memories (e.g. postcopy
+     * over memory-backend-file objects).
+     */
+    qemu_create_late_backends();
+
+    /*
      * Note: creates a QOM object, must run only after global and
      * compat properties have been set up.
      */
     migration_object_init();
-
-    qemu_create_late_backends();
 
     /* parse features once if machine provides default cpu_type */
     current_machine->cpu_type = machine_class->default_cpu_type;

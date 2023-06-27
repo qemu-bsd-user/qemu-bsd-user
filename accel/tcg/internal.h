@@ -64,7 +64,18 @@ static inline target_ulong log_pc(CPUState *cpu, const TranslationBlock *tb)
     }
 }
 
+/*
+ * Return true if CS is not running in parallel with other cpus, either
+ * because there are no other cpus or we are within an exclusive context.
+ */
+static inline bool cpu_in_serial_context(CPUState *cs)
+{
+    return !(cs->tcg_cflags & CF_PARALLEL) || cpu_in_exclusive_context(cs);
+}
+
 extern int64_t max_delay;
 extern int64_t max_advance;
+
+extern bool one_insn_per_tb;
 
 #endif /* ACCEL_TCG_INTERNAL_H */

@@ -1223,6 +1223,7 @@ static const char regnames_LO[][4] = {
 /* General purpose registers moves. */
 void gen_load_gpr(TCGv t, int reg)
 {
+    assert(reg >= 0 && reg <= ARRAY_SIZE(cpu_gpr));
     if (reg == 0) {
         tcg_gen_movi_tl(t, 0);
     } else {
@@ -1232,6 +1233,7 @@ void gen_load_gpr(TCGv t, int reg)
 
 void gen_store_gpr(TCGv t, int reg)
 {
+    assert(reg >= 0 && reg <= ARRAY_SIZE(cpu_gpr));
     if (reg != 0) {
         tcg_gen_mov_tl(cpu_gpr[reg], t);
     }
@@ -1240,6 +1242,7 @@ void gen_store_gpr(TCGv t, int reg)
 #if defined(TARGET_MIPS64)
 void gen_load_gpr_hi(TCGv_i64 t, int reg)
 {
+    assert(reg >= 0 && reg <= ARRAY_SIZE(cpu_gpr_hi));
     if (reg == 0) {
         tcg_gen_movi_i64(t, 0);
     } else {
@@ -1249,6 +1252,7 @@ void gen_load_gpr_hi(TCGv_i64 t, int reg)
 
 void gen_store_gpr_hi(TCGv_i64 t, int reg)
 {
+    assert(reg >= 0 && reg <= ARRAY_SIZE(cpu_gpr_hi));
     if (reg != 0) {
         tcg_gen_mov_i64(cpu_gpr_hi[reg], t);
     }
@@ -1945,13 +1949,13 @@ FOP_CONDNS(s, FMT_S, 32, gen_store_fpr32(ctx, fp0, fd))
 
 /* load/store instructions. */
 #ifdef CONFIG_USER_ONLY
-#define OP_LD_ATOMIC(insn, fname)                                          \
+#define OP_LD_ATOMIC(insn, memop)                                          \
 static inline void op_ld_##insn(TCGv ret, TCGv arg1, int mem_idx,          \
                                 DisasContext *ctx)                         \
 {                                                                          \
     TCGv t0 = tcg_temp_new();                                              \
     tcg_gen_mov_tl(t0, arg1);                                              \
-    tcg_gen_qemu_##fname(ret, arg1, ctx->mem_idx);                         \
+    tcg_gen_qemu_ld_tl(ret, arg1, ctx->mem_idx, memop);                    \
     tcg_gen_st_tl(t0, cpu_env, offsetof(CPUMIPSState, lladdr));            \
     tcg_gen_st_tl(ret, cpu_env, offsetof(CPUMIPSState, llval));            \
 }
@@ -1963,9 +1967,9 @@ static inline void op_ld_##insn(TCGv ret, TCGv arg1, int mem_idx,          \
     gen_helper_##insn(ret, cpu_env, arg1, tcg_constant_i32(mem_idx));      \
 }
 #endif
-OP_LD_ATOMIC(ll, ld32s);
+OP_LD_ATOMIC(ll, MO_TESL);
 #if defined(TARGET_MIPS64)
-OP_LD_ATOMIC(lld, ld64);
+OP_LD_ATOMIC(lld, MO_TEUQ);
 #endif
 #undef OP_LD_ATOMIC
 

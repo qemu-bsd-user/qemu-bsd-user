@@ -192,7 +192,10 @@ BlockExport *blk_exp_add(BlockExportOptions *export, Error **errp)
     return exp;
 
 fail:
-    blk_unref(blk);
+    if (blk) {
+        blk_set_dev_ops(blk, NULL, NULL);
+        blk_unref(blk);
+    }
     aio_context_release(ctx);
     if (exp) {
         g_free(exp->id);
@@ -219,6 +222,7 @@ static void blk_exp_delete_bh(void *opaque)
     assert(exp->refcount == 0);
     QLIST_REMOVE(exp, next);
     exp->drv->delete(exp);
+    blk_set_dev_ops(exp->blk, NULL, NULL);
     blk_unref(exp->blk);
     qapi_event_send_block_export_deleted(exp->id);
     g_free(exp->id);
@@ -306,7 +310,7 @@ void blk_exp_close_all_type(BlockExportType type)
         blk_exp_request_shutdown(exp);
     }
 
-    AIO_WAIT_WHILE(NULL, blk_exp_has_type(type));
+    AIO_WAIT_WHILE_UNLOCKED(NULL, blk_exp_has_type(type));
 }
 
 void blk_exp_close_all(void)

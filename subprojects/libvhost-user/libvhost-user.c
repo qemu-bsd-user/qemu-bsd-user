@@ -32,6 +32,12 @@
 #include <sys/mman.h>
 #include <endian.h>
 
+/* Necessary to provide VIRTIO_F_VERSION_1 on system
+ * with older linux headers. Must appear before
+ * <linux/vhost.h> below.
+ */
+#include "standard-headers/linux/virtio_config.h"
+
 #if defined(__linux__)
 #include <sys/syscall.h>
 #include <fcntl.h>
@@ -2453,6 +2459,16 @@ void vu_queue_notify(VuDev *dev, VuVirtq *vq)
 void vu_queue_notify_sync(VuDev *dev, VuVirtq *vq)
 {
     _vu_queue_notify(dev, vq, true);
+}
+
+void vu_config_change_msg(VuDev *dev)
+{
+    VhostUserMsg vmsg = {
+        .request = VHOST_USER_BACKEND_CONFIG_CHANGE_MSG,
+        .flags = VHOST_USER_VERSION,
+    };
+
+    vu_message_write(dev, dev->slave_fd, &vmsg);
 }
 
 static inline void

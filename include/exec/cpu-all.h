@@ -21,6 +21,7 @@
 
 #include "exec/cpu-common.h"
 #include "exec/memory.h"
+#include "exec/tswap.h"
 #include "qemu/thread.h"
 #include "hw/core/cpu.h"
 #include "qemu/rcu.h"
@@ -42,69 +43,6 @@
 
 #if HOST_BIG_ENDIAN != TARGET_BIG_ENDIAN
 #define BSWAP_NEEDED
-#endif
-
-#ifdef BSWAP_NEEDED
-
-static inline uint16_t tswap16(uint16_t s)
-{
-    return bswap16(s);
-}
-
-static inline uint32_t tswap32(uint32_t s)
-{
-    return bswap32(s);
-}
-
-static inline uint64_t tswap64(uint64_t s)
-{
-    return bswap64(s);
-}
-
-static inline void tswap16s(uint16_t *s)
-{
-    *s = bswap16(*s);
-}
-
-static inline void tswap32s(uint32_t *s)
-{
-    *s = bswap32(*s);
-}
-
-static inline void tswap64s(uint64_t *s)
-{
-    *s = bswap64(*s);
-}
-
-#else
-
-static inline uint16_t tswap16(uint16_t s)
-{
-    return s;
-}
-
-static inline uint32_t tswap32(uint32_t s)
-{
-    return s;
-}
-
-static inline uint64_t tswap64(uint64_t s)
-{
-    return s;
-}
-
-static inline void tswap16s(uint16_t *s)
-{
-}
-
-static inline void tswap32s(uint32_t *s)
-{
-}
-
-static inline void tswap64s(uint64_t *s)
-{
-}
-
 #endif
 
 #if TARGET_LONG_SIZE == 4
@@ -146,11 +84,8 @@ static inline void tswap64s(uint64_t *s)
 
 #if defined(CONFIG_USER_ONLY)
 #include "exec/user/abitypes.h"
+#include "exec/user/guest-base.h"
 
-/* On some host systems the guest address space is reserved on the host.
- * This allows the guest address space to be offset to a convenient location.
- */
-extern uintptr_t guest_base;
 extern bool have_guest_base;
 
 /*
