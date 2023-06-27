@@ -84,6 +84,7 @@ typedef enum MMUAccessType {
     MMU_DATA_LOAD  = 0,
     MMU_DATA_STORE = 1,
     MMU_INST_FETCH = 2
+#define MMU_ACCESS_COUNT 3
 } MMUAccessType;
 
 typedef struct CPUWatchpoint CPUWatchpoint;
@@ -402,6 +403,7 @@ struct CPUState {
     struct kvm_dirty_gfn *kvm_dirty_gfns;
     uint32_t kvm_fetch_index;
     uint64_t dirty_pages;
+    int kvm_vcpu_stats_fd;
 
     /* Use by accel-block: CPU is executing an ioctl() */
     QemuLockCnt in_ioctl_lock;
