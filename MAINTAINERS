@@ -157,6 +157,9 @@ F: include/exec/helper*.h
 F: include/sysemu/cpus.h
 F: include/sysemu/tcg.h
 F: include/hw/core/tcg-cpu-ops.h
+F: host/include/*/host/cpuinfo.h
+F: util/cpuinfo-*.c
+F: include/tcg/
 
 FPU emulation
 M: Aurelien Jarno <aurelien@aurel32.net>
@@ -215,7 +218,7 @@ F: tests/tcg/cris/
 F: disas/cris.c
 
 Hexagon TCG CPUs
-M: Taylor Simpson <tsimpson@quicinc.com>
+M: Brian Cain <bcain@quicinc.com>
 S: Supported
 F: target/hexagon/
 X: target/hexagon/idef-parser/
@@ -2237,6 +2240,7 @@ F: tests/qtest/fuzz-megasas-test.c
 
 Network packet abstractions
 M: Dmitry Fleytman <dmitry.fleytman@gmail.com>
+R: Akihiko Odaki <akihiko.odaki@daynix.com>
 S: Maintained
 F: include/net/eth.h
 F: net/eth.c
@@ -2279,7 +2283,7 @@ R: Sriram Yagnaraman <sriram.yagnaraman@est.tech>
 S: Maintained
 F: docs/system/devices/igb.rst
 F: hw/net/igb*
-F: tests/avocado/igb.py
+F: tests/avocado/netdev-ethtool.py
 F: tests/qtest/igb-test.c
 F: tests/qtest/libqos/igb.c
 
@@ -2646,6 +2650,7 @@ F: util/aio-*.c
 F: util/aio-*.h
 F: util/fdmon-*.c
 F: block/io.c
+F: block/plug.c
 F: migration/block*
 F: include/block/aio.h
 F: include/block/aio-wait.h

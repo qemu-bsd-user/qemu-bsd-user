@@ -265,12 +265,21 @@ endif
 
 # Meson currently only handles pie as a boolean for now, so if the user
 # has explicitly disabled PIE we need to extend our cflags.
+#
+# -no-pie is supposedly a linker flag that has no effect on the compiler
+# command line, but some distros, that didn't quite know what they were
+# doing, made local changes to gcc's specs file that turned it into
+# a compiler command-line flag.
+#
+# What about linker flags?  For a static build, no PIE is implied by -static
+# which we added above (and if it's not because of the same specs patching,
+# there's nothing we can do: compilation will fail, report a bug to your
+# distro and do not use --disable-pie in the meanwhile).  For dynamic linking,
+# instead, we can't add -no-pie because it overrides -shared: the linker then
+# tries to build an executable instead of a shared library and fails.  So
+# don't add -no-pie anywhere and cross fingers. :(
 if not get_option('b_pie')
-  qemu_common_flags += cc.get_supported_arguments('-fno-pie')
-  if not get_option('prefer_static')
-    # No PIE is implied by -static which we added above.
-    qemu_ldflags += cc.get_supported_link_arguments('-no-pie')
-  endif
+  qemu_common_flags += cc.get_supported_arguments('-fno-pie', '-no-pie')
 endif
 
 if not get_option('stack_protector').disabled()
@@ -395,8 +404,6 @@ if targetos != 'sunos' and not get_option('tsan')
   qemu_ldflags += cc.get_supported_link_arguments('-Wl,--warn-common')
 endif
 
-# Specify linker-script with add_project_link_arguments so that it is not placed
-# within a linker --start-group/--end-group pair
 if get_option('fuzzing')
   # Specify a filter to only instrument code that is directly related to
   # virtual-devices.
@@ -510,6 +517,16 @@ endif
 add_project_arguments('-iquote', '.',
                       '-iquote', meson.current_source_dir(),
                       '-iquote', meson.current_source_dir() / 'include',
+                      language: all_languages)
+
+# If a host-specific include directory exists, list that first...
+host_include = meson.current_source_dir() / 'host/include/'
+if fs.is_dir(host_include / host_arch)
+  add_project_arguments('-iquote', host_include / host_arch,
+                        language: all_languages)
+endif
+# ... followed by the generic fallback.
+add_project_arguments('-iquote', host_include / 'generic',
                       language: all_languages)
 
 sparse = find_program('cgcc', required: get_option('sparse'))
@@ -770,7 +787,7 @@ if not cc.compiles('''
     g_free(f);
   }
   G_DEFINE_AUTOPTR_CLEANUP_FUNC(Foo, foo_free)
-  int main(void) { return 0; }''', dependencies: glib_pc, args: ['-Werror'])
+  int main(void) { return 0; }''', dependencies: glib_pc, args: ['-Wunused-function', '-Werror'])
   glib_cflags += cc.get_supported_arguments('-Wno-unused-function')
 endif
 glib = declare_dependency(dependencies: [glib_pc, gmodule],
@@ -2089,6 +2106,10 @@ config_host_data.set('CONFIG_LZO', lzo.found())
 config_host_data.set('CONFIG_MPATH', mpathpersist.found())
 config_host_data.set('CONFIG_MPATH_NEW_API', mpathpersist_new_api)
 config_host_data.set('CONFIG_BLKIO', blkio.found())
+if blkio.found()
+  config_host_data.set('CONFIG_BLKIO_VHOST_VDPA_FD',
+                       blkio.version().version_compare('>=1.3.0'))
+endif
 config_host_data.set('CONFIG_CURL', curl.found())
 config_host_data.set('CONFIG_CURSES', curses.found())
 config_host_data.set('CONFIG_GBM', gbm.found())
@@ -2526,7 +2547,13 @@ config_host_data.set('CONFIG_ATOMIC64', cc.links('''
     return 0;
   }'''))
 
-has_int128 = cc.links('''
+has_int128_type = cc.compiles('''
+  __int128_t a;
+  __uint128_t b;
+  int main(void) { b = a; }''')
+config_host_data.set('CONFIG_INT128_TYPE', has_int128_type)
+
+has_int128 = has_int128_type and cc.links('''
   __int128_t a;
   __uint128_t b;
   int main (void) {
@@ -2535,10 +2562,9 @@ has_int128 = cc.links('''
     a = a * a;
     return 0;
   }''')
-
 config_host_data.set('CONFIG_INT128', has_int128)
 
-if has_int128
+if has_int128_type
   # "do we have 128-bit atomics which are handled inline and specifically not
   # via libatomic". The reason we can't use libatomic is documented in the
   # comment starting "GCC is a house divided" in include/qemu/atomic128.h.
@@ -2547,7 +2573,7 @@ if has_int128
   # __alignof(unsigned __int128) for the host.
   atomic_test_128 = '''
     int main(int ac, char **av) {
-      unsigned __int128 *p = __builtin_assume_aligned(av[ac - 1], sizeof(16));
+      __uint128_t *p = __builtin_assume_aligned(av[ac - 1], 16);
       p[1] = __atomic_load_n(&p[0], __ATOMIC_RELAXED);
       __atomic_store_n(&p[2], p[3], __ATOMIC_RELAXED);
       __atomic_compare_exchange_n(&p[4], &p[5], p[6], 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
@@ -2569,7 +2595,7 @@ if has_int128
       config_host_data.set('CONFIG_CMPXCHG128', cc.links('''
         int main(void)
         {
-          unsigned __int128 x = 0, y = 0;
+          __uint128_t x = 0, y = 0;
           __sync_val_compare_and_swap_16(&x, y, x);
           return 0;
         }
@@ -3042,13 +3068,14 @@ if have_system and vfio_user_server_allowed
 endif
 
 fdt = not_found
-if have_system
-  fdt_opt = get_option('fdt')
+fdt_opt = get_option('fdt')
+if fdt_required.length() > 0 or fdt_opt == 'enabled'
+  if fdt_opt == 'disabled'
+    error('fdt disabled but required by targets ' + ', '.join(fdt_required))
+  endif
+
   if fdt_opt in ['enabled', 'auto', 'system']
-    have_internal = fs.exists(meson.current_source_dir() / 'dtc/libfdt/Makefile.libfdt')
-    fdt = cc.find_library('fdt',
-                          required: fdt_opt == 'system' or
-                                    fdt_opt == 'enabled' and not have_internal)
+    fdt = cc.find_library('fdt', required: fdt_opt == 'system')
     if fdt.found() and cc.links('''
        #include <libfdt.h>
        #include <libfdt_env.h>
@@ -3057,40 +3084,26 @@ if have_system
       fdt_opt = 'system'
     elif fdt_opt == 'system'
        error('system libfdt requested, but it is too old (1.5.1 or newer required)')
-    elif have_internal
-      fdt_opt = 'internal'
     else
-      fdt_opt = 'disabled'
+      fdt_opt = 'internal'
       fdt = not_found
     endif
   endif
-  if fdt_opt == 'internal'
-    fdt_files = files(
-      'dtc/libfdt/fdt.c',
-      'dtc/libfdt/fdt_ro.c',
-      'dtc/libfdt/fdt_wip.c',
-      'dtc/libfdt/fdt_sw.c',
-      'dtc/libfdt/fdt_rw.c',
-      'dtc/libfdt/fdt_strerror.c',
-      'dtc/libfdt/fdt_empty_tree.c',
-      'dtc/libfdt/fdt_addresses.c',
-      'dtc/libfdt/fdt_overlay.c',
-      'dtc/libfdt/fdt_check.c',
-    )
+  if not fdt.found()
+    assert(fdt_opt == 'internal')
+    have_internal = fs.exists(meson.current_source_dir() / 'subprojects/dtc/meson.build')
 
-    fdt_inc = include_directories('dtc/libfdt')
-    libfdt = static_library('fdt',
-                            build_by_default: false,
-                            sources: fdt_files,
-                            include_directories: fdt_inc)
-    fdt = declare_dependency(link_with: libfdt,
-                             include_directories: fdt_inc)
+    if not have_internal
+      error('libfdt source not found - please pull git submodule')
+    endif
+
+    libfdt_proj = subproject('dtc', required: true,
+                             default_options: ['tools=false',  'yaml=disabled',
+                                               'python=disabled', 'default_library=static'])
+    fdt = libfdt_proj.get_variable('libfdt_dep')
   endif
 else
   fdt_opt = 'disabled'
-endif
-if not fdt.found() and fdt_required.length() > 0
-  error('fdt not available but required by targets ' + ', '.join(fdt_required))
 endif
 
 config_host_data.set('CONFIG_CAPSTONE', capstone.found())
@@ -4027,7 +4040,6 @@ summary(summary_info, bool_yn: true, section: 'Directories')
 # Host binaries
 summary_info = {}
 summary_info += {'git':               config_host['GIT']}
-summary_info += {'make':              config_host['MAKE']}
 summary_info += {'python':            '@0@ (version: @1@)'.format(python.full_path(), python.language_version())}
 summary_info += {'sphinx-build':      sphinx_build}
 if config_host.has_key('HAVE_GDB_BIN')

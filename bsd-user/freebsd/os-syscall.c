@@ -1621,7 +1621,6 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     TaskState *ts = cpu->opaque;
     abi_long ret;
 
-    trace_guest_user_syscall(cpu, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
     if (do_strace) {
         record_syscall(ts, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
     }
@@ -1631,7 +1630,6 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     if (do_strace) {
         record_syscall_ret(ts, num, ret, get_second_rval(cpu_env));
     }
-    trace_guest_user_syscall_ret(cpu, num, ret);
 
     return ret;
 }

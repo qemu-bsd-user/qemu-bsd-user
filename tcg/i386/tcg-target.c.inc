@@ -91,6 +91,8 @@ static const int tcg_target_reg_alloc_order[] = {
 #endif
 };
 
+#define TCG_TMP_VEC  TCG_REG_XMM5
+
 static const int tcg_target_call_iarg_regs[] = {
 #if TCG_TARGET_REG_BITS == 64
 #if defined(_WIN64)
@@ -158,42 +160,14 @@ static TCGReg tcg_target_call_oarg_reg(TCGCallReturnKind kind, int slot)
 # define SOFTMMU_RESERVE_REGS  0
 #endif
 
-/* The host compiler should supply <cpuid.h> to enable runtime features
-   detection, as we're not going to go so far as our own inline assembly.
-   If not available, default values will be assumed.  */
-#if defined(CONFIG_CPUID_H)
-#include "qemu/cpuid.h"
-#endif
-
 /* For 64-bit, we always know that CMOV is available.  */
 #if TCG_TARGET_REG_BITS == 64
-# define have_cmov 1
-#elif defined(CONFIG_CPUID_H)
-static bool have_cmov;
+# define have_cmov      true
 #else
-# define have_cmov 0
+# define have_cmov      (cpuinfo & CPUINFO_CMOV)
 #endif
-
-/* We need these symbols in tcg-target.h, and we can't properly conditionalize
-   it there.  Therefore we always define the variable.  */
-bool have_bmi1;
-bool have_popcnt;
-bool have_avx1;
-bool have_avx2;
-bool have_avx512bw;
-bool have_avx512dq;
-bool have_avx512vbmi2;
-bool have_avx512vl;
-bool have_movbe;
-bool have_atomic16;
-
-#ifdef CONFIG_CPUID_H
-static bool have_bmi2;
-static bool have_lzcnt;
-#else
-# define have_bmi2 0
-# define have_lzcnt 0
-#endif
+#define have_bmi2       (cpuinfo & CPUINFO_BMI2)
+#define have_lzcnt      (cpuinfo & CPUINFO_LZCNT)
 
 static const tcg_insn_unit *tb_ret_addr;
 
@@ -347,6 +321,8 @@ static bool tcg_target_const_match(int64_t val, TCGType type, int ct)
 #define OPC_PCMPGTW     (0x65 | P_EXT | P_DATA16)
 #define OPC_PCMPGTD     (0x66 | P_EXT | P_DATA16)
 #define OPC_PCMPGTQ     (0x37 | P_EXT38 | P_DATA16)
+#define OPC_PEXTRD      (0x16 | P_EXT3A | P_DATA16)
+#define OPC_PINSRD      (0x22 | P_EXT3A | P_DATA16)
 #define OPC_PMAXSB      (0x3c | P_EXT38 | P_DATA16)
 #define OPC_PMAXSW      (0xee | P_EXT | P_DATA16)
 #define OPC_PMAXSD      (0x3d | P_EXT38 | P_DATA16)
@@ -1781,7 +1757,21 @@ typedef struct {
 
 bool tcg_target_has_memory_bswap(MemOp memop)
 {
-    return have_movbe;
+    TCGAtomAlign aa;
+
+    if (!have_movbe) {
+        return false;
+    }
+    if ((memop & MO_SIZE) < MO_128) {
+        return true;
+    }
+
+    /*
+     * Reject 16-byte memop with 16-byte atomicity, i.e. VMOVDQA,
+     * but do allow a pair of 64-bit operations, i.e. MOVBEQ.
+     */
+    aa = atom_and_align_for_opc(tcg_ctx, memop, MO_ATOM_IFALIGN, true);
+    return aa.atom < MO_128;
 }
 
 /*
@@ -1808,6 +1798,30 @@ static const TCGLdstHelperParam ldst_helper_param = {
 #else
 static const TCGLdstHelperParam ldst_helper_param = { };
 #endif
+
+static void tcg_out_vec_to_pair(TCGContext *s, TCGType type,
+                                TCGReg l, TCGReg h, TCGReg v)
+{
+    int rexw = type == TCG_TYPE_I32 ? 0 : P_REXW;
+
+    /* vpmov{d,q} %v, %l */
+    tcg_out_vex_modrm(s, OPC_MOVD_EyVy + rexw, v, 0, l);
+    /* vpextr{d,q} $1, %v, %h */
+    tcg_out_vex_modrm(s, OPC_PEXTRD + rexw, v, 0, h);
+    tcg_out8(s, 1);
+}
+
+static void tcg_out_pair_to_vec(TCGContext *s, TCGType type,
+                                TCGReg v, TCGReg l, TCGReg h)
+{
+    int rexw = type == TCG_TYPE_I32 ? 0 : P_REXW;
+
+    /* vmov{d,q} %l, %v */
+    tcg_out_vex_modrm(s, OPC_MOVD_VyEy + rexw, v, 0, l);
+    /* vpinsr{d,q} $1, %h, %v, %v */
+    tcg_out_vex_modrm(s, OPC_PINSRD + rexw, v, v, h);
+    tcg_out8(s, 1);
+}
 
 /*
  * Generate code for the slow path for a load at the end of block
@@ -1898,6 +1912,7 @@ static TCGLabelQemuLdst *prepare_host_addr(TCGContext *s, HostAddress *h,
 {
     TCGLabelQemuLdst *ldst = NULL;
     MemOp opc = get_memop(oi);
+    MemOp s_bits = opc & MO_SIZE;
     unsigned a_mask;
 
 #ifdef CONFIG_SOFTMMU
@@ -1908,7 +1923,7 @@ static TCGLabelQemuLdst *prepare_host_addr(TCGContext *s, HostAddress *h,
     *h = x86_guest_base;
 #endif
     h->base = addrlo;
-    h->aa = atom_and_align_for_opc(s, opc, MO_ATOM_IFALIGN, false);
+    h->aa = atom_and_align_for_opc(s, opc, MO_ATOM_IFALIGN, s_bits == MO_128);
     a_mask = (1 << h->aa.align) - 1;
 
 #ifdef CONFIG_SOFTMMU
@@ -1918,7 +1933,6 @@ static TCGLabelQemuLdst *prepare_host_addr(TCGContext *s, HostAddress *h,
     TCGType tlbtype = TCG_TYPE_I32;
     int trexw = 0, hrexw = 0, tlbrexw = 0;
     unsigned mem_index = get_mmuidx(oi);
-    unsigned s_bits = opc & MO_SIZE;
     unsigned s_mask = (1 << s_bits) - 1;
     int tlb_mask;
 
@@ -2098,6 +2112,72 @@ static void tcg_out_qemu_ld_direct(TCGContext *s, TCGReg datalo, TCGReg datahi,
                                      h.base, h.index, 0, h.ofs + 4);
         }
         break;
+
+    case MO_128:
+        tcg_debug_assert(TCG_TARGET_REG_BITS == 64);
+
+        /*
+         * Without 16-byte atomicity, use integer regs.
+         * That is where we want the data, and it allows bswaps.
+         */
+        if (h.aa.atom < MO_128) {
+            if (use_movbe) {
+                TCGReg t = datalo;
+                datalo = datahi;
+                datahi = t;
+            }
+            if (h.base == datalo || h.index == datalo) {
+                tcg_out_modrm_sib_offset(s, OPC_LEA + P_REXW, datahi,
+                                         h.base, h.index, 0, h.ofs);
+                tcg_out_modrm_offset(s, movop + P_REXW + h.seg,
+                                     datalo, datahi, 0);
+                tcg_out_modrm_offset(s, movop + P_REXW + h.seg,
+                                     datahi, datahi, 8);
+            } else {
+                tcg_out_modrm_sib_offset(s, movop + P_REXW + h.seg, datalo,
+                                         h.base, h.index, 0, h.ofs);
+                tcg_out_modrm_sib_offset(s, movop + P_REXW + h.seg, datahi,
+                                         h.base, h.index, 0, h.ofs + 8);
+            }
+            break;
+        }
+
+        /*
+         * With 16-byte atomicity, a vector load is required.
+         * If we already have 16-byte alignment, then VMOVDQA always works.
+         * Else if VMOVDQU has atomicity with dynamic alignment, use that.
+         * Else use we require a runtime test for alignment for VMOVDQA;
+         * use VMOVDQU on the unaligned nonatomic path for simplicity.
+         */
+        if (h.aa.align >= MO_128) {
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQA_VxWx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+        } else if (cpuinfo & CPUINFO_ATOMIC_VMOVDQU) {
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQU_VxWx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+        } else {
+            TCGLabel *l1 = gen_new_label();
+            TCGLabel *l2 = gen_new_label();
+
+            tcg_out_testi(s, h.base, 15);
+            tcg_out_jxx(s, JCC_JNE, l1, true);
+
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQA_VxWx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+            tcg_out_jxx(s, JCC_JMP, l2, true);
+
+            tcg_out_label(s, l1);
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQU_VxWx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+            tcg_out_label(s, l2);
+        }
+        tcg_out_vec_to_pair(s, TCG_TYPE_I64, datalo, datahi, TCG_TMP_VEC);
+        break;
+
     default:
         g_assert_not_reached();
     }
@@ -2168,6 +2248,63 @@ static void tcg_out_qemu_st_direct(TCGContext *s, TCGReg datalo, TCGReg datahi,
                                      h.base, h.index, 0, h.ofs + 4);
         }
         break;
+
+    case MO_128:
+        tcg_debug_assert(TCG_TARGET_REG_BITS == 64);
+
+        /*
+         * Without 16-byte atomicity, use integer regs.
+         * That is where we have the data, and it allows bswaps.
+         */
+        if (h.aa.atom < MO_128) {
+            if (use_movbe) {
+                TCGReg t = datalo;
+                datalo = datahi;
+                datahi = t;
+            }
+            tcg_out_modrm_sib_offset(s, movop + P_REXW + h.seg, datalo,
+                                     h.base, h.index, 0, h.ofs);
+            tcg_out_modrm_sib_offset(s, movop + P_REXW + h.seg, datahi,
+                                     h.base, h.index, 0, h.ofs + 8);
+            break;
+        }
+
+        /*
+         * With 16-byte atomicity, a vector store is required.
+         * If we already have 16-byte alignment, then VMOVDQA always works.
+         * Else if VMOVDQU has atomicity with dynamic alignment, use that.
+         * Else use we require a runtime test for alignment for VMOVDQA;
+         * use VMOVDQU on the unaligned nonatomic path for simplicity.
+         */
+        tcg_out_pair_to_vec(s, TCG_TYPE_I64, TCG_TMP_VEC, datalo, datahi);
+        if (h.aa.align >= MO_128) {
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQA_WxVx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+        } else if (cpuinfo & CPUINFO_ATOMIC_VMOVDQU) {
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQU_WxVx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+        } else {
+            TCGLabel *l1 = gen_new_label();
+            TCGLabel *l2 = gen_new_label();
+
+            tcg_out_testi(s, h.base, 15);
+            tcg_out_jxx(s, JCC_JNE, l1, true);
+
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQA_WxVx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+            tcg_out_jxx(s, JCC_JMP, l2, true);
+
+            tcg_out_label(s, l1);
+            tcg_out_vex_modrm_sib_offset(s, OPC_MOVDQU_WxVx + h.seg,
+                                         TCG_TMP_VEC, 0,
+                                         h.base, h.index, 0, h.ofs);
+            tcg_out_label(s, l2);
+        }
+        break;
+
     default:
         g_assert_not_reached();
     }
@@ -2498,6 +2635,11 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             tcg_out_qemu_ld(s, a0, a1, a2, args[3], args[4], TCG_TYPE_I64);
         }
         break;
+    case INDEX_op_qemu_ld_a32_i128:
+    case INDEX_op_qemu_ld_a64_i128:
+        tcg_debug_assert(TCG_TARGET_REG_BITS == 64);
+        tcg_out_qemu_ld(s, a0, a1, a2, -1, args[3], TCG_TYPE_I128);
+        break;
 
     case INDEX_op_qemu_st_a64_i32:
     case INDEX_op_qemu_st8_a64_i32:
@@ -2523,6 +2665,11 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         } else {
             tcg_out_qemu_st(s, a0, a1, a2, args[3], args[4], TCG_TYPE_I64);
         }
+        break;
+    case INDEX_op_qemu_st_a32_i128:
+    case INDEX_op_qemu_st_a64_i128:
+        tcg_debug_assert(TCG_TARGET_REG_BITS == 64);
+        tcg_out_qemu_st(s, a0, a1, a2, -1, args[3], TCG_TYPE_I128);
         break;
 
     OP_32_64(mulu2):
@@ -3220,6 +3367,15 @@ static TCGConstraintSetIndex tcg_target_op_def(TCGOpcode op)
         return TCG_TARGET_REG_BITS == 64 ? C_O0_I2(L, L) : C_O0_I3(L, L, L);
     case INDEX_op_qemu_st_a64_i64:
         return TCG_TARGET_REG_BITS == 64 ? C_O0_I2(L, L) : C_O0_I4(L, L, L, L);
+
+    case INDEX_op_qemu_ld_a32_i128:
+    case INDEX_op_qemu_ld_a64_i128:
+        tcg_debug_assert(TCG_TARGET_REG_BITS == 64);
+        return C_O2_I1(r, r, L);
+    case INDEX_op_qemu_st_a32_i128:
+    case INDEX_op_qemu_st_a64_i128:
+        tcg_debug_assert(TCG_TARGET_REG_BITS == 64);
+        return C_O0_I3(L, L, L);
 
     case INDEX_op_brcond2_i32:
         return C_O0_I4(r, r, ri, ri);
@@ -3961,93 +4117,6 @@ static void tcg_out_nop_fill(tcg_insn_unit *p, int count)
 
 static void tcg_target_init(TCGContext *s)
 {
-#ifdef CONFIG_CPUID_H
-    unsigned a, b, c, d, b7 = 0, c7 = 0;
-    unsigned max = __get_cpuid_max(0, 0);
-
-    if (max >= 7) {
-        /* BMI1 is available on AMD Piledriver and Intel Haswell CPUs.  */
-        __cpuid_count(7, 0, a, b7, c7, d);
-        have_bmi1 = (b7 & bit_BMI) != 0;
-        have_bmi2 = (b7 & bit_BMI2) != 0;
-    }
-
-    if (max >= 1) {
-        __cpuid(1, a, b, c, d);
-#ifndef have_cmov
-        /* For 32-bit, 99% certainty that we're running on hardware that
-           supports cmov, but we still need to check.  In case cmov is not
-           available, we'll use a small forward branch.  */
-        have_cmov = (d & bit_CMOV) != 0;
-#endif
-
-        /* MOVBE is only available on Intel Atom and Haswell CPUs, so we
-           need to probe for it.  */
-        have_movbe = (c & bit_MOVBE) != 0;
-        have_popcnt = (c & bit_POPCNT) != 0;
-
-        /* There are a number of things we must check before we can be
-           sure of not hitting invalid opcode.  */
-        if (c & bit_OSXSAVE) {
-            unsigned bv = xgetbv_low(0);
-
-            if ((bv & 6) == 6) {
-                have_avx1 = (c & bit_AVX) != 0;
-                have_avx2 = (b7 & bit_AVX2) != 0;
-
-                /*
-                 * There are interesting instructions in AVX512, so long
-                 * as we have AVX512VL, which indicates support for EVEX
-                 * on sizes smaller than 512 bits.  We are required to
-                 * check that OPMASK and all extended ZMM state are enabled
-                 * even if we're not using them -- the insns will fault.
-                 */
-                if ((bv & 0xe0) == 0xe0
-                    && (b7 & bit_AVX512F)
-                    && (b7 & bit_AVX512VL)) {
-                    have_avx512vl = true;
-                    have_avx512bw = (b7 & bit_AVX512BW) != 0;
-                    have_avx512dq = (b7 & bit_AVX512DQ) != 0;
-                    have_avx512vbmi2 = (c7 & bit_AVX512VBMI2) != 0;
-                }
-
-                /*
-                 * The Intel SDM has added:
-                 *   Processors that enumerate support for Intel® AVX
-                 *   (by setting the feature flag CPUID.01H:ECX.AVX[bit 28])
-                 *   guarantee that the 16-byte memory operations performed
-                 *   by the following instructions will always be carried
-                 *   out atomically:
-                 *   - MOVAPD, MOVAPS, and MOVDQA.
-                 *   - VMOVAPD, VMOVAPS, and VMOVDQA when encoded with VEX.128.
-                 *   - VMOVAPD, VMOVAPS, VMOVDQA32, and VMOVDQA64 when encoded
-                 *     with EVEX.128 and k0 (masking disabled).
-                 * Note that these instructions require the linear addresses
-                 * of their memory operands to be 16-byte aligned.
-                 *
-                 * AMD has provided an even stronger guarantee that processors
-                 * with AVX provide 16-byte atomicity for all cachable,
-                 * naturally aligned single loads and stores, e.g. MOVDQU.
-                 *
-                 * See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104688
-                 */
-                if (have_avx1) {
-                    __cpuid(0, a, b, c, d);
-                    have_atomic16 = (c == signature_INTEL_ecx ||
-                                     c == signature_AMD_ecx);
-                }
-            }
-        }
-    }
-
-    max = __get_cpuid_max(0x8000000, 0);
-    if (max >= 1) {
-        __cpuid(0x80000001, a, b, c, d);
-        /* LZCNT was introduced with AMD Barcelona and Intel Haswell CPUs.  */
-        have_lzcnt = (c & bit_LZCNT) != 0;
-    }
-#endif /* CONFIG_CPUID_H */
-
     tcg_target_available_regs[TCG_TYPE_I32] = ALL_GENERAL_REGS;
     if (TCG_TARGET_REG_BITS == 64) {
         tcg_target_available_regs[TCG_TYPE_I64] = ALL_GENERAL_REGS;
@@ -4077,6 +4146,7 @@ static void tcg_target_init(TCGContext *s)
 
     s->reserved_regs = 0;
     tcg_regset_set_reg(s->reserved_regs, TCG_REG_CALL_STACK);
+    tcg_regset_set_reg(s->reserved_regs, TCG_TMP_VEC);
 #ifdef _WIN64
     /* These are call saved, and we don't save them, so don't use them. */
     tcg_regset_set_reg(s->reserved_regs, TCG_REG_XMM6);

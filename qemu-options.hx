@@ -4170,26 +4170,42 @@ DEF("qmp", HAS_ARG, QEMU_OPTION_qmp, \
     QEMU_ARCH_ALL)
 SRST
 ``-qmp dev``
-    Like -monitor but opens in 'control' mode.
+    Like ``-monitor`` but opens in 'control' mode. For example, to make
+    QMP available on localhost port 4444::
+
+        -qmp tcp:localhost:4444,server=on,wait=off
+
+    Not all options are configurable via this syntax; for maximum
+    flexibility use the ``-mon`` option and an accompanying ``-chardev``.
+
 ERST
 DEF("qmp-pretty", HAS_ARG, QEMU_OPTION_qmp_pretty, \
     "-qmp-pretty dev like -qmp but uses pretty JSON formatting\n",
     QEMU_ARCH_ALL)
 SRST
 ``-qmp-pretty dev``
-    Like -qmp but uses pretty JSON formatting.
+    Like ``-qmp`` but uses pretty JSON formatting.
 ERST
 
 DEF("mon", HAS_ARG, QEMU_OPTION_mon, \
     "-mon [chardev=]name[,mode=readline|control][,pretty[=on|off]]\n", QEMU_ARCH_ALL)
 SRST
 ``-mon [chardev=]name[,mode=readline|control][,pretty[=on|off]]``
-    Setup monitor on chardev name. ``mode=control`` configures 
-    a QMP monitor (a JSON RPC-style protocol) and it is not the
-    same as HMP, the human monitor that has a "(qemu)" prompt.
-    ``pretty`` is only valid when ``mode=control``, 
+    Set up a monitor connected to the chardev ``name``.
+    QEMU supports two monitors: the Human Monitor Protocol
+    (HMP; for human interaction), and the QEMU Monitor Protocol
+    (QMP; a JSON RPC-style protocol).
+    The default is HMP; ``mode=control`` selects QMP instead.
+    ``pretty`` is only valid when ``mode=control``,
     turning on JSON pretty printing to ease
     human reading and debugging.
+
+    For example::
+
+      -chardev socket,id=mon1,host=localhost,port=4444,server=on,wait=off \
+      -mon chardev=mon1,mode=control,pretty=on
+
+    enables the QMP monitor on localhost port 4444 with pretty-printing.
 ERST
 
 DEF("debugcon", HAS_ARG, QEMU_OPTION_debugcon, \
@@ -4933,7 +4949,7 @@ SRST
     they are specified. Note that the 'id' property must be set. These
     objects are placed in the '/objects' path.
 
-    ``-object memory-backend-file,id=id,size=size,mem-path=dir,share=on|off,discard-data=on|off,merge=on|off,dump=on|off,prealloc=on|off,host-nodes=host-nodes,policy=default|preferred|bind|interleave,align=align,readonly=on|off``
+    ``-object memory-backend-file,id=id,size=size,mem-path=dir,share=on|off,discard-data=on|off,merge=on|off,dump=on|off,prealloc=on|off,host-nodes=host-nodes,policy=default|preferred|bind|interleave,align=align,offset=offset,readonly=on|off``
         Creates a memory file backend object, which can be used to back
         the guest RAM with huge pages.
 
@@ -5002,6 +5018,10 @@ SRST
         device DAX /dev/dax0.0 requires 2M alignment rather than 4K. In
         such cases, users can specify the required alignment via this
         option.
+
+        The ``offset`` option specifies the offset into the target file
+        that the region starts at. You can use this parameter to back
+        multiple regions with a single file.
 
         The ``pmem`` option specifies whether the backing file specified
         by ``mem-path`` is in host persistent memory that can be

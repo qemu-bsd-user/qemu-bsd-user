@@ -27,9 +27,6 @@
 #include "qemu/interval-tree.h"
 #include "qemu/clang-tsa.h"
 
-/* allow to see translation results - the slowdown should be negligible, so we leave it */
-#define DEBUG_DISAS
-
 /* Page tracking code uses ram addresses in system mode, and virtual
    addresses in userspace mode.  Define tb_page_addr_t to be an appropriate
    type.  */
@@ -547,9 +544,6 @@ struct TranslationBlock {
 #define CF_PCREL         0x00200000 /* Opcodes in TB are PC-relative */
 #define CF_CLUSTER_MASK  0xff000000 /* Top 8 bits are cluster ID */
 #define CF_CLUSTER_SHIFT 24
-
-    /* Per-vCPU dynamic tracing state used to generate this TB */
-    uint32_t trace_vcpu_dstate;
 
     /*
      * Above fields used for comparing
