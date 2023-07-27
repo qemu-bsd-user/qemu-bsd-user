@@ -43,7 +43,14 @@
  *              subsys=<subsys_id>
  *      -device nvme-ns,drive=<drive_id>,bus=<bus_name>,nsid=<nsid>,\
  *              zoned=<true|false[optional]>, \
- *              subsys=<subsys_id>,detached=<true|false[optional]>
+ *              subsys=<subsys_id>,shared=<true|false[optional]>, \
+ *              detached=<true|false[optional]>, \
+ *              zoned.zone_size=<N[optional]>, \
+ *              zoned.zone_capacity=<N[optional]>, \
+ *              zoned.descr_ext_size=<N[optional]>, \
+ *              zoned.max_active=<N[optional]>, \
+ *              zoned.max_open=<N[optional]>, \
+ *              zoned.cross_read=<true|false[optional]>
  *
  * Note cmb_size_mb denotes size of CMB in MB. CMB is assumed to be at
  * offset 0 in BAR2 and supports only WDS, RDS and SQS for now. By default, the
@@ -1748,6 +1755,7 @@ static void nvme_aio_err(NvmeRequest *req, int ret)
     case NVME_CMD_WRITE:
     case NVME_CMD_WRITE_ZEROES:
     case NVME_CMD_ZONE_APPEND:
+    case NVME_CMD_COPY:
         status = NVME_WRITE_FAULT;
         break;
     default:
@@ -2847,6 +2855,25 @@ static void nvme_copy_source_range_parse(void *ranges, int idx, uint8_t format,
     }
 }
 
+static inline uint16_t nvme_check_copy_mcl(NvmeNamespace *ns,
+                                           NvmeCopyAIOCB *iocb, uint16_t nr)
+{
+    uint32_t copy_len = 0;
+
+    for (int idx = 0; idx < nr; idx++) {
+        uint32_t nlb;
+        nvme_copy_source_range_parse(iocb->ranges, idx, iocb->format, NULL,
+                                     &nlb, NULL, NULL, NULL);
+        copy_len += nlb + 1;
+    }
+
+    if (copy_len > ns->id_ns.mcl) {
+        return NVME_CMD_SIZE_LIMIT | NVME_DNR;
+    }
+
+    return NVME_SUCCESS;
+}
+
 static void nvme_copy_out_completed_cb(void *opaque, int ret)
 {
     NvmeCopyAIOCB *iocb = opaque;
@@ -3157,6 +3184,11 @@ static uint16_t nvme_copy(NvmeCtrl *n, NvmeRequest *req)
         if (status) {
             goto invalid;
         }
+    }
+
+    status = nvme_check_copy_mcl(ns, iocb, nr);
+    if (status) {
+        goto invalid;
     }
 
     iocb->req = req;
@@ -6769,6 +6801,7 @@ static uint16_t nvme_dbbuf_config(NvmeCtrl *n, const NvmeRequest *req)
     PCIDevice *pci = PCI_DEVICE(n);
     uint64_t dbs_addr = le64_to_cpu(req->cmd.dptr.prp1);
     uint64_t eis_addr = le64_to_cpu(req->cmd.dptr.prp2);
+    uint32_t v;
     int i;
 
     /* Address should be page aligned */
@@ -6786,6 +6819,8 @@ static uint16_t nvme_dbbuf_config(NvmeCtrl *n, const NvmeRequest *req)
         NvmeCQueue *cq = n->cq[i];
 
         if (sq) {
+            v = cpu_to_le32(sq->tail);
+
             /*
              * CAP.DSTRD is 0, so offset of ith sq db_addr is (i<<3)
              * nvme_process_db() uses this hard-coded way to calculate
@@ -6793,7 +6828,7 @@ static uint16_t nvme_dbbuf_config(NvmeCtrl *n, const NvmeRequest *req)
              */
             sq->db_addr = dbs_addr + (i << 3);
             sq->ei_addr = eis_addr + (i << 3);
-            pci_dma_write(pci, sq->db_addr, &sq->tail, sizeof(sq->tail));
+            pci_dma_write(pci, sq->db_addr, &v, sizeof(sq->tail));
 
             if (n->params.ioeventfd && sq->sqid != 0) {
                 if (!nvme_init_sq_ioeventfd(sq)) {
@@ -6803,10 +6838,12 @@ static uint16_t nvme_dbbuf_config(NvmeCtrl *n, const NvmeRequest *req)
         }
 
         if (cq) {
+            v = cpu_to_le32(cq->head);
+
             /* CAP.DSTRD is 0, so offset of ith cq db_addr is (i<<3)+(1<<2) */
             cq->db_addr = dbs_addr + (i << 3) + (1 << 2);
             cq->ei_addr = eis_addr + (i << 3) + (1 << 2);
-            pci_dma_write(pci, cq->db_addr, &cq->head, sizeof(cq->head));
+            pci_dma_write(pci, cq->db_addr, &v, sizeof(cq->head));
 
             if (n->params.ioeventfd && cq->cqid != 0) {
                 if (!nvme_init_cq_ioeventfd(cq)) {
@@ -7555,7 +7592,7 @@ static uint64_t nvme_mmio_read(void *opaque, hwaddr addr, unsigned size)
 static void nvme_process_db(NvmeCtrl *n, hwaddr addr, int val)
 {
     PCIDevice *pci = PCI_DEVICE(n);
-    uint32_t qid;
+    uint32_t qid, v;
 
     if (unlikely(addr & ((1 << 2) - 1))) {
         NVME_GUEST_ERR(pci_nvme_ub_db_wr_misaligned,
@@ -7622,7 +7659,8 @@ static void nvme_process_db(NvmeCtrl *n, hwaddr addr, int val)
         start_sqs = nvme_cq_full(cq) ? 1 : 0;
         cq->head = new_head;
         if (!qid && n->dbbuf_enabled) {
-            pci_dma_write(pci, cq->db_addr, &cq->head, sizeof(cq->head));
+            v = cpu_to_le32(cq->head);
+            pci_dma_write(pci, cq->db_addr, &v, sizeof(cq->head));
         }
         if (start_sqs) {
             NvmeSQueue *sq;
@@ -7682,6 +7720,8 @@ static void nvme_process_db(NvmeCtrl *n, hwaddr addr, int val)
 
         sq->tail = new_tail;
         if (!qid && n->dbbuf_enabled) {
+            v = cpu_to_le32(sq->tail);
+
             /*
              * The spec states "the host shall also update the controller's
              * corresponding doorbell property to match the value of that entry
@@ -7695,7 +7735,7 @@ static void nvme_process_db(NvmeCtrl *n, hwaddr addr, int val)
              * including ones that run on Linux, are not updating Admin Queues,
              * so we can't trust reading it for an appropriate sq tail.
              */
-            pci_dma_write(pci, sq->db_addr, &sq->tail, sizeof(sq->tail));
+            pci_dma_write(pci, sq->db_addr, &v, sizeof(sq->tail));
         }
 
         qemu_bh_schedule(sq->bh);
@@ -8088,7 +8128,7 @@ static bool nvme_init_pci(NvmeCtrl *n, PCIDevice *pci_dev, Error **errp)
     pcie_endpoint_cap_init(pci_dev, 0x80);
     pcie_cap_flr_init(pci_dev);
     if (n->params.sriov_max_vfs) {
-        pcie_ari_init(pci_dev, 0x100, 1);
+        pcie_ari_init(pci_dev, 0x100);
     }
 
     /* add one to max_ioqpairs to account for the admin queue pair */
