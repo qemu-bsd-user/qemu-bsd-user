@@ -50,20 +50,8 @@
 
 int do_strace;
 
-/*
- * Going hand in hand with the va space needed (see below), we need
- * to find a host address to map the guest to. Assume that qemu
- * itself doesn't need memory above 32GB (or that we don't collide
- * with anything interesting). This is selected rather arbitrarily,
- * but seems to produce good results in tests to date.
- */
-# if HOST_LONG_BITS >= 64
-uintptr_t guest_base = 0x800000000ul;    /* at 32GB */
-bool have_guest_base = true;
-#else
-uintptr_t guest_base;    /* TODO: use sysctl to find big enough hole */
+uintptr_t guest_base;
 bool have_guest_base;
-#endif
 static bool opt_one_insn_per_tb;
 static const char *cpu_model;
 static const char *cpu_type;
