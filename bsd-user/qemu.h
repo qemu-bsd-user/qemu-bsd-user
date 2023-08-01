@@ -341,9 +341,7 @@ abi_long freebsd_umtx_robust_list(abi_ulong target_addr, size_t rbsize);
 
 static inline int access_ok(int type, abi_ulong addr, abi_ulong size)
 {
-    return page_check_range((target_ulong)addr, size,
-                            (type == VERIFY_READ) ? PAGE_READ :
-                                (PAGE_READ | PAGE_WRITE)) == 0;
+    return page_check_range((target_ulong)addr, size, type);
 }
 
 /*

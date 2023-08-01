@@ -182,7 +182,7 @@ void gen_a64_update_pc(DisasContext *s, target_long diff)
  *  + for EL2 and EL3 there is only one TBI bit, and if it is set
  *    then the address is zero-extended, clearing bits [63:56]
  *  + for EL0 and EL1, TBI0 controls addresses with bit 55 == 0
- *    and TBI1 controls addressses with bit 55 == 1.
+ *    and TBI1 controls addresses with bit 55 == 1.
  *    If the appropriate TBI bit is set for the address then
  *    the address is sign-extended from bit 55 into bits [63:56]
  *
@@ -2313,7 +2313,7 @@ static void handle_sys(DisasContext *s, bool isread,
 
     if (!isread && !(ri->type & ARM_CP_SUPPRESS_TB_END)) {
         /*
-         * A write to any coprocessor regiser that ends a TB
+         * A write to any coprocessor register that ends a TB
          * must rebuild the hflags for the next TB.
          */
         gen_rebuild_hflags(s);
@@ -3004,6 +3004,9 @@ static bool trans_STGP(DisasContext *s, arg_ldstpair *a)
     MemOp mop;
     TCGv_i128 tmp;
 
+    /* STGP only comes in one size. */
+    tcg_debug_assert(a->sz == MO_64);
+
     if (!dc_isar_feature(aa64_mte_insn_reg, s)) {
         return false;
     }
@@ -3029,13 +3032,25 @@ static bool trans_STGP(DisasContext *s, arg_ldstpair *a)
         gen_helper_stg(cpu_env, dirty_addr, dirty_addr);
     }
 
-    mop = finalize_memop(s, a->sz);
-    clean_addr = gen_mte_checkN(s, dirty_addr, true, false, 2 << a->sz, mop);
+    mop = finalize_memop(s, MO_64);
+    clean_addr = gen_mte_checkN(s, dirty_addr, true, false, 2 << MO_64, mop);
 
     tcg_rt = cpu_reg(s, a->rt);
     tcg_rt2 = cpu_reg(s, a->rt2);
 
-    assert(a->sz == 3);
+    /*
+     * STGP is defined as two 8-byte memory operations and one tag operation.
+     * We implement it as one single 16-byte memory operation for convenience.
+     * Rebuild mop as for STP.
+     * TODO: The atomicity with LSE2 is stronger than required.
+     * Need a form of MO_ATOM_WITHIN16_PAIR that never requires
+     * 16-byte atomicity.
+     */
+    mop = MO_128;
+    if (s->align_mem) {
+        mop |= MO_ALIGN_8;
+    }
+    mop = finalize_memop_pair(s, mop);
 
     tmp = tcg_temp_new_i128();
     if (s->be_data == MO_LE) {
@@ -13210,7 +13225,6 @@ static void disas_crypto_aes(DisasContext *s, uint32_t insn)
     int opcode = extract32(insn, 12, 5);
     int rn = extract32(insn, 5, 5);
     int rd = extract32(insn, 0, 5);
-    int decrypt;
     gen_helper_gvec_2 *genfn2 = NULL;
     gen_helper_gvec_3 *genfn3 = NULL;
 
@@ -13221,20 +13235,16 @@ static void disas_crypto_aes(DisasContext *s, uint32_t insn)
 
     switch (opcode) {
     case 0x4: /* AESE */
-        decrypt = 0;
         genfn3 = gen_helper_crypto_aese;
         break;
     case 0x6: /* AESMC */
-        decrypt = 0;
         genfn2 = gen_helper_crypto_aesmc;
         break;
     case 0x5: /* AESD */
-        decrypt = 1;
-        genfn3 = gen_helper_crypto_aese;
+        genfn3 = gen_helper_crypto_aesd;
         break;
     case 0x7: /* AESIMC */
-        decrypt = 1;
-        genfn2 = gen_helper_crypto_aesmc;
+        genfn2 = gen_helper_crypto_aesimc;
         break;
     default:
         unallocated_encoding(s);
@@ -13245,9 +13255,9 @@ static void disas_crypto_aes(DisasContext *s, uint32_t insn)
         return;
     }
     if (genfn2) {
-        gen_gvec_op2_ool(s, true, rd, rn, decrypt, genfn2);
+        gen_gvec_op2_ool(s, true, rd, rn, 0, genfn2);
     } else {
-        gen_gvec_op3_ool(s, true, rd, rd, rn, decrypt, genfn3);
+        gen_gvec_op3_ool(s, true, rd, rd, rn, 0, genfn3);
     }
 }
 

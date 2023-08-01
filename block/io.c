@@ -1379,7 +1379,7 @@ bdrv_aligned_preadv(BdrvChild *child, BdrvTrackedRequest *req,
     }
 
     /* Forward the request to the BlockDriver, possibly fragmenting it */
-    total_bytes = bdrv_getlength(bs);
+    total_bytes = bdrv_co_getlength(bs);
     if (total_bytes < 0) {
         ret = total_bytes;
         goto out;
@@ -1710,7 +1710,11 @@ static int bdrv_pad_request(BlockDriverState *bs,
     int sliced_niov;
     size_t sliced_head, sliced_tail;
 
-    bdrv_check_qiov_request(*offset, *bytes, *qiov, *qiov_offset, &error_abort);
+    /* Should have been checked by the caller already */
+    ret = bdrv_check_request32(*offset, *bytes, *qiov, *qiov_offset);
+    if (ret < 0) {
+        return ret;
+    }
 
     if (!bdrv_init_padding(bs, *offset, *bytes, write, pad)) {
         if (padded) {
@@ -1723,7 +1727,7 @@ static int bdrv_pad_request(BlockDriverState *bs,
                                   &sliced_head, &sliced_tail,
                                   &sliced_niov);
 
-    /* Guaranteed by bdrv_check_qiov_request() */
+    /* Guaranteed by bdrv_check_request32() */
     assert(*bytes <= SIZE_MAX);
     ret = bdrv_create_padded_qiov(bs, pad, sliced_iov, sliced_niov,
                                   sliced_head, *bytes);
@@ -2388,7 +2392,7 @@ bdrv_co_block_status(BlockDriverState *bs, bool want_zero,
     assert(pnum);
     assert_bdrv_graph_readable();
     *pnum = 0;
-    total_size = bdrv_getlength(bs);
+    total_size = bdrv_co_getlength(bs);
     if (total_size < 0) {
         ret = total_size;
         goto early_out;
@@ -2408,7 +2412,7 @@ bdrv_co_block_status(BlockDriverState *bs, bool want_zero,
         bytes = n;
     }
 
-    /* Must be non-NULL or bdrv_getlength() would have failed */
+    /* Must be non-NULL or bdrv_co_getlength() would have failed */
     assert(bs->drv);
     has_filtered_child = bdrv_filter_child(bs);
     if (!bs->drv->bdrv_co_block_status && !has_filtered_child) {
@@ -2546,7 +2550,7 @@ bdrv_co_block_status(BlockDriverState *bs, bool want_zero,
         if (!cow_bs) {
             ret |= BDRV_BLOCK_ZERO;
         } else if (want_zero) {
-            int64_t size2 = bdrv_getlength(cow_bs);
+            int64_t size2 = bdrv_co_getlength(cow_bs);
 
             if (size2 >= 0 && offset >= size2) {
                 ret |= BDRV_BLOCK_ZERO;
@@ -3011,7 +3015,7 @@ int coroutine_fn bdrv_co_flush(BlockDriverState *bs)
     }
 
     /* Write back cached data to the OS even with cache=unsafe */
-    BLKDBG_EVENT(primary_child, BLKDBG_FLUSH_TO_OS);
+    BLKDBG_CO_EVENT(primary_child, BLKDBG_FLUSH_TO_OS);
     if (bs->drv->bdrv_co_flush_to_os) {
         ret = bs->drv->bdrv_co_flush_to_os(bs);
         if (ret < 0) {
@@ -3029,7 +3033,7 @@ int coroutine_fn bdrv_co_flush(BlockDriverState *bs)
         goto flush_children;
     }
 
-    BLKDBG_EVENT(primary_child, BLKDBG_FLUSH_TO_DISK);
+    BLKDBG_CO_EVENT(primary_child, BLKDBG_FLUSH_TO_DISK);
     if (!bs->drv) {
         /* bs->drv->bdrv_co_flush() might have ejected the BDS
          * (even in case of apparent success) */
@@ -3592,7 +3596,7 @@ int coroutine_fn bdrv_co_truncate(BdrvChild *child, int64_t offset, bool exact,
         return ret;
     }
 
-    old_size = bdrv_getlength(bs);
+    old_size = bdrv_co_getlength(bs);
     if (old_size < 0) {
         error_setg_errno(errp, -old_size, "Failed to get old image size");
         return old_size;

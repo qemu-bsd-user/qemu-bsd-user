@@ -447,20 +447,14 @@ static inline void loongson3_virt_devices_init(MachineState *machine,
 
     pci_vga_init(pci_bus);
 
-    if (defaults_enabled()) {
+    if (defaults_enabled() && object_class_by_name("pci-ohci")) {
         pci_create_simple(pci_bus, -1, "pci-ohci");
         usb_create_simple(usb_bus_find(-1), "usb-kbd");
         usb_create_simple(usb_bus_find(-1), "usb-tablet");
     }
 
     for (i = 0; i < nb_nics; i++) {
-        NICInfo *nd = &nd_table[i];
-
-        if (!nd->model) {
-            nd->model = g_strdup(mc->default_nic);
-        }
-
-        pci_nic_init_nofail(nd, pci_bus, nd->model, NULL);
+        pci_nic_init_nofail(&nd_table[i], pci_bus, mc->default_nic, NULL);
     }
 }
 
@@ -487,8 +481,8 @@ static void mips_loongson3_virt_init(MachineState *machine)
         if (!machine->cpu_type) {
             machine->cpu_type = MIPS_CPU_TYPE_NAME("Loongson-3A1000");
         }
-        if (!strstr(machine->cpu_type, "Loongson-3A1000")) {
-            error_report("Loongson-3/TCG needs cpu type Loongson-3A1000");
+        if (!cpu_type_supports_isa(machine->cpu_type, INSN_LOONGSON3A)) {
+            error_report("Loongson-3/TCG needs a Loongson-3 series cpu");
             exit(1);
         }
     } else {
