@@ -888,7 +888,9 @@ struct target_pollfd {
 };
 
 /* So far all target and host bitmasks are the same */
+#undef  target_to_host_bitmask
 #define target_to_host_bitmask(x, tbl) (x)
+#undef  host_to_target_bitmask
 #define host_to_target_bitmask(x, tbl) (x)
 
 #endif /* SYSCALL_DEFS_H */

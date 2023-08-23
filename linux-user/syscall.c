@@ -455,7 +455,6 @@ static const bitmask_transtbl fcntl_flags_tbl[] = {
 #if TARGET_O_LARGEFILE != 0 || O_LARGEFILE != 0
   { TARGET_O_LARGEFILE, TARGET_O_LARGEFILE, O_LARGEFILE, O_LARGEFILE, },
 #endif
-  { 0, 0, 0, 0 }
 };
 
 _syscall2(int, sys_getcwd1, char *, buf, size_t, size)
@@ -802,93 +801,52 @@ static inline int host_to_target_sock_type(int host_type)
 }
 
 static abi_ulong target_brk, initial_target_brk;
-static abi_ulong brk_page;
 
 void target_set_brk(abi_ulong new_brk)
 {
     target_brk = TARGET_PAGE_ALIGN(new_brk);
     initial_target_brk = target_brk;
-    brk_page = HOST_PAGE_ALIGN(target_brk);
 }
 
 /* do_brk() must return target values and target errnos. */
 abi_long do_brk(abi_ulong brk_val)
 {
     abi_long mapped_addr;
-    abi_ulong new_alloc_size;
-    abi_ulong new_brk, new_host_brk_page;
+    abi_ulong new_brk;
+    abi_ulong old_brk;
 
     /* brk pointers are always untagged */
 
-    /* return old brk value if brk_val unchanged or zero */
-    if (!brk_val || brk_val == target_brk) {
+    /* do not allow to shrink below initial brk value */
+    if (brk_val < initial_target_brk) {
         return target_brk;
     }
 
-    /* do not allow to shrink below initial brk value */
-    if (brk_val < initial_target_brk) {
-        brk_val = initial_target_brk;
-    }
-
     new_brk = TARGET_PAGE_ALIGN(brk_val);
-    new_host_brk_page = HOST_PAGE_ALIGN(brk_val);
+    old_brk = TARGET_PAGE_ALIGN(target_brk);
 
-    /* brk_val and old target_brk might be on the same page */
-    if (new_brk == TARGET_PAGE_ALIGN(target_brk)) {
-        /* empty remaining bytes in (possibly larger) host page */
-        memset(g2h_untagged(new_brk), 0, new_host_brk_page - new_brk);
+    /* new and old target_brk might be on the same page */
+    if (new_brk == old_brk) {
         target_brk = brk_val;
         return target_brk;
     }
 
     /* Release heap if necesary */
-    if (new_brk < target_brk) {
-        /* empty remaining bytes in (possibly larger) host page */
-        memset(g2h_untagged(new_brk), 0, new_host_brk_page - new_brk);
-
-        /* free unused host pages and set new brk_page */
-        target_munmap(new_host_brk_page, brk_page - new_host_brk_page);
-        brk_page = new_host_brk_page;
+    if (new_brk < old_brk) {
+        target_munmap(new_brk, old_brk - new_brk);
 
         target_brk = brk_val;
         return target_brk;
     }
 
-    /* We need to allocate more memory after the brk... Note that
-     * we don't use MAP_FIXED because that will map over the top of
-     * any existing mapping (like the one with the host libc or qemu
-     * itself); instead we treat "mapped but at wrong address" as
-     * a failure and unmap again.
-     */
-    if (new_host_brk_page > brk_page) {
-        new_alloc_size = new_host_brk_page - brk_page;
-        mapped_addr = get_errno(target_mmap(brk_page, new_alloc_size,
-                                        PROT_READ|PROT_WRITE,
-                                        MAP_ANON|MAP_PRIVATE, 0, 0));
-    } else {
-        new_alloc_size = 0;
-        mapped_addr = brk_page;
-    }
+    mapped_addr = target_mmap(old_brk, new_brk - old_brk,
+                              PROT_READ | PROT_WRITE,
+                              MAP_FIXED_NOREPLACE | MAP_ANON | MAP_PRIVATE,
+                              -1, 0);
 
-    if (mapped_addr == brk_page) {
-        /* Heap contents are initialized to zero, as for anonymous
-         * mapped pages.  Technically the new pages are already
-         * initialized to zero since they *are* anonymous mapped
-         * pages, however we have to take care with the contents that
-         * come from the remaining part of the previous page: it may
-         * contains garbage data due to a previous heap usage (grown
-         * then shrunken).  */
-        memset(g2h_untagged(brk_page), 0, HOST_PAGE_ALIGN(brk_page) - brk_page);
-
+    if (mapped_addr == old_brk) {
         target_brk = brk_val;
-        brk_page = new_host_brk_page;
         return target_brk;
-    } else if (mapped_addr != -1) {
-        /* Mapped but at wrong address, meaning there wasn't actually
-         * enough space for this brk.
-         */
-        target_munmap(mapped_addr, new_alloc_size);
-        mapped_addr = -1;
     }
 
 #if defined(TARGET_ALPHA)
@@ -5854,7 +5812,6 @@ static const bitmask_transtbl iflag_tbl[] = {
         { TARGET_IXOFF, TARGET_IXOFF, IXOFF, IXOFF },
         { TARGET_IMAXBEL, TARGET_IMAXBEL, IMAXBEL, IMAXBEL },
         { TARGET_IUTF8, TARGET_IUTF8, IUTF8, IUTF8},
-        { 0, 0, 0, 0 }
 };
 
 static const bitmask_transtbl oflag_tbl[] = {
@@ -5882,7 +5839,6 @@ static const bitmask_transtbl oflag_tbl[] = {
 	{ TARGET_VTDLY, TARGET_VT1, VTDLY, VT1 },
 	{ TARGET_FFDLY, TARGET_FF0, FFDLY, FF0 },
 	{ TARGET_FFDLY, TARGET_FF1, FFDLY, FF1 },
-	{ 0, 0, 0, 0 }
 };
 
 static const bitmask_transtbl cflag_tbl[] = {
@@ -5917,7 +5873,6 @@ static const bitmask_transtbl cflag_tbl[] = {
 	{ TARGET_HUPCL, TARGET_HUPCL, HUPCL, HUPCL },
 	{ TARGET_CLOCAL, TARGET_CLOCAL, CLOCAL, CLOCAL },
 	{ TARGET_CRTSCTS, TARGET_CRTSCTS, CRTSCTS, CRTSCTS },
-	{ 0, 0, 0, 0 }
 };
 
 static const bitmask_transtbl lflag_tbl[] = {
@@ -5937,7 +5892,6 @@ static const bitmask_transtbl lflag_tbl[] = {
   { TARGET_PENDIN, TARGET_PENDIN, PENDIN, PENDIN },
   { TARGET_IEXTEN, TARGET_IEXTEN, IEXTEN, IEXTEN },
   { TARGET_EXTPROC, TARGET_EXTPROC, EXTPROC, EXTPROC},
-  { 0, 0, 0, 0 }
 };
 
 static void target_to_host_termios (void *dst, const void *src)
@@ -6026,10 +5980,6 @@ static const StructEntry struct_termios_def = {
 #endif
 
 static const bitmask_transtbl mmap_flags_tbl[] = {
-    { TARGET_MAP_TYPE, TARGET_MAP_SHARED, MAP_TYPE, MAP_SHARED },
-    { TARGET_MAP_TYPE, TARGET_MAP_PRIVATE, MAP_TYPE, MAP_PRIVATE },
-    { TARGET_MAP_TYPE, TARGET_MAP_SHARED_VALIDATE,
-      MAP_TYPE, MAP_SHARED_VALIDATE },
     { TARGET_MAP_FIXED, TARGET_MAP_FIXED, MAP_FIXED, MAP_FIXED },
     { TARGET_MAP_ANONYMOUS, TARGET_MAP_ANONYMOUS,
       MAP_ANONYMOUS, MAP_ANONYMOUS },
@@ -6047,15 +5997,82 @@ static const bitmask_transtbl mmap_flags_tbl[] = {
        Recognize it for the target insofar as we do not want to pass
        it through to the host.  */
     { TARGET_MAP_STACK, TARGET_MAP_STACK, 0, 0 },
-    { TARGET_MAP_SYNC, TARGET_MAP_SYNC, MAP_SYNC, MAP_SYNC },
     { TARGET_MAP_NONBLOCK, TARGET_MAP_NONBLOCK, MAP_NONBLOCK, MAP_NONBLOCK },
     { TARGET_MAP_POPULATE, TARGET_MAP_POPULATE, MAP_POPULATE, MAP_POPULATE },
     { TARGET_MAP_FIXED_NOREPLACE, TARGET_MAP_FIXED_NOREPLACE,
       MAP_FIXED_NOREPLACE, MAP_FIXED_NOREPLACE },
     { TARGET_MAP_UNINITIALIZED, TARGET_MAP_UNINITIALIZED,
       MAP_UNINITIALIZED, MAP_UNINITIALIZED },
-    { 0, 0, 0, 0 }
 };
+
+/*
+ * Arrange for legacy / undefined architecture specific flags to be
+ * ignored by mmap handling code.
+ */
+#ifndef TARGET_MAP_32BIT
+#define TARGET_MAP_32BIT 0
+#endif
+#ifndef TARGET_MAP_HUGE_2MB
+#define TARGET_MAP_HUGE_2MB 0
+#endif
+#ifndef TARGET_MAP_HUGE_1GB
+#define TARGET_MAP_HUGE_1GB 0
+#endif
+
+static abi_long do_mmap(abi_ulong addr, abi_ulong len, int prot,
+                        int target_flags, int fd, off_t offset)
+{
+    /*
+     * The historical set of flags that all mmap types implicitly support.
+     */
+    enum {
+        TARGET_LEGACY_MAP_MASK = TARGET_MAP_SHARED
+                               | TARGET_MAP_PRIVATE
+                               | TARGET_MAP_FIXED
+                               | TARGET_MAP_ANONYMOUS
+                               | TARGET_MAP_DENYWRITE
+                               | TARGET_MAP_EXECUTABLE
+                               | TARGET_MAP_UNINITIALIZED
+                               | TARGET_MAP_GROWSDOWN
+                               | TARGET_MAP_LOCKED
+                               | TARGET_MAP_NORESERVE
+                               | TARGET_MAP_POPULATE
+                               | TARGET_MAP_NONBLOCK
+                               | TARGET_MAP_STACK
+                               | TARGET_MAP_HUGETLB
+                               | TARGET_MAP_32BIT
+                               | TARGET_MAP_HUGE_2MB
+                               | TARGET_MAP_HUGE_1GB
+    };
+    int host_flags;
+
+    switch (target_flags & TARGET_MAP_TYPE) {
+    case TARGET_MAP_PRIVATE:
+        host_flags = MAP_PRIVATE;
+        break;
+    case TARGET_MAP_SHARED:
+        host_flags = MAP_SHARED;
+        break;
+    case TARGET_MAP_SHARED_VALIDATE:
+        /*
+         * MAP_SYNC is only supported for MAP_SHARED_VALIDATE, and is
+         * therefore omitted from mmap_flags_tbl and TARGET_LEGACY_MAP_MASK.
+         */
+        if (target_flags & ~(TARGET_LEGACY_MAP_MASK | TARGET_MAP_SYNC)) {
+            return -TARGET_EOPNOTSUPP;
+        }
+        host_flags = MAP_SHARED_VALIDATE;
+        if (target_flags & TARGET_MAP_SYNC) {
+            host_flags |= MAP_SYNC;
+        }
+        break;
+    default:
+        return -TARGET_EINVAL;
+    }
+    host_flags |= target_to_host_bitmask(target_flags, mmap_flags_tbl);
+
+    return get_errno(target_mmap(addr, len, prot, host_flags, fd, offset));
+}
 
 /*
  * NOTE: TARGET_ABI32 is defined for TARGET_I386 (but not for TARGET_X86_64)
@@ -8111,16 +8128,17 @@ static int open_self_maps_1(CPUArchState *cpu_env, int fd, bool smaps)
 {
     CPUState *cpu = env_cpu(cpu_env);
     TaskState *ts = cpu->opaque;
-    GSList *map_info = read_self_maps();
-    GSList *s;
+    IntervalTreeRoot *map_info = read_self_maps();
+    IntervalTreeNode *s;
     int count;
 
-    for (s = map_info; s; s = g_slist_next(s)) {
-        MapInfo *e = (MapInfo *) s->data;
+    for (s = interval_tree_iter_first(map_info, 0, -1); s;
+         s = interval_tree_iter_next(s, 0, -1)) {
+        MapInfo *e = container_of(s, MapInfo, itree);
 
-        if (h2g_valid(e->start)) {
-            unsigned long min = e->start;
-            unsigned long max = e->end;
+        if (h2g_valid(e->itree.start)) {
+            unsigned long min = e->itree.start;
+            unsigned long max = e->itree.last + 1;
             int flags = page_get_flags(h2g(min));
             const char *path;
 
@@ -8539,9 +8557,12 @@ static int open_hardware(CPUArchState *cpu_env, int fd)
 }
 #endif
 
-int do_guest_openat(CPUArchState *cpu_env, int dirfd, const char *pathname,
+
+int do_guest_openat(CPUArchState *cpu_env, int dirfd, const char *fname,
                     int flags, mode_t mode, bool safe)
 {
+    g_autofree char *proc_name = NULL;
+    const char *pathname;
     struct fake_open {
         const char *filename;
         int (*fill)(CPUArchState *cpu_env, int fd);
@@ -8566,6 +8587,14 @@ int do_guest_openat(CPUArchState *cpu_env, int dirfd, const char *pathname,
 #endif
         { NULL, NULL, NULL }
     };
+
+    /* if this is a file from /proc/ filesystem, expand full name */
+    proc_name = realpath(fname, NULL);
+    if (proc_name && strncmp(proc_name, "/proc/", 6) == 0) {
+        pathname = proc_name;
+    } else {
+        pathname = fname;
+    }
 
     if (is_proc_myself(pathname, "exe")) {
         if (safe) {
@@ -10576,28 +10605,20 @@ static abi_long do_syscall1(CPUArchState *cpu_env, int num, abi_long arg1,
             v5 = tswapal(v[4]);
             v6 = tswapal(v[5]);
             unlock_user(v, arg1, 0);
-            ret = get_errno(target_mmap(v1, v2, v3,
-                                        target_to_host_bitmask(v4, mmap_flags_tbl),
-                                        v5, v6));
+            return do_mmap(v1, v2, v3, v4, v5, v6);
         }
 #else
         /* mmap pointers are always untagged */
-        ret = get_errno(target_mmap(arg1, arg2, arg3,
-                                    target_to_host_bitmask(arg4, mmap_flags_tbl),
-                                    arg5,
-                                    arg6));
+        return do_mmap(arg1, arg2, arg3, arg4, arg5, arg6);
 #endif
-        return ret;
 #endif
 #ifdef TARGET_NR_mmap2
     case TARGET_NR_mmap2:
 #ifndef MMAP_SHIFT
 #define MMAP_SHIFT 12
 #endif
-        ret = target_mmap(arg1, arg2, arg3,
-                          target_to_host_bitmask(arg4, mmap_flags_tbl),
-                          arg5, (off_t)(abi_ulong)arg6 << MMAP_SHIFT);
-        return get_errno(ret);
+        return do_mmap(arg1, arg2, arg3, arg4, arg5,
+                       (off_t)(abi_ulong)arg6 << MMAP_SHIFT);
 #endif
     case TARGET_NR_munmap:
         arg1 = cpu_untagged_addr(cpu, arg1);
