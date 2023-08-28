@@ -449,12 +449,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_getloginclass(arg1, arg2);
         break;
 
-#if 0
-    case TARGET_FREEBSD_NR_pdwait4: /* pdwait4(2) */
-        ret = do_freebsd_pdwait4(arg1, arg2, arg3, arg4);
-        break;
-#endif
-
     case TARGET_FREEBSD_NR_pdgetpid: /* pdgetpid(2) */
         ret = do_freebsd_pdgetpid(arg1, arg2);
         break;

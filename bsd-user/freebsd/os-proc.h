@@ -35,7 +35,6 @@ pid_t safe_wait6(idtype_t idtype, id_t id, int *status, int options,
     struct __wrusage *wrusage, siginfo_t *infop);
 
 extern int __setugid(int flag);
-extern int pdwait4(int fd, int *status, int options, struct rusage *rusage);
 
 /* execve(2) */
 static inline abi_long do_freebsd_execve(abi_ulong path_or_fd, abi_ulong argp,
@@ -153,30 +152,6 @@ static inline abi_long do_freebsd_getloginclass(abi_ulong arg1, abi_ulong arg2)
     ret = get_errno(getloginclass(p, arg2));
     unlock_user(p, arg1, 0);
 
-    return ret;
-}
-
-/* pdwait4(2) */
-static inline abi_long do_freebsd_pdwait4(abi_long arg1,
-        abi_ulong target_status, abi_long arg3, abi_ulong target_rusage)
-{
-    abi_long ret;
-    int status;
-    struct rusage rusage, *rusage_ptr = NULL;
-
-    if (target_rusage) {
-        rusage_ptr = &rusage;
-    }
-    ret = get_errno(pdwait4(arg1, &status, arg3, rusage_ptr));
-    if (target_status != 0) {
-        status = host_to_target_waitstatus(status);
-        if (put_user_s32(status, target_status) != 0) {
-            return -TARGET_EFAULT;
-        }
-    }
-    if (target_rusage != 0) {
-        host_to_target_rusage(target_rusage, &rusage);
-    }
     return ret;
 }
 
