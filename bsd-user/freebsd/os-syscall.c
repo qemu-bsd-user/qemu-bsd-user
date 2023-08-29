@@ -17,6 +17,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+#define _ACL_PRIVATE 1	// XXX Don't upstream: we need to sort out this junk and the twisty maze of .h
+
 #include "qemu/osdep.h"
 
 #include "qemu/cutils.h"
@@ -75,6 +77,9 @@ safe_syscall4(pid_t, wait4, pid_t, wpid, int *, status, int, options,
     struct rusage *, rusage);
 safe_syscall6(pid_t, wait6, idtype_t, idtype, id_t, id, int *, status, int,
     options, struct __wrusage *, wrusage, siginfo_t *, infop);
+
+/* *BSD dependent syscall shims */
+#include "os-stat.h"
 
 /* I/O */
 safe_syscall3(int, open, const char *, path, int, flags, mode_t, mode);
@@ -804,113 +809,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
 #endif
 
         /*
-         * stat system calls
-         */
-    case TARGET_FREEBSD_NR_freebsd11_stat: /* stat(2) */
-        ret = do_freebsd11_stat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_lstat: /* lstat(2) */
-        ret = do_freebsd11_lstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_fstat: /* fstat(2) */
-        ret = do_freebsd11_fstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_fstat: /* fstat(2) */
-        ret = do_freebsd_fstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_fstatat: /* fstatat(2) */
-        ret = do_freebsd11_fstatat(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_fstatat: /* fstatat(2) */
-        ret = do_freebsd_fstatat(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_nstat: /* undocumented */
-        ret = do_freebsd11_nstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_nfstat: /* undocumented */
-        ret = do_freebsd11_nfstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_nlstat: /* undocumented */
-        ret = do_freebsd11_nlstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_getfh: /* getfh(2) */
-        ret = do_freebsd_getfh(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_lgetfh: /* lgetfh(2) */
-        ret = do_freebsd_lgetfh(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_fhopen: /* fhopen(2) */
-        ret = do_freebsd_fhopen(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_fhstat: /* fhstat(2) */
-        ret = do_freebsd11_fhstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_fhstat: /* fhstat(2) */
-        ret = do_freebsd_fhstat(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_fhstatfs: /* fhstatfs(2) */
-        ret = do_freebsd11_fhstatfs(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_fhstatfs: /* fhstatfs(2) */
-        ret = do_freebsd_fhstatfs(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_statfs: /* statfs(2) */
-        ret = do_freebsd11_statfs(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_statfs: /* statfs(2) */
-        ret = do_freebsd_statfs(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_fstatfs: /* fstatfs(2) */
-        ret = do_freebsd11_fstatfs(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_fstatfs: /* fstatfs(2) */
-        ret = do_freebsd_fstatfs(arg1, arg2);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_getfsstat: /* getfsstat(2) */
-        ret = do_freebsd11_getfsstat(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_getfsstat: /* getfsstat(2) */
-        ret = do_freebsd_getfsstat(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_getdents: /* getdents(2) */
-        ret = do_freebsd11_getdents(arg1, arg2, arg3);
-        break;
-
-    case TARGET_FREEBSD_NR_getdirentries: /* getdirentries(2) */
-        ret = do_freebsd_getdirentries(arg1, arg2, arg3, arg4);
-        break;
-
-    case TARGET_FREEBSD_NR_freebsd11_getdirentries: /* getdirentries(2) */
-        ret = do_freebsd11_getdirentries(arg1, arg2, arg3, arg4);
-        break;
-    case TARGET_FREEBSD_NR_fcntl: /* fcntl(2) */
-        ret = do_freebsd_fcntl(arg1, arg2, arg3);
-        break;
-
-
-        /*
          * Memory management system calls.
          */
     case TARGET_FREEBSD_NR_mmap: /* mmap(2) */
@@ -1312,6 +1210,113 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     case TARGET_FREEBSD_NR_ioctl: /* ioctl(2) */
         ret = do_bsd_ioctl(arg1, arg2, arg3);
         break;
+
+        /*
+         * stat system calls
+         */
+    case TARGET_FREEBSD_NR_freebsd11_stat: /* stat(2) */
+        ret = do_freebsd11_stat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_lstat: /* lstat(2) */
+        ret = do_freebsd11_lstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_fstat: /* fstat(2) */
+        ret = do_freebsd11_fstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_fstat: /* fstat(2) */
+        ret = do_freebsd_fstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_fstatat: /* fstatat(2) */
+        ret = do_freebsd11_fstatat(arg1, arg2, arg3, arg4);
+        break;
+
+    case TARGET_FREEBSD_NR_fstatat: /* fstatat(2) */
+        ret = do_freebsd_fstatat(arg1, arg2, arg3, arg4);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_nstat: /* undocumented */
+        ret = do_freebsd11_nstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_nfstat: /* undocumented */
+        ret = do_freebsd11_nfstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_nlstat: /* undocumented */
+        ret = do_freebsd11_nlstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_getfh: /* getfh(2) */
+        ret = do_freebsd_getfh(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_lgetfh: /* lgetfh(2) */
+        ret = do_freebsd_lgetfh(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_fhopen: /* fhopen(2) */
+        ret = do_freebsd_fhopen(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_fhstat: /* fhstat(2) */
+        ret = do_freebsd11_fhstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_fhstat: /* fhstat(2) */
+        ret = do_freebsd_fhstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_fhstatfs: /* fhstatfs(2) */
+        ret = do_freebsd11_fhstatfs(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_fhstatfs: /* fhstatfs(2) */
+        ret = do_freebsd_fhstatfs(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_statfs: /* statfs(2) */
+        ret = do_freebsd11_statfs(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_statfs: /* statfs(2) */
+        ret = do_freebsd_statfs(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_fstatfs: /* fstatfs(2) */
+        ret = do_freebsd11_fstatfs(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_fstatfs: /* fstatfs(2) */
+        ret = do_freebsd_fstatfs(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_getfsstat: /* getfsstat(2) */
+        ret = do_freebsd11_getfsstat(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_getfsstat: /* getfsstat(2) */
+        ret = do_freebsd_getfsstat(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_getdents: /* getdents(2) */
+        ret = do_freebsd11_getdents(arg1, arg2, arg3);
+        break;
+
+    case TARGET_FREEBSD_NR_getdirentries: /* getdirentries(2) */
+        ret = do_freebsd_getdirentries(arg1, arg2, arg3, arg4);
+        break;
+
+    case TARGET_FREEBSD_NR_freebsd11_getdirentries: /* getdirentries(2) */
+        ret = do_freebsd11_getdirentries(arg1, arg2, arg3, arg4);
+        break;
+    case TARGET_FREEBSD_NR_fcntl: /* fcntl(2) */
+        ret = do_freebsd_fcntl(arg1, arg2, arg3);
+        break;
+
 
         /*
          * sys{ctl, arch, call}

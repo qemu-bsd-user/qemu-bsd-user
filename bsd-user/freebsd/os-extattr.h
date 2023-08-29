@@ -17,13 +17,9 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+// XXX Likely need to hoist these up into qemu-os.h or something
 #include <sys/extattr.h>
-#ifndef _ACL_PRIVATE
-#define _ACL_PRIVATE
-#endif
 #include <sys/acl.h>
-
-#include "qemu-os.h"
 
 /* extattrctl() */
 static inline abi_long do_freebsd_extattrctl(abi_ulong arg1, abi_ulong arg2,

@@ -445,8 +445,8 @@ struct target_freebsd11_stat {
     int64_t    st_blocks;   /* blocks allocated for file */
     uint32_t   st_blksize;  /* optimal blocksize for I/O */
     uint32_t   st_flags;    /* user defined flags for file */
-    __uint32_t st_gen;      /* file generation number */
-    __int32_t  st_lspare;
+    uint32_t   st_gen;      /* file generation number */
+    int32_t    st_lspare;
     struct target_freebsd_timespec st_birthtim; /* time of file creation */
     /*
      * Explicitly pad st_birthtim to 16 bytes so that the size of
@@ -465,37 +465,37 @@ struct target_freebsd11_stat {
 #endif
 
 struct target_stat {
-        uint64_t  st_dev;               /* inode's device */
-        uint64_t  st_ino;               /* inode's number */
-        uint64_t  st_nlink;             /* number of hard links */
-        int16_t   st_mode;              /* inode protection mode */
-        int16_t   st_padding0;
-        uint32_t  st_uid;               /* user ID of the file's owner */
-        uint32_t  st_gid;               /* group ID of the file's group */
-        int32_t   st_padding1;
-        uint64_t  st_rdev;              /* device type */
+    uint64_t  st_dev;               /* inode's device */
+    uint64_t  st_ino;               /* inode's number */
+    uint64_t  st_nlink;             /* number of hard links */
+    int16_t   st_mode;              /* inode protection mode */
+    int16_t   st_padding0;
+    uint32_t  st_uid;               /* user ID of the file's owner */
+    uint32_t  st_gid;               /* group ID of the file's group */
+    int32_t   st_padding1;
+    uint64_t  st_rdev;              /* device type */
 #ifdef TARGET_HAS_STAT_TIME_T_EXT
-        int32_t   st_atim_ext;
+    int32_t   st_atim_ext;
 #endif
-        struct  target_freebsd_timespec st_atim; /* time of last access */
+    struct  target_freebsd_timespec st_atim; /* time of last access */
 #ifdef TARGET_HAS_STAT_TIME_T_EXT
-        int32_t   st_mtim_ext;
+    int32_t   st_mtim_ext;
 #endif
-        struct  target_freebsd_timespec st_mtim; /* time of last data modification */
+    struct  target_freebsd_timespec st_mtim; /* time of last data modification */
 #ifdef TARGET_HAS_STAT_TIME_T_EXT
-        __int32_t st_ctim_ext;
+    int32_t st_ctim_ext;
 #endif
-        struct  target_freebsd_timespec st_ctim;/* time of last file status change */
+    struct  target_freebsd_timespec st_ctim;/* time of last file status change */
 #ifdef TARGET_HAS_STAT_TIME_T_EXT
-        __int32_t st_btim_ext;
+    int32_t st_btim_ext;
 #endif
-        struct  target_freebsd_timespec st_birthtim;   /* time of file creation */
-        int64_t   st_size;              /* file size, in bytes */
-        int64_t   st_blocks;            /* blocks allocated for file */
-        uint32_t  st_blksize;           /* optimal blocksize for I/O */
-        uint32_t  st_flags;             /* user defined flags for file */
-        uint64_t  st_gen;               /* file generation number */
-        uint64_t  st_spare[10];
+    struct  target_freebsd_timespec st_birthtim;   /* time of file creation */
+    int64_t   st_size;              /* file size, in bytes */
+    int64_t   st_blocks;            /* blocks allocated for file */
+    uint32_t  st_blksize;           /* optimal blocksize for I/O */
+    uint32_t  st_flags;             /* user defined flags for file */
+    uint64_t  st_gen;               /* file generation number */
+    uint64_t  st_spare[10];
 };
 
 
@@ -515,8 +515,7 @@ struct target_freebsd11_nstat {
     int64_t    st_blocks;   /* blocks allocated for file */
     uint32_t   st_blksize;  /* optimal blocksize for I/O */
     uint32_t   st_flags;    /* user defined flags for file */
-    __uint32_t st_gen;      /* file generation number */
-    /* __int32_t  st_lspare; */
+    uint32_t   st_gen;      /* file generation number */
     struct target_freebsd_timespec st_birthtim; /* time of file creation */
     /*
      * Explicitly pad st_birthtim to 16 bytes so that the size of
@@ -564,36 +563,36 @@ struct target_freebsd11_statfs {
 };
 
 struct target_statfs {
-        uint32_t f_version;             /* structure version number */
-        uint32_t f_type;                /* type of filesystem */
-        uint64_t f_flags;               /* copy of mount exported flags */
-        uint64_t f_bsize;               /* filesystem fragment size */
-        uint64_t f_iosize;              /* optimal transfer block size */
-        uint64_t f_blocks;              /* total data blocks in filesystem */
-        uint64_t f_bfree;               /* free blocks in filesystem */
-        int64_t  f_bavail;              /* free blocks avail to non-superuser */
-        uint64_t f_files;               /* total file nodes in filesystem */
-        int64_t  f_ffree;               /* free nodes avail to non-superuser */
-        uint64_t f_syncwrites;          /* count of sync writes since mount */
-        uint64_t f_asyncwrites;         /* count of async writes since mount */
-        uint64_t f_syncreads;           /* count of sync reads since mount */
-        uint64_t f_asyncreads;          /* count of async reads since mount */
-        uint64_t f_spare[10];           /* unused spare */
-        uint32_t f_namemax;             /* maximum filename length */
-        uint32_t f_owner;               /* user that mounted the filesystem */
-        target_freebsd_fsid_t f_fsid;   /* filesystem id */
-        char      f_charspare[80];      /* spare string space */
-        char      f_fstypename[16];     /* filesystem type name */
-        char      f_mntfromname[1024];  /* mounted filesystem */
-        char      f_mntonname[1024];    /* directory on which mounted */
+    uint32_t f_version;             /* structure version number */
+    uint32_t f_type;                /* type of filesystem */
+    uint64_t f_flags;               /* copy of mount exported flags */
+    uint64_t f_bsize;               /* filesystem fragment size */
+    uint64_t f_iosize;              /* optimal transfer block size */
+    uint64_t f_blocks;              /* total data blocks in filesystem */
+    uint64_t f_bfree;               /* free blocks in filesystem */
+    int64_t  f_bavail;              /* free blocks avail to non-superuser */
+    uint64_t f_files;               /* total file nodes in filesystem */
+    int64_t  f_ffree;               /* free nodes avail to non-superuser */
+    uint64_t f_syncwrites;          /* count of sync writes since mount */
+    uint64_t f_asyncwrites;         /* count of async writes since mount */
+    uint64_t f_syncreads;           /* count of sync reads since mount */
+    uint64_t f_asyncreads;          /* count of async reads since mount */
+    uint64_t f_spare[10];           /* unused spare */
+    uint32_t f_namemax;             /* maximum filename length */
+    uint32_t f_owner;               /* user that mounted the filesystem */
+    target_freebsd_fsid_t f_fsid;   /* filesystem id */
+    char      f_charspare[80];      /* spare string space */
+    char      f_fstypename[16];     /* filesystem type name */
+    char      f_mntfromname[1024];  /* mounted filesystem */
+    char      f_mntonname[1024];    /* directory on which mounted */
 };
 
 /* File identifier. These are unique per filesystem on a single machine. */
 #define TARGET_MAXFIDSZ     16
 
 struct target_freebsd_fid {
-    u_short     fid_len;            /* len of data in bytes */
-    u_short     fid_data0;          /* force longword align */
+    uint16_t    fid_len;            /* len of data in bytes */
+    uint16_t    fid_data0;          /* force longword align */
     char        fid_data[TARGET_MAXFIDSZ];  /* data (variable len) */
 };
 
