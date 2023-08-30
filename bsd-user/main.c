@@ -55,7 +55,6 @@ bool have_guest_base;
 static bool opt_one_insn_per_tb;
 static const char *cpu_model;
 static const char *cpu_type;
-static const char *seed_optarg;
 /*
  * When running 32-on-64 we should make sure we can fit all of the possible
  * guest address space into a contiguous chunk of virtual host memory.
@@ -301,6 +300,7 @@ int main(int argc, char **argv)
     const char *filename;
     const char *log_file = NULL;
     const char *log_mask = NULL;
+    const char *seed_optarg = NULL;
     struct target_pt_regs regs1, *regs = &regs1;
     struct image_info info1, *info = &info1;
     struct bsd_binprm bprm;
@@ -446,7 +446,6 @@ int main(int argc, char **argv)
     {
         int mask = 0;
         if (log_mask) {
-
             mask = qemu_str_to_log_mask(log_mask);
             if (!mask) {
                 qemu_print_log_usage(stdout);
@@ -497,7 +496,6 @@ int main(int argc, char **argv)
                                  opt_one_insn_per_tb, &error_abort);
         ac->init_machine(NULL);
     }
-
     cpu = cpu_create(cpu_type);
     env = cpu->env_ptr;
     cpu_reset(cpu);
