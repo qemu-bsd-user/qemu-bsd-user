@@ -1580,6 +1580,9 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_freebsd_getrandom(arg1, arg2, arg3);
         break;
 #endif
+    case TARGET_FREEBSD_NR_kenv:
+	ret = do_freebsd_kenv(arg1, arg2, arg3, arg4);
+	break;
 
     default:
     {

@@ -23,6 +23,7 @@
 #include <sys/cpuset.h>
 #include <sys/random.h>
 #include <sched.h>
+#include <kenv.h>
 
 int shm_open2(const char *path, int flags, mode_t mode, int shmflags,
     const char *);
@@ -404,5 +405,82 @@ static inline abi_long do_freebsd_getrandom(abi_ulong buf, abi_ulong buflen,
     return ret;
 }
 #endif
+
+static inline abi_long do_freebsd_kenv(abi_long action, abi_ulong name,
+    abi_ulong value, abi_long len)
+{
+    abi_long ret;
+    void *gname = NULL;		/* unlocked in cases where set */
+    void *gvalue = NULL;        /* unlocked in cases where set */
+
+    ret = -TARGET_EINVAL;
+    switch (action) {
+    case KENV_GET:
+        gname = lock_user_string(name);
+	if (gname == NULL) {
+	    ret = -TARGET_EFAULT;
+	    break;
+	}
+	gvalue = lock_user(VERIFY_WRITE, value, len, 0);
+	if (gvalue == NULL) {
+	    ret = -TARGET_EFAULT;
+	    break;
+	}
+	ret = kenv(action, gname, gvalue, len);
+	if (ret > 0) {
+		len = ret;
+	}
+	break;
+    case KENV_SET:
+        gname = lock_user_string(name);
+	if (gname == NULL) {
+	    ret = -TARGET_EFAULT;
+	    break;
+	}
+	gvalue = lock_user(VERIFY_READ, value, len, 1);
+	if (gvalue == NULL) {
+	    ret = -TARGET_EFAULT;
+	    break;
+	}
+	ret = kenv(action, gname, gvalue, len);
+	break;
+    case KENV_UNSET:
+        gname = lock_user_string(name);
+	if (gname == NULL) {
+	    ret = -TARGET_EFAULT;
+	    break;
+	}
+	ret = kenv(action, gname, NULL, 0);	/* value and name ignored, per kenv(2) */
+	break;
+    case KENV_DUMP:		/* All three treated the same */
+    case KENV_DUMP_LOADER:
+    case KENV_DUMP_STATIC:
+	if (value != 0) {			/* value == NULL -> just return length */
+	    gvalue = lock_user(VERIFY_WRITE, value, len, 0);
+	    if (gvalue == NULL) {
+		ret = -TARGET_EFAULT;
+		break;
+	    }
+	}
+	ret = kenv(action, NULL, gvalue, len);	/* name is ignored, per kenv(2) */
+	if (ret > 0) {
+		len = ret;
+	}
+	break;
+    default:
+	ret = -TARGET_EINVAL;
+	break;
+    }
+
+    /* Unmap everything mapped */
+    if (gvalue != NULL) {
+	unlock_user(gvalue, value, len);
+    }
+    if (gname != NULL) {
+	unlock_user(gname, name, 0);
+    }
+
+    return ret;
+}
 
 #endif /* OS_MISC_H */
