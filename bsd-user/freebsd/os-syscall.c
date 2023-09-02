@@ -1542,6 +1542,49 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
         /*
+         * FreeBSD kernel module
+         */
+    case TARGET_FREEBSD_NR_modfnext: /* modfnext(2) */
+        ret = do_freebsd_modfnext(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_modfind: /* modfind(2) */
+        ret = do_freebsd_modfind(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_kldload: /* kldload(2) */
+        ret = do_freebsd_kldload(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_kldunload: /* kldunload(2) */
+        ret = do_freebsd_kldunload(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_kldunloadf: /* kldunloadf(2) */
+        ret = do_freebsd_kldunloadf(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_kldfind: /* kldfind(2) */
+        ret = do_freebsd_kldfind(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_kldnext: /* kldnext(2) */
+        ret = do_freebsd_kldnext(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_kldstat: /* kldstat(2) */
+        ret = do_freebsd_kldstat(arg1, arg2);
+        break;
+
+    case TARGET_FREEBSD_NR_kldfirstmod: /* kldfirstmod(2) */
+        ret = do_freebsd_kldfirstmod(arg1);
+        break;
+
+    case TARGET_FREEBSD_NR_kldsym: /* kldsym(2) */
+        ret = do_freebsd_kldsym(arg1, arg2, arg3);
+        break;
+
+        /*
          * FreeBSD additional posix support
          */
     case TARGET_FREEBSD_NR_posix_fallocate: /* posix_fallocate(2) */
