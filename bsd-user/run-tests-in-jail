@@ -1,0 +1,86 @@
+#!/bin/sh
+
+#
+# Run FreeBSD's user tests inside a jail. This can either be a native jail, a
+# 32-bit-on-64-bit jail, or a qemu-emulation jail. We'll disable the tests that
+# can't work in that environment with variable options.
+#
+# This is designed to go hand in hand with a poudriere jail. This is created
+# with poudriere ports -c, poudriere jail -c and then started and stoped with
+# poudriere jail -s and -k. This script is intended to run in a newly started
+# jail, which won't have any packages installed and is 'clean' and 'freshly
+# build (or updated)'.
+#
+
+# Look at uname to suss out if we're under qemu. It's nice to have the same
+# script for native jails, 32-on-64 jails and qemu jails. We mark qemu and jail
+# so that we can skip tests that don't work in those contexts to save time.
+#
+# uname -p and uname -m are the emulation, but uname -v still has the real
+# kernel processor abi as its third word. Use that to see if we're 32-on-64
+# or qemu.
+#
+# On September 1, 2023, about 1390 ports fail.
+# On September 2, 2023, about 1050 ports fail.
+#
+ma=$(uname -p)					# Emulated machine_arch
+rma=$(uname -v | awk '{print $3;}')		# Kernel machine_arch
+if [ ${ma} != ${rma} ]; then
+    if [ ${ma} = "armv7" -a ${rma} = "aarch64" ]; then
+	# 32-bit on 64-bit host
+    elif  [ ${ma} = "i386" -a ${rma} = "amd64" ]; then
+	# 32-bit on 64-bit host
+    elif  [ ${ma} = "powerpc" -a ${rma} = "powerpc64" ]; then
+	# 32-bit on 64-bit host
+    else
+	# mismatch that can only be explained by qmeu-enabled jail
+	qemu="--variable test_suites.FreeBSD.qemu=true"
+    fi
+fi
+
+# Are we in a jail? Note that as well, some tests don't work in jail
+if [ $(sysctl -n "security.jail.jailed") -eq 1 ]; then
+    jail="--variable test_suites.FreeBSD.jailed=true"
+fi
+
+# Note: The above two settings depend on tagging the broken tests in qemu
+# (because the syscalls aren't implemented) or in a jail because such interfaces
+# aren't allowed in a jail. The more that are tagged, the better the data we'll
+# get here.
+
+# Temp hack until FreeBSD 15 package builders have caught up
+case $(uname -U) in
+    15*)
+	mkdir -p /usr/local/etc
+	cat <<EOF > /usr/local/etc/pkg.conf
+	ABI = "FreeBSD:14:$(uname -p)"
+EOF
+	;;
+esac
+
+# Bootstrap pkg, since we're starting in a clean jail
+pkg bootstrap -y
+
+# Install needed packages to run the tests.
+# Note: freebsd-ci installs more, but we've eliminated those
+# packages that enable tests that don't / can't work
+# in emulation to reduce the noise
+pkg install -y  \
+                coreutils       \
+                gdb             \
+                gtar            \
+                jq              \
+                ksh93           \
+                nist-kat        \
+                nmap            \
+                perl5           \
+                net/py-dpkt     \
+                net/scapy       \
+                python          \
+                python3         \
+                devel/py-pytest \
+                sudo 
+
+# We turn off some tests for qemu, or inside of jails knowing they will fail to reduce noise.
+kyua ${qemu} ${jail} --variable parallelism=50 test -k /usr/tests/Kyuafile
+# XXX TODO automate post-processing. kyua makes that way too hard, so see what the ci suite does
