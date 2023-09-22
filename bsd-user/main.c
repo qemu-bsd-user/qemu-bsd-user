@@ -309,7 +309,7 @@ int main(int argc, char **argv)
     TaskState *ts;
     CPUArchState *env;
     CPUState *cpu;
-    int optind, rv;
+    int rv;
     const char *r;
     const char *gdbstub = NULL;
     char **target_environ, **wrk;
