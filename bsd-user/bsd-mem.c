@@ -26,15 +26,13 @@
 
 struct bsd_shm_regions bsd_shm_regions[N_BSD_SHM_REGIONS];
 
-abi_ulong bsd_target_brk;
-abi_ulong bsd_target_original_brk;
-abi_ulong brk_page;
+abi_ulong target_brk;
+abi_ulong initial_target_brk;
 
 void target_set_brk(abi_ulong new_brk)
 {
-
-    bsd_target_original_brk = bsd_target_brk = HOST_PAGE_ALIGN(new_brk);
-    brk_page = HOST_PAGE_ALIGN(bsd_target_brk);
+    target_brk = TARGET_PAGE_ALIGN(new_brk);
+    initial_target_brk = target_brk;
 }
 
 abi_long target_to_host_ipc_perm(struct ipc_perm *host_ip,
