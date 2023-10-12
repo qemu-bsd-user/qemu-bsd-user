@@ -104,7 +104,7 @@ static void gdb_chr_event(void *opaque, QEMUChrEvent event)
 }
 
 /*
- * In softmmu mode we stop the VM and wait to send the syscall packet
+ * In system-mode we stop the VM and wait to send the syscall packet
  * until notification that the CPU has stopped. This must be done
  * because if the packet is sent now the reply from the syscall
  * request could be received while the CPU is still in the running
@@ -292,7 +292,7 @@ static int find_cpu_clusters(Object *child, void *opaque)
         assert(cluster->cluster_id != UINT32_MAX);
         process->pid = cluster->cluster_id + 1;
         process->attached = false;
-        process->target_xml[0] = '\0';
+        process->target_xml = NULL;
 
         return 0;
     }

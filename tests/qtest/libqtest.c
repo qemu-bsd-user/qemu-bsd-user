@@ -421,9 +421,6 @@ static QTestState *G_GNUC_PRINTF(1, 2) qtest_spawn_qemu(const char *fmt, ...)
         int sig = SIGKILL;
         procctl(P_PID, getpid(), PROC_PDEATHSIG_CTL, &sig);
 #endif /* __FreeBSD__ */
-        if (!g_setenv("QEMU_AUDIO_DRV", "none", true)) {
-            exit(1);
-        }
         execlp("/bin/sh", "sh", "-c", command->str, NULL);
         exit(1);
     }
@@ -464,6 +461,7 @@ QTestState *qtest_init_without_qmp_handshake(const char *extra_args)
                          "-chardev socket,path=%s,id=char0 "
                          "-mon chardev=char0,mode=control "
                          "-display none "
+                         "-audio none "
                          "%s"
                          " -accel qtest",
                          socket_path,
@@ -1261,6 +1259,28 @@ void qtest_memset(QTestState *s, uint64_t addr, uint8_t pattern, size_t size)
     qtest_rsp(s);
 }
 
+QDict *qtest_vqmp_assert_failure_ref(QTestState *qts,
+                                     const char *fmt, va_list args)
+{
+    QDict *response;
+    QDict *ret;
+
+    response = qtest_vqmp(qts, fmt, args);
+
+    g_assert(response);
+    if (!qdict_haskey(response, "error")) {
+        g_autoptr(GString) s = qobject_to_json_pretty(QOBJECT(response), true);
+        g_test_message("%s", s->str);
+    }
+    g_assert(qdict_haskey(response, "error"));
+    g_assert(!qdict_haskey(response, "return"));
+    ret = qdict_get_qdict(response, "error");
+    qobject_ref(ret);
+    qobject_unref(response);
+
+    return ret;
+}
+
 QDict *qtest_vqmp_assert_success_ref(QTestState *qts,
                                      const char *fmt, va_list args)
 {
@@ -1322,6 +1342,17 @@ void qtest_vqmp_fds_assert_success(QTestState *qts, int *fds, size_t nfds,
     qobject_unref(response);
 }
 #endif /* !_WIN32 */
+
+QDict *qtest_qmp_assert_failure_ref(QTestState *qts, const char *fmt, ...)
+{
+    QDict *response;
+    va_list ap;
+
+    va_start(ap, fmt);
+    response = qtest_vqmp_assert_failure_ref(qts, fmt, ap);
+    va_end(ap);
+    return response;
+}
 
 QDict *qtest_qmp_assert_success_ref(QTestState *qts, const char *fmt, ...)
 {
