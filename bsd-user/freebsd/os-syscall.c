@@ -35,8 +35,6 @@
 #include "truss_hdr.h"
 #include "systruss.h"
 
-#define target_to_host_bitmask(x, tbl) (x)
-
 /* BSD independent syscall shims */
 #include "bsd-file.h"
 #include "bsd-ioctl.h"
@@ -72,14 +70,10 @@ safe_syscall6(int, kevent, int, kq, const struct kevent *, changelist,
     int, nchanges, struct kevent *, eventlist, int, nevents,
     const struct timespec *, timeout);
 
-/* used in os-proc */
-safe_syscall4(pid_t, wait4, pid_t, wpid, int *, status, int, options,
-    struct rusage *, rusage);
-safe_syscall6(pid_t, wait6, idtype_t, idtype, id_t, id, int *, status, int,
-    options, struct __wrusage *, wrusage, siginfo_t *, infop);
-
-/* *BSD dependent syscall shims */
+/* BSD dependent syscall shims */
 #include "os-stat.h"
+#include "os-proc.h"
+#include "os-misc.h"
 
 /* I/O */
 safe_syscall3(int, open, const char *, path, int, flags, mode_t, mode);
@@ -124,6 +118,12 @@ safe_syscall6(ssize_t, copy_file_range, int, infd, off_t *, inoffp, int, outfd,
 #endif
 
 int g_posix_timers[32] = { 0, } ;
+
+/* used in os-proc */
+safe_syscall4(pid_t, wait4, pid_t, wpid, int *, status, int, options,
+    struct rusage *, rusage);
+safe_syscall6(pid_t, wait6, idtype_t, idtype, id_t, id, int *, status, int,
+    options, struct __wrusage *, wrusage, siginfo_t *, infop);
 
 /*
  * errno conversion.
@@ -311,7 +311,8 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_wait6: /* wait6(2) */
-        ret = do_freebsd_wait6(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+        ret = do_freebsd_wait6(cpu_env, arg1, arg2, arg3,
+                               arg4, arg5, arg6, arg7, arg8);
         break;
 
     case TARGET_FREEBSD_NR_exit: /* exit(2) */
@@ -395,12 +396,12 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_getpgid: /* getpgid(2) */
-	ret = do_bsd_getpgid(arg1);
-	break;
+         ret = do_bsd_getpgid(arg1);
+         break;
 
     case TARGET_FREEBSD_NR_setpgid: /* setpgid(2) */
-	ret = do_bsd_setpgid(arg1, arg2);
-	break;
+         ret = do_bsd_setpgid(arg1, arg2);
+         break;
 
     case TARGET_FREEBSD_NR_setreuid: /* setreuid(2) */
         ret = do_bsd_setreuid(arg1, arg2);
@@ -1316,7 +1317,6 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
     case TARGET_FREEBSD_NR_fcntl: /* fcntl(2) */
         ret = do_freebsd_fcntl(arg1, arg2, arg3);
         break;
-
 
         /*
          * sys{ctl, arch, call}

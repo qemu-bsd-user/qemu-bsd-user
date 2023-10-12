@@ -41,16 +41,19 @@ get_filename_from_fd(pid_t pid, int fd, char *filename, size_t len)
     struct filestat *fst;
 
     procstat = procstat_open_sysctl();
-    if (procstat == NULL)
+    if (procstat == NULL) {
         goto out;
+    }
 
     kp = procstat_getprocs(procstat, KERN_PROC_PID, pid, &cnt);
-    if (kp == NULL)
+    if (kp == NULL) {
         goto out;
+    }
 
     head = procstat_getfiles(procstat, kp, 0);
-    if (head == NULL)
+    if (head == NULL) {
         goto out;
+    }
 
     STAILQ_FOREACH(fst, head, next) {
         if (fd == fst->fs_fd) {
@@ -63,12 +66,15 @@ get_filename_from_fd(pid_t pid, int fd, char *filename, size_t len)
     }
 
 out:
-    if (head != NULL)
+    if (head != NULL) {
         procstat_freefiles(procstat, head);
-    if (kp != NULL)
+    }
+    if (kp != NULL) {
         procstat_freeprocs(procstat, kp);
-    if (procstat != NULL)
+    }
+    if (procstat != NULL) {
         procstat_close(procstat);
+    }
     return ret;
 }
 
@@ -171,14 +177,14 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
              */
             if (get_filename_from_fd(getpid(), (int)path_or_fd, execpath,
                         sizeof(execpath)) != NULL) {
-                memmove(qarg1 + 2, qarg1, (qargend-qarg1) * sizeof(*qarg1));
-		qarg1[1] = qarg1[0];
-		qarg1[0] = (char *)"-0";
-		qarg1 += 2;
-		qargend += 2;
+                memmove(qarg1 + 2, qarg1, (qargend - qarg1) * sizeof(*qarg1));
+                qarg1[1] = qarg1[0];
+                qarg1[0] = (char *)"-0";
+                qarg1 += 2;
+                qargend += 2;
                 *qarg1 = execpath;
 #ifndef DONT_INHERIT_INTERP_PREFIX
-                memmove(qarg1 + 2, qarg1, (qargend-qarg1) * sizeof(*qarg1));
+                memmove(qarg1 + 2, qarg1, (qargend - qarg1) * sizeof(*qarg1));
                 *qarg1++ = (char *)"-L";
                 *qarg1++ = (char *)interp_prefix;
 #endif
@@ -208,14 +214,14 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         if (fd > 0 && is_target_elf_binary(fd) == 1) {
             close(fd);
             /* execve() as a target binary using emulator. */
-            memmove(qarg1 + 2, qarg1, (qargend-qarg1) * sizeof(*qarg1));
+            memmove(qarg1 + 2, qarg1, (qargend - qarg1) * sizeof(*qarg1));
             qarg1[1] = qarg1[0];
             qarg1[0] = (char *)"-0";
             qarg1 += 2;
-	    qargend += 2;
+            qargend += 2;
             *qarg1 = (char *)p;
 #ifndef DONT_INHERIT_INTERP_PREFIX
-            memmove(qarg1 + 2, qarg1, (qargend-qarg1) * sizeof(*qarg1));
+            memmove(qarg1 + 2, qarg1, (qargend - qarg1) * sizeof(*qarg1));
             *qarg1++ = (char *)"-L";
             *qarg1++ = (char *)interp_prefix;
 #endif
@@ -254,8 +260,7 @@ execve_end:
 static abi_long
 t2h_procctl_cmd(int target_cmd, int *host_cmd)
 {
-
-    switch(target_cmd) {
+    switch (target_cmd) {
     case TARGET_PROC_SPROTECT:
         *host_cmd = PROC_SPROTECT;
         break;
@@ -277,25 +282,8 @@ t2h_procctl_cmd(int target_cmd, int *host_cmd)
         break;
 
     default:
-        return (-TARGET_EINVAL);
+        return -TARGET_EINVAL;
     }
-
-    return 0;
-}
-
-static abi_long
-t2h_reaper_kill(abi_ulong target_rk_addr, struct procctl_reaper_kill *host_rk)
-{
-    struct target_procctl_reaper_kill *target_rk;
-
-    if (!lock_user_struct(VERIFY_READ, target_rk, target_rk_addr, 1))
-        return -TARGET_EFAULT;
-    __get_user(host_rk->rk_sig, &target_rk->rk_sig);
-    __get_user(host_rk->rk_flags, &target_rk->rk_flags);
-    __get_user(host_rk->rk_subtree, &target_rk->rk_subtree);
-    __get_user(host_rk->rk_killed, &target_rk->rk_killed);
-    __get_user(host_rk->rk_fpid, &target_rk->rk_fpid);
-    unlock_user_struct(target_rk, target_rk_addr, 0);
 
     return 0;
 }
@@ -306,8 +294,9 @@ h2t_reaper_status(struct procctl_reaper_status *host_rs,
 {
     struct target_procctl_reaper_status *target_rs;
 
-    if (!lock_user_struct(VERIFY_WRITE, target_rs, target_rs_addr, 0))
+    if (!lock_user_struct(VERIFY_WRITE, target_rs, target_rs_addr, 0)) {
         return -TARGET_EFAULT;
+    }
     __put_user(host_rs->rs_flags, &target_rs->rs_flags);
     __put_user(host_rs->rs_children, &target_rs->rs_children);
     __put_user(host_rs->rs_descendants, &target_rs->rs_descendants);
@@ -319,12 +308,31 @@ h2t_reaper_status(struct procctl_reaper_status *host_rs,
 }
 
 static abi_long
+t2h_reaper_kill(abi_ulong target_rk_addr, struct procctl_reaper_kill *host_rk)
+{
+    struct target_procctl_reaper_kill *target_rk;
+
+    if (!lock_user_struct(VERIFY_READ, target_rk, target_rk_addr, 1)) {
+        return -TARGET_EFAULT;
+    }
+    __get_user(host_rk->rk_sig, &target_rk->rk_sig);
+    __get_user(host_rk->rk_flags, &target_rk->rk_flags);
+    __get_user(host_rk->rk_subtree, &target_rk->rk_subtree);
+    __get_user(host_rk->rk_killed, &target_rk->rk_killed);
+    __get_user(host_rk->rk_fpid, &target_rk->rk_fpid);
+    unlock_user_struct(target_rk, target_rk_addr, 0);
+
+    return 0;
+}
+
+static abi_long
 h2t_reaper_kill(struct procctl_reaper_kill *host_rk, abi_ulong target_rk_addr)
 {
     struct target_procctl_reaper_kill *target_rk;
 
-    if (!lock_user_struct(VERIFY_WRITE, target_rk, target_rk_addr, 0))
+    if (!lock_user_struct(VERIFY_WRITE, target_rk, target_rk_addr, 0)) {
         return -TARGET_EFAULT;
+    }
     __put_user(host_rk->rk_sig, &target_rk->rk_sig);
     __put_user(host_rk->rk_flags, &target_rk->rk_flags);
     __put_user(host_rk->rk_subtree, &target_rk->rk_subtree);
@@ -341,8 +349,9 @@ h2t_procctl_reaper_pidinfo(struct procctl_reaper_pidinfo *host_pi,
 {
     struct target_procctl_reaper_pidinfo *target_pi;
 
-    if (!lock_user_struct(VERIFY_WRITE, target_pi, target_pi_addr, 0))
+    if (!lock_user_struct(VERIFY_WRITE, target_pi, target_pi_addr, 0)) {
         return -TARGET_EFAULT;
+    }
     __put_user(host_pi->pi_pid, &target_pi->pi_pid);
     __put_user(host_pi->pi_subtree, &target_pi->pi_subtree);
     __put_user(host_pi->pi_flags, &target_pi->pi_flags);
@@ -359,7 +368,7 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
     void *data;
     int host_cmd, flags;
     uint32_t u, target_rp_count;
-    union {
+    g_autofree union {
         struct procctl_reaper_status rs;
         struct procctl_reaper_pids rp;
         struct procctl_reaper_kill rk;
@@ -387,9 +396,9 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
 #endif
 
     error = t2h_procctl_cmd(target_cmd, &host_cmd);
-    if (error)
+    if (error) {
         return error;
-
+    }
     switch (host_cmd) {
     case PROC_SPROTECT:
         data = &flags;
@@ -397,10 +406,11 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
 
     case PROC_REAP_ACQUIRE:
     case PROC_REAP_RELEASE:
-        if (target_arg == 0)
+        if (target_arg == 0) {
             data = NULL;
-        else
+        } else {
             error = -TARGET_EINVAL;
+        }
         break;
 
     case PROC_REAP_STATUS:
@@ -415,13 +425,14 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
         __get_user(target_rp_pids, &target_rp->rp_pids);
         unlock_user_struct(target_rp, target_arg, 0);
         host.rp.rp_count = target_rp_count;
-        /* XXX we should check target_rc_count to see if it is reasonable. */
-        host.rp.rp_pids = alloca(target_rp_count *
-                sizeof(struct procctl_reaper_pidinfo));
-        if (host.rp.rp_pids == NULL)
+        host.rp.rp_pids = g_try_new(struct procctl_reaper_pidinfo,
+            target_rp_count);
+
+        if (host.rp.rp_pids == NULL) {
             error = -TARGET_ENOMEM;
-        else
+        } else {
             data = &host.rp;
+        }
         break;
 
     case PROC_REAP_KILL:
@@ -429,18 +440,19 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
         break;
     }
 
-    if (error)
+    if (error) {
         return error;
-
+    }
     error = get_errno(procctl(idtype, id, host_cmd, data));
 
-    if (error)
+    if (error) {
         return error;
-
-    switch(host_cmd) {
+    }
+    switch (host_cmd) {
     case PROC_SPROTECT:
-        if (put_user_s32(flags, target_arg))
+        if (put_user_s32(flags, target_arg)) {
             return -TARGET_EFAULT;
+        }
         break;
 
     case PROC_REAP_STATUS:
@@ -453,8 +465,9 @@ do_freebsd_procctl(void *cpu_env, int idtype, abi_ulong arg2, abi_ulong arg3,
             error = h2t_procctl_reaper_pidinfo(&host.rp.rp_pids[u],
                     target_rp_pids +
                     (u * sizeof(struct target_procctl_reaper_pidinfo)));
-            if (error)
+            if (error) {
                 break;
+            }
         }
         break;
 

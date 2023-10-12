@@ -134,6 +134,9 @@ struct target_sched_param {
 /*
  *  sys/mman.h
  */
+#define TARGET_MADV_DONTNEED            4       /* dont need these pages */
+
+/* XXX */
 #define TARGET_BSD_MAP_FLAGMASK         0x3ff7
 
 /*

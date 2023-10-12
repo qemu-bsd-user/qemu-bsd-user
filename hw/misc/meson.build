@@ -60,6 +60,7 @@ system_ss.add(when: 'CONFIG_IMX', if_true: files(
   'imx6_src.c',
   'imx6ul_ccm.c',
   'imx7_ccm.c',
+  'imx7_src.c',
   'imx7_gpr.c',
   'imx7_snvs.c',
   'imx_ccm.c',
@@ -97,6 +98,9 @@ specific_ss.add(when: 'CONFIG_XLNX_VERSAL', if_true: files('xlnx-versal-crl.c'))
 system_ss.add(when: 'CONFIG_XLNX_VERSAL', if_true: files(
   'xlnx-versal-xramc.c',
   'xlnx-versal-pmc-iou-slcr.c',
+  'xlnx-versal-cfu.c',
+  'xlnx-cfi-if.c',
+  'xlnx-versal-cframe-reg.c',
 ))
 system_ss.add(when: 'CONFIG_STM32F2XX_SYSCFG', if_true: files('stm32f2xx_syscfg.c'))
 system_ss.add(when: 'CONFIG_STM32F4XX_SYSCFG', if_true: files('stm32f4xx_syscfg.c'))

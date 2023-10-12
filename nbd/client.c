@@ -877,10 +877,9 @@ static int nbd_list_meta_contexts(QIOChannel *ioc,
  * Returns: negative errno: failure talking to server
  *          non-negative: enum NBDMode describing server abilities
  */
-static int nbd_start_negotiate(AioContext *aio_context, QIOChannel *ioc,
-                               QCryptoTLSCreds *tlscreds,
+static int nbd_start_negotiate(QIOChannel *ioc, QCryptoTLSCreds *tlscreds,
                                const char *hostname, QIOChannel **outioc,
-                               bool structured_reply, bool *zeroes,
+                               NBDMode max_mode, bool *zeroes,
                                Error **errp)
 {
     ERRP_GUARD();
@@ -946,10 +945,6 @@ static int nbd_start_negotiate(AioContext *aio_context, QIOChannel *ioc,
                     return -EINVAL;
                 }
                 ioc = *outioc;
-                if (aio_context) {
-                    qio_channel_set_blocking(ioc, false, NULL);
-                    qio_channel_attach_aio_context(ioc, aio_context);
-                }
             } else {
                 error_setg(errp, "Server does not support STARTTLS");
                 return -EINVAL;
@@ -958,7 +953,7 @@ static int nbd_start_negotiate(AioContext *aio_context, QIOChannel *ioc,
         if (fixedNewStyle) {
             int result = 0;
 
-            if (structured_reply) {
+            if (max_mode >= NBD_MODE_STRUCTURED) {
                 result = nbd_request_simple_option(ioc,
                                                    NBD_OPT_STRUCTURED_REPLY,
                                                    false, errp);
@@ -1014,8 +1009,7 @@ static int nbd_negotiate_finish_oldstyle(QIOChannel *ioc, NBDExportInfo *info,
  * Returns: negative errno: failure talking to server
  *          0: server is connected
  */
-int nbd_receive_negotiate(AioContext *aio_context, QIOChannel *ioc,
-                          QCryptoTLSCreds *tlscreds,
+int nbd_receive_negotiate(QIOChannel *ioc, QCryptoTLSCreds *tlscreds,
                           const char *hostname, QIOChannel **outioc,
                           NBDExportInfo *info, Error **errp)
 {
@@ -1027,21 +1021,20 @@ int nbd_receive_negotiate(AioContext *aio_context, QIOChannel *ioc,
     assert(info->name && strlen(info->name) <= NBD_MAX_STRING_SIZE);
     trace_nbd_receive_negotiate_name(info->name);
 
-    result = nbd_start_negotiate(aio_context, ioc, tlscreds, hostname, outioc,
-                                 info->structured_reply, &zeroes, errp);
+    result = nbd_start_negotiate(ioc, tlscreds, hostname, outioc,
+                                 info->mode, &zeroes, errp);
     if (result < 0) {
         return result;
     }
 
-    info->structured_reply = false;
+    info->mode = result;
     info->base_allocation = false;
     if (tlscreds && *outioc) {
         ioc = *outioc;
     }
 
-    switch ((NBDMode)result) {
+    switch (info->mode) {
     case NBD_MODE_STRUCTURED:
-        info->structured_reply = true;
         if (base_allocation) {
             result = nbd_negotiate_simple_meta_context(ioc, info, errp);
             if (result < 0) {
@@ -1150,8 +1143,8 @@ int nbd_receive_export_list(QIOChannel *ioc, QCryptoTLSCreds *tlscreds,
     QIOChannel *sioc = NULL;
 
     *info = NULL;
-    result = nbd_start_negotiate(NULL, ioc, tlscreds, hostname, &sioc, true,
-                                 NULL, errp);
+    result = nbd_start_negotiate(ioc, tlscreds, hostname, &sioc,
+                                 NBD_MODE_STRUCTURED, NULL, errp);
     if (tlscreds && sioc) {
         ioc = sioc;
     }
@@ -1182,7 +1175,7 @@ int nbd_receive_export_list(QIOChannel *ioc, QCryptoTLSCreds *tlscreds,
             memset(&array[count - 1], 0, sizeof(*array));
             array[count - 1].name = name;
             array[count - 1].description = desc;
-            array[count - 1].structured_reply = result == NBD_MODE_STRUCTURED;
+            array[count - 1].mode = result;
         }
 
         for (i = 0; i < count; i++) {
@@ -1215,6 +1208,7 @@ int nbd_receive_export_list(QIOChannel *ioc, QCryptoTLSCreds *tlscreds,
         /* Lone export name is implied, but we can parse length and flags */
         array = g_new0(NBDExportInfo, 1);
         array->name = g_strdup("");
+        array->mode = NBD_MODE_OLDSTYLE;
         count = 1;
 
         if (nbd_negotiate_finish_oldstyle(ioc, array, errp) < 0) {
@@ -1224,7 +1218,7 @@ int nbd_receive_export_list(QIOChannel *ioc, QCryptoTLSCreds *tlscreds,
         /* Send NBD_CMD_DISC as a courtesy to the server, but ignore all
          * errors now that we have the information we wanted. */
         if (nbd_drop(ioc, 124, NULL) == 0) {
-            NBDRequest request = { .type = NBD_CMD_DISC };
+            NBDRequest request = { .type = NBD_CMD_DISC, .mode = result };
 
             nbd_send_request(ioc, &request);
         }
@@ -1354,6 +1348,8 @@ int nbd_send_request(QIOChannel *ioc, NBDRequest *request)
 {
     uint8_t buf[NBD_REQUEST_SIZE];
 
+    assert(request->mode <= NBD_MODE_STRUCTURED); /* TODO handle extended */
+    assert(request->len <= UINT32_MAX);
     trace_nbd_send_request(request->from, request->len, request->cookie,
                            request->flags, request->type,
                            nbd_cmd_lookup(request->type));

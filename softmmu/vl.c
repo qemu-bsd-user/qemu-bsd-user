@@ -49,6 +49,7 @@
 #include "qemu/error-report.h"
 #include "qemu/sockets.h"
 #include "qemu/accel.h"
+#include "qemu/async-teardown.h"
 #include "hw/usb.h"
 #include "hw/isa/isa.h"
 #include "hw/scsi/scsi.h"
@@ -86,11 +87,9 @@
 #include "migration/colo.h"
 #include "migration/postcopy-ram.h"
 #include "sysemu/kvm.h"
-#include "sysemu/hax.h"
 #include "qapi/qobject-input-visitor.h"
 #include "qemu/option.h"
 #include "qemu/config-file.h"
-#include "qemu/qemu-options.h"
 #include "qemu/main-loop.h"
 #ifdef CONFIG_VIRTFS
 #include "fsdev/qemu-fsdev.h"
@@ -748,6 +747,33 @@ static QemuOptsList qemu_smp_opts = {
     },
 };
 
+#if defined(CONFIG_POSIX)
+static QemuOptsList qemu_run_with_opts = {
+    .name = "run-with",
+    .head = QTAILQ_HEAD_INITIALIZER(qemu_run_with_opts.head),
+    .desc = {
+#if defined(CONFIG_LINUX)
+        {
+            .name = "async-teardown",
+            .type = QEMU_OPT_BOOL,
+        },
+#endif
+        {
+            .name = "chroot",
+            .type = QEMU_OPT_STRING,
+        },
+        { /* end of list */ }
+    },
+};
+
+#define qemu_add_run_with_opts() qemu_add_opts(&qemu_run_with_opts)
+
+#else
+
+#define qemu_add_run_with_opts()
+
+#endif /* CONFIG_POSIX */
+
 static void realtime_init(void)
 {
     if (enable_mlock) {
@@ -865,6 +891,16 @@ static void help(int exitcode)
 
     exit(exitcode);
 }
+
+enum {
+
+#define DEF(option, opt_arg, opt_enum, opt_help, arch_mask)     \
+    opt_enum,
+#define DEFHEADING(text)
+#define ARCHHEADING(text, arch_mask)
+
+#include "qemu-options.def"
+};
 
 #define HAS_ARG 0x0001
 
@@ -1926,9 +1962,7 @@ static void qemu_create_early_backends(void)
      * setting machine properties, so they can be referred to.
      */
     configure_blockdev(&bdo_queue, machine_class, snapshot);
-    if (!audio_init_audiodevs()) {
-        exit(1);
-    }
+    audio_init_audiodevs();
 }
 
 
@@ -2089,6 +2123,7 @@ static int global_init_func(void *opaque, QemuOpts *opts, Error **errp)
 static bool is_qemuopts_group(const char *group)
 {
     if (g_str_equal(group, "object") ||
+        g_str_equal(group, "audiodev") ||
         g_str_equal(group, "machine") ||
         g_str_equal(group, "smp-opts") ||
         g_str_equal(group, "boot-opts")) {
@@ -2104,6 +2139,15 @@ static void qemu_record_config_group(const char *group, QDict *dict,
         Visitor *v = qobject_input_visitor_new_keyval(QOBJECT(dict));
         object_option_add_visitor(v);
         visit_free(v);
+
+    } else if (g_str_equal(group, "audiodev")) {
+        Audiodev *dev = NULL;
+        Visitor *v = qobject_input_visitor_new_keyval(QOBJECT(dict));
+        if (visit_type_Audiodev(v, NULL, &dev, errp)) {
+            audio_define(dev);
+        }
+        visit_free(v);
+
     } else if (g_str_equal(group, "machine")) {
         /*
          * Cannot merge string-valued and type-safe dictionaries, so JSON
@@ -2546,11 +2590,6 @@ static void qemu_init_board(void)
     drive_check_orphaned();
 
     realtime_init();
-
-    if (hax_enabled()) {
-        /* FIXME: why isn't cpu_synchronize_all_post_init enough? */
-        hax_sync_vcpus();
-    }
 }
 
 static void qemu_create_cli_devices(void)
@@ -2704,6 +2743,7 @@ void qemu_init(int argc, char **argv)
     qemu_add_opts(&qemu_semihosting_config_opts);
     qemu_add_opts(&qemu_fw_cfg_opts);
     qemu_add_opts(&qemu_action_opts);
+    qemu_add_run_with_opts();
     module_call_init(MODULE_INIT_OPTS);
 
     error_init(argv[0]);
@@ -2884,10 +2924,6 @@ void qemu_init(int argc, char **argv)
                 }
                 break;
 #endif
-            case QEMU_OPTION_audio_help:
-                audio_legacy_help();
-                exit (0);
-                break;
             case QEMU_OPTION_audiodev:
                 audio_parse_option(optarg);
                 break;
@@ -3172,7 +3208,6 @@ void qemu_init(int argc, char **argv)
                 }
                 break;
             case QEMU_OPTION_watchdog_action: {
-                QemuOpts *opts;
                 opts = qemu_opts_create(qemu_find_opts("action"), NULL, 0, &error_abort);
                 qemu_opt_set(opts, "watchdog", optarg, &error_abort);
                 break;
@@ -3483,16 +3518,16 @@ void qemu_init(int argc, char **argv)
                 break;
             case QEMU_OPTION_compat:
                 {
-                    CompatPolicy *opts;
+                    CompatPolicy *opts_policy;
                     Visitor *v;
 
                     v = qobject_input_visitor_new_str(optarg, NULL,
                                                       &error_fatal);
 
-                    visit_type_CompatPolicy(v, NULL, &opts, &error_fatal);
-                    QAPI_CLONE_MEMBERS(CompatPolicy, &compat_policy, opts);
+                    visit_type_CompatPolicy(v, NULL, &opts_policy, &error_fatal);
+                    QAPI_CLONE_MEMBERS(CompatPolicy, &compat_policy, opts_policy);
 
-                    qapi_free_CompatPolicy(opts);
+                    qapi_free_CompatPolicy(opts_policy);
                     visit_free(v);
                     break;
                 }
@@ -3522,11 +3557,52 @@ void qemu_init(int argc, char **argv)
             case QEMU_OPTION_nouserconfig:
                 /* Nothing to be parsed here. Especially, do not error out below. */
                 break;
-            default:
-                if (os_parse_cmd_args(popt->index, optarg)) {
-                    error_report("Option not supported in this build");
+#if defined(CONFIG_POSIX)
+            case QEMU_OPTION_runas:
+                if (!os_set_runas(optarg)) {
+                    error_report("User \"%s\" doesn't exist"
+                                 " (and is not <uid>:<gid>)",
+                                 optarg);
                     exit(1);
                 }
+                break;
+            case QEMU_OPTION_chroot:
+                warn_report("option is deprecated,"
+                            " use '-run-with chroot=...' instead");
+                os_set_chroot(optarg);
+                break;
+            case QEMU_OPTION_daemonize:
+                os_set_daemonize(true);
+                break;
+#if defined(CONFIG_LINUX)
+            /* deprecated */
+            case QEMU_OPTION_asyncteardown:
+                init_async_teardown();
+                break;
+#endif
+            case QEMU_OPTION_run_with: {
+                const char *str;
+                opts = qemu_opts_parse_noisily(qemu_find_opts("run-with"),
+                                                         optarg, false);
+                if (!opts) {
+                    exit(1);
+                }
+#if defined(CONFIG_LINUX)
+                if (qemu_opt_get_bool(opts, "async-teardown", false)) {
+                    init_async_teardown();
+                }
+#endif
+                str = qemu_opt_get(opts, "chroot");
+                if (str) {
+                    os_set_chroot(str);
+                }
+                break;
+            }
+#endif /* CONFIG_POSIX */
+
+            default:
+                error_report("Option not supported in this build");
+                exit(1);
             }
         }
     }

@@ -319,8 +319,8 @@ static CPAccessResult access_tpm(CPUARMState *env, const ARMCPRegInfo *ri,
 }
 
 /* Check for traps from EL1 due to HCR_EL2.TVM and HCR_EL2.TRVM.  */
-static CPAccessResult access_tvm_trvm(CPUARMState *env, const ARMCPRegInfo *ri,
-                                      bool isread)
+CPAccessResult access_tvm_trvm(CPUARMState *env, const ARMCPRegInfo *ri,
+                               bool isread)
 {
     if (arm_current_el(env) == 1) {
         uint64_t trap = isread ? HCR_TRVM : HCR_TVM;
@@ -5980,7 +5980,10 @@ static void hcrx_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     uint64_t valid_mask = 0;
 
-    /* No features adding bits to HCRX are implemented. */
+    /* FEAT_MOPS adds MSCEn and MCE2 */
+    if (cpu_isar_feature(aa64_mops, env_archcpu(env))) {
+        valid_mask |= HCRX_MSCEN | HCRX_MCE2;
+    }
 
     /* Clear RES0 bits.  */
     env->cp15.hcrx_el2 = value & valid_mask;
@@ -6009,13 +6012,24 @@ uint64_t arm_hcrx_el2_eff(CPUARMState *env)
 {
     /*
      * The bits in this register behave as 0 for all purposes other than
-     * direct reads of the register if:
-     *   - EL2 is not enabled in the current security state,
-     *   - SCR_EL3.HXEn is 0.
+     * direct reads of the register if SCR_EL3.HXEn is 0.
+     * If EL2 is not enabled in the current security state, then the
+     * bit may behave as if 0, or as if 1, depending on the bit.
+     * For the moment, we treat the EL2-disabled case as taking
+     * priority over the HXEn-disabled case. This is true for the only
+     * bit for a feature which we implement where the answer is different
+     * for the two cases (MSCEn for FEAT_MOPS).
+     * This may need to be revisited for future bits.
      */
-    if (!arm_is_el2_enabled(env)
-        || (arm_feature(env, ARM_FEATURE_EL3)
-            && !(env->cp15.scr_el3 & SCR_HXEN))) {
+    if (!arm_is_el2_enabled(env)) {
+        uint64_t hcrx = 0;
+        if (cpu_isar_feature(aa64_mops, env_archcpu(env))) {
+            /* MSCEn behaves as 1 if EL2 is not enabled */
+            hcrx |= HCRX_MSCEN;
+        }
+        return hcrx;
+    }
+    if (arm_feature(env, ARM_FEATURE_EL3) && !(env->cp15.scr_el3 & SCR_HXEN)) {
         return 0;
     }
     return env->cp15.hcrx_el2;
@@ -7748,10 +7762,6 @@ static const ARMCPRegInfo mte_reginfo[] = {
       .opc0 = 3, .opc1 = 0, .crn = 1, .crm = 0, .opc2 = 6,
       .access = PL1_RW, .accessfn = access_mte,
       .fieldoffset = offsetof(CPUARMState, cp15.gcr_el1) },
-    { .name = "GMID_EL1", .state = ARM_CP_STATE_AA64,
-      .opc0 = 3, .opc1 = 1, .crn = 0, .crm = 0, .opc2 = 4,
-      .access = PL1_R, .accessfn = access_aa64_tid5,
-      .type = ARM_CP_CONST, .resetvalue = GMID_EL1_BS },
     { .name = "TCO", .state = ARM_CP_STATE_AA64,
       .opc0 = 3, .opc1 = 3, .crn = 4, .crm = 2, .opc2 = 7,
       .type = ARM_CP_NO_RAW,
@@ -8439,11 +8449,11 @@ void register_cp_regs_for_features(ARMCPU *cpu)
               .access = PL1_R, .type = ARM_CP_CONST,
               .accessfn = access_aa64_tid3,
               .resetvalue = cpu->isar.id_aa64isar1 },
-            { .name = "ID_AA64ISAR2_EL1_RESERVED", .state = ARM_CP_STATE_AA64,
+            { .name = "ID_AA64ISAR2_EL1", .state = ARM_CP_STATE_AA64,
               .opc0 = 3, .opc1 = 0, .crn = 0, .crm = 6, .opc2 = 2,
               .access = PL1_R, .type = ARM_CP_CONST,
               .accessfn = access_aa64_tid3,
-              .resetvalue = 0 },
+              .resetvalue = cpu->isar.id_aa64isar2 },
             { .name = "ID_AA64ISAR3_EL1_RESERVED", .state = ARM_CP_STATE_AA64,
               .opc0 = 3, .opc1 = 0, .crn = 0, .crm = 6, .opc2 = 3,
               .access = PL1_R, .type = ARM_CP_CONST,
@@ -8625,11 +8635,16 @@ void register_cp_regs_for_features(ARMCPU *cpu)
                                R_ID_AA64ZFR0_F64MM_MASK },
             { .name = "ID_AA64SMFR0_EL1",
               .exported_bits = R_ID_AA64SMFR0_F32F32_MASK |
+                               R_ID_AA64SMFR0_BI32I32_MASK |
                                R_ID_AA64SMFR0_B16F32_MASK |
                                R_ID_AA64SMFR0_F16F32_MASK |
                                R_ID_AA64SMFR0_I8I32_MASK |
+                               R_ID_AA64SMFR0_F16F16_MASK |
+                               R_ID_AA64SMFR0_B16B16_MASK |
+                               R_ID_AA64SMFR0_I16I32_MASK |
                                R_ID_AA64SMFR0_F64F64_MASK |
                                R_ID_AA64SMFR0_I16I64_MASK |
+                               R_ID_AA64SMFR0_SMEVER_MASK |
                                R_ID_AA64SMFR0_FA64_MASK },
             { .name = "ID_AA64MMFR0_EL1",
               .exported_bits = R_ID_AA64MMFR0_ECV_MASK,
@@ -8680,22 +8695,35 @@ void register_cp_regs_for_features(ARMCPU *cpu)
               .exported_bits = R_ID_AA64ISAR2_WFXT_MASK |
                                R_ID_AA64ISAR2_RPRES_MASK |
                                R_ID_AA64ISAR2_GPA3_MASK |
-                               R_ID_AA64ISAR2_APA3_MASK },
+                               R_ID_AA64ISAR2_APA3_MASK |
+                               R_ID_AA64ISAR2_MOPS_MASK |
+                               R_ID_AA64ISAR2_BC_MASK |
+                               R_ID_AA64ISAR2_RPRFM_MASK |
+                               R_ID_AA64ISAR2_CSSC_MASK },
             { .name = "ID_AA64ISAR*_EL1_RESERVED",
               .is_glob = true },
         };
         modify_arm_cp_regs(v8_idregs, v8_user_idregs);
 #endif
-        /* RVBAR_EL1 is only implemented if EL1 is the highest EL */
+        /*
+         * RVBAR_EL1 and RMR_EL1 only implemented if EL1 is the highest EL.
+         * TODO: For RMR, a write with bit 1 set should do something with
+         * cpu_reset(). In the meantime, "the bit is strictly a request",
+         * so we are in spec just ignoring writes.
+         */
         if (!arm_feature(env, ARM_FEATURE_EL3) &&
             !arm_feature(env, ARM_FEATURE_EL2)) {
-            ARMCPRegInfo rvbar = {
-                .name = "RVBAR_EL1", .state = ARM_CP_STATE_BOTH,
-                .opc0 = 3, .opc1 = 0, .crn = 12, .crm = 0, .opc2 = 1,
-                .access = PL1_R,
-                .fieldoffset = offsetof(CPUARMState, cp15.rvbar),
+            ARMCPRegInfo el1_reset_regs[] = {
+                { .name = "RVBAR_EL1", .state = ARM_CP_STATE_BOTH,
+                  .opc0 = 3, .opc1 = 0, .crn = 12, .crm = 0, .opc2 = 1,
+                  .access = PL1_R,
+                  .fieldoffset = offsetof(CPUARMState, cp15.rvbar) },
+                { .name = "RMR_EL1", .state = ARM_CP_STATE_BOTH,
+                  .opc0 = 3, .opc1 = 0, .crn = 12, .crm = 0, .opc2 = 2,
+                  .access = PL1_RW, .type = ARM_CP_CONST,
+                  .resetvalue = arm_feature(env, ARM_FEATURE_AARCH64) }
             };
-            define_one_arm_cp_reg(cpu, &rvbar);
+            define_arm_cp_regs(cpu, el1_reset_regs);
         }
         define_arm_cp_regs(cpu, v8_idregs);
         define_arm_cp_regs(cpu, v8_cp_reginfo);
@@ -8779,22 +8807,25 @@ void register_cp_regs_for_features(ARMCPU *cpu)
         if (cpu_isar_feature(aa64_sel2, cpu)) {
             define_arm_cp_regs(cpu, el2_sec_cp_reginfo);
         }
-        /* RVBAR_EL2 is only implemented if EL2 is the highest EL */
+        /*
+         * RVBAR_EL2 and RMR_EL2 only implemented if EL2 is the highest EL.
+         * See commentary near RMR_EL1.
+         */
         if (!arm_feature(env, ARM_FEATURE_EL3)) {
-            ARMCPRegInfo rvbar[] = {
-                {
-                    .name = "RVBAR_EL2", .state = ARM_CP_STATE_AA64,
-                    .opc0 = 3, .opc1 = 4, .crn = 12, .crm = 0, .opc2 = 1,
-                    .access = PL2_R,
-                    .fieldoffset = offsetof(CPUARMState, cp15.rvbar),
-                },
-                {   .name = "RVBAR", .type = ARM_CP_ALIAS,
-                    .cp = 15, .opc1 = 0, .crn = 12, .crm = 0, .opc2 = 1,
-                    .access = PL2_R,
-                    .fieldoffset = offsetof(CPUARMState, cp15.rvbar),
-                },
+            static const ARMCPRegInfo el2_reset_regs[] = {
+                { .name = "RVBAR_EL2", .state = ARM_CP_STATE_AA64,
+                  .opc0 = 3, .opc1 = 4, .crn = 12, .crm = 0, .opc2 = 1,
+                  .access = PL2_R,
+                  .fieldoffset = offsetof(CPUARMState, cp15.rvbar) },
+                { .name = "RVBAR", .type = ARM_CP_ALIAS,
+                  .cp = 15, .opc1 = 0, .crn = 12, .crm = 0, .opc2 = 1,
+                  .access = PL2_R,
+                  .fieldoffset = offsetof(CPUARMState, cp15.rvbar) },
+                { .name = "RMR_EL2", .state = ARM_CP_STATE_AA64,
+                  .opc0 = 3, .opc1 = 4, .crn = 12, .crm = 0, .opc2 = 2,
+                  .access = PL2_RW, .type = ARM_CP_CONST, .resetvalue = 1 },
             };
-            define_arm_cp_regs(cpu, rvbar);
+            define_arm_cp_regs(cpu, el2_reset_regs);
         }
     }
 
@@ -8805,8 +8836,14 @@ void register_cp_regs_for_features(ARMCPU *cpu)
             { .name = "RVBAR_EL3", .state = ARM_CP_STATE_AA64,
               .opc0 = 3, .opc1 = 6, .crn = 12, .crm = 0, .opc2 = 1,
               .access = PL3_R,
-              .fieldoffset = offsetof(CPUARMState, cp15.rvbar),
-            },
+              .fieldoffset = offsetof(CPUARMState, cp15.rvbar), },
+            { .name = "RMR_EL3", .state = ARM_CP_STATE_AA64,
+              .opc0 = 3, .opc1 = 6, .crn = 12, .crm = 0, .opc2 = 2,
+              .access = PL3_RW, .type = ARM_CP_CONST, .resetvalue = 1 },
+            { .name = "RMR", .state = ARM_CP_STATE_AA32,
+              .cp = 15, .opc1 = 0, .crn = 12, .crm = 0, .opc2 = 2,
+              .access = PL3_RW, .type = ARM_CP_CONST,
+              .resetvalue = arm_feature(env, ARM_FEATURE_AARCH64) },
             { .name = "SCTLR_EL3", .state = ARM_CP_STATE_AA64,
               .opc0 = 3, .opc1 = 6, .crn = 1, .crm = 0, .opc2 = 0,
               .access = PL3_RW,
@@ -9342,6 +9379,13 @@ void register_cp_regs_for_features(ARMCPU *cpu)
      * then define only a RAZ/WI version of PSTATE.TCO.
      */
     if (cpu_isar_feature(aa64_mte, cpu)) {
+        ARMCPRegInfo gmid_reginfo = {
+            .name = "GMID_EL1", .state = ARM_CP_STATE_AA64,
+            .opc0 = 3, .opc1 = 1, .crn = 0, .crm = 0, .opc2 = 4,
+            .access = PL1_R, .accessfn = access_aa64_tid5,
+            .type = ARM_CP_CONST, .resetvalue = cpu->gm_blocksize,
+        };
+        define_one_arm_cp_reg(cpu, &gmid_reginfo);
         define_arm_cp_regs(cpu, mte_reginfo);
         define_arm_cp_regs(cpu, mte_el0_cacheop_reginfo);
     } else if (cpu_isar_feature(aa64_mte_insn_reg, cpu)) {
@@ -10253,7 +10297,7 @@ static const int8_t target_el_table[2][2][2][2][2][4] = {
 uint32_t arm_phys_excp_target_el(CPUState *cs, uint32_t excp_idx,
                                  uint32_t cur_el, bool secure)
 {
-    CPUARMState *env = cs->env_ptr;
+    CPUARMState *env = cpu_env(cs);
     bool rw;
     bool scr;
     bool hcr;

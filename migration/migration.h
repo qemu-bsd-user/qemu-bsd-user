@@ -196,7 +196,10 @@ struct MigrationIncomingState {
 
     /* A tree of pages that we requested to the source VM */
     GTree *page_requested;
-    /* For debugging purpose only, but would be nice to keep */
+    /*
+     * For postcopy only, count the number of requested page faults that
+     * still haven't been resolved.
+     */
     int page_requested_count;
     /*
      * The mutex helps to maintain the requested pages that we sent to the
@@ -210,6 +213,14 @@ struct MigrationIncomingState {
      * contains valid information.
      */
     QemuMutex page_request_mutex;
+    /*
+     * If postcopy preempt is enabled, there is a chance that the main
+     * thread finished loading its data before the preempt channel has
+     * finished loading the urgent pages.  If that happens, the two threads
+     * will use this condvar to synchronize, so the main thread will always
+     * wait until all pages received.
+     */
+    QemuCond page_request_cond;
 
     /*
      * Number of devices that have yet to approve switchover. When this reaches
@@ -382,7 +393,6 @@ struct MigrationState {
 
     /* Needed by postcopy-pause state */
     QemuSemaphore postcopy_pause_sem;
-    QemuSemaphore postcopy_pause_rp_sem;
     /*
      * Whether we abort the migration if decompression errors are
      * detected at the destination. It is left at false for qemu
@@ -472,7 +482,7 @@ void migrate_fd_connect(MigrationState *s, Error *error_in);
 bool migration_is_setup_or_active(int state);
 bool migration_is_running(int state);
 
-void migrate_init(MigrationState *s);
+int migrate_init(MigrationState *s, Error **errp);
 bool migration_is_blocked(Error **errp);
 /* True if outgoing migration has entered postcopy phase */
 bool migration_in_postcopy(void);
@@ -512,8 +522,8 @@ void migration_consume_urgent_request(void);
 bool migration_rate_limit(void);
 void migration_cancel(const Error *error);
 
-void populate_vfio_info(MigrationInfo *info);
-void reset_vfio_bytes_transferred(void);
+void migration_populate_vfio_info(MigrationInfo *info);
+void migration_reset_vfio_bytes_transferred(void);
 void postcopy_temp_page_reset(PostcopyTmpPage *tmp_page);
 
 #endif

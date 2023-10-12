@@ -24,79 +24,40 @@
 
 #include "qemu/osdep.h"
 #include "qemu/units.h"
-#include "hw/i386/x86.h"
 #include "hw/i386/pc.h"
 #include "hw/char/serial.h"
 #include "hw/char/parallel.h"
-#include "hw/i386/topology.h"
 #include "hw/i386/fw_cfg.h"
 #include "hw/i386/vmport.h"
 #include "sysemu/cpus.h"
-#include "hw/block/fdc.h"
 #include "hw/ide/internal.h"
-#include "hw/ide/isa.h"
-#include "hw/pci/pci.h"
-#include "hw/pci/pci_bus.h"
-#include "hw/pci-bridge/pci_expander_bridge.h"
-#include "hw/nvram/fw_cfg.h"
 #include "hw/timer/hpet.h"
-#include "hw/firmware/smbios.h"
 #include "hw/loader.h"
-#include "elf.h"
-#include "migration/vmstate.h"
-#include "multiboot.h"
 #include "hw/rtc/mc146818rtc.h"
 #include "hw/intc/i8259.h"
-#include "hw/intc/ioapic.h"
 #include "hw/timer/i8254.h"
 #include "hw/input/i8042.h"
-#include "hw/irq.h"
 #include "hw/audio/pcspk.h"
-#include "hw/pci/msi.h"
-#include "hw/sysbus.h"
 #include "sysemu/sysemu.h"
-#include "sysemu/tcg.h"
-#include "sysemu/numa.h"
-#include "sysemu/kvm.h"
 #include "sysemu/xen.h"
 #include "sysemu/reset.h"
-#include "sysemu/runstate.h"
 #include "kvm/kvm_i386.h"
 #include "hw/xen/xen.h"
-#include "hw/xen/start_info.h"
-#include "ui/qemu-spice.h"
-#include "exec/memory.h"
-#include "qemu/bitmap.h"
-#include "qemu/config-file.h"
 #include "qemu/error-report.h"
-#include "qemu/option.h"
-#include "qemu/cutils.h"
-#include "hw/acpi/acpi.h"
 #include "hw/acpi/cpu_hotplug.h"
 #include "acpi-build.h"
-#include "hw/mem/pc-dimm.h"
 #include "hw/mem/nvdimm.h"
-#include "hw/cxl/cxl.h"
 #include "hw/cxl/cxl_host.h"
-#include "qapi/error.h"
-#include "qapi/qapi-visit-common.h"
-#include "qapi/qapi-visit-machine.h"
-#include "qapi/visitor.h"
-#include "hw/core/cpu.h"
 #include "hw/usb.h"
 #include "hw/i386/intel_iommu.h"
 #include "hw/net/ne2000-isa.h"
-#include "standard-headers/asm-x86/bootparam.h"
 #include "hw/virtio/virtio-iommu.h"
 #include "hw/virtio/virtio-md-pci.h"
 #include "hw/i386/kvm/xen_overlay.h"
 #include "hw/i386/kvm/xen_evtchn.h"
 #include "hw/i386/kvm/xen_gnttab.h"
 #include "hw/i386/kvm/xen_xenstore.h"
-#include "sysemu/replay.h"
-#include "target/i386/cpu.h"
 #include "e820_memory_layout.h"
-#include "fw_cfg.h"
 #include "trace.h"
 #include CONFIG_DEVICES
 
@@ -359,60 +320,6 @@ GlobalProperty pc_compat_2_0[] = {
 };
 const size_t pc_compat_2_0_len = G_N_ELEMENTS(pc_compat_2_0);
 
-GlobalProperty pc_compat_1_7[] = {
-    PC_CPU_MODEL_IDS("1.7.0")
-    { TYPE_USB_DEVICE, "msos-desc", "no" },
-    { "PIIX4_PM", ACPI_PM_PROP_ACPI_PCIHP_BRIDGE, "off" },
-    { "hpet", HPET_INTCAP, "4" },
-};
-const size_t pc_compat_1_7_len = G_N_ELEMENTS(pc_compat_1_7);
-
-GlobalProperty pc_compat_1_6[] = {
-    PC_CPU_MODEL_IDS("1.6.0")
-    { "e1000", "mitigation", "off" },
-    { "qemu64-" TYPE_X86_CPU, "model", "2" },
-    { "qemu32-" TYPE_X86_CPU, "model", "3" },
-    { "i440FX-pcihost", "short_root_bus", "1" },
-    { "q35-pcihost", "short_root_bus", "1" },
-};
-const size_t pc_compat_1_6_len = G_N_ELEMENTS(pc_compat_1_6);
-
-GlobalProperty pc_compat_1_5[] = {
-    PC_CPU_MODEL_IDS("1.5.0")
-    { "Conroe-" TYPE_X86_CPU, "model", "2" },
-    { "Conroe-" TYPE_X86_CPU, "min-level", "2" },
-    { "Penryn-" TYPE_X86_CPU, "model", "2" },
-    { "Penryn-" TYPE_X86_CPU, "min-level", "2" },
-    { "Nehalem-" TYPE_X86_CPU, "model", "2" },
-    { "Nehalem-" TYPE_X86_CPU, "min-level", "2" },
-    { "virtio-net-pci", "any_layout", "off" },
-    { TYPE_X86_CPU, "pmu", "on" },
-    { "i440FX-pcihost", "short_root_bus", "0" },
-    { "q35-pcihost", "short_root_bus", "0" },
-};
-const size_t pc_compat_1_5_len = G_N_ELEMENTS(pc_compat_1_5);
-
-GlobalProperty pc_compat_1_4[] = {
-    PC_CPU_MODEL_IDS("1.4.0")
-    { "scsi-hd", "discard_granularity", "0" },
-    { "scsi-cd", "discard_granularity", "0" },
-    { "ide-hd", "discard_granularity", "0" },
-    { "ide-cd", "discard_granularity", "0" },
-    { "virtio-blk-pci", "discard_granularity", "0" },
-    /* DEV_NVECTORS_UNSPECIFIED as a uint32_t string: */
-    { "virtio-serial-pci", "vectors", "0xFFFFFFFF" },
-    { "virtio-net-pci", "ctrl_guest_offloads", "off" },
-    { "e1000", "romfile", "pxe-e1000.rom" },
-    { "ne2k_pci", "romfile", "pxe-ne2k_pci.rom" },
-    { "pcnet", "romfile", "pxe-pcnet.rom" },
-    { "rtl8139", "romfile", "pxe-rtl8139.rom" },
-    { "virtio-net-pci", "romfile", "pxe-virtio.rom" },
-    { "486-" TYPE_X86_CPU, "model", "0" },
-    { "n270" "-" TYPE_X86_CPU, "movbe", "off" },
-    { "Westmere" "-" TYPE_X86_CPU, "pclmulqdq", "off" },
-};
-const size_t pc_compat_1_4_len = G_N_ELEMENTS(pc_compat_1_4);
-
 GSIState *pc_gsi_create(qemu_irq **irqs, bool pci_enabled)
 {
     GSIState *s;
@@ -436,7 +343,7 @@ static uint64_t ioport80_read(void *opaque, hwaddr addr, unsigned size)
     return 0xffffffffffffffffULL;
 }
 
-/* MSDOS compatibility mode FPU exception support */
+/* MS-DOS compatibility mode FPU exception support */
 static void ioportF0_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
@@ -907,13 +814,39 @@ static uint64_t pc_get_cxl_range_end(PCMachineState *pcms)
 static hwaddr pc_max_used_gpa(PCMachineState *pcms, uint64_t pci_hole64_size)
 {
     X86CPU *cpu = X86_CPU(first_cpu);
+    PCMachineClass *pcmc = PC_MACHINE_GET_CLASS(pcms);
+    MachineState *ms = MACHINE(pcms);
 
-    /* 32-bit systems don't have hole64 thus return max CPU address */
-    if (cpu->phys_bits <= 32) {
+    if (cpu->env.features[FEAT_8000_0001_EDX] & CPUID_EXT2_LM) {
+        /* 64-bit systems */
+        return pc_pci_hole64_start() + pci_hole64_size - 1;
+    }
+
+    /* 32-bit systems */
+    if (pcmc->broken_32bit_mem_addr_check) {
+        /* old value for compatibility reasons */
         return ((hwaddr)1 << cpu->phys_bits) - 1;
     }
 
-    return pc_pci_hole64_start() + pci_hole64_size - 1;
+    /*
+     * 32-bit systems don't have hole64 but they might have a region for
+     * memory devices. Even if additional hotplugged memory devices might
+     * not be usable by most guest OSes, we need to still consider them for
+     * calculating the highest possible GPA so that we can properly report
+     * if someone configures them on a CPU that cannot possibly address them.
+     */
+    if (pcmc->has_reserved_memory &&
+        (ms->ram_size < ms->maxram_size)) {
+        hwaddr devmem_start;
+        ram_addr_t devmem_size;
+
+        pc_get_device_memory_range(pcms, &devmem_start, &devmem_size);
+        devmem_start += devmem_size;
+        return devmem_start - 1;
+    }
+
+    /* configuration without any memory hotplug */
+    return pc_above_4g_end(pcms) - 1;
 }
 
 /*
@@ -1293,9 +1226,9 @@ void pc_basic_device_init(struct PCMachineState *pcms,
             exit(1);
         }
         /*
-         * For pc-piix-*, hpet's intcap is always IRQ2. For pc-q35-1.7 and
-         * earlier, use IRQ2 for compat. Otherwise, use IRQ16~23, IRQ8 and
-         * IRQ2.
+         * For pc-piix-*, hpet's intcap is always IRQ2. For pc-q35-*,
+         * use IRQ16~23, IRQ8 and IRQ2.  If the user has already set
+         * the property, use whatever mask they specified.
          */
         uint8_t compat = object_property_get_uint(OBJECT(hpet),
                 HPET_INTCAP, NULL);
@@ -1746,16 +1679,16 @@ static void pc_machine_set_max_fw_size(Object *obj, Visitor *v,
     }
 
     /*
-    * We don't have a theoretically justifiable exact lower bound on the base
-    * address of any flash mapping. In practice, the IO-APIC MMIO range is
-    * [0xFEE00000..0xFEE01000] -- see IO_APIC_DEFAULT_ADDRESS --, leaving free
-    * only 18MB-4KB below 4G. For now, restrict the cumulative mapping to 8MB in
-    * size.
-    */
+     * We don't have a theoretically justifiable exact lower bound on the base
+     * address of any flash mapping. In practice, the IO-APIC MMIO range is
+     * [0xFEE00000..0xFEE01000] -- see IO_APIC_DEFAULT_ADDRESS --, leaving free
+     * only 18MiB-4KiB below 4GiB. For now, restrict the cumulative mapping to
+     * 16MiB in size.
+     */
     if (value > 16 * MiB) {
         error_setg(errp,
                    "User specified max allowed firmware size %" PRIu64 " is "
-                   "greater than 16MiB. If combined firwmare size exceeds "
+                   "greater than 16MiB. If combined firmware size exceeds "
                    "16MiB the system may not boot, or experience intermittent"
                    "stability issues.",
                    value);

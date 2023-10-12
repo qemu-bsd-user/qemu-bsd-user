@@ -72,6 +72,7 @@ typedef enum DisasJumpType {
  * @num_insns: Number of translated instructions (including current).
  * @max_insns: Maximum number of instructions to be translated in this TB.
  * @singlestep_enabled: "Hardware" single stepping enabled.
+ * @saved_can_do_io: Known value of cpu->neg.can_do_io, or -1 for unknown.
  *
  * Architecture-agnostic disassembly context.
  */
@@ -83,6 +84,7 @@ typedef struct DisasContextBase {
     int num_insns;
     int max_insns;
     bool singlestep_enabled;
+    int8_t saved_can_do_io;
     void *host_addr[2];
 } DisasContextBase;
 
@@ -159,7 +161,7 @@ bool translator_use_goto_tb(DisasContextBase *db, vaddr dest);
  * translator_io_start
  * @db: Disassembly context
  *
- * If icount is enabled, set cpu->can_to_io, adjust db->is_jmp to
+ * If icount is enabled, set cpu->can_do_io, adjust db->is_jmp to
  * DISAS_TOO_MANY if it is still DISAS_NEXT, and return true.
  * Otherwise return false.
  */

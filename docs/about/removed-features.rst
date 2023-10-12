@@ -436,6 +436,18 @@ the process listing. This was replaced by the new ``password-secret``
 option which lets the password be securely provided on the command
 line using a ``secret`` object instance.
 
+``QEMU_AUDIO_`` environment variables and ``-audio-help`` (removed in 8.2)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+The ``-audiodev`` and ``-audio`` command line options are now the only
+way to specify audio backend settings.
+
+Creating vnc without ``audiodev=`` property (removed in 8.2)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+When using vnc, you should specify an ``audiodev=`` property if
+you plan to transmit audio through the VNC protocol.
+
 QEMU Machine Protocol (QMP) commands
 ------------------------------------
 
@@ -659,15 +671,18 @@ Use ``Icelake-Server`` instead.
 System accelerators
 -------------------
 
-Userspace local APIC with KVM (x86, removed 8.0)
-''''''''''''''''''''''''''''''''''''''''''''''''
+Userspace local APIC with KVM (x86, removed in 8.0)
+'''''''''''''''''''''''''''''''''''''''''''''''''''
 
 ``-M kernel-irqchip=off`` cannot be used on KVM if the CPU model includes
 a local APIC.  The ``split`` setting is supported, as is using ``-M
 kernel-irqchip=off`` when the CPU does not have a local APIC.
 
-System accelerators
--------------------
+HAXM (``-accel hax``) (removed in 8.2)
+''''''''''''''''''''''''''''''''''''''
+
+The HAXM project has been retired (see https://github.com/intel/haxm#status).
+Use "whpx" (on Windows) or "hvf" (on macOS) instead.
 
 MIPS "Trap-and-Emulate" KVM support (removed in 8.0)
 ''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -712,8 +727,8 @@ mips ``fulong2e`` machine alias (removed in 6.0)
 
 This machine has been renamed ``fuloong2e``.
 
-``pc-0.10`` up to ``pc-1.3`` (removed in 4.0 up to 6.0)
-'''''''''''''''''''''''''''''''''''''''''''''''''''''''
+``pc-0.10`` up to ``pc-i440fx-1.7`` (removed in 4.0 up to 8.2)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 These machine types were very old and likely could not be used for live
 migration from old QEMU versions anymore. Use a newer machine type instead.

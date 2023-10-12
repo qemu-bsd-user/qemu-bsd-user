@@ -322,7 +322,7 @@ static bool patch_reloc(tcg_insn_unit *src_rw, int type,
 }
 
 /* test if a constant matches the constraint */
-static bool tcg_target_const_match(int64_t val, TCGType type, int ct)
+static bool tcg_target_const_match(int64_t val, TCGType type, int ct, int vece)
 {
     if (ct & TCG_CT_CONST) {
         return 1;
@@ -527,11 +527,6 @@ static void tcg_out_exts_i32_i64(TCGContext *s, TCGReg rd, TCGReg rs)
 static void tcg_out_extu_i32_i64(TCGContext *s, TCGReg rd, TCGReg rs)
 {
     tcg_out_ext32u(s, rd, rs);
-}
-
-static void tcg_out_extrl_i64_i32(TCGContext *s, TCGReg rd, TCGReg rs)
-{
-    tcg_out_mov(s, TCG_TYPE_I32, rd, rs);
 }
 
 static bool tcg_out_xchg(TCGContext *s, TCGType type, TCGReg r1, TCGReg r2)
@@ -965,6 +960,11 @@ static void tcg_target_qemu_prologue(TCGContext *s)
     tcg_out_arithi(s, TCG_REG_G0, TCG_REG_I7, 8, RETURN);
     /* delay slot */
     tcg_out_movi_s13(s, TCG_REG_O0, 0);
+}
+
+static void tcg_out_tb_start(TCGContext *s)
+{
+    /* nothing to do */
 }
 
 static void tcg_out_nop_fill(tcg_insn_unit *p, int count)
@@ -1444,9 +1444,6 @@ static void tcg_out_op(TCGContext *s, TCGOpcode opc,
     case INDEX_op_divu_i64:
         c = ARITH_UDIVX;
         goto gen_arith;
-    case INDEX_op_extrh_i64_i32:
-        tcg_out_arithi(s, a0, a1, 32, SHIFT_SRLX);
-        break;
 
     case INDEX_op_brcond_i64:
         tcg_out_brcond_i64(s, a2, a0, a1, const_args[1], arg_label(args[3]));
@@ -1501,7 +1498,6 @@ static void tcg_out_op(TCGContext *s, TCGOpcode opc,
     case INDEX_op_ext32u_i64:
     case INDEX_op_ext_i32_i64:
     case INDEX_op_extu_i32_i64:
-    case INDEX_op_extrl_i64_i32:
     default:
         g_assert_not_reached();
     }
@@ -1533,8 +1529,6 @@ static TCGConstraintSetIndex tcg_target_op_def(TCGOpcode op)
     case INDEX_op_ext32u_i64:
     case INDEX_op_ext_i32_i64:
     case INDEX_op_extu_i32_i64:
-    case INDEX_op_extrl_i64_i32:
-    case INDEX_op_extrh_i64_i32:
     case INDEX_op_qemu_ld_a32_i32:
     case INDEX_op_qemu_ld_a64_i32:
     case INDEX_op_qemu_ld_a32_i64:

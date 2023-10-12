@@ -342,7 +342,7 @@ static void coroutine_fn bdrv_co_yield_to_drain(BlockDriverState *bs,
      * timer callback), it is a bug in the caller that should be fixed. */
     assert(data.done);
 
-    /* Reaquire the AioContext of bs if we dropped it */
+    /* Reacquire the AioContext of bs if we dropped it */
     if (ctx != co_ctx) {
         aio_context_acquire(ctx);
     }
@@ -387,7 +387,8 @@ void bdrv_do_drained_begin_quiesce(BlockDriverState *bs, BdrvChild *parent)
     bdrv_do_drained_begin(bs, parent, false);
 }
 
-void bdrv_drained_begin(BlockDriverState *bs)
+void coroutine_mixed_fn
+bdrv_drained_begin(BlockDriverState *bs)
 {
     IO_OR_GS_CODE();
     bdrv_do_drained_begin(bs, NULL, true);
@@ -506,7 +507,7 @@ void bdrv_drain_all_begin_nopoll(void)
     }
 }
 
-void bdrv_drain_all_begin(void)
+void coroutine_mixed_fn bdrv_drain_all_begin(void)
 {
     BlockDriverState *bs = NULL;
 
@@ -591,10 +592,16 @@ static void coroutine_fn tracked_request_end(BdrvTrackedRequest *req)
         qatomic_dec(&req->bs->serialising_in_flight);
     }
 
-    qemu_co_mutex_lock(&req->bs->reqs_lock);
+    qemu_mutex_lock(&req->bs->reqs_lock);
     QLIST_REMOVE(req, list);
+    qemu_mutex_unlock(&req->bs->reqs_lock);
+
+    /*
+     * At this point qemu_co_queue_wait(&req->wait_queue, ...) won't be called
+     * anymore because the request has been removed from the list, so it's safe
+     * to restart the queue outside reqs_lock to minimize the critical section.
+     */
     qemu_co_queue_restart_all(&req->wait_queue);
-    qemu_co_mutex_unlock(&req->bs->reqs_lock);
 }
 
 /**
@@ -621,9 +628,9 @@ static void coroutine_fn tracked_request_begin(BdrvTrackedRequest *req,
 
     qemu_co_queue_init(&req->wait_queue);
 
-    qemu_co_mutex_lock(&bs->reqs_lock);
+    qemu_mutex_lock(&bs->reqs_lock);
     QLIST_INSERT_HEAD(&bs->tracked_requests, req, list);
-    qemu_co_mutex_unlock(&bs->reqs_lock);
+    qemu_mutex_unlock(&bs->reqs_lock);
 }
 
 static bool tracked_request_overlaps(BdrvTrackedRequest *req,
@@ -728,21 +735,21 @@ BdrvTrackedRequest *coroutine_fn bdrv_co_get_self_request(BlockDriverState *bs)
 }
 
 /**
- * Round a region to cluster boundaries
+ * Round a region to subcluster (if supported) or cluster boundaries
  */
 void coroutine_fn GRAPH_RDLOCK
-bdrv_round_to_clusters(BlockDriverState *bs, int64_t offset, int64_t bytes,
-                       int64_t *cluster_offset, int64_t *cluster_bytes)
+bdrv_round_to_subclusters(BlockDriverState *bs, int64_t offset, int64_t bytes,
+                          int64_t *align_offset, int64_t *align_bytes)
 {
     BlockDriverInfo bdi;
     IO_CODE();
-    if (bdrv_co_get_info(bs, &bdi) < 0 || bdi.cluster_size == 0) {
-        *cluster_offset = offset;
-        *cluster_bytes = bytes;
+    if (bdrv_co_get_info(bs, &bdi) < 0 || bdi.subcluster_size == 0) {
+        *align_offset = offset;
+        *align_bytes = bytes;
     } else {
-        int64_t c = bdi.cluster_size;
-        *cluster_offset = QEMU_ALIGN_DOWN(offset, c);
-        *cluster_bytes = QEMU_ALIGN_UP(offset - *cluster_offset + bytes, c);
+        int64_t c = bdi.subcluster_size;
+        *align_offset = QEMU_ALIGN_DOWN(offset, c);
+        *align_bytes = QEMU_ALIGN_UP(offset - *align_offset + bytes, c);
     }
 }
 
@@ -787,9 +794,9 @@ bdrv_wait_serialising_requests(BdrvTrackedRequest *self)
         return;
     }
 
-    qemu_co_mutex_lock(&bs->reqs_lock);
+    qemu_mutex_lock(&bs->reqs_lock);
     bdrv_wait_serialising_requests_locked(self);
-    qemu_co_mutex_unlock(&bs->reqs_lock);
+    qemu_mutex_unlock(&bs->reqs_lock);
 }
 
 void coroutine_fn bdrv_make_request_serialising(BdrvTrackedRequest *req,
@@ -797,12 +804,12 @@ void coroutine_fn bdrv_make_request_serialising(BdrvTrackedRequest *req,
 {
     IO_CODE();
 
-    qemu_co_mutex_lock(&req->bs->reqs_lock);
+    qemu_mutex_lock(&req->bs->reqs_lock);
 
     tracked_request_set_serialising(req, align);
     bdrv_wait_serialising_requests_locked(req);
 
-    qemu_co_mutex_unlock(&req->bs->reqs_lock);
+    qemu_mutex_unlock(&req->bs->reqs_lock);
 }
 
 int bdrv_check_qiov_request(int64_t offset, int64_t bytes,
@@ -1168,8 +1175,8 @@ bdrv_co_do_copy_on_readv(BdrvChild *child, int64_t offset, int64_t bytes,
     void *bounce_buffer = NULL;
 
     BlockDriver *drv = bs->drv;
-    int64_t cluster_offset;
-    int64_t cluster_bytes;
+    int64_t align_offset;
+    int64_t align_bytes;
     int64_t skip_bytes;
     int ret;
     int max_transfer = MIN_NON_ZERO(bs->bl.max_transfer,
@@ -1203,28 +1210,28 @@ bdrv_co_do_copy_on_readv(BdrvChild *child, int64_t offset, int64_t bytes,
      * BDRV_REQUEST_MAX_BYTES (even when the original read did not), which
      * is one reason we loop rather than doing it all at once.
      */
-    bdrv_round_to_clusters(bs, offset, bytes, &cluster_offset, &cluster_bytes);
-    skip_bytes = offset - cluster_offset;
+    bdrv_round_to_subclusters(bs, offset, bytes, &align_offset, &align_bytes);
+    skip_bytes = offset - align_offset;
 
     trace_bdrv_co_do_copy_on_readv(bs, offset, bytes,
-                                   cluster_offset, cluster_bytes);
+                                   align_offset, align_bytes);
 
-    while (cluster_bytes) {
+    while (align_bytes) {
         int64_t pnum;
 
         if (skip_write) {
             ret = 1; /* "already allocated", so nothing will be copied */
-            pnum = MIN(cluster_bytes, max_transfer);
+            pnum = MIN(align_bytes, max_transfer);
         } else {
-            ret = bdrv_is_allocated(bs, cluster_offset,
-                                    MIN(cluster_bytes, max_transfer), &pnum);
+            ret = bdrv_is_allocated(bs, align_offset,
+                                    MIN(align_bytes, max_transfer), &pnum);
             if (ret < 0) {
                 /*
                  * Safe to treat errors in querying allocation as if
                  * unallocated; we'll probably fail again soon on the
                  * read, but at least that will set a decent errno.
                  */
-                pnum = MIN(cluster_bytes, max_transfer);
+                pnum = MIN(align_bytes, max_transfer);
             }
 
             /* Stop at EOF if the image ends in the middle of the cluster */
@@ -1242,7 +1249,7 @@ bdrv_co_do_copy_on_readv(BdrvChild *child, int64_t offset, int64_t bytes,
             /* Must copy-on-read; use the bounce buffer */
             pnum = MIN(pnum, MAX_BOUNCE_BUFFER);
             if (!bounce_buffer) {
-                int64_t max_we_need = MAX(pnum, cluster_bytes - pnum);
+                int64_t max_we_need = MAX(pnum, align_bytes - pnum);
                 int64_t max_allowed = MIN(max_transfer, MAX_BOUNCE_BUFFER);
                 int64_t bounce_buffer_len = MIN(max_we_need, max_allowed);
 
@@ -1254,7 +1261,7 @@ bdrv_co_do_copy_on_readv(BdrvChild *child, int64_t offset, int64_t bytes,
             }
             qemu_iovec_init_buf(&local_qiov, bounce_buffer, pnum);
 
-            ret = bdrv_driver_preadv(bs, cluster_offset, pnum,
+            ret = bdrv_driver_preadv(bs, align_offset, pnum,
                                      &local_qiov, 0, 0);
             if (ret < 0) {
                 goto err;
@@ -1266,13 +1273,13 @@ bdrv_co_do_copy_on_readv(BdrvChild *child, int64_t offset, int64_t bytes,
                 /* FIXME: Should we (perhaps conditionally) be setting
                  * BDRV_REQ_MAY_UNMAP, if it will allow for a sparser copy
                  * that still correctly reads as zero? */
-                ret = bdrv_co_do_pwrite_zeroes(bs, cluster_offset, pnum,
+                ret = bdrv_co_do_pwrite_zeroes(bs, align_offset, pnum,
                                                BDRV_REQ_WRITE_UNCHANGED);
             } else {
                 /* This does not change the data on the disk, it is not
                  * necessary to flush even in cache=writethrough mode.
                  */
-                ret = bdrv_driver_pwritev(bs, cluster_offset, pnum,
+                ret = bdrv_driver_pwritev(bs, align_offset, pnum,
                                           &local_qiov, 0,
                                           BDRV_REQ_WRITE_UNCHANGED);
             }
@@ -1301,8 +1308,8 @@ bdrv_co_do_copy_on_readv(BdrvChild *child, int64_t offset, int64_t bytes,
             }
         }
 
-        cluster_offset += pnum;
-        cluster_bytes -= pnum;
+        align_offset += pnum;
+        align_bytes -= pnum;
         progress += pnum - skip_bytes;
         skip_bytes = 0;
     }
@@ -2944,25 +2951,18 @@ int bdrv_load_vmstate(BlockDriverState *bs, uint8_t *buf,
 /**************************************************************/
 /* async I/Os */
 
+/**
+ * Synchronously cancels an acb. Must be called with the BQL held and the acb
+ * must be processed with the BQL held too (IOThreads are not allowed).
+ *
+ * Use bdrv_aio_cancel_async() instead when possible.
+ */
 void bdrv_aio_cancel(BlockAIOCB *acb)
 {
-    IO_CODE();
+    GLOBAL_STATE_CODE();
     qemu_aio_ref(acb);
     bdrv_aio_cancel_async(acb);
-    while (acb->refcnt > 1) {
-        if (acb->aiocb_info->get_aio_context) {
-            aio_poll(acb->aiocb_info->get_aio_context(acb), true);
-        } else if (acb->bs) {
-            /* qemu_aio_ref and qemu_aio_unref are not thread-safe, so
-             * assert that we're not using an I/O thread.  Thread-safe
-             * code should use bdrv_aio_cancel_async exclusively.
-             */
-            assert(bdrv_get_aio_context(acb->bs) == qemu_get_aio_context());
-            aio_poll(bdrv_get_aio_context(acb->bs), true);
-        } else {
-            abort();
-        }
-    }
+    AIO_WAIT_WHILE_UNLOCKED(NULL, acb->refcnt > 1);
     qemu_aio_unref(acb);
 }
 
@@ -2996,7 +2996,7 @@ int coroutine_fn bdrv_co_flush(BlockDriverState *bs)
         goto early_exit;
     }
 
-    qemu_co_mutex_lock(&bs->reqs_lock);
+    qemu_mutex_lock(&bs->reqs_lock);
     current_gen = qatomic_read(&bs->write_gen);
 
     /* Wait until any previous flushes are completed */
@@ -3006,7 +3006,7 @@ int coroutine_fn bdrv_co_flush(BlockDriverState *bs)
 
     /* Flushes reach this point in nondecreasing current_gen order.  */
     bs->active_flush_req = true;
-    qemu_co_mutex_unlock(&bs->reqs_lock);
+    qemu_mutex_unlock(&bs->reqs_lock);
 
     /* Write back all layers by calling one driver function */
     if (bs->drv->bdrv_co_flush) {
@@ -3094,11 +3094,11 @@ out:
         bs->flushed_gen = current_gen;
     }
 
-    qemu_co_mutex_lock(&bs->reqs_lock);
+    qemu_mutex_lock(&bs->reqs_lock);
     bs->active_flush_req = false;
     /* Return value is ignored - it's ok if wait queue is empty */
     qemu_co_queue_next(&bs->flush_queue);
-    qemu_co_mutex_unlock(&bs->reqs_lock);
+    qemu_mutex_unlock(&bs->reqs_lock);
 
 early_exit:
     bdrv_dec_in_flight(bs);

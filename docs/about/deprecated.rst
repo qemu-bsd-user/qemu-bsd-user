@@ -20,38 +20,14 @@ they were first deprecated in the 2.10.0 release.
 What follows is a list of all features currently marked as
 deprecated.
 
-Build options
--------------
-
-``gprof`` builds (since 8.0)
-''''''''''''''''''''''''''''
-
-The ``--enable-gprof`` configure setting relies on compiler
-instrumentation to gather its data which can distort the generated
-profile. As other non-instrumenting tools are available that give a
-more holistic view of the system with non-instrumented binaries we are
-deprecating the build option and no longer defend it in CI. The
-``--enable-gcov`` build option remains for analysis test case
-coverage.
-
 System emulator command line arguments
 --------------------------------------
 
-``QEMU_AUDIO_`` environment variables and ``-audio-help`` (since 4.0)
-'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-The ``-audiodev`` argument is now the preferred way to specify audio
-backend settings instead of environment variables.  To ease migration to
-the new format, the ``-audiodev-help`` option can be used to convert
-the current values of the environment variables to ``-audiodev`` options.
-
-Creating sound card devices and vnc without ``audiodev=`` property (since 4.2)
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Creating sound card devices without ``audiodev=`` property (since 4.2)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 When not using the deprecated legacy audio config, each sound card
-should specify an ``audiodev=`` property.  Additionally, when using
-vnc, you should specify an ``audiodev=`` property if you plan to
-transmit audio through the VNC protocol.
+should specify an ``audiodev=`` property.
 
 Short-form boolean options (since 6.0)
 ''''''''''''''''''''''''''''''''''''''
@@ -104,12 +80,6 @@ Use ``-machine hpet=off`` instead.
 
 The ``-no-acpi`` setting has been turned into a machine property.
 Use ``-machine acpi=off`` instead.
-
-``-accel hax`` (since 8.0)
-''''''''''''''''''''''''''
-
-The HAXM project has been retired (see https://github.com/intel/haxm#status).
-Use "whpx" (on Windows) or "hvf" (on macOS) instead.
 
 ``-async-teardown`` (since 8.1)
 '''''''''''''''''''''''''''''''
@@ -282,14 +252,6 @@ The ``dtb-kaslr-seed`` property on the ``virt`` board has been
 deprecated; use the new name ``dtb-randomness`` instead. The new name
 better reflects the way this property affects all random data within
 the device tree blob, not just the ``kaslr-seed`` node.
-
-``pc-i440fx-1.4`` up to ``pc-i440fx-1.7`` (since 7.0)
-'''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-These old machine types are quite neglected nowadays and thus might have
-various pitfalls with regards to live migration. Use a newer machine type
-instead.
-
 
 Backend options
 ---------------

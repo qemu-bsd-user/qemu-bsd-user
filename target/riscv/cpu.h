@@ -349,7 +349,7 @@ struct CPUArchState {
     target_ulong upmmask;
     target_ulong upmbase;
 
-    /* CSRs for execution enviornment configuration */
+    /* CSRs for execution environment configuration */
     uint64_t menvcfg;
     uint64_t mstateen[SMSTATEEN_MAX_COUNT];
     uint64_t hstateen[SMSTATEEN_MAX_COUNT];
@@ -388,7 +388,7 @@ struct ArchCPU {
     /* < private > */
     CPUState parent_obj;
     /* < public > */
-    CPUNegativeOffsetState neg;
+
     CPURISCVState env;
 
     char *dyn_csr_xml;

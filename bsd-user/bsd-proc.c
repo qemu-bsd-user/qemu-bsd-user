@@ -35,83 +35,17 @@
  */
 int target_to_host_resource(int code)
 {
-
-    switch (code) {
-    case TARGET_RLIMIT_AS:
-        return RLIMIT_AS;
-
-    case TARGET_RLIMIT_CORE:
-        return RLIMIT_CORE;
-
-    case TARGET_RLIMIT_CPU:
-        return RLIMIT_CPU;
-
-    case TARGET_RLIMIT_DATA:
-        return RLIMIT_DATA;
-
-    case TARGET_RLIMIT_FSIZE:
-        return RLIMIT_FSIZE;
-
-    case TARGET_RLIMIT_MEMLOCK:
-        return RLIMIT_MEMLOCK;
-
-    case TARGET_RLIMIT_NOFILE:
-        return RLIMIT_NOFILE;
-
-    case TARGET_RLIMIT_NPROC:
-        return RLIMIT_NPROC;
-
-    case TARGET_RLIMIT_RSS:
-        return RLIMIT_RSS;
-
-    case TARGET_RLIMIT_SBSIZE:
-        return RLIMIT_SBSIZE;
-
-    case TARGET_RLIMIT_STACK:
-        return RLIMIT_STACK;
-
-    case TARGET_RLIMIT_SWAP:
-        return RLIMIT_SWAP;
-
-    case TARGET_RLIMIT_NPTS:
-        return RLIMIT_NPTS;
-
-    default:
-        return code;
-    }
+    return code;
 }
 
 rlim_t target_to_host_rlim(abi_llong target_rlim)
 {
-    abi_llong target_rlim_swap;
-    rlim_t result;
-
-    target_rlim_swap = tswap64(target_rlim);
-    if (target_rlim_swap == TARGET_RLIM_INFINITY) {
-        return RLIM_INFINITY;
-    }
-
-    result = target_rlim_swap;
-    if (target_rlim_swap != (rlim_t)result) {
-        return RLIM_INFINITY;
-    }
-
-    return result;
+    return tswap64(target_rlim);
 }
 
 abi_llong host_to_target_rlim(rlim_t rlim)
 {
-    abi_llong target_rlim_swap;
-    abi_llong result;
-
-    if (rlim == RLIM_INFINITY || rlim != (abi_llong)rlim) {
-        target_rlim_swap = TARGET_RLIM_INFINITY;
-    } else {
-        target_rlim_swap = rlim;
-    }
-    result = tswap64(target_rlim_swap);
-
-    return result;
+    return tswap64(rlim);
 }
 
 void h2g_rusage(const struct rusage *rusage,
@@ -185,43 +119,27 @@ int host_to_target_waitstatus(int status)
     return status;
 }
 
-int
-bsd_get_ncpu(void)
+int bsd_get_ncpu(void)
 {
-    static int ncpu = -1;
+    int ncpu = -1;
+    cpuset_t mask;
 
-    if (ncpu != -1) {
-        return ncpu;
+    CPU_ZERO(&mask);
+
+    if (cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, sizeof(mask),
+                           &mask) == 0) {
+        ncpu = CPU_COUNT(&mask);
     }
+
     if (ncpu == -1) {
-        cpuset_t mask;
-
-        CPU_ZERO(&mask);
-
-        if (cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, sizeof(mask),
-                               &mask) == 0) {
-            ncpu = CPU_COUNT(&mask);
-        }
-    }
-#ifdef _SC_NPROCESSORS_ONLN
-    if (ncpu == -1)
         ncpu = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
-#if defined(CTL_HW) && defined(HW_NCPU)
-    if (ncpu == -1) {
-        int mib[2] = {CTL_HW, HW_NCPU};
-        size_t sz;
-
-        sz = sizeof(ncpu);
-        if (sysctl(mib, 2, &ncpu, &sz, NULL, NULL) == -1) {
-            ncpu = -1;
-        }
     }
-#endif
+
     if (ncpu == -1) {
         gemu_log("XXX Missing bsd_get_ncpu() implementation\n");
         ncpu = 1;
     }
+
     return ncpu;
 }
 

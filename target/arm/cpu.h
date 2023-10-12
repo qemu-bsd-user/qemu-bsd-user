@@ -856,7 +856,6 @@ struct ArchCPU {
     CPUState parent_obj;
     /*< public >*/
 
-    CPUNegativeOffsetState neg;
     CPUARMState env;
 
     /* Coprocessor information */
@@ -1033,6 +1032,7 @@ struct ArchCPU {
         uint32_t dbgdevid1;
         uint64_t id_aa64isar0;
         uint64_t id_aa64isar1;
+        uint64_t id_aa64isar2;
         uint64_t id_aa64pfr0;
         uint64_t id_aa64pfr1;
         uint64_t id_aa64mmfr0;
@@ -1071,10 +1071,14 @@ struct ArchCPU {
      */
     bool prop_pauth;
     bool prop_pauth_impdef;
+    bool prop_pauth_qarma3;
     bool prop_lpa2;
 
     /* DCZ blocksize, in log_2(words), ie low 4 bits of DCZID_EL0 */
-    uint32_t dcz_blocksize;
+    uint8_t dcz_blocksize;
+    /* GM blocksize, in log_2(words), ie low 4 bits of GMID_EL0 */
+    uint8_t gm_blocksize;
+
     uint64_t rvbar_prop; /* Property/input signals.  */
 
     /* Configurable aspects of GIC cpu interface (which is part of the CPU) */
@@ -1310,6 +1314,7 @@ void pmu_init(ARMCPU *cpu);
 #define SCTLR_EnIB    (1U << 30) /* v8.3, AArch64 only */
 #define SCTLR_EnIA    (1U << 31) /* v8.3, AArch64 only */
 #define SCTLR_DSSBS_32 (1U << 31) /* v8.5, AArch32 only */
+#define SCTLR_MSCEN   (1ULL << 33) /* FEAT_MOPS */
 #define SCTLR_BT0     (1ULL << 35) /* v8.5-BTI */
 #define SCTLR_BT1     (1ULL << 36) /* v8.5-BTI */
 #define SCTLR_ITFSB   (1ULL << 37) /* v8.5-MemTag */
@@ -2161,6 +2166,7 @@ FIELD(ID_AA64ISAR0, SHA1, 8, 4)
 FIELD(ID_AA64ISAR0, SHA2, 12, 4)
 FIELD(ID_AA64ISAR0, CRC32, 16, 4)
 FIELD(ID_AA64ISAR0, ATOMIC, 20, 4)
+FIELD(ID_AA64ISAR0, TME, 24, 4)
 FIELD(ID_AA64ISAR0, RDM, 28, 4)
 FIELD(ID_AA64ISAR0, SHA3, 32, 4)
 FIELD(ID_AA64ISAR0, SM3, 36, 4)
@@ -2195,6 +2201,13 @@ FIELD(ID_AA64ISAR2, APA3, 12, 4)
 FIELD(ID_AA64ISAR2, MOPS, 16, 4)
 FIELD(ID_AA64ISAR2, BC, 20, 4)
 FIELD(ID_AA64ISAR2, PAC_FRAC, 24, 4)
+FIELD(ID_AA64ISAR2, CLRBHB, 28, 4)
+FIELD(ID_AA64ISAR2, SYSREG_128, 32, 4)
+FIELD(ID_AA64ISAR2, SYSINSTR_128, 36, 4)
+FIELD(ID_AA64ISAR2, PRFMSLC, 40, 4)
+FIELD(ID_AA64ISAR2, RPRFM, 48, 4)
+FIELD(ID_AA64ISAR2, CSSC, 52, 4)
+FIELD(ID_AA64ISAR2, ATS1A, 60, 4)
 
 FIELD(ID_AA64PFR0, EL0, 0, 4)
 FIELD(ID_AA64PFR0, EL1, 4, 4)
@@ -2222,6 +2235,12 @@ FIELD(ID_AA64PFR1, SME, 24, 4)
 FIELD(ID_AA64PFR1, RNDR_TRAP, 28, 4)
 FIELD(ID_AA64PFR1, CSV2_FRAC, 32, 4)
 FIELD(ID_AA64PFR1, NMI, 36, 4)
+FIELD(ID_AA64PFR1, MTE_FRAC, 40, 4)
+FIELD(ID_AA64PFR1, GCS, 44, 4)
+FIELD(ID_AA64PFR1, THE, 48, 4)
+FIELD(ID_AA64PFR1, MTEX, 52, 4)
+FIELD(ID_AA64PFR1, DF2, 56, 4)
+FIELD(ID_AA64PFR1, PFAR, 60, 4)
 
 FIELD(ID_AA64MMFR0, PARANGE, 0, 4)
 FIELD(ID_AA64MMFR0, ASIDBITS, 4, 4)
@@ -2253,6 +2272,7 @@ FIELD(ID_AA64MMFR1, AFP, 44, 4)
 FIELD(ID_AA64MMFR1, NTLBPA, 48, 4)
 FIELD(ID_AA64MMFR1, TIDCP1, 52, 4)
 FIELD(ID_AA64MMFR1, CMOW, 56, 4)
+FIELD(ID_AA64MMFR1, ECBHB, 60, 4)
 
 FIELD(ID_AA64MMFR2, CNP, 0, 4)
 FIELD(ID_AA64MMFR2, UAO, 4, 4)
@@ -2274,7 +2294,9 @@ FIELD(ID_AA64DFR0, DEBUGVER, 0, 4)
 FIELD(ID_AA64DFR0, TRACEVER, 4, 4)
 FIELD(ID_AA64DFR0, PMUVER, 8, 4)
 FIELD(ID_AA64DFR0, BRPS, 12, 4)
+FIELD(ID_AA64DFR0, PMSS, 16, 4)
 FIELD(ID_AA64DFR0, WRPS, 20, 4)
+FIELD(ID_AA64DFR0, SEBEP, 24, 4)
 FIELD(ID_AA64DFR0, CTX_CMPS, 28, 4)
 FIELD(ID_AA64DFR0, PMSVER, 32, 4)
 FIELD(ID_AA64DFR0, DOUBLELOCK, 36, 4)
@@ -2282,12 +2304,14 @@ FIELD(ID_AA64DFR0, TRACEFILT, 40, 4)
 FIELD(ID_AA64DFR0, TRACEBUFFER, 44, 4)
 FIELD(ID_AA64DFR0, MTPMU, 48, 4)
 FIELD(ID_AA64DFR0, BRBE, 52, 4)
+FIELD(ID_AA64DFR0, EXTTRCBUFF, 56, 4)
 FIELD(ID_AA64DFR0, HPMN0, 60, 4)
 
 FIELD(ID_AA64ZFR0, SVEVER, 0, 4)
 FIELD(ID_AA64ZFR0, AES, 4, 4)
 FIELD(ID_AA64ZFR0, BITPERM, 16, 4)
 FIELD(ID_AA64ZFR0, BFLOAT16, 20, 4)
+FIELD(ID_AA64ZFR0, B16B16, 24, 4)
 FIELD(ID_AA64ZFR0, SHA3, 32, 4)
 FIELD(ID_AA64ZFR0, SM4, 40, 4)
 FIELD(ID_AA64ZFR0, I8MM, 44, 4)
@@ -2295,9 +2319,13 @@ FIELD(ID_AA64ZFR0, F32MM, 52, 4)
 FIELD(ID_AA64ZFR0, F64MM, 56, 4)
 
 FIELD(ID_AA64SMFR0, F32F32, 32, 1)
+FIELD(ID_AA64SMFR0, BI32I32, 33, 1)
 FIELD(ID_AA64SMFR0, B16F32, 34, 1)
 FIELD(ID_AA64SMFR0, F16F32, 35, 1)
 FIELD(ID_AA64SMFR0, I8I32, 36, 4)
+FIELD(ID_AA64SMFR0, F16F16, 42, 1)
+FIELD(ID_AA64SMFR0, B16B16, 43, 1)
+FIELD(ID_AA64SMFR0, I16I32, 44, 4)
 FIELD(ID_AA64SMFR0, F64F64, 48, 1)
 FIELD(ID_AA64SMFR0, I16I64, 52, 4)
 FIELD(ID_AA64SMFR0, SMEVER, 56, 4)
@@ -3142,6 +3170,7 @@ FIELD(TBFLAG_A64, SVL, 24, 4)
 FIELD(TBFLAG_A64, SME_TRAP_NONSTREAMING, 28, 1)
 FIELD(TBFLAG_A64, FGT_ERET, 29, 1)
 FIELD(TBFLAG_A64, NAA, 30, 1)
+FIELD(TBFLAG_A64, ATA0, 31, 1)
 
 /*
  * Helpers for using the above.
@@ -3205,11 +3234,7 @@ static inline bool bswap_code(bool sctlr_b)
      * The invalid combination SCTLR.B=1/CPSR.E=1/TARGET_BIG_ENDIAN=0
      * would also end up as a mixed-endian mode with BE code, LE data.
      */
-    return
-#if TARGET_BIG_ENDIAN
-        1 ^
-#endif
-        sctlr_b;
+    return TARGET_BIG_ENDIAN ^ sctlr_b;
 #else
     /* All code access in ARM is little endian, and there are no loaders
      * doing swaps that need to be reversed
@@ -3221,11 +3246,7 @@ static inline bool bswap_code(bool sctlr_b)
 #ifdef CONFIG_USER_ONLY
 static inline bool arm_cpu_bswap_data(CPUARMState *env)
 {
-    return
-#if TARGET_BIG_ENDIAN
-       1 ^
-#endif
-       arm_cpu_data_is_big_endian(env);
+    return TARGET_BIG_ENDIAN ^ arm_cpu_data_is_big_endian(env);
 }
 #endif
 
@@ -3800,26 +3821,57 @@ static inline bool isar_feature_aa64_fcma(const ARMISARegisters *id)
     return FIELD_EX64(id->id_aa64isar1, ID_AA64ISAR1, FCMA) != 0;
 }
 
+/*
+ * These are the values from APA/API/APA3.
+ * In general these must be compared '>=', per the normal Arm ARM
+ * treatment of fields in ID registers.
+ */
+typedef enum {
+    PauthFeat_None         = 0,
+    PauthFeat_1            = 1,
+    PauthFeat_EPAC         = 2,
+    PauthFeat_2            = 3,
+    PauthFeat_FPAC         = 4,
+    PauthFeat_FPACCOMBINED = 5,
+} ARMPauthFeature;
+
+static inline ARMPauthFeature
+isar_feature_pauth_feature(const ARMISARegisters *id)
+{
+    /*
+     * Architecturally, only one of {APA,API,APA3} may be active (non-zero)
+     * and the other two must be zero.  Thus we may avoid conditionals.
+     */
+    return (FIELD_EX64(id->id_aa64isar1, ID_AA64ISAR1, APA) |
+            FIELD_EX64(id->id_aa64isar1, ID_AA64ISAR1, API) |
+            FIELD_EX64(id->id_aa64isar2, ID_AA64ISAR2, APA3));
+}
+
 static inline bool isar_feature_aa64_pauth(const ARMISARegisters *id)
 {
     /*
      * Return true if any form of pauth is enabled, as this
      * predicate controls migration of the 128-bit keys.
      */
-    return (id->id_aa64isar1 &
-            (FIELD_DP64(0, ID_AA64ISAR1, APA, 0xf) |
-             FIELD_DP64(0, ID_AA64ISAR1, API, 0xf) |
-             FIELD_DP64(0, ID_AA64ISAR1, GPA, 0xf) |
-             FIELD_DP64(0, ID_AA64ISAR1, GPI, 0xf))) != 0;
+    return isar_feature_pauth_feature(id) != PauthFeat_None;
 }
 
-static inline bool isar_feature_aa64_pauth_arch(const ARMISARegisters *id)
+static inline bool isar_feature_aa64_pauth_qarma5(const ARMISARegisters *id)
 {
     /*
-     * Return true if pauth is enabled with the architected QARMA algorithm.
-     * QEMU will always set APA+GPA to the same value.
+     * Return true if pauth is enabled with the architected QARMA5 algorithm.
+     * QEMU will always enable or disable both APA and GPA.
      */
     return FIELD_EX64(id->id_aa64isar1, ID_AA64ISAR1, APA) != 0;
+}
+
+static inline bool isar_feature_aa64_pauth_qarma3(const ARMISARegisters *id)
+{
+    /*
+     * Return true if pauth is enabled with the architected QARMA3 algorithm.
+     * QEMU will always enable or disable both APA3 and GPA3.
+     */
+    return FIELD_EX64(id->id_aa64isar2, ID_AA64ISAR2, APA3) != 0;
 }
 
 static inline bool isar_feature_aa64_tlbirange(const ARMISARegisters *id)
@@ -3944,6 +3996,11 @@ static inline bool isar_feature_aa64_hcx(const ARMISARegisters *id)
     return FIELD_EX64(id->id_aa64mmfr1, ID_AA64MMFR1, HCX) != 0;
 }
 
+static inline bool isar_feature_aa64_tidcp1(const ARMISARegisters *id)
+{
+    return FIELD_EX64(id->id_aa64mmfr2, ID_AA64MMFR1, TIDCP1) != 0;
+}
+
 static inline bool isar_feature_aa64_uao(const ARMISARegisters *id)
 {
     return FIELD_EX64(id->id_aa64mmfr2, ID_AA64MMFR2, UAO) != 0;
@@ -4030,6 +4087,11 @@ static inline bool isar_feature_aa64_rcpc_8_4(const ARMISARegisters *id)
 static inline bool isar_feature_aa64_i8mm(const ARMISARegisters *id)
 {
     return FIELD_EX64(id->id_aa64isar1, ID_AA64ISAR1, I8MM) != 0;
+}
+
+static inline bool isar_feature_aa64_hbc(const ARMISARegisters *id)
+{
+    return FIELD_EX64(id->id_aa64isar2, ID_AA64ISAR2, BC) != 0;
 }
 
 static inline bool isar_feature_aa64_tgran4_lpa2(const ARMISARegisters *id)
@@ -4218,6 +4280,11 @@ static inline bool isar_feature_aa64_sme_fa64(const ARMISARegisters *id)
 static inline bool isar_feature_aa64_doublelock(const ARMISARegisters *id)
 {
     return FIELD_SEX64(id->id_aa64dfr0, ID_AA64DFR0, DOUBLELOCK) >= 0;
+}
+
+static inline bool isar_feature_aa64_mops(const ARMISARegisters *id)
+{
+    return FIELD_EX64(id->id_aa64isar2, ID_AA64ISAR2, MOPS);
 }
 
 /*

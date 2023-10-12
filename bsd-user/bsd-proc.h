@@ -27,13 +27,11 @@
 #include "qemu/plugin.h"
 
 extern int _getlogin(char*, int);
+int bsd_get_ncpu(void);
 
 /* exit(2) */
 static inline abi_long do_bsd_exit(void *cpu_env, abi_long arg1)
 {
-#ifdef TARGET_GPROF
-    _mcleanup();
-#endif
     gdb_exit(arg1);
     qemu_plugin_user_exit();
     _exit(arg1);
@@ -46,10 +44,10 @@ static inline abi_long do_bsd_getgroups(abi_long gidsetsize, abi_long arg2)
 {
     abi_long ret;
     uint32_t *target_grouplist;
-    gid_t *grouplist;
+    g_autofree gid_t *grouplist;
     int i;
 
-    grouplist = alloca(gidsetsize * sizeof(gid_t));
+    grouplist = g_try_new(gid_t, gidsetsize);
     ret = get_errno(getgroups(gidsetsize, grouplist));
     if (gidsetsize != 0) {
         if (!is_error(ret)) {
@@ -70,10 +68,10 @@ static inline abi_long do_bsd_getgroups(abi_long gidsetsize, abi_long arg2)
 static inline abi_long do_bsd_setgroups(abi_long gidsetsize, abi_long arg2)
 {
     uint32_t *target_grouplist;
-    gid_t *grouplist;
+    g_autofree gid_t *grouplist;
     int i;
 
-    grouplist = alloca(gidsetsize * sizeof(gid_t));
+    grouplist = g_try_new(gid_t, gidsetsize);
     target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * 2, 1);
     if (!target_grouplist) {
         return -TARGET_EFAULT;
@@ -113,12 +111,12 @@ static inline abi_long do_bsd_getlogin(abi_long arg1, abi_long arg2)
     abi_long ret;
     void *p;
 
-    p = lock_user_string(arg1);
+    p = lock_user(VERIFY_WRITE, arg1, arg2, 0);
     if (p == NULL) {
         return -TARGET_EFAULT;
     }
     ret = get_errno(_getlogin(p, arg2));
-    unlock_user(p, arg1, 0);
+    unlock_user(p, arg1, arg2);
 
     return ret;
 }
@@ -365,23 +363,19 @@ static inline abi_long do_bsd_issetugid(void)
 static inline abi_long do_bsd_profil(abi_long arg1, abi_long arg2,
                                      abi_long arg3, abi_long arg4)
 {
-    qemu_log("qemu: Unsupported syscall profil()\n");
     return -TARGET_ENOSYS;
 }
-
 
 /* ktrace(2) */
 static inline abi_long do_bsd_ktrace(abi_long arg1, abi_long arg2,
                                      abi_long arg3, abi_long arg4)
 {
-    qemu_log("qemu: Unsupported syscall ktrace()\n");
     return -TARGET_ENOSYS;
 }
 
 /* utrace(2) */
 static inline abi_long do_bsd_utrace(abi_long arg1, abi_long arg2)
 {
-    qemu_log("qemu: Unsupported syscall ptrace()\n");
     return -TARGET_ENOSYS;
 }
 
@@ -390,7 +384,6 @@ static inline abi_long do_bsd_utrace(abi_long arg1, abi_long arg2)
 static inline abi_long do_bsd_ptrace(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
-    qemu_log("qemu: Unsupported syscall ptrace()\n");
     return -TARGET_ENOSYS;
 }
 
@@ -405,11 +398,8 @@ static inline abi_long do_bsd_getpriority(abi_long which, abi_long who)
     errno = 0;
     ret = getpriority(which, who);
     if (ret == -1 && errno != 0) {
-        ret = -host_to_target_errno(errno);
-        return ret;
+        return -host_to_target_errno(errno);
     }
-    /* Return value is a biased priority to avoid negative numbers. */
-    ret = 20 - ret;
 
     return ret;
 }
@@ -439,6 +429,4 @@ static inline abi_long do_bsd_sched_get_priority_max(int policy)
     return get_errno(sched_get_priority_max(policy));
 }
 
-int bsd_get_ncpu(void);
-
-#endif /* BSD_PROC_H */
+#endif /* !BSD_PROC_H_ */

@@ -50,6 +50,7 @@ tests = {
   'test-qapi-util': [],
   'test-interval-tree': [],
   'test-xs-node': [qom],
+  'test-virtio-dmabuf': [meson.project_source_root() / 'hw/display/virtio-dmabuf.c'],
 }
 
 if have_system or have_tools
@@ -98,7 +99,7 @@ if have_block
   }
   if gnutls.found() and \
      tasn1.found() and \
-     'CONFIG_POSIX' in config_host
+     targetos != 'windows'
     tests += {
       'test-crypto-tlscredsx509': ['crypto-tls-x509-helpers.c', 'pkix_asn1_tab.c',
                                    tasn1, crypto, gnutls],
@@ -113,7 +114,7 @@ if have_block
   if xts == 'private'
     tests += {'test-crypto-xts': [crypto, io]}
   endif
-  if 'CONFIG_POSIX' in config_host
+  if targetos != 'windows'
     tests += {
       'test-image-locking': [testblock],
       'test-nested-aio-poll': [testblock],
@@ -148,7 +149,7 @@ if have_system
   # are not runnable under TSan due to a known issue.
   # https://github.com/google/sanitizers/issues/1116
   if not get_option('tsan')
-    if 'CONFIG_POSIX' in config_host
+    if targetos != 'windows'
         tests += {
           'test-char': ['socket-helpers.c', qom, io, chardev]
         }

@@ -36,6 +36,7 @@
 #include "qemu/timer.h"
 #include "exec/translation-block.h"
 #include "exec/tlb-common.h"
+#include "tcg/startup.h"
 #include "tcg/tcg-op-common.h"
 
 #if UINTPTR_MAX == UINT32_MAX
@@ -108,6 +109,7 @@ static void tcg_register_jit_int(const void *buf, size_t size,
     __attribute__((unused));
 
 /* Forward declarations for functions declared and used in tcg-target.c.inc. */
+static void tcg_out_tb_start(TCGContext *s);
 static void tcg_out_ld(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg1,
                        intptr_t arg2);
 static bool tcg_out_mov(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg);
@@ -171,7 +173,7 @@ static bool tcg_out_sti(TCGContext *s, TCGType type, TCGArg val,
 static void tcg_out_call(TCGContext *s, const tcg_insn_unit *target,
                          const TCGHelperInfo *info);
 static TCGReg tcg_target_call_oarg_reg(TCGCallReturnKind kind, int slot);
-static bool tcg_target_const_match(int64_t val, TCGType type, int ct);
+static bool tcg_target_const_match(int64_t val, TCGType type, int ct, int vece);
 #ifdef TCG_TARGET_NEED_LDST_LABELS
 static int tcg_out_ldst_finalize(TCGContext *s);
 #endif
@@ -230,7 +232,7 @@ __thread TCGContext *tcg_ctx;
 TCGContext **tcg_ctxs;
 unsigned int tcg_cur_ctxs;
 unsigned int tcg_max_ctxs;
-TCGv_env cpu_env = 0;
+TCGv_env tcg_env;
 const void *tcg_code_gen_epilogue;
 uintptr_t tcg_splitwx_diff;
 
@@ -405,7 +407,8 @@ static uintptr_t G_GNUC_UNUSED get_jmp_target_addr(TCGContext *s, int which)
 #if defined(CONFIG_SOFTMMU) && !defined(CONFIG_TCG_INTERPRETER)
 static int tlb_mask_table_ofs(TCGContext *s, int which)
 {
-    return s->tlb_fast_offset + which * sizeof(CPUTLBDescFast);
+    return (offsetof(CPUNegativeOffsetState, tlb.f[which]) -
+            sizeof(CPUNegativeOffsetState));
 }
 #endif
 
@@ -732,6 +735,13 @@ static const TCGTargetOpDef constraint_sets[] = {
 #define C_N1_O1_I4(O1, O2, I1, I2, I3, I4) C_PFX6(c_n1_o1_i4_, O1, O2, I1, I2, I3, I4)
 
 #include "tcg-target.c.inc"
+
+#ifndef CONFIG_TCG_INTERPRETER
+/* Validate CPUTLBDescFast placement. */
+QEMU_BUILD_BUG_ON((int)(offsetof(CPUNegativeOffsetState, tlb.f[0]) -
+                        sizeof(CPUNegativeOffsetState))
+                  < MIN_TLB_MASK_TABLE_OFS);
+#endif
 
 static void alloc_tcg_plugin_context(TCGContext *s)
 {
@@ -1352,7 +1362,7 @@ static void tcg_context_init(unsigned max_cpus)
 
     tcg_debug_assert(!tcg_regset_test_reg(s->reserved_regs, TCG_AREG0));
     ts = tcg_global_reg_new_internal(s, TCG_TYPE_PTR, TCG_AREG0, "env");
-    cpu_env = temp_tcgv_ptr(ts);
+    tcg_env = temp_tcgv_ptr(ts);
 }
 
 void tcg_init(size_t tb_size, int splitwx, unsigned max_cpus)
@@ -1386,8 +1396,9 @@ TranslationBlock *tcg_tb_alloc(TCGContext *s)
     return tb;
 }
 
-void tcg_prologue_init(TCGContext *s)
+void tcg_prologue_init(void)
 {
+    TCGContext *s = tcg_ctx;
     size_t prologue_size;
 
     s->code_ptr = s->code_gen_ptr;
@@ -1495,11 +1506,6 @@ void tcg_func_start(TCGContext *s)
 
     tcg_debug_assert(s->addr_type == TCG_TYPE_I32 ||
                      s->addr_type == TCG_TYPE_I64);
-
-#if defined(CONFIG_SOFTMMU) && !defined(CONFIG_TCG_INTERPRETER)
-    tcg_debug_assert(s->tlb_fast_offset < 0);
-    tcg_debug_assert(s->tlb_fast_offset >= MIN_TLB_MASK_TABLE_OFS);
-#endif
 
     tcg_debug_assert(s->insn_start_words > 0);
 }
@@ -2548,21 +2554,21 @@ static void tcg_dump_ops(TCGContext *s, FILE *f, bool have_prefs)
                 {
                     const char *s_al, *s_op, *s_at;
                     MemOpIdx oi = op->args[k++];
-                    MemOp op = get_memop(oi);
+                    MemOp mop = get_memop(oi);
                     unsigned ix = get_mmuidx(oi);
 
-                    s_al = alignment_name[(op & MO_AMASK) >> MO_ASHIFT];
-                    s_op = ldst_name[op & (MO_BSWAP | MO_SSIZE)];
-                    s_at = atom_name[(op & MO_ATOM_MASK) >> MO_ATOM_SHIFT];
-                    op &= ~(MO_AMASK | MO_BSWAP | MO_SSIZE | MO_ATOM_MASK);
+                    s_al = alignment_name[(mop & MO_AMASK) >> MO_ASHIFT];
+                    s_op = ldst_name[mop & (MO_BSWAP | MO_SSIZE)];
+                    s_at = atom_name[(mop & MO_ATOM_MASK) >> MO_ATOM_SHIFT];
+                    mop &= ~(MO_AMASK | MO_BSWAP | MO_SSIZE | MO_ATOM_MASK);
 
                     /* If all fields are accounted for, print symbolically. */
-                    if (!op && s_al && s_op && s_at) {
+                    if (!mop && s_al && s_op && s_at) {
                         col += ne_fprintf(f, ",%s%s%s,%u",
                                           s_at, s_al, s_op, ix);
                     } else {
-                        op = get_memop(oi);
-                        col += ne_fprintf(f, ",$0x%x,%u", op, ix);
+                        mop = get_memop(oi);
+                        col += ne_fprintf(f, ",$0x%x,%u", mop, ix);
                     }
                     i = 1;
                 }
@@ -4689,7 +4695,7 @@ static void tcg_reg_alloc_op(TCGContext *s, const TCGOp *op)
         ts = arg_temp(arg);
 
         if (ts->val_type == TEMP_VAL_CONST
-            && tcg_target_const_match(ts->val, ts->type, arg_ct->ct)) {
+            && tcg_target_const_match(ts->val, ts->type, arg_ct->ct, TCGOP_VECE(op))) {
             /* constant is OK for instruction */
             const_args[i] = 1;
             new_args[i] = ts->val;
@@ -6013,6 +6019,8 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb, uint64_t pc_start)
     start_words = s->insn_start_words;
     s->gen_insn_data =
         tcg_malloc(sizeof(uint64_t) * s->gen_tb->icount * start_words);
+
+    tcg_out_tb_start(s);
 
     num_insns = -1;
     QTAILQ_FOREACH(op, &s->ops, link) {

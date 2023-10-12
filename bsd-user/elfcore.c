@@ -1135,7 +1135,7 @@ static int fill_note_info(struct elf_note_info *info,
         if (cpu == thread_cpu) {
             continue;
         }
-        err = fill_thread_info(info, signr, (CPUArchState *)cpu->env_ptr);
+        err = fill_thread_info(info, signr, cpu_env(cpu));
         if (err != 0) {
             cpu_list_unlock();
             goto edone;

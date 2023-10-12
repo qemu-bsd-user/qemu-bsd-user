@@ -91,8 +91,8 @@ static inline abi_long do_bsd_mprotect(abi_long arg1, abi_long arg2,
 /* msync(2) */
 static inline abi_long do_bsd_msync(abi_long addr, abi_long len, abi_long flags)
 {
-    if (!access_ok(VERIFY_WRITE, addr, len)) {
-        /* XXX Should be EFAULT, but FreeBSD seems to get this wrong. */
+    if (!guest_range_valid_untagged(addr, len)) {
+        /* It seems odd, but POSIX wants this to be ENOMEM */
         return -TARGET_ENOMEM;
     }
 
@@ -102,12 +102,18 @@ static inline abi_long do_bsd_msync(abi_long addr, abi_long len, abi_long flags)
 /* mlock(2) */
 static inline abi_long do_bsd_mlock(abi_long arg1, abi_long arg2)
 {
+    if (!guest_range_valid_untagged(arg1, arg2)) {
+        return -TARGET_EINVAL;
+    }
     return get_errno(mlock(g2h_untagged(arg1), arg2));
 }
 
 /* munlock(2) */
 static inline abi_long do_bsd_munlock(abi_long arg1, abi_long arg2)
 {
+    if (!guest_range_valid_untagged(arg1, arg2)) {
+        return -TARGET_EINVAL;
+    }
     return get_errno(munlock(g2h_untagged(arg1), arg2));
 }
 
@@ -127,13 +133,53 @@ static inline abi_long do_bsd_munlockall(void)
 static inline abi_long do_bsd_madvise(abi_long arg1, abi_long arg2,
         abi_long arg3)
 {
+    abi_ulong len;
+    int ret = 0;
+    abi_long start = arg1;
+    abi_long len_in = arg2;
+    abi_long advice = arg3;
+
+    if (start & ~TARGET_PAGE_MASK) {
+        return -TARGET_EINVAL;
+    }
+    if (len_in == 0) {
+        return 0;
+    }
+    len = TARGET_PAGE_ALIGN(len_in);
+    if (len == 0 || !guest_range_valid_untagged(start, len)) {
+        return -TARGET_EINVAL;
+    }
+
     /*
-     * A straight passthrough may not be safe because qemu sometimes
-     * turns private file-backed mapping into anonymous mappings. This
-     * will break MADV_DONTNEED.  This is a hint, so ignoring and returing
-     * success is ok.
+     * Most advice values are hints, so ignoring and returning success is ok.
+     *
+     * However, some advice values such as MADV_DONTNEED, are not hints and
+     * need to be emulated.
+     *
+     * A straight passthrough for those may not be safe because qemu sometimes
+     * turns private file-backed mappings into anonymous mappings.
+     * If all guest pages have PAGE_PASSTHROUGH set, mappings have the
+     * same semantics for the host as for the guest.
+     *
+     * MADV_DONTNEED is passed through, if possible.
+     * If passthrough isn't possible, we nevertheless (wrongly!) return
+     * success, which is broken but some userspace programs fail to work
+     * otherwise. Completely implementing such emulation is quite complicated
+     * though.
      */
-    return get_errno(0);
+    mmap_lock();
+    switch (advice) {
+    case MADV_DONTNEED:
+        if (page_check_range(start, len, PAGE_PASSTHROUGH)) {
+            ret = get_errno(madvise(g2h_untagged(start), len, advice));
+            if (ret == 0) {
+                page_reset_target_data(start, start + len - 1);
+            }
+        }
+    }
+    mmap_unlock();
+
+    return ret;
 }
 
 /* minherit(2) */
@@ -148,30 +194,23 @@ static inline abi_long do_bsd_mincore(abi_ulong target_addr, abi_ulong len,
         abi_ulong target_vec)
 {
     abi_long ret;
-    void *p, *a;
+    void *p;
+    abi_ulong vec_len = DIV_ROUND_UP(len, TARGET_PAGE_SIZE);
 
-    a = lock_user(VERIFY_WRITE, target_addr, len, 0);
-    if (a == NULL) {
+    if (!guest_range_valid_untagged(target_addr, len)
+        || !page_check_range(target_addr, len, PAGE_VALID)) {
         return -TARGET_EFAULT;
     }
-    p = lock_user_string(target_vec);
+
+    p = lock_user(VERIFY_WRITE, target_vec, vec_len, 0);
     if (p == NULL) {
-        unlock_user(a, target_addr, 0);
         return -TARGET_EFAULT;
     }
-    ret = get_errno(mincore(a, len, p));
-    unlock_user(p, target_vec, ret);
-    unlock_user(a, target_addr, 0);
+    ret = get_errno(mincore(g2h_untagged(target_addr), len, p));
+    unlock_user(p, target_vec, vec_len);
 
     return ret;
 }
-
-#ifdef DO_DEBUG
-#define DEBUGF_BRK(message, args...) \
-    do { fprintf(stderr, (message), ## args); } while (0)
-#else
-#define DEBUGF_BRK(message, args...)
-#endif
 
 /* do_brk() must return target values and target errnos. */
 static inline abi_long do_obreak(abi_ulong brk_val)
@@ -225,7 +264,6 @@ static inline abi_long do_bsd_shm_open(abi_ulong arg1, abi_long arg2,
     int ret;
     void *p;
 
-#define SHM_PATH(p) ((p) == SHM_ANON ? (p) : path(p))
     if (arg1 == (uintptr_t)SHM_ANON) {
         p = SHM_ANON;
     } else {
@@ -234,8 +272,8 @@ static inline abi_long do_bsd_shm_open(abi_ulong arg1, abi_long arg2,
             return -TARGET_EFAULT;
         }
     }
-    ret = get_errno(shm_open(SHM_PATH(p),
-                target_to_host_bitmask(arg2, fcntl_flags_tbl), arg3));
+    ret = get_errno(shm_open(p, target_to_host_bitmask(arg2, fcntl_flags_tbl),
+                             arg3));
 
     if (p != SHM_ANON) {
         unlock_user(p, arg1, 0);
@@ -243,7 +281,6 @@ static inline abi_long do_bsd_shm_open(abi_ulong arg1, abi_long arg2,
 
     return ret;
 }
-#undef SHM_PATH
 
 /* shm_unlink(2) */
 static inline abi_long do_bsd_shm_unlink(abi_ulong arg1)
@@ -279,7 +316,6 @@ static inline abi_long do_bsd_shmctl(abi_long shmid, abi_long cmd,
 
     switch (cmd) {
     case IPC_STAT:
-    case IPC_SET:
         if (target_to_host_shmid_ds(&dsarg, buff)) {
             return -TARGET_EFAULT;
         }
@@ -287,6 +323,13 @@ static inline abi_long do_bsd_shmctl(abi_long shmid, abi_long cmd,
         if (host_to_target_shmid_ds(buff, &dsarg)) {
             return -TARGET_EFAULT;
         }
+        break;
+
+    case IPC_SET:
+        if (target_to_host_shmid_ds(&dsarg, buff)) {
+            return -TARGET_EFAULT;
+        }
+        ret = get_errno(shmctl(shmid, cmd, &dsarg));
         break;
 
     case IPC_RMID:
@@ -306,9 +349,7 @@ static inline abi_long do_bsd_shmat(int shmid, abi_ulong shmaddr, int shmflg)
 {
     abi_ulong raddr;
     abi_long ret;
-    void *host_raddr;
     struct shmid_ds shm_info;
-    int i;
 
     /* Find out the length of the shared memory segment. */
     ret = get_errno(shmctl(shmid, IPC_STAT, &shm_info));
@@ -317,62 +358,78 @@ static inline abi_long do_bsd_shmat(int shmid, abi_ulong shmaddr, int shmflg)
         return ret;
     }
 
-    mmap_lock();
+    if (!guest_range_valid_untagged(shmaddr, shm_info.shm_segsz)) {
+        return -TARGET_EINVAL;
+    }
 
-    if (shmaddr) {
-        host_raddr = shmat(shmid, (void *)g2h_untagged(shmaddr), shmflg);
-    } else {
-        abi_ulong mmap_start;
+    WITH_MMAP_LOCK_GUARD() {
+        void *host_raddr;
 
-        mmap_start = mmap_find_vma(0, shm_info.shm_segsz);
-
-        if (mmap_start == -1) {
-            errno = ENOMEM;
-            host_raddr = (void *)-1;
+        if (shmaddr) {
+            host_raddr = shmat(shmid, (void *)g2h_untagged(shmaddr), shmflg);
         } else {
+            abi_ulong mmap_start;
+
+            mmap_start = mmap_find_vma(0, shm_info.shm_segsz);
+
+            if (mmap_start == -1) {
+                return -TARGET_ENOMEM;
+            }
             host_raddr = shmat(shmid, g2h_untagged(mmap_start),
-                shmflg); /* | SHM_REMAP XXX WHY? */
+                               shmflg | SHM_REMAP);
+        }
+
+        if (host_raddr == (void *)-1) {
+            return get_errno(-1);
+        }
+        raddr = h2g(host_raddr);
+
+        page_set_flags(raddr, raddr + shm_info.shm_segsz - 1,
+                       PAGE_VALID | PAGE_RESET | PAGE_READ |
+                       (shmflg & SHM_RDONLY ? 0 : PAGE_WRITE));
+
+        for (int i = 0; i < N_BSD_SHM_REGIONS; i++) {
+            if (bsd_shm_regions[i].start == 0) {
+                bsd_shm_regions[i].start = raddr;
+                bsd_shm_regions[i].size = shm_info.shm_segsz;
+                break;
+            }
         }
     }
 
-    if (host_raddr == (void *)-1) {
-        mmap_unlock();
-        return get_errno((long)host_raddr);
-    }
-    raddr = h2g((unsigned long)host_raddr);
-
-    page_set_flags(raddr, raddr + shm_info.shm_segsz,
-        PAGE_VALID | PAGE_READ | ((shmflg & SHM_RDONLY) ? 0 : PAGE_WRITE));
-
-    for (i = 0; i < N_BSD_SHM_REGIONS; i++) {
-        if (bsd_shm_regions[i].start == 0) {
-            bsd_shm_regions[i].start = raddr;
-            bsd_shm_regions[i].size = shm_info.shm_segsz;
-            break;
-        }
-    }
-
-    mmap_unlock();
     return raddr;
 }
 
 /* shmdt(2) */
 static inline abi_long do_bsd_shmdt(abi_ulong shmaddr)
 {
-    int i;
+    abi_long ret;
 
-    for (i = 0; i < N_BSD_SHM_REGIONS; ++i) {
-        if (bsd_shm_regions[i].start == shmaddr) {
+    WITH_MMAP_LOCK_GUARD() {
+        int i;
+
+        for (i = 0; i < N_BSD_SHM_REGIONS; ++i) {
+            if (bsd_shm_regions[i].start == shmaddr) {
+                break;
+            }
+        }
+
+        if (i == N_BSD_SHM_REGIONS) {
+            return -TARGET_EINVAL;
+        }
+
+        ret = get_errno(shmdt(g2h_untagged(shmaddr)));
+        if (ret == 0) {
+            abi_ulong size = bsd_shm_regions[i].size;
+
             bsd_shm_regions[i].start = 0;
-            page_set_flags(shmaddr,
-                shmaddr + bsd_shm_regions[i].size, 0);
-            break;
+            page_set_flags(shmaddr, shmaddr + size - 1, 0);
+            mmap_reserve(shmaddr, size);
         }
     }
 
-    return get_errno(shmdt(g2h_untagged(shmaddr)));
+    return ret;
 }
-
 
 static inline abi_long do_bsd_vadvise(void)
 {

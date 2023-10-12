@@ -1880,7 +1880,7 @@ qcow2_do_open(BlockDriverState *bs, QDict *options, int flags,
     g_free(s->image_data_file);
     if (open_data_file && has_data_file(bs)) {
         bdrv_graph_co_rdunlock();
-        bdrv_unref_child(bs, s->data_file);
+        bdrv_co_unref_child(bs, s->data_file);
         bdrv_graph_co_rdlock();
         s->data_file = NULL;
     }
@@ -2161,6 +2161,9 @@ qcow2_co_block_status(BlockDriverState *bs, bool want_zero, int64_t offset,
         (status & BDRV_BLOCK_OFFSET_VALID))
     {
         status |= BDRV_BLOCK_RECURSE;
+    }
+    if (type == QCOW2_SUBCLUSTER_COMPRESSED) {
+        status |= BDRV_BLOCK_COMPRESSED;
     }
     return status;
 }
@@ -2790,7 +2793,9 @@ static void qcow2_do_close(BlockDriverState *bs, bool close_data_file)
     g_free(s->image_backing_format);
 
     if (close_data_file && has_data_file(bs)) {
+        bdrv_graph_wrlock(NULL);
         bdrv_unref_child(bs, s->data_file);
+        bdrv_graph_wrunlock();
         s->data_file = NULL;
     }
 
@@ -5197,6 +5202,7 @@ qcow2_co_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
 {
     BDRVQcow2State *s = bs->opaque;
     bdi->cluster_size = s->cluster_size;
+    bdi->subcluster_size = s->subcluster_size;
     bdi->vm_state_offset = qcow2_vm_state_offset(s);
     bdi->is_dirty = s->incompatible_features & QCOW2_INCOMPAT_DIRTY;
     return 0;
@@ -5282,7 +5288,7 @@ static ImageInfoSpecific *qcow2_get_specific_info(BlockDriverState *bs,
     return spec_info;
 }
 
-static int qcow2_has_zero_init(BlockDriverState *bs)
+static int coroutine_mixed_fn qcow2_has_zero_init(BlockDriverState *bs)
 {
     BDRVQcow2State *s = bs->opaque;
     bool preallocated;

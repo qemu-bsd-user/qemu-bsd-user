@@ -235,6 +235,12 @@ typedef struct IOMMUTLBEvent {
 /* RAM is an mmap-ed named file */
 #define RAM_NAMED_FILE (1 << 9)
 
+/* RAM is mmap-ed read-only */
+#define RAM_READONLY (1 << 10)
+
+/* RAM FD is opened read-only */
+#define RAM_READONLY_FD (1 << 11)
+
 static inline void iommu_notifier_init(IOMMUNotifier *n, IOMMUNotify fn,
                                        IOMMUNotifierFlag flags,
                                        hwaddr start, hwaddr end,
@@ -1089,6 +1095,7 @@ struct AddressSpace {
     struct FlatView *current_map;
 
     int ioeventfd_nb;
+    int ioeventfd_notifiers;
     struct MemoryRegionIoeventfd *ioeventfds;
     QTAILQ_HEAD(, MemoryListener) listeners;
     QTAILQ_ENTRY(AddressSpace) address_spaces_link;
@@ -1331,10 +1338,10 @@ void memory_region_init_resizeable_ram(MemoryRegion *mr,
  * @align: alignment of the region base address; if 0, the default alignment
  *         (getpagesize()) will be used.
  * @ram_flags: RamBlock flags. Supported flags: RAM_SHARED, RAM_PMEM,
- *             RAM_NORESERVE,
+ *             RAM_NORESERVE, RAM_PROTECTED, RAM_NAMED_FILE, RAM_READONLY,
+ *             RAM_READONLY_FD
  * @path: the path in which to allocate the RAM.
  * @offset: offset within the file referenced by path
- * @readonly: true to open @path for reading, false for read/write.
  * @errp: pointer to Error*, to store an error if it happens.
  *
  * Note that this function does not do anything to cause the data in the
@@ -1348,7 +1355,6 @@ void memory_region_init_ram_from_file(MemoryRegion *mr,
                                       uint32_t ram_flags,
                                       const char *path,
                                       ram_addr_t offset,
-                                      bool readonly,
                                       Error **errp);
 
 /**
@@ -1360,7 +1366,8 @@ void memory_region_init_ram_from_file(MemoryRegion *mr,
  * @name: the name of the region.
  * @size: size of the region.
  * @ram_flags: RamBlock flags. Supported flags: RAM_SHARED, RAM_PMEM,
- *             RAM_NORESERVE, RAM_PROTECTED.
+ *             RAM_NORESERVE, RAM_PROTECTED, RAM_NAMED_FILE, RAM_READONLY,
+ *             RAM_READONLY_FD
  * @fd: the fd to mmap.
  * @offset: offset within the file referenced by fd
  * @errp: pointer to Error*, to store an error if it happens.
@@ -2664,9 +2671,6 @@ struct MemoryRegionCache {
     bool is_write;
 };
 
-#define MEMORY_REGION_CACHE_INVALID ((MemoryRegionCache) { .mrs.mr = NULL })
-
-
 /* address_space_ld*_cached: load from a cached #MemoryRegion
  * address_space_st*_cached: store into a cached #MemoryRegion
  *
@@ -2754,6 +2758,19 @@ int64_t address_space_cache_init(MemoryRegionCache *cache,
                                  hwaddr addr,
                                  hwaddr len,
                                  bool is_write);
+
+/**
+ * address_space_cache_init_empty: Initialize empty #MemoryRegionCache
+ *
+ * @cache: The #MemoryRegionCache to operate on.
+ *
+ * Initializes #MemoryRegionCache structure without memory region attached.
+ * Cache initialized this way can only be safely destroyed, but not used.
+ */
+static inline void address_space_cache_init_empty(MemoryRegionCache *cache)
+{
+    cache->mrs.mr = NULL;
+}
 
 /**
  * address_space_cache_invalidate: complete a write to a #MemoryRegionCache

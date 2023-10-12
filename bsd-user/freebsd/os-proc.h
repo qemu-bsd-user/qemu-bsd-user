@@ -64,6 +64,10 @@ static inline abi_long do_freebsd_wait4(abi_long arg1, abi_ulong target_status,
         rusage_ptr = &rusage;
     }
     ret = get_errno(safe_wait4(arg1, &status, arg3, rusage_ptr));
+
+    if (ret < 0) {
+        return ret;
+    }
     if (target_status != 0) {
         status = host_to_target_waitstatus(status);
         if (put_user_s32(status, target_status) != 0) {
@@ -77,10 +81,10 @@ static inline abi_long do_freebsd_wait4(abi_long arg1, abi_ulong target_status,
 }
 
 /* wait6(2) */
-static inline abi_long do_freebsd_wait6(void *cpu_env, abi_long idtype, 
+static inline abi_long do_freebsd_wait6(void *cpu_env, abi_long idtype,
     abi_long id1, abi_long id2,
     abi_ulong target_status, abi_long options, abi_ulong target_wrusage,
-	abi_ulong target_infop, abi_ulong pad1)
+    abi_ulong target_infop, abi_ulong pad1)
 {
     abi_long ret;
     int status;
@@ -89,20 +93,25 @@ static inline abi_long do_freebsd_wait6(void *cpu_env, abi_long idtype,
     void *p;
 
     if (regpairs_aligned(cpu_env) != 0) {
-		/* printf("shifting args\n"); */
-		/* 64-bit id is aligned, so shift all the arguments over by one */
-		id1 = id2;
-		id2 = target_status;
-		target_status = options;
-		options = target_wrusage;
-		target_wrusage = target_infop;
-		target_infop = pad1;
+        /* printf("shifting args\n"); */
+        /* 64-bit id is aligned, so shift all the arguments over by one */
+        id1 = id2;
+        id2 = target_status;
+        target_status = options;
+        options = target_wrusage;
+        target_wrusage = target_infop;
+        target_infop = pad1;
     }
 
     if (target_wrusage) {
         wrusage_ptr = &wrusage;
     }
-    ret = get_errno(safe_wait6(idtype, target_arg64(id1, id2), &status, options, wrusage_ptr, &info));
+    ret = get_errno(safe_wait6(idtype, target_arg64(id1, id2),
+                               &status, options, wrusage_ptr, &info));
+
+    if (ret < 0) {
+        return ret;
+    }
     if (target_status != 0) {
         status = host_to_target_waitstatus(status);
         if (put_user_s32(status, target_status) != 0) {
@@ -145,12 +154,12 @@ static inline abi_long do_freebsd_getloginclass(abi_ulong arg1, abi_ulong arg2)
     abi_long ret;
     void *p;
 
-    p = lock_user_string(arg1);
+    p = lock_user(VERIFY_WRITE, arg1, arg2, 0);
     if (p == NULL) {
         return -TARGET_EFAULT;
     }
     ret = get_errno(getloginclass(p, arg2));
-    unlock_user(p, arg1, 0);
+    unlock_user(p, arg1, arg2);
 
     return ret;
 }
@@ -173,8 +182,7 @@ static inline abi_long do_freebsd_pdgetpid(abi_long fd, abi_ulong target_pidp)
 /* undocumented __setugid */
 static inline abi_long do_freebsd___setugid(abi_long arg1)
 {
-
-    return get_errno(__setugid(arg1));
+    return -TARGET_ENOSYS;
 }
 
 /* fork(2) */
@@ -208,7 +216,6 @@ static inline abi_long do_freebsd_fork(void *cpu_env)
 /* vfork(2) */
 static inline abi_long do_freebsd_vfork(void *cpu_env)
 {
-
     return do_freebsd_fork(cpu_env);
 }
 
@@ -226,8 +233,9 @@ static inline abi_long do_freebsd_rfork(void *cpu_env, abi_long flags)
      * entirely for now is ok, the only consumer at the moment is posix_spawn
      * and it will fall back to classic vfork(2) if we return EINVAL.
      */
-    if ((flags & TARGET_RFSPAWN) != 0)
+    if ((flags & TARGET_RFSPAWN) != 0) {
         return -TARGET_EINVAL;
+    }
     fork_start();
     ret = rfork(flags);
     if (ret == 0) {
@@ -267,9 +275,9 @@ static inline abi_long do_freebsd_pdfork(void *cpu_env, abi_ulong target_fdp,
     } else {
         /* parent */
         child_flag = 0;
-    }
-    if (put_user_s32(fd, target_fdp)) {
-        return -TARGET_EFAULT;
+        if (put_user_s32(fd, target_fdp)) {
+            return -TARGET_EFAULT;
+        }
     }
 
     /*

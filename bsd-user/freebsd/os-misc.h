@@ -383,6 +383,13 @@ static inline abi_long do_freebsd_posix_openpt(abi_long flags)
     return get_errno(posix_openpt(flags));
 }
 
+/*
+ * shm_open2 isn't exported, but the __sys_ alias is. We can use either for the
+ * static version, but to dynamically link we have to use the sys version.
+ */
+int __sys_shm_open2(const char *path, int flags, mode_t mode, int shmflags,
+    const char *);
+
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300048
 /* shm_open2(2) */
 static inline abi_long do_freebsd_shm_open2(abi_ulong pathptr, abi_ulong flags,
@@ -391,15 +398,9 @@ static inline abi_long do_freebsd_shm_open2(abi_ulong pathptr, abi_ulong flags,
     int ret;
     void *uname, *upath;
 
-#ifdef SHM_ANON
-#define SHM_PATH(p) (p) == SHM_ANON ? (p) : path(p)
     if (pathptr == (uintptr_t)SHM_ANON) {
         upath = SHM_ANON;
-    } else
-#else
-#define SHM_PATH(p) path(p)
-#endif
-    {
+    } else {
         upath = lock_user_string(pathptr);
         if (upath == NULL) {
             return -TARGET_EFAULT;
@@ -414,14 +415,11 @@ static inline abi_long do_freebsd_shm_open2(abi_ulong pathptr, abi_ulong flags,
             return -TARGET_EFAULT;
         }
     }
-    ret = get_errno(shm_open2(SHM_PATH(upath),
+    ret = get_errno(__sys_shm_open2(upath,
                 target_to_host_bitmask(flags, fcntl_flags_tbl), mode,
                 target_to_host_bitmask(shmflags, shmflag_flags_tbl), uname));
 
-#ifdef SHM_ANON
-    if (upath != SHM_ANON)
-#endif
-    {
+    if (upath != SHM_ANON) {
         unlock_user(upath, pathptr, 0);
     }
     if (uname != NULL) {
@@ -429,7 +427,6 @@ static inline abi_long do_freebsd_shm_open2(abi_ulong pathptr, abi_ulong flags,
     }
     return ret;
 }
-#undef SHM_PATH
 #endif /* __FreeBSD_version >= 1300048 */
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300049

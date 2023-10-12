@@ -101,7 +101,6 @@ bdrv_co_delete_file_noerr(BlockDriverState *bs);
 
 
 /* async block I/O */
-void bdrv_aio_cancel(BlockAIOCB *acb);
 void bdrv_aio_cancel_async(BlockAIOCB *acb);
 
 /* sg packet commands */
@@ -189,10 +188,10 @@ bdrv_get_info(BlockDriverState *bs, BlockDriverInfo *bdi);
 ImageInfoSpecific *bdrv_get_specific_info(BlockDriverState *bs,
                                           Error **errp);
 BlockStatsSpecific *bdrv_get_specific_stats(BlockDriverState *bs);
-void bdrv_round_to_clusters(BlockDriverState *bs,
-                            int64_t offset, int64_t bytes,
-                            int64_t *cluster_offset,
-                            int64_t *cluster_bytes);
+void bdrv_round_to_subclusters(BlockDriverState *bs,
+                               int64_t offset, int64_t bytes,
+                               int64_t *cluster_offset,
+                               int64_t *cluster_bytes);
 
 void bdrv_get_backing_filename(BlockDriverState *bs,
                                char *filename, int filename_size);

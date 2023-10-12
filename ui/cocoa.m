@@ -784,7 +784,7 @@ static CGEventRef handleTapEvent(CGEventTapProxy proxy, CGEventType type, CGEven
     }
 
     if (keysym) {
-        kbd_put_keysym(keysym);
+        qemu_text_console_put_keysym(NULL, keysym);
     }
 }
 
@@ -2001,7 +2001,7 @@ static void cocoa_refresh(DisplayChangeListener *dcl)
     COCOA_DEBUG("qemu_cocoa: cocoa_refresh\n");
     graphic_hw_update(NULL);
 
-    if (qemu_input_is_absolute()) {
+    if (qemu_input_is_absolute(dcl->con)) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (![cocoaView isAbsoluteEnabled]) {
                 if ([cocoaView isMouseGrabbed]) {
@@ -2045,7 +2045,7 @@ static void cocoa_display_init(DisplayState *ds, DisplayOptions *opts)
 
     /*
      * Create the menu entries which depend on QEMU state (for consoles
-     * and removeable devices). These make calls back into QEMU functions,
+     * and removable devices). These make calls back into QEMU functions,
      * which is OK because at this point we know that the second thread
      * holds the iothread lock and is synchronously waiting for us to
      * finish.
