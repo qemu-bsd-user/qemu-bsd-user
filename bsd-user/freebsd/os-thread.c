@@ -25,7 +25,7 @@
 #include "signal-common.h"
 #include "target_arch_cpu.h"
 #include "target_arch_thread.h"
-#include "tcg/tcg.h"
+#include "tcg/startup.h"
 #include "exec/exec-all.h"
 #include "exec/tb-flush.h"
 
