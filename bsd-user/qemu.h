@@ -553,6 +553,44 @@ static inline void *lock_user_string(abi_ulong guest_addr)
 #define unlock_user_struct(host_ptr, guest_addr, copy)          \
     unlock_user(host_ptr, guest_addr, (copy) ? sizeof(*host_ptr) : 0)
 
+#define CONCAT(a, b) CONCAT_(a,b)
+#define CONCAT_(a, b) a##b
+
+/* lock/unlock a byte vector of length len */
+#define WITH_LOCK_VEC(host_ptr, type, guest_addr, len)              \
+    for (abi_ulong                                                  \
+             CONCAT(host_ptr, _brk) = 0,                            \
+             CONCAT(host_ptr, _gaddr) = guest_addr,                 \
+             CONCAT(host_ptr, _len) = len,                          \
+             CONCAT(host_ptr, _copy_in) = type == VERIFY_READ,      \
+             CONCAT(host_ptr, _copy_out) = type == VERIFY_WRITE;    \
+         !CONCAT(host_ptr, _brk); )                                 \
+        for (host_ptr = lock_user(type,                             \
+                                  CONCAT(host_ptr, _gaddr),         \
+                                  CONCAT(host_ptr, _len),           \
+                                  CONCAT(host_ptr, _copy_in));      \
+             !(CONCAT(host_ptr, _brk)++);                           \
+             UNLOCK(host_ptr))
+
+#define UNLOCK(host_ptr)                                                \
+    unlock_user(host_ptr,                                               \
+                CONCAT(host_ptr, _gaddr),                               \
+                CONCAT(host_ptr, _copy_out) ? CONCAT(host_ptr, _len) : 0)
+
+/* lock/unlock a target struct */
+#define WITH_LOCK_STRUCT(host_ptr, type, guest_addr)                \
+    WITH_LOCK_VEC(host_ptr, type, guest_addr, sizeof(*host_ptr))
+
+/* This is used to select one of above two macros
+ * based on the number of params.
+ */
+#define WITH_LOCK_DISPATCH(_1, _2, _3, _4, NAME, ...) NAME
+
+#define WITH_LOCK(...)                                  \
+    WITH_LOCK_DISPATCH(__VA_ARGS__,                     \
+                       WITH_LOCK_VEC,                   \
+                       WITH_LOCK_STRUCT) (__VA_ARGS__)
+
 #if TARGET_ABI_BITS == 32
 static inline uint64_t
 target_arg64(uint32_t word0, uint32_t word1)
