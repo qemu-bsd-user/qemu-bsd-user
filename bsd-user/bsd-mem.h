@@ -202,12 +202,12 @@ static inline abi_long do_bsd_mincore(abi_ulong target_addr, abi_ulong len,
         return -TARGET_EFAULT;
     }
 
-    p = lock_user(VERIFY_WRITE, target_vec, vec_len, 0);
-    if (p == NULL) {
-        return -TARGET_EFAULT;
+    WITH_LOCK (p, VERIFY_WRITE, target_vec, vec_len) {
+        if (p == NULL) {
+            return -TARGET_EFAULT;
+        }
+        ret = get_errno(mincore(g2h_untagged(target_addr), len, p));
     }
-    ret = get_errno(mincore(g2h_untagged(target_addr), len, p));
-    unlock_user(p, target_vec, vec_len);
 
     return ret;
 }
@@ -310,26 +310,30 @@ static inline abi_long do_bsd_shmctl(abi_long shmid, abi_long cmd,
         abi_ulong buff)
 {
     struct shmid_ds dsarg;
+    struct target_shmid_ds *target_sd;
     abi_long ret = -TARGET_EINVAL;
 
     cmd &= 0xff;
 
     switch (cmd) {
     case IPC_STAT:
-        if (target_to_host_shmid_ds(&dsarg, buff)) {
-            return -TARGET_EFAULT;
-        }
-        ret = get_errno(shmctl(shmid, cmd, &dsarg));
-        if (host_to_target_shmid_ds(buff, &dsarg)) {
-            return -TARGET_EFAULT;
+        WITH_LOCK (target_sd, VERIFY_WRITE, buff) {
+            if (target_sd == NULL) {
+                return -TARGET_EFAULT;
+            }
+            ret = get_errno(shmctl(shmid, cmd, &dsarg));
+            host_to_target_shmid_ds(target_sd, &dsarg);
         }
         break;
 
     case IPC_SET:
-        if (target_to_host_shmid_ds(&dsarg, buff)) {
-            return -TARGET_EFAULT;
+        WITH_LOCK(target_sd, VERIFY_READ, buff) {
+            if (target_sd == NULL) {
+                return -TARGET_EFAULT;
+            }
+            target_to_host_shmid_ds(&dsarg, target_sd);
+            ret = get_errno(shmctl(shmid, cmd, &dsarg));
         }
-        ret = get_errno(shmctl(shmid, cmd, &dsarg));
         break;
 
     case IPC_RMID:
