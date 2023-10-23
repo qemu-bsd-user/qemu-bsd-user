@@ -319,36 +319,36 @@ static inline abi_long do_bsd_msgrcv(int msqid, abi_long msgp,
 {
     struct target_msgbuf *target_mb = NULL;
     char *target_mtext;
-    struct kern_mymsg *host_mb;
+    g_autofree struct kern_mymsg *host_mb;
     abi_long ret = 0;
 
     ret = bsd_validate_msgsz(msgsz);
     if (is_error(ret)) {
         return ret;
     }
-    if (!lock_user_struct(VERIFY_WRITE, target_mb, msgp, 0)) {
-        return -TARGET_EFAULT;
-    }
-    host_mb = g_malloc(msgsz + sizeof(long));
-    ret = get_errno(msgrcv(msqid, host_mb, msgsz, tswapal(msgtyp), msgflg));
-    if (ret > 0) {
-        abi_ulong target_mtext_addr = msgp + sizeof(abi_ulong);
-        target_mtext = lock_user(VERIFY_WRITE, target_mtext_addr, ret, 0);
-        if (target_mtext == NULL) {
-            ret = -TARGET_EFAULT;
-            goto end;
+
+    WITH_LOCK (target_mb, VERIFY_WRITE, msgp) {
+        if (target_mb == NULL) {
+            return -TARGET_EFAULT;
         }
-        memcpy(target_mb->mtext, host_mb->mtext, ret);
-        unlock_user(target_mtext, target_mtext_addr, ret);
+        host_mb = (struct kern_mymsg *) g_try_new(char, msgsz + sizeof(long));
+
+        ret = get_errno(msgrcv(msqid, host_mb, msgsz, tswapal(msgtyp), msgflg));
+        if (!is_error(ret)) {
+            target_mb->mtype = tswapal(host_mb->mtype);
+        }
+        if (ret > 0) {
+            WITH_LOCK(target_mtext, VERIFY_WRITE, msgp + sizeof(abi_ulong),
+                      ret) {
+                if (target_mtext == NULL) {
+                    UNLOCK(target_mb);
+                    return -TARGET_EFAULT;
+                }
+                memcpy(target_mb->mtext, host_mb->mtext, ret);
+            }
+        }
     }
-    if (!is_error(ret)) {
-        target_mb->mtype = tswapal(host_mb->mtype);
-    }
-end:
-    if (target_mb != NULL) {
-        unlock_user_struct(target_mb, msgp, 1);
-    }
-    g_free(host_mb);
+
     return ret;
 }
 
