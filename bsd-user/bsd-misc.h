@@ -100,133 +100,112 @@ static inline abi_long do_bsd_semget(abi_long key, int nsems,
 /* semop(2) */
 static inline abi_long do_bsd_semop(int semid, abi_long ptr, unsigned nsops)
 {
-    struct sembuf sops[nsops];
+    g_autofree struct sembuf *sops;
     struct target_sembuf *target_sembuf;
+    abi_long ret;
     int i;
 
-    target_sembuf = lock_user(VERIFY_READ, ptr,
-            nsops * sizeof(struct target_sembuf), 1);
-    if (target_sembuf == NULL) {
-        return -TARGET_EFAULT;
-    }
-    for (i = 0; i < nsops; i++) {
-        __get_user(sops[i].sem_num, &target_sembuf[i].sem_num);
-        __get_user(sops[i].sem_op, &target_sembuf[i].sem_op);
-        __get_user(sops[i].sem_flg, &target_sembuf[i].sem_flg);
-    }
-    unlock_user(target_sembuf, ptr, 0);
+    sops = g_try_new(struct sembuf, nsops);
 
-    return semop(semid, sops, nsops);
+    WITH_LOCK (target_sembuf, VERIFY_READ, ptr,
+               nsops * sizeof(struct target_sembuf)) {
+        if (target_sembuf == NULL) {
+            return -TARGET_EFAULT;
+        }
+        for (i = 0; i < nsops; i++) {
+            __get_user(sops[i].sem_num, &target_sembuf[i].sem_num);
+            __get_user(sops[i].sem_op, &target_sembuf[i].sem_op);
+            __get_user(sops[i].sem_flg, &target_sembuf[i].sem_flg);
+        }
+        ret = get_errno(semop(semid, sops, nsops));
+    }
+    return ret;
 }
 
 /* __semctl(2) */
-static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
-        union target_semun target_su)
+static inline abi_long do_bsd___semctl(int semid, int semnum, int cmd,
+                                       union target_semun target_su)
 {
     union semun arg;
     struct semid_ds dsarg;
-    unsigned short *array = NULL;
-    int host_cmd;
+    struct target_semid_ds *target_sd;
+    g_autofree unsigned short *host_array = NULL;
+    unsigned short *target_array = NULL;
+    int nsems;
     abi_long ret = 0;
-    abi_long err;
 
-    switch (target_cmd) {
-    case TARGET_GETVAL:
-        host_cmd = GETVAL;
-        break;
-
-    case TARGET_SETVAL:
-        host_cmd = SETVAL;
-        break;
-
-    case TARGET_GETALL:
-        host_cmd = GETALL;
-        break;
-
-    case TARGET_SETALL:
-        host_cmd = SETALL;
-        break;
-
-    case TARGET_IPC_STAT:
-        host_cmd = IPC_STAT;
-        break;
-
-    case TARGET_IPC_SET:
-        host_cmd = IPC_SET;
-        break;
-
-    case TARGET_IPC_RMID:
-        host_cmd = IPC_RMID;
-        break;
-
-    case TARGET_GETPID:
-        host_cmd = GETPID;
-        break;
-
-    case TARGET_GETNCNT:
-        host_cmd = GETNCNT;
-        break;
-
-    case TARGET_GETZCNT:
-        host_cmd = GETZCNT;
-        break;
-
-    default:
-        return -TARGET_EINVAL;
-    }
-
-    switch (host_cmd) {
-    case GETVAL:
-    case SETVAL:
-        /*
-         * In 64 bit cross-endian situations, we will erroneously pick up the
-         * wrong half of the union for the "val" element.  To rectify this, the
-         * entire 8-byte structure is byteswapped, followed by a swap of the 4
-         * byte val field. In other cases, the data is already in proper host
-         * byte order.
-         */
-        if (sizeof(target_su.val) != (sizeof(target_su.buf))) {
-            target_su.buf = tswapal(target_su.buf);
-            arg.val = tswap32(target_su.val);
-        } else {
-            arg.val = target_su.val;
-        }
-        ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        break;
-
+    switch (cmd) {
     case GETALL:
-    case SETALL:
-        err = target_to_host_semarray(semid, &array, target_su.array);
-        if (is_error(err)) {
-            return err;
+        nsems = semarray_length(semid);
+        if (nsems == -1) {
+            return get_errno(nsems);
         }
-        arg.array = array;
-        ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semarray(semid, target_su.array, &array);
-        if (is_error(err)) {
-            return err;
+        WITH_LOCK(target_array, VERIFY_WRITE, target_su.array,
+                  nsems * sizeof(unsigned short)) {
+            if (target_array == NULL) {
+                return -TARGET_EFAULT;
+            }
+            host_array = g_try_new(unsigned short, nsems);
+            arg.array = host_array;
+
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
+            host_to_target_semarray(target_array, host_array, nsems);
+        }
+        break;
+
+    case SETALL:
+        nsems = semarray_length(semid);
+        if (nsems == -1) {
+            return get_errno(nsems);
+        }
+        WITH_LOCK (target_array, VERIFY_READ, target_su.array,
+                   nsems * sizeof(unsigned short)) {
+            if (target_array == NULL) {
+                return -TARGET_EFAULT;
+            }
+            host_array = g_try_new(unsigned short, nsems);
+            arg.array = host_array;
+
+            target_to_host_semarray(host_array, target_array, nsems);
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
         }
         break;
 
     case IPC_STAT:
-    case IPC_SET:
-        err = target_to_host_semid_ds(&dsarg, target_su.buf);
-        if (is_error(err)) {
-            return err;
-        }
-        arg.buf = &dsarg;
-        ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semid_ds(target_su.buf, &dsarg);
-        if (is_error(err)) {
-            return err;
+        WITH_LOCK (target_sd, VERIFY_WRITE, target_su.buf) {
+            if (target_sd == NULL) {
+                return -TARGET_EFAULT;
+            }
+            arg.buf = &dsarg;
+
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
+            host_to_target_semid_ds(target_sd, &dsarg);
         }
         break;
 
+    case IPC_SET:
+        WITH_LOCK (target_sd, VERIFY_READ, target_su.buf) {
+            if (target_sd == NULL) {
+                return -TARGET_EFAULT;
+            }
+            arg.buf = &dsarg;
+
+            target_to_host_semid_ds(&dsarg, target_sd);
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
+        }
+        break;
+
+    case SETVAL:
+        __get_user(arg.val, &target_su.val);
+        ret = get_errno(semctl(semid, semnum, cmd, arg));
+        break;
+
     case IPC_RMID:
+    case GETVAL:
     case GETPID:
     case GETNCNT:
     case GETZCNT:
-        ret = get_errno(semctl(semid, semnum, host_cmd, NULL));
+        ret = get_errno(semctl(semid, semnum, cmd, NULL));
         break;
 
     default:
