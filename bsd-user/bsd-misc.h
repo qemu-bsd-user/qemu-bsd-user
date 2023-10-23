@@ -216,43 +216,37 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int cmd,
 }
 
 /* msgctl(2) */
-static inline abi_long do_bsd_msgctl(int msgid, int target_cmd, abi_long ptr)
+static inline abi_long do_bsd_msgctl(int msgid, int cmd, abi_long ptr)
 {
     struct msqid_ds dsarg;
+    struct target_msqid_ds *target_md;
     abi_long ret = -TARGET_EINVAL;
-    int host_cmd;
 
-    switch (target_cmd) {
-    case TARGET_IPC_STAT:
-        host_cmd = IPC_STAT;
-        break;
-
-    case TARGET_IPC_SET:
-        host_cmd = IPC_SET;
-        break;
-
-    case TARGET_IPC_RMID:
-        host_cmd = IPC_RMID;
-        break;
-
-    default:
-        return -TARGET_EINVAL;
-    }
-
-    switch (host_cmd) {
+    switch (cmd) {
     case IPC_STAT:
-    case IPC_SET:
-        if (target_to_host_msqid_ds(&dsarg, ptr)) {
-            return -TARGET_EFAULT;
+        WITH_LOCK (target_md, VERIFY_WRITE, ptr) {
+            if (target_md == NULL) {
+                return -TARGET_EFAULT;
+            }
+
+            ret = get_errno(msgctl(msgid, cmd, &dsarg));
+            host_to_target_msqid_ds(target_md, &dsarg);
         }
-        ret = get_errno(msgctl(msgid, host_cmd, &dsarg));
-        if (host_to_target_msqid_ds(ptr, &dsarg)) {
-            return -TARGET_EFAULT;
+        break;
+
+    case IPC_SET:
+        WITH_LOCK (target_md, VERIFY_READ, ptr) {
+            if (target_md == NULL) {
+                return -TARGET_EFAULT;
+            }
+
+            target_to_host_msqid_ds(&dsarg, target_md);
+            ret = get_errno(msgctl(msgid, cmd, &dsarg));
         }
         break;
 
     case IPC_RMID:
-        ret = get_errno(msgctl(msgid, host_cmd, NULL));
+        ret = get_errno(msgctl(msgid, cmd, NULL));
         break;
 
     default:
@@ -289,23 +283,24 @@ static inline abi_long do_bsd_msgsnd(int msqid, abi_long msgp,
         abi_ulong msgsz, int msgflg)
 {
     struct target_msgbuf *target_mb;
-    struct kern_mymsg *host_mb;
+    g_autofree struct kern_mymsg *host_mb;
     abi_long ret;
 
     ret = bsd_validate_msgsz(msgsz);
     if (is_error(ret)) {
         return ret;
     }
-    if (!lock_user_struct(VERIFY_READ, target_mb, msgp, 0)) {
-        return -TARGET_EFAULT;
-    }
-    host_mb = g_malloc(msgsz + sizeof(long));
-    host_mb->mtype = (abi_long) tswapal(target_mb->mtype);
-    memcpy(host_mb->mtext, target_mb->mtext, msgsz);
-    ret = get_errno(msgsnd(msqid, host_mb, msgsz, msgflg));
-    g_free(host_mb);
-    unlock_user_struct(target_mb, msgp, 0);
+    WITH_LOCK (target_mb, VERIFY_READ, msgp) {
+        if (target_mb) {
+            return -TARGET_EFAULT;
+        }
+        host_mb = (struct kern_mymsg *) g_try_new(char, msgsz + sizeof(long));
 
+        __get_user(host_mb->mtype, &target_mb->mtype);
+        memcpy(host_mb->mtext, target_mb->mtext, msgsz);
+
+        ret = get_errno(msgsnd(msqid, host_mb, msgsz, msgflg));
+    }
     return ret;
 }
 
