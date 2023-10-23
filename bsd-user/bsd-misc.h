@@ -54,32 +54,33 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
 {
     int i;
     abi_long ret;
-    struct uuid *host_uuid;
+    g_autofree struct uuid *host_uuid;
+    struct target_uuid *target_uuid;
 
     if (count < 1 || count > 2048) {
         return -TARGET_EINVAL;
     }
 
-    host_uuid = g_malloc(count * sizeof(struct uuid));
+    WITH_LOCK (target_uuid, VERIFY_WRITE, target_addr,
+               count * sizeof(struct target_uuid)) {
+        if (target_uuid == NULL) {
+            return -TARGET_EFAULT;
+        }
 
-    if (host_uuid == NULL) {
-        return -TARGET_ENOMEM;
-    }
+        host_uuid = g_try_new(struct uuid, count);
+        if (host_uuid == NULL) {
+            UNLOCK(target_uuid);
+            return -TARGET_ENOMEM;
+        }
 
-    ret = get_errno(uuidgen(host_uuid, count));
-    if (is_error(ret)) {
-        goto out;
-    }
-    for (i = 0; i < count; i++) {
-        ret = host_to_target_uuid(target_addr +
-            (abi_ulong)(sizeof(struct target_uuid) * i), &host_uuid[i]);
-        if (is_error(ret)) {
-            goto out;
+        ret = get_errno(uuidgen(host_uuid, count));
+        if (!ret) {
+            for (i = 0; i < count; i++) {
+                host_to_target_uuid(&target_uuid[i], &host_uuid[i]);
+            }
         }
     }
 
-out:
-    g_free(host_uuid);
     return ret;
 }
 
