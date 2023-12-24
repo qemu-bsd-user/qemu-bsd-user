@@ -54,31 +54,39 @@ abi_long target_to_host_ip_mreq(struct ip_mreqn *mreqn, abi_ulong target_addr,
         socklen_t len);
 
 /* bsd-misc.c */
-abi_long host_to_target_uuid(abi_ulong target_addr, struct uuid *host_uuid);
+int semarray_length(int semid);
 
-abi_long target_to_host_semarray(int semid, unsigned short **host_array,
-        abi_ulong target_addr);
-abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
-        unsigned short **host_array);
+void host_to_target_uuid(struct target_uuid *target_uuid,
+                         struct uuid *host_uuid);
 
-abi_long target_to_host_semid_ds(struct semid_ds *host_sd,
-        abi_ulong target_addr);
-abi_long host_to_target_semid_ds(abi_ulong target_addr,
-        struct semid_ds *host_sd);
+void target_to_host_semarray(unsigned short *host_array,
+                             unsigned short *target_array,
+                             int nsems);
 
-abi_long target_to_host_msqid_ds(struct msqid_ds *host_md,
-        abi_ulong target_addr);
-abi_long host_to_target_msqid_ds(abi_ulong target_addr,
-        struct msqid_ds *host_md);
+void host_to_target_semarray(unsigned short *target_array,
+                             unsigned short *host_array,
+                             int nsems);
+
+void target_to_host_semid_ds(struct semid_ds *host_sd,
+                             struct target_semid_ds *target_sd);
+
+void host_to_target_semid_ds(struct target_semid_ds *target_sd,
+                             struct semid_ds *host_sd);
+
+void target_to_host_msqid_ds(struct msqid_ds *host_md,
+                             struct target_msqid_ds *target_md);
+
+void host_to_target_msqid_ds(struct target_msqid_ds *target_md,
+                             struct msqid_ds *host_md);
 
 /* bsd-mem.c */
-void target_to_host_ipc_perm__locked(struct ipc_perm *host_ip,
-        struct target_ipc_perm *target_ip);
-void host_to_target_ipc_perm__locked(struct target_ipc_perm *target_ip,
-        struct ipc_perm *host_ip);
-abi_long target_to_host_shmid_ds(struct shmid_ds *host_sd,
-        abi_ulong target_addr);
-abi_long host_to_target_shmid_ds(abi_ulong target_addr,
-        struct shmid_ds *host_sd);
+void target_to_host_ipc_perm(struct ipc_perm *host_ip,
+                             struct target_ipc_perm *target_ip);
+void host_to_target_ipc_perm(struct target_ipc_perm *target_ip,
+                             struct ipc_perm *host_ip);
+void target_to_host_shmid_ds(struct shmid_ds *host_sd,
+                             struct target_shmid_ds *target_sd);
+void host_to_target_shmid_ds(struct target_shmid_ds *target_sd,
+                             struct shmid_ds *host_sd);
 
 #endif /* QEMU_BSD_H */

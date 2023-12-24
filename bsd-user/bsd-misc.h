@@ -54,32 +54,33 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
 {
     int i;
     abi_long ret;
-    struct uuid *host_uuid;
+    g_autofree struct uuid *host_uuid;
+    struct target_uuid *target_uuid;
 
     if (count < 1 || count > 2048) {
         return -TARGET_EINVAL;
     }
 
-    host_uuid = g_malloc(count * sizeof(struct uuid));
+    WITH_LOCK (target_uuid, VERIFY_WRITE, target_addr,
+               count * sizeof(struct target_uuid)) {
+        if (target_uuid == NULL) {
+            return -TARGET_EFAULT;
+        }
 
-    if (host_uuid == NULL) {
-        return -TARGET_ENOMEM;
-    }
+        host_uuid = g_try_new(struct uuid, count);
+        if (host_uuid == NULL) {
+            UNLOCK(target_uuid);
+            return -TARGET_ENOMEM;
+        }
 
-    ret = get_errno(uuidgen(host_uuid, count));
-    if (is_error(ret)) {
-        goto out;
-    }
-    for (i = 0; i < count; i++) {
-        ret = host_to_target_uuid(target_addr +
-            (abi_ulong)(sizeof(struct target_uuid) * i), &host_uuid[i]);
-        if (is_error(ret)) {
-            goto out;
+        ret = get_errno(uuidgen(host_uuid, count));
+        if (!ret) {
+            for (i = 0; i < count; i++) {
+                host_to_target_uuid(&target_uuid[i], &host_uuid[i]);
+            }
         }
     }
 
-out:
-    g_free(host_uuid);
     return ret;
 }
 
@@ -99,133 +100,112 @@ static inline abi_long do_bsd_semget(abi_long key, int nsems,
 /* semop(2) */
 static inline abi_long do_bsd_semop(int semid, abi_long ptr, unsigned nsops)
 {
-    struct sembuf sops[nsops];
+    g_autofree struct sembuf *sops;
     struct target_sembuf *target_sembuf;
+    abi_long ret;
     int i;
 
-    target_sembuf = lock_user(VERIFY_READ, ptr,
-            nsops * sizeof(struct target_sembuf), 1);
-    if (target_sembuf == NULL) {
-        return -TARGET_EFAULT;
-    }
-    for (i = 0; i < nsops; i++) {
-        __get_user(sops[i].sem_num, &target_sembuf[i].sem_num);
-        __get_user(sops[i].sem_op, &target_sembuf[i].sem_op);
-        __get_user(sops[i].sem_flg, &target_sembuf[i].sem_flg);
-    }
-    unlock_user(target_sembuf, ptr, 0);
+    sops = g_try_new(struct sembuf, nsops);
 
-    return semop(semid, sops, nsops);
+    WITH_LOCK (target_sembuf, VERIFY_READ, ptr,
+               nsops * sizeof(struct target_sembuf)) {
+        if (target_sembuf == NULL) {
+            return -TARGET_EFAULT;
+        }
+        for (i = 0; i < nsops; i++) {
+            __get_user(sops[i].sem_num, &target_sembuf[i].sem_num);
+            __get_user(sops[i].sem_op, &target_sembuf[i].sem_op);
+            __get_user(sops[i].sem_flg, &target_sembuf[i].sem_flg);
+        }
+        ret = get_errno(semop(semid, sops, nsops));
+    }
+    return ret;
 }
 
 /* __semctl(2) */
-static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
-        union target_semun target_su)
+static inline abi_long do_bsd___semctl(int semid, int semnum, int cmd,
+                                       union target_semun target_su)
 {
     union semun arg;
     struct semid_ds dsarg;
-    unsigned short *array = NULL;
-    int host_cmd;
+    struct target_semid_ds *target_sd;
+    g_autofree unsigned short *host_array = NULL;
+    unsigned short *target_array = NULL;
+    int nsems;
     abi_long ret = 0;
-    abi_long err;
 
-    switch (target_cmd) {
-    case TARGET_GETVAL:
-        host_cmd = GETVAL;
-        break;
-
-    case TARGET_SETVAL:
-        host_cmd = SETVAL;
-        break;
-
-    case TARGET_GETALL:
-        host_cmd = GETALL;
-        break;
-
-    case TARGET_SETALL:
-        host_cmd = SETALL;
-        break;
-
-    case TARGET_IPC_STAT:
-        host_cmd = IPC_STAT;
-        break;
-
-    case TARGET_IPC_SET:
-        host_cmd = IPC_SET;
-        break;
-
-    case TARGET_IPC_RMID:
-        host_cmd = IPC_RMID;
-        break;
-
-    case TARGET_GETPID:
-        host_cmd = GETPID;
-        break;
-
-    case TARGET_GETNCNT:
-        host_cmd = GETNCNT;
-        break;
-
-    case TARGET_GETZCNT:
-        host_cmd = GETZCNT;
-        break;
-
-    default:
-        return -TARGET_EINVAL;
-    }
-
-    switch (host_cmd) {
-    case GETVAL:
-    case SETVAL:
-        /*
-         * In 64 bit cross-endian situations, we will erroneously pick up the
-         * wrong half of the union for the "val" element.  To rectify this, the
-         * entire 8-byte structure is byteswapped, followed by a swap of the 4
-         * byte val field. In other cases, the data is already in proper host
-         * byte order.
-         */
-        if (sizeof(target_su.val) != (sizeof(target_su.buf))) {
-            target_su.buf = tswapal(target_su.buf);
-            arg.val = tswap32(target_su.val);
-        } else {
-            arg.val = target_su.val;
-        }
-        ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        break;
-
+    switch (cmd) {
     case GETALL:
-    case SETALL:
-        err = target_to_host_semarray(semid, &array, target_su.array);
-        if (is_error(err)) {
-            return err;
+        nsems = semarray_length(semid);
+        if (nsems == -1) {
+            return get_errno(nsems);
         }
-        arg.array = array;
-        ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semarray(semid, target_su.array, &array);
-        if (is_error(err)) {
-            return err;
+        WITH_LOCK(target_array, VERIFY_WRITE, target_su.array,
+                  nsems * sizeof(unsigned short)) {
+            if (target_array == NULL) {
+                return -TARGET_EFAULT;
+            }
+            host_array = g_try_new(unsigned short, nsems);
+            arg.array = host_array;
+
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
+            host_to_target_semarray(target_array, host_array, nsems);
+        }
+        break;
+
+    case SETALL:
+        nsems = semarray_length(semid);
+        if (nsems == -1) {
+            return get_errno(nsems);
+        }
+        WITH_LOCK (target_array, VERIFY_READ, target_su.array,
+                   nsems * sizeof(unsigned short)) {
+            if (target_array == NULL) {
+                return -TARGET_EFAULT;
+            }
+            host_array = g_try_new(unsigned short, nsems);
+            arg.array = host_array;
+
+            target_to_host_semarray(host_array, target_array, nsems);
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
         }
         break;
 
     case IPC_STAT:
-    case IPC_SET:
-        err = target_to_host_semid_ds(&dsarg, target_su.buf);
-        if (is_error(err)) {
-            return err;
-        }
-        arg.buf = &dsarg;
-        ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semid_ds(target_su.buf, &dsarg);
-        if (is_error(err)) {
-            return err;
+        WITH_LOCK (target_sd, VERIFY_WRITE, target_su.buf) {
+            if (target_sd == NULL) {
+                return -TARGET_EFAULT;
+            }
+            arg.buf = &dsarg;
+
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
+            host_to_target_semid_ds(target_sd, &dsarg);
         }
         break;
 
+    case IPC_SET:
+        WITH_LOCK (target_sd, VERIFY_READ, target_su.buf) {
+            if (target_sd == NULL) {
+                return -TARGET_EFAULT;
+            }
+            arg.buf = &dsarg;
+
+            target_to_host_semid_ds(&dsarg, target_sd);
+            ret = get_errno(semctl(semid, semnum, cmd, arg));
+        }
+        break;
+
+    case SETVAL:
+        __get_user(arg.val, &target_su.val);
+        ret = get_errno(semctl(semid, semnum, cmd, arg));
+        break;
+
     case IPC_RMID:
+    case GETVAL:
     case GETPID:
     case GETNCNT:
     case GETZCNT:
-        ret = get_errno(semctl(semid, semnum, host_cmd, NULL));
+        ret = get_errno(semctl(semid, semnum, cmd, NULL));
         break;
 
     default:
@@ -236,43 +216,37 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
 }
 
 /* msgctl(2) */
-static inline abi_long do_bsd_msgctl(int msgid, int target_cmd, abi_long ptr)
+static inline abi_long do_bsd_msgctl(int msgid, int cmd, abi_long ptr)
 {
     struct msqid_ds dsarg;
+    struct target_msqid_ds *target_md;
     abi_long ret = -TARGET_EINVAL;
-    int host_cmd;
 
-    switch (target_cmd) {
-    case TARGET_IPC_STAT:
-        host_cmd = IPC_STAT;
-        break;
-
-    case TARGET_IPC_SET:
-        host_cmd = IPC_SET;
-        break;
-
-    case TARGET_IPC_RMID:
-        host_cmd = IPC_RMID;
-        break;
-
-    default:
-        return -TARGET_EINVAL;
-    }
-
-    switch (host_cmd) {
+    switch (cmd) {
     case IPC_STAT:
-    case IPC_SET:
-        if (target_to_host_msqid_ds(&dsarg, ptr)) {
-            return -TARGET_EFAULT;
+        WITH_LOCK (target_md, VERIFY_WRITE, ptr) {
+            if (target_md == NULL) {
+                return -TARGET_EFAULT;
+            }
+
+            ret = get_errno(msgctl(msgid, cmd, &dsarg));
+            host_to_target_msqid_ds(target_md, &dsarg);
         }
-        ret = get_errno(msgctl(msgid, host_cmd, &dsarg));
-        if (host_to_target_msqid_ds(ptr, &dsarg)) {
-            return -TARGET_EFAULT;
+        break;
+
+    case IPC_SET:
+        WITH_LOCK (target_md, VERIFY_READ, ptr) {
+            if (target_md == NULL) {
+                return -TARGET_EFAULT;
+            }
+
+            target_to_host_msqid_ds(&dsarg, target_md);
+            ret = get_errno(msgctl(msgid, cmd, &dsarg));
         }
         break;
 
     case IPC_RMID:
-        ret = get_errno(msgctl(msgid, host_cmd, NULL));
+        ret = get_errno(msgctl(msgid, cmd, NULL));
         break;
 
     default:
@@ -309,23 +283,24 @@ static inline abi_long do_bsd_msgsnd(int msqid, abi_long msgp,
         abi_ulong msgsz, int msgflg)
 {
     struct target_msgbuf *target_mb;
-    struct kern_mymsg *host_mb;
+    g_autofree struct kern_mymsg *host_mb;
     abi_long ret;
 
     ret = bsd_validate_msgsz(msgsz);
     if (is_error(ret)) {
         return ret;
     }
-    if (!lock_user_struct(VERIFY_READ, target_mb, msgp, 0)) {
-        return -TARGET_EFAULT;
-    }
-    host_mb = g_malloc(msgsz + sizeof(long));
-    host_mb->mtype = (abi_long) tswapal(target_mb->mtype);
-    memcpy(host_mb->mtext, target_mb->mtext, msgsz);
-    ret = get_errno(msgsnd(msqid, host_mb, msgsz, msgflg));
-    g_free(host_mb);
-    unlock_user_struct(target_mb, msgp, 0);
+    WITH_LOCK (target_mb, VERIFY_READ, msgp) {
+        if (target_mb) {
+            return -TARGET_EFAULT;
+        }
+        host_mb = (struct kern_mymsg *) g_try_new(char, msgsz + sizeof(long));
 
+        __get_user(host_mb->mtype, &target_mb->mtype);
+        memcpy(host_mb->mtext, target_mb->mtext, msgsz);
+
+        ret = get_errno(msgsnd(msqid, host_mb, msgsz, msgflg));
+    }
     return ret;
 }
 
@@ -344,36 +319,36 @@ static inline abi_long do_bsd_msgrcv(int msqid, abi_long msgp,
 {
     struct target_msgbuf *target_mb = NULL;
     char *target_mtext;
-    struct kern_mymsg *host_mb;
+    g_autofree struct kern_mymsg *host_mb;
     abi_long ret = 0;
 
     ret = bsd_validate_msgsz(msgsz);
     if (is_error(ret)) {
         return ret;
     }
-    if (!lock_user_struct(VERIFY_WRITE, target_mb, msgp, 0)) {
-        return -TARGET_EFAULT;
-    }
-    host_mb = g_malloc(msgsz + sizeof(long));
-    ret = get_errno(msgrcv(msqid, host_mb, msgsz, tswapal(msgtyp), msgflg));
-    if (ret > 0) {
-        abi_ulong target_mtext_addr = msgp + sizeof(abi_ulong);
-        target_mtext = lock_user(VERIFY_WRITE, target_mtext_addr, ret, 0);
-        if (target_mtext == NULL) {
-            ret = -TARGET_EFAULT;
-            goto end;
+
+    WITH_LOCK (target_mb, VERIFY_WRITE, msgp) {
+        if (target_mb == NULL) {
+            return -TARGET_EFAULT;
         }
-        memcpy(target_mb->mtext, host_mb->mtext, ret);
-        unlock_user(target_mtext, target_mtext_addr, ret);
+        host_mb = (struct kern_mymsg *) g_try_new(char, msgsz + sizeof(long));
+
+        ret = get_errno(msgrcv(msqid, host_mb, msgsz, tswapal(msgtyp), msgflg));
+        if (!is_error(ret)) {
+            target_mb->mtype = tswapal(host_mb->mtype);
+        }
+        if (ret > 0) {
+            WITH_LOCK(target_mtext, VERIFY_WRITE, msgp + sizeof(abi_ulong),
+                      ret) {
+                if (target_mtext == NULL) {
+                    UNLOCK(target_mb);
+                    return -TARGET_EFAULT;
+                }
+                memcpy(target_mb->mtext, host_mb->mtext, ret);
+            }
+        }
     }
-    if (!is_error(ret)) {
-        target_mb->mtype = tswapal(host_mb->mtype);
-    }
-end:
-    if (target_mb != NULL) {
-        unlock_user_struct(target_mb, msgp, 1);
-    }
-    g_free(host_mb);
+
     return ret;
 }
 
