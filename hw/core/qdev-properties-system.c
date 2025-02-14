@@ -58,6 +58,32 @@ static bool check_prop_still_unset(Object *obj, const char *name,
     return false;
 }
 
+bool qdev_prop_sanitize_s390x_loadparm(uint8_t *loadparm, const char *str,
+                                       Error **errp)
+{
+    int i, len;
+
+    len = strlen(str);
+    if (len > 8) {
+        error_setg(errp, "'loadparm' can only contain up to 8 characters");
+        return false;
+    }
+
+    for (i = 0; i < len; i++) {
+        uint8_t c = qemu_toupper(str[i]); /* mimic HMC */
+
+        if (qemu_isalnum(c) || c == '.' || c == ' ') {
+            loadparm[i] = c;
+        } else {
+            error_setg(errp,
+                       "invalid character in 'loadparm': '%c' (ASCII 0x%02x)",
+                       c, c);
+            return false;
+        }
+    }
+
+    return true;
+}
 
 /* --- drive --- */
 
@@ -790,39 +816,57 @@ static void set_pci_devfn(Object *obj, Visitor *v, const char *name,
                           void *opaque, Error **errp)
 {
     Property *prop = opaque;
+    g_autofree GenericAlternate *alt;
     int32_t value, *ptr = object_field_prop_ptr(obj, prop);
     unsigned int slot, fn, n;
-    char *str;
+    g_autofree char *str = NULL;
 
-    if (!visit_type_str(v, name, &str, NULL)) {
+    if (!visit_start_alternate(v, name, &alt, sizeof(*alt), errp)) {
+        return;
+    }
+
+    switch (alt->type) {
+    case QTYPE_QSTRING:
+        if (!visit_type_str(v, name, &str, errp)) {
+            goto out;
+        }
+
+        if (sscanf(str, "%x.%x%n", &slot, &fn, &n) != 2) {
+            fn = 0;
+            if (sscanf(str, "%x%n", &slot, &n) != 1) {
+                goto invalid;
+            }
+        }
+        if (str[n] != '\0' || fn > 7 || slot > 31) {
+            goto invalid;
+        }
+        *ptr = slot << 3 | fn;
+        break;
+
+    case QTYPE_QNUM:
         if (!visit_type_int32(v, name, &value, errp)) {
-            return;
+            goto out;
         }
         if (value < -1 || value > 255) {
             error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
                        name ? name : "null", "a value between -1 and 255");
-            return;
+            goto out;
         }
         *ptr = value;
-        return;
+        break;
+
+    default:
+        error_setg(errp, "Invalid parameter type for '%s', expected int or str",
+                   name ? name : "null");
+        goto out;
     }
 
-    if (sscanf(str, "%x.%x%n", &slot, &fn, &n) != 2) {
-        fn = 0;
-        if (sscanf(str, "%x%n", &slot, &n) != 1) {
-            goto invalid;
-        }
-    }
-    if (str[n] != '\0' || fn > 7 || slot > 31) {
-        goto invalid;
-    }
-    *ptr = slot << 3 | fn;
-    g_free(str);
-    return;
+    goto out;
 
 invalid:
     error_set_from_qdev_prop_error(errp, EINVAL, obj, name, str);
-    g_free(str);
+out:
+    visit_end_alternate(v, (void **) &alt);
 }
 
 static int print_pci_devfn(Object *obj, Property *prop, char *dest,
