@@ -255,7 +255,6 @@ abi_long target_mremap(abi_ulong old_addr, abi_ulong old_size,
                        abi_ulong new_size, unsigned long flags,
                        abi_ulong new_addr);
 extern abi_ulong mmap_next_start;
-abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size);
 int target_msync(abi_ulong start, abi_ulong len, int flags);
 void mmap_reserve(abi_ulong start, abi_ulong size);
 
@@ -576,5 +575,8 @@ target_arg64(uint64_t word0, uint64_t word1)
 #include <pthread.h>
 
 #include "user/safe-syscall.h"
+
+/* Clone cpu state */
+CPUArchState *cpu_copy(CPUArchState *env);
 
 #endif /* QEMU_H */
