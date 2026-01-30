@@ -28,8 +28,8 @@
 #include "hw/ppc/openpic.h"
 #include "hw/ppc/openpic_kvm.h"
 #include "hw/pci/msi.h"
-#include "hw/qdev-properties.h"
-#include "hw/sysbus.h"
+#include "hw/core/qdev-properties.h"
+#include "hw/core/sysbus.h"
 #include "system/kvm.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
@@ -223,8 +223,7 @@ static void kvm_openpic_realize(DeviceState *dev, Error **errp)
     cd.type = kvm_openpic_model;
     ret = kvm_vm_ioctl(s, KVM_CREATE_DEVICE, &cd);
     if (ret < 0) {
-        error_setg(errp, "Can't create device %d: %s",
-                   cd.type, strerror(errno));
+        error_setg_errno(errp, errno, "Can't create device %d", cd.type);
         return;
     }
     opp->fd = cd.fd;

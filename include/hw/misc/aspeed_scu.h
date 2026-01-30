@@ -11,7 +11,7 @@
 #ifndef ASPEED_SCU_H
 #define ASPEED_SCU_H
 
-#include "hw/sysbus.h"
+#include "hw/core/sysbus.h"
 #include "qom/object.h"
 
 #define TYPE_ASPEED_SCU "aspeed.scu"
@@ -51,6 +51,7 @@ struct AspeedSCUState {
 #define AST2600_A3_SILICON_REV   0x05030303U
 #define AST1030_A0_SILICON_REV   0x80000000U
 #define AST1030_A1_SILICON_REV   0x80010000U
+#define AST1060_A2_SILICON_REV   0xA0030000U
 #define AST2700_A0_SILICON_REV   0x06000103U
 #define AST2720_A0_SILICON_REV   0x06000203U
 #define AST2750_A0_SILICON_REV   0x06000003U

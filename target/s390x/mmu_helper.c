@@ -26,9 +26,9 @@
 #include "system/memory.h"
 #include "exec/page-protection.h"
 #include "exec/target_page.h"
-#include "hw/hw.h"
+#include "hw/core/hw-error.h"
 #include "hw/s390x/storage-keys.h"
-#include "hw/boards.h"
+#include "hw/core/boards.h"
 
 /* Fetch/store bits in the translation exception code: */
 #define FS_READ  0x800
@@ -44,7 +44,8 @@ static void trigger_access_exception(CPUS390XState *env, uint32_t type,
     } else {
         CPUState *cs = env_cpu(env);
         if (type != PGM_ADDRESSING) {
-            stq_phys(cs->as, env->psa + offsetof(LowCore, trans_exc_code), tec);
+            stq_be_phys(cs->as, env->psa + offsetof(LowCore, trans_exc_code),
+                        tec);
         }
         trigger_pgm_exception(env, type);
     }

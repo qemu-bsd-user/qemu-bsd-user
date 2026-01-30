@@ -32,7 +32,7 @@
 #include "qemu/units.h"
 #include "hw/acpi/acpi.h"
 #include "hw/char/parallel-isa.h"
-#include "hw/loader.h"
+#include "hw/core/loader.h"
 #include "hw/i2c/smbus_eeprom.h"
 #include "hw/rtc/mc146818rtc.h"
 #include "system/tcg.h"
@@ -40,7 +40,7 @@
 #include "hw/i386/kvm/clock.h"
 #include "hw/pci-host/q35.h"
 #include "hw/pci/pcie_port.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/i386/x86.h"
 #include "hw/i386/pc.h"
 #include "hw/i386/amd_iommu.h"
@@ -52,7 +52,7 @@
 #include "hw/ide/ahci-pci.h"
 #include "hw/intc/ioapic.h"
 #include "hw/southbridge/ich9.h"
-#include "hw/usb.h"
+#include "hw/usb/usb.h"
 #include "hw/usb/hcd-uhci.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
@@ -374,12 +374,21 @@ static void pc_q35_machine_options(MachineClass *m)
                      pc_q35_compat_defaults, pc_q35_compat_defaults_len);
 }
 
-static void pc_q35_machine_10_2_options(MachineClass *m)
+static void pc_q35_machine_11_0_options(MachineClass *m)
 {
     pc_q35_machine_options(m);
 }
 
-DEFINE_Q35_MACHINE_AS_LATEST(10, 2);
+DEFINE_Q35_MACHINE_AS_LATEST(11, 0);
+
+static void pc_q35_machine_10_2_options(MachineClass *m)
+{
+    pc_q35_machine_11_0_options(m);
+    compat_props_add(m->compat_props, hw_compat_10_2, hw_compat_10_2_len);
+    compat_props_add(m->compat_props, pc_compat_10_2, pc_compat_10_2_len);
+}
+
+DEFINE_Q35_MACHINE(10, 2);
 
 static void pc_q35_machine_10_1_options(MachineClass *m)
 {

@@ -4,12 +4,12 @@
 #include "qemu/notify.h"
 #include "qapi/qapi-types-common.h"
 #include "qemu/uuid.h"
-#include "hw/boards.h"
+#include "hw/core/boards.h"
 #include "hw/block/fdc.h"
 #include "hw/block/flash.h"
 #include "hw/i386/x86.h"
 
-#include "hw/hotplug.h"
+#include "hw/core/hotplug.h"
 #include "qom/object.h"
 #include "hw/i386/sgx-epc.h"
 #include "hw/cxl/cxl.h"
@@ -213,6 +213,9 @@ void pc_system_parse_ovmf_flash(uint8_t *flash_ptr, size_t flash_size);
 
 /* sgx.c */
 void pc_machine_init_sgx_epc(PCMachineState *pcms);
+
+extern GlobalProperty pc_compat_10_2[];
+extern const size_t pc_compat_10_2_len;
 
 extern GlobalProperty pc_compat_10_1[];
 extern const size_t pc_compat_10_1_len;

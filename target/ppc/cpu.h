@@ -27,7 +27,7 @@
 #include "exec/cpu-interrupt.h"
 #include "cpu-qom.h"
 #include "qom/object.h"
-#include "hw/registerfields.h"
+#include "hw/core/registerfields.h"
 
 #define CPU_RESOLVING_TYPE TYPE_POWERPC_CPU
 
@@ -1529,6 +1529,7 @@ struct ArchCPU {
     void *machine_data;
     int32_t node_id; /* NUMA node this CPU belongs to */
     PPCHash64Options *hash64_opts;
+    bool rtas_stopped_state;
 
     /* Those resources are used only during code translation */
     /* opcode handlers */

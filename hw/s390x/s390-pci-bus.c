@@ -20,11 +20,12 @@
 #include "hw/s390x/s390-pci-kvm.h"
 #include "hw/s390x/s390-pci-vfio.h"
 #include "hw/s390x/s390-virtio-ccw.h"
-#include "hw/boards.h"
+#include "hw/core/boards.h"
 #include "hw/pci/pci_bus.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/pci/pci_bridge.h"
 #include "hw/pci/msi.h"
+#include "exec/cpu-common.h"
 #include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "system/reset.h"
@@ -461,8 +462,8 @@ static uint64_t table_translate(S390IOTLBEntry *entry, uint64_t to, int8_t ett,
     uint16_t err = 0;
 
     tx = get_table_index(entry->iova, ett);
-    te = address_space_ldq(&address_space_memory, to + tx * sizeof(uint64_t),
-                           MEMTXATTRS_UNSPECIFIED, NULL);
+    te = address_space_ldq_be(&address_space_memory, to + tx * sizeof(uint64_t),
+                              MEMTXATTRS_UNSPECIFIED, NULL);
 
     if (!te) {
         err = ERR_EVENT_INVALTE;

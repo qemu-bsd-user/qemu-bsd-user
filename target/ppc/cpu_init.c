@@ -34,7 +34,7 @@
 #include "qapi/error.h"
 #include "qobject/qnull.h"
 #include "qapi/visitor.h"
-#include "hw/qdev-properties.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/ppc/ppc.h"
 #include "mmu-book3s-v3.h"
 #include "qemu/cutils.h"
@@ -46,7 +46,7 @@
 #include "spr_common.h"
 #include "power8-pmu.h"
 #ifndef CONFIG_USER_ONLY
-#include "hw/boards.h"
+#include "hw/core/boards.h"
 #include "hw/intc/intc.h"
 #include "kvm_ppc.h"
 #endif
@@ -54,6 +54,11 @@
 #include "cpu_init.h"
 /* #define PPC_DEBUG_SPR */
 /* #define USE_APPLE_GDB */
+
+static const Property powerpc_cpu_properties[] = {
+    DEFINE_PROP_BOOL("rtas-stopped-state", PowerPCCPU,
+                      rtas_stopped_state, true),
+};
 
 static inline void vscr_init(CPUPPCState *env, uint32_t val)
 {
@@ -7528,6 +7533,8 @@ static void ppc_cpu_class_init(ObjectClass *oc, const void *data)
     device_class_set_parent_unrealize(dc, ppc_cpu_unrealize,
                                       &pcc->parent_unrealize);
     pcc->pvr_match = ppc_pvr_match_default;
+
+    device_class_set_props(dc, powerpc_cpu_properties);
 
     resettable_class_set_parent_phases(rc, NULL, ppc_cpu_reset_hold, NULL,
                                        &pcc->parent_phases);

@@ -27,6 +27,7 @@
 #include "hw/acpi/generic_event_device.h"
 #include "hw/nvram/fw_cfg.h"
 #include "qemu/uuid.h"
+#include "exec/cpu-common.h"
 
 #define ACPI_HW_ERROR_FW_CFG_FILE           "etc/hardware_errors"
 #define ACPI_HW_ERROR_ADDR_FW_CFG_FILE      "etc/hardware_errors_addr"
@@ -563,7 +564,7 @@ int acpi_ghes_memory_errors(AcpiGhesState *ags, uint16_t source_id,
     const uint8_t guid[] =
           UUID_LE(0xA5BC1114, 0x6F64, 0x4EDE, 0xB8, 0x63, 0x3E, 0x83, \
                   0xED, 0x7C, 0x83, 0xB1);
-    Error *errp = NULL;
+    Error *err = NULL;
     int data_length;
     GArray *block;
 
@@ -583,12 +584,12 @@ int acpi_ghes_memory_errors(AcpiGhesState *ags, uint16_t source_id,
     acpi_ghes_build_append_mem_cper(block, physical_address);
 
     /* Report the error */
-    ghes_record_cper_errors(ags, block->data, block->len, source_id, &errp);
+    ghes_record_cper_errors(ags, block->data, block->len, source_id, &err);
 
     g_array_free(block, true);
 
-    if (errp) {
-        error_report_err(errp);
+    if (err) {
+        error_report_err(err);
         return -1;
     }
 
