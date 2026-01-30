@@ -822,7 +822,6 @@ version_res = []
 coref = []
 iokit = []
 pvg = not_found
-metal = []
 emulator_link_args = []
 midl = not_found
 widl = not_found
@@ -844,8 +843,8 @@ elif host_os == 'darwin'
   coref = dependency('appleframeworks', modules: 'CoreFoundation')
   iokit = dependency('appleframeworks', modules: 'IOKit', required: false)
   host_dsosuf = '.dylib'
-  pvg = dependency('appleframeworks', modules: 'ParavirtualizedGraphics')
-  metal = dependency('appleframeworks', modules: 'Metal')
+  pvg = dependency('appleframeworks', modules: ['ParavirtualizedGraphics', 'Metal'],
+                   required: get_option('pvg'))
 elif host_os == 'sunos'
   socket = [cc.find_library('socket'),
             cc.find_library('nsl'),
@@ -2886,6 +2885,12 @@ config_host_data.set('HAVE_MLOCKALL', cc.links(gnu_source_prefix + '''
     return mlockall(MCL_FUTURE);
   }'''))
 
+config_host_data.set('HAVE_MLOCK_ONFAULT', cc.links(gnu_source_prefix + '''
+  #include <sys/mman.h>
+  int main(void) {
+      return mlockall(MCL_FUTURE | MCL_ONFAULT);
+  }'''))
+
 have_l2tpv3 = false
 if get_option('l2tpv3').allowed() and have_system
   have_l2tpv3 = cc.has_type('struct mmsghdr',
@@ -3361,6 +3366,12 @@ foreach target : target_dirs
   if target.endswith('-softmmu')
     target_kconfig += 'CONFIG_' + config_target['TARGET_ARCH'].to_upper() + '=y'
     target_kconfig += 'CONFIG_TARGET_BIG_ENDIAN=' + config_target['TARGET_BIG_ENDIAN']
+
+    # PVG is not cross-architecture.  Use accelerator_targets as a proxy to
+    # figure out which target can support PVG on this host
+    if pvg.found() and target in accelerator_targets.get('CONFIG_HVF', [])
+      target_kconfig += 'CONFIG_MAC_PVG=y'
+    endif
 
     config_input = meson.get_external_property(target, 'default')
     config_devices_mak = target + '-config-devices.mak'
@@ -4074,6 +4085,7 @@ if have_rust
     'MigrationPriority',
     'QEMUChrEvent',
     'QEMUClockType',
+    'ResetType',
     'device_endian',
     'module_init_type',
   ]
@@ -4086,6 +4098,13 @@ if have_rust
   ]
   foreach enum : c_bitfields
     bindgen_args += ['--bitfield-enum', enum]
+  endforeach
+  c_nocopy = [
+    'QEMUTimer',
+  ]
+  # Used to customize Drop trait
+  foreach struct : c_nocopy
+    bindgen_args += ['--no-copy', struct]
   endforeach
 
   # TODO: Remove this comment when the clang/libclang mismatch issue is solved.
@@ -4829,6 +4848,9 @@ summary_info += {'selinux':           selinux}
 summary_info += {'libdw':             libdw}
 if host_os == 'freebsd'
   summary_info += {'libinotify-kqueue': inotify}
+endif
+if host_os == 'darwin'
+  summary_info += {'ParavirtualizedGraphics support': pvg}
 endif
 summary(summary_info, bool_yn: true, section: 'Dependencies')
 
