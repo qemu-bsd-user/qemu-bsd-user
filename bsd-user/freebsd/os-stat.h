@@ -20,6 +20,8 @@
 #ifndef BSD_USER_FREEBSD_OS_STAT_H
 #define BSD_USER_FREEBSD_OS_STAT_H
 
+#include <libsys.h>
+
 int freebsd11_stat(const char *path, struct freebsd11_stat *stat);
 __sym_compat(stat, freebsd11_stat, FBSD_1.0);
 int freebsd11_lstat(const char *path, struct freebsd11_stat *stat);
@@ -635,10 +637,13 @@ static inline abi_long do_freebsd_fcntl(abi_long arg1, abi_long arg2,
 }
 
 #if defined(__FreeBSD_version) && __FreeBSD_version >= 1300080
+#if __FreeBSD_version < 1500032
 extern int __realpathat(int fd, const char *path, char *buf, size_t size,
         int flags);
 /* https://svnweb.freebsd.org/base?view=revision&revision=358172 */
+/* Removed in cdb24fbb0a75209043efd3b5e94faa57dfc44bd1 in favor of sys */
 /* no man page */
+#endif
 static inline abi_long do_freebsd_realpathat(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4, abi_long arg5)
 {
@@ -652,7 +657,11 @@ static inline abi_long do_freebsd_realpathat(abi_long arg1, abi_long arg2,
         return -TARGET_EFAULT;
     }
 
+#if __FreeBSD_version < 1500032
     ret = get_errno(__realpathat(arg1, p, b, arg4, arg5));
+#else
+    ret = get_errno(__sys___realpathat(arg1, p, b, arg4, arg5));
+#endif
     UNLOCK_PATH(p, arg2);
     unlock_user(b, arg3, ret);
 
