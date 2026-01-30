@@ -33,7 +33,6 @@
 #endif /* CONFIG_TCG */
 #include "internals.h"
 #include "cpu-features.h"
-#include "exec/exec-all.h"
 #include "exec/target_page.h"
 #include "hw/qdev-properties.h"
 #if !defined(CONFIG_USER_ONLY)
@@ -2649,13 +2648,54 @@ static const gchar *arm_gdb_arch_name(CPUState *cs)
     ARMCPU *cpu = ARM_CPU(cs);
     CPUARMState *env = &cpu->env;
 
+    if (arm_gdbstub_is_aarch64(cpu)) {
+        return "aarch64";
+    }
     if (arm_feature(env, ARM_FEATURE_IWMMXT)) {
         return "iwmmxt";
     }
     return "arm";
 }
 
-#ifndef CONFIG_USER_ONLY
+static const char *arm_gdb_get_core_xml_file(CPUState *cs)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    if (arm_gdbstub_is_aarch64(cpu)) {
+        return "aarch64-core.xml";
+    }
+    if (arm_feature(env, ARM_FEATURE_M)) {
+        return "arm-m-profile.xml";
+    }
+    return "arm-core.xml";
+}
+
+#ifdef CONFIG_USER_ONLY
+/**
+ * aarch64_untagged_addr:
+ *
+ * Remove any address tag from @x.  This is explicitly related to the
+ * linux syscall TIF_TAGGED_ADDR setting, not TBI in general.
+ *
+ * There should be a better place to put this, but we need this in
+ * include/exec/cpu_ldst.h, and not some place linux-user specific.
+ *
+ * Note that arm-*-user will never set tagged_addr_enable.
+ */
+static vaddr aarch64_untagged_addr(CPUState *cs, vaddr x)
+{
+    CPUARMState *env = cpu_env(cs);
+    if (env->tagged_addr_enable) {
+        /*
+         * TBI is enabled for userspace but not kernelspace addresses.
+         * Only clear the tag if bit 55 is clear.
+         */
+        x &= sextract64(x, 0, 56);
+    }
+    return x;
+}
+#else
 #include "hw/core/sysemu-cpu-ops.h"
 
 static const struct SysemuCPUOps arm_sysemu_ops = {
@@ -2677,6 +2717,7 @@ static const TCGCPUOps arm_tcg_ops = {
 
     .initialize = arm_translate_init,
     .translate_code = arm_translate_code,
+    .get_tb_cpu_state = arm_get_tb_cpu_state,
     .synchronize_from_tb = arm_cpu_synchronize_from_tb,
     .debug_excp_handler = arm_debug_excp_handler,
     .restore_state_to_opc = arm_restore_state_to_opc,
@@ -2685,10 +2726,12 @@ static const TCGCPUOps arm_tcg_ops = {
 #ifdef CONFIG_USER_ONLY
     .record_sigsegv = arm_cpu_record_sigsegv,
     .record_sigbus = arm_cpu_record_sigbus,
+    .untagged_addr = aarch64_untagged_addr,
 #else
     .tlb_fill_align = arm_cpu_tlb_fill_align,
     .cpu_exec_interrupt = arm_cpu_exec_interrupt,
     .cpu_exec_halt = arm_cpu_exec_halt,
+    .cpu_exec_reset = cpu_reset,
     .do_interrupt = arm_cpu_do_interrupt,
     .do_transaction_failed = arm_cpu_do_transaction_failed,
     .do_unaligned_access = arm_cpu_do_unaligned_access,
@@ -2699,7 +2742,7 @@ static const TCGCPUOps arm_tcg_ops = {
 };
 #endif /* CONFIG_TCG */
 
-static void arm_cpu_class_init(ObjectClass *oc, void *data)
+static void arm_cpu_class_init(ObjectClass *oc, const void *data)
 {
     ARMCPUClass *acc = ARM_CPU_CLASS(oc);
     CPUClass *cc = CPU_CLASS(acc);
@@ -2724,6 +2767,7 @@ static void arm_cpu_class_init(ObjectClass *oc, void *data)
     cc->sysemu_ops = &arm_sysemu_ops;
 #endif
     cc->gdb_arch_name = arm_gdb_arch_name;
+    cc->gdb_get_core_xml_file = arm_gdb_get_core_xml_file;
     cc->gdb_stop_before_watchpoint = true;
     cc->disas_set_info = arm_disas_set_info;
 
@@ -2740,13 +2784,12 @@ static void arm_cpu_instance_init(Object *obj)
     arm_cpu_post_init(obj);
 }
 
-static void cpu_register_class_init(ObjectClass *oc, void *data)
+static void cpu_register_class_init(ObjectClass *oc, const void *data)
 {
     ARMCPUClass *acc = ARM_CPU_CLASS(oc);
     CPUClass *cc = CPU_CLASS(acc);
 
     acc->info = data;
-    cc->gdb_core_xml_file = "arm-core.xml";
     if (acc->info->deprecation_note) {
         cc->deprecation_note = acc->info->deprecation_note;
     }
@@ -2758,7 +2801,7 @@ void arm_cpu_register(const ARMCPUInfo *info)
         .parent = TYPE_ARM_CPU,
         .instance_init = arm_cpu_instance_init,
         .class_init = info->class_init ?: cpu_register_class_init,
-        .class_data = (void *)info,
+        .class_data = info,
     };
 
     type_info.name = g_strdup_printf("%s-" TYPE_ARM_CPU, info->name);

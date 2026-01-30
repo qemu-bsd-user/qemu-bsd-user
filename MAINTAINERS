@@ -168,7 +168,7 @@ F: include/exec/helper*.h.inc
 F: include/exec/helper-info.c.inc
 F: include/exec/page-protection.h
 F: include/system/tcg.h
-F: include/accel/tcg/cpu-ops.h
+F: include/accel/tcg/
 F: host/include/*/host/cpuinfo.h
 F: util/cpuinfo-*.c
 F: include/tcg/
@@ -493,13 +493,12 @@ M: Richard Henderson <richard.henderson@linaro.org>
 R: Paolo Bonzini <pbonzini@redhat.com>
 S: Maintained
 F: include/exec/cpu*.h
-F: include/exec/exec-all.h
 F: include/exec/target_long.h
 F: include/qemu/accel.h
 F: include/system/accel-*.h
 F: include/system/cpus.h
-F: include/accel/accel-cpu-target.h
-F: accel/accel-*.c
+F: include/accel/accel-cpu*.h
+F: accel/accel-*.?
 F: accel/Makefile.objs
 F: accel/stubs/Makefile.objs
 F: cpu-common.c
@@ -1174,6 +1173,7 @@ F: docs/system/arm/fby35.rst
 F: tests/*/*aspeed*
 F: tests/*/*ast2700*
 F: hw/arm/fby35.c
+F: pc-bios/ast27x0_bootrom.bin
 
 NRF51
 M: Joel Stanley <joel@jms.id.au>
@@ -1581,7 +1581,7 @@ F: hw/pci-host/ppc440_pcix.c
 F: hw/display/sm501*
 F: hw/ide/sii3112.c
 F: hw/rtc/m41t80.c
-F: pc-bios/canyonlands.dt[sb]
+F: pc-bios/dtb/canyonlands.dt[sb]
 F: pc-bios/u-boot-sam460ex-20100605.bin
 F: roms/u-boot-sam460ex
 F: docs/system/ppc/amigang.rst
@@ -1926,6 +1926,13 @@ F: tests/functional/test_empty_cpu_model.py
 F: tests/unit/test-smp-parse.c
 T: git https://gitlab.com/ehabkost/qemu.git machine-next
 
+TargetInfo API
+M: Pierrick Bouvier <pierrick.bouvier@linaro.org>
+M: Philippe Mathieu-Daudé <philmd@linaro.org>
+S: Supported
+F: include/qemu/target-info*.h
+F: target-info*.c
+
 Xtensa Machines
 ---------------
 sim
@@ -2197,6 +2204,7 @@ M: Alex Williamson <alex.williamson@redhat.com>
 M: Cédric Le Goater <clg@redhat.com>
 S: Supported
 F: hw/vfio/*
+F: util/vfio-helpers.c
 F: include/hw/vfio/
 F: docs/devel/migration/vfio.rst
 F: qapi/vfio.json
@@ -3530,6 +3538,7 @@ R: Li Zhijian <lizhijian@fujitsu.com>
 R: Peter Xu <peterx@redhat.com>
 S: Odd Fixes
 F: migration/rdma*
+F: scripts/rdma-migration-helper.sh
 
 Migration dirty limit and dirty page rate
 M: Hyman Huang <yong.huang@smartx.com>

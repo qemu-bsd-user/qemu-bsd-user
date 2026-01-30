@@ -24,7 +24,6 @@
 #include "cpu.h"
 #include "cpu_vendorid.h"
 #include "internals.h"
-#include "exec/exec-all.h"
 #include "qapi/error.h"
 #include "qapi/visitor.h"
 #include "qemu/error-report.h"
@@ -3028,7 +3027,7 @@ static const struct SysemuCPUOps riscv_sysemu_ops = {
 };
 #endif
 
-static void riscv_cpu_common_class_init(ObjectClass *c, void *data)
+static void riscv_cpu_common_class_init(ObjectClass *c, const void *data)
 {
     RISCVCPUClass *mcc = RISCV_CPU_CLASS(c);
     CPUClass *cc = CPU_CLASS(c);
@@ -3061,7 +3060,7 @@ static void riscv_cpu_common_class_init(ObjectClass *c, void *data)
     device_class_set_props(dc, riscv_cpu_properties);
 }
 
-static void riscv_cpu_class_init(ObjectClass *c, void *data)
+static void riscv_cpu_class_init(ObjectClass *c, const void *data)
 {
     RISCVCPUClass *mcc = RISCV_CPU_CLASS(c);
 

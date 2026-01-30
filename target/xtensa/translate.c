@@ -31,7 +31,6 @@
 #include "qemu/osdep.h"
 
 #include "cpu.h"
-#include "exec/exec-all.h"
 #include "tcg/tcg-op.h"
 #include "qemu/log.h"
 #include "qemu/qemu-print.h"
@@ -1395,11 +1394,11 @@ static void translate_bbi(DisasContext *dc, const OpcodeArg arg[],
                           const uint32_t par[])
 {
     TCGv_i32 tmp = tcg_temp_new_i32();
-#if TARGET_BIG_ENDIAN
-    tcg_gen_andi_i32(tmp, arg[0].in, 0x80000000u >> arg[1].imm);
-#else
-    tcg_gen_andi_i32(tmp, arg[0].in, 0x00000001u << arg[1].imm);
-#endif
+    if (TARGET_BIG_ENDIAN) {
+        tcg_gen_andi_i32(tmp, arg[0].in, 0x80000000u >> arg[1].imm);
+    } else {
+        tcg_gen_andi_i32(tmp, arg[0].in, 0x00000001u << arg[1].imm);
+    }
     gen_brcondi(dc, par[0], tmp, 0, arg[2].imm);
 }
 

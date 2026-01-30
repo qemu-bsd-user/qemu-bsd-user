@@ -35,15 +35,12 @@
 #include "qapi/qapi-types-common.h"
 #include "qapi/qapi-builtin-visit.h"
 #include "qemu/units.h"
-#if defined(CONFIG_USER_ONLY)
-#include "hw/qdev-core.h"
-#else
+#include "qemu/target-info.h"
+#ifndef CONFIG_USER_ONLY
 #include "hw/boards.h"
-#include "system/tcg.h"
 #endif
 #include "accel/tcg/cpu-ops.h"
 #include "internal-common.h"
-#include "cpu.h"
 
 
 struct TCGState {
@@ -89,7 +86,7 @@ static int tcg_init_machine(MachineState *ms)
     unsigned max_threads = 1;
 
 #ifndef CONFIG_USER_ONLY
-    CPUClass *cc = CPU_CLASS(object_class_by_name(CPU_RESOLVING_TYPE));
+    CPUClass *cc = CPU_CLASS(object_class_by_name(target_cpu_type()));
     bool mttcg_supported = cc->tcg_ops->mttcg_supported;
 
     switch (s->mttcg_enabled) {
@@ -237,7 +234,7 @@ static int tcg_gdbstub_supported_sstep_flags(void)
     }
 }
 
-static void tcg_accel_class_init(ObjectClass *oc, void *data)
+static void tcg_accel_class_init(ObjectClass *oc, const void *data)
 {
     AccelClass *ac = ACCEL_CLASS(oc);
     ac->name = "tcg";

@@ -23,8 +23,6 @@
 #include "cpu.h"
 #include "qemu/units.h"
 #include "accel/tcg/cpu-ldst.h"
-#include "exec/exec-all.h"
-#include "trace/trace-bsd_user.h"
 
 #include "user/abitypes.h"
 #include "user/cpu_loop.h"

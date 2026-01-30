@@ -29,7 +29,6 @@
 #include "qemu/module.h"
 #include "system/kvm.h"
 #include "system/qtest.h"
-#include "exec/exec-all.h"
 #include "hw/qdev-properties.h"
 #include "hw/qdev-clock.h"
 #include "fpu_helper.h"
@@ -550,12 +549,24 @@ static int mips_cpu_mmu_index(CPUState *cs, bool ifunc)
     return mips_env_mmu_index(cpu_env(cs));
 }
 
+static TCGTBCPUState mips_get_tb_cpu_state(CPUState *cs)
+{
+    CPUMIPSState *env = cpu_env(cs);
+
+    return (TCGTBCPUState){
+        .pc = env->active_tc.PC,
+        .flags = env->hflags & (MIPS_HFLAG_TMASK | MIPS_HFLAG_BMASK |
+                                MIPS_HFLAG_HWRENA_ULR),
+    };
+}
+
 static const TCGCPUOps mips_tcg_ops = {
     .mttcg_supported = TARGET_LONG_BITS == 32,
     .guest_default_memory_order = 0,
 
     .initialize = mips_tcg_init,
     .translate_code = mips_translate_code,
+    .get_tb_cpu_state = mips_get_tb_cpu_state,
     .synchronize_from_tb = mips_cpu_synchronize_from_tb,
     .restore_state_to_opc = mips_restore_state_to_opc,
     .mmu_index = mips_cpu_mmu_index,
@@ -564,6 +575,7 @@ static const TCGCPUOps mips_tcg_ops = {
     .tlb_fill = mips_cpu_tlb_fill,
     .cpu_exec_interrupt = mips_cpu_exec_interrupt,
     .cpu_exec_halt = mips_cpu_has_work,
+    .cpu_exec_reset = cpu_reset,
     .do_interrupt = mips_cpu_do_interrupt,
     .do_transaction_failed = mips_cpu_do_transaction_failed,
     .do_unaligned_access = mips_cpu_do_unaligned_access,
@@ -572,7 +584,7 @@ static const TCGCPUOps mips_tcg_ops = {
 };
 #endif /* CONFIG_TCG */
 
-static void mips_cpu_class_init(ObjectClass *c, void *data)
+static void mips_cpu_class_init(ObjectClass *c, const void *data)
 {
     MIPSCPUClass *mcc = MIPS_CPU_CLASS(c);
     CPUClass *cc = CPU_CLASS(c);
@@ -613,7 +625,7 @@ static const TypeInfo mips_cpu_type_info = {
     .class_init = mips_cpu_class_init,
 };
 
-static void mips_cpu_cpudef_class_init(ObjectClass *oc, void *data)
+static void mips_cpu_cpudef_class_init(ObjectClass *oc, const void *data)
 {
     MIPSCPUClass *mcc = MIPS_CPU_CLASS(oc);
     mcc->cpu_def = data;
@@ -626,7 +638,7 @@ static void mips_register_cpudef_type(const struct mips_def_t *def)
         .name = typename,
         .parent = TYPE_MIPS_CPU,
         .class_init = mips_cpu_cpudef_class_init,
-        .class_data = (void *)def,
+        .class_data = def,
     };
 
     type_register_static(&ti);

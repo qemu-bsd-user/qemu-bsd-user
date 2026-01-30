@@ -35,7 +35,7 @@
 #include "hw/s390x/css-bridge.h"
 #include "hw/s390x/ap-bridge.h"
 #include "migration/register.h"
-#include "cpu_models.h"
+#include "target/s390x/cpu_models.h"
 #include "hw/nmi.h"
 #include "hw/qdev-properties.h"
 #include "hw/s390x/tod.h"
@@ -365,7 +365,8 @@ static void s390_machine_unprotect(S390CcwMachineState *ms)
     ram_block_discard_disable(false);
 }
 
-static int s390_machine_protect(S390CcwMachineState *ms)
+static int s390_machine_protect(S390CcwMachineState *ms,
+                                struct S390PVResponse *pv_resp)
 {
     Error *local_err = NULL;
     int rc;
@@ -408,19 +409,19 @@ static int s390_machine_protect(S390CcwMachineState *ms)
     }
 
     /* Set SE header and unpack */
-    rc = s390_ipl_prepare_pv_header(&local_err);
+    rc = s390_ipl_prepare_pv_header(pv_resp, &local_err);
     if (rc) {
         goto out_err;
     }
 
     /* Decrypt image */
-    rc = s390_ipl_pv_unpack();
+    rc = s390_ipl_pv_unpack(pv_resp);
     if (rc) {
         goto out_err;
     }
 
     /* Verify integrity */
-    rc = s390_pv_verify();
+    rc = s390_pv_verify(pv_resp);
     if (rc) {
         goto out_err;
     }
@@ -452,6 +453,7 @@ static void s390_pv_prepare_reset(S390CcwMachineState *ms)
 static void s390_machine_reset(MachineState *machine, ResetType type)
 {
     S390CcwMachineState *ms = S390_CCW_MACHINE(machine);
+    struct S390PVResponse pv_resp;
     enum s390_reset reset_type;
     CPUState *cs, *t;
     S390CPU *cpu;
@@ -540,8 +542,8 @@ static void s390_machine_reset(MachineState *machine, ResetType type)
         }
         run_on_cpu(cs, s390_do_cpu_reset, RUN_ON_CPU_NULL);
 
-        if (s390_machine_protect(ms)) {
-            s390_pv_inject_reset_error(cs);
+        if (s390_machine_protect(ms, &pv_resp)) {
+            s390_pv_inject_reset_error(cs, pv_resp);
             /*
              * Continue after the diag308 so the guest knows something
              * went wrong.
@@ -804,7 +806,7 @@ static void machine_set_loadparm(Object *obj, Visitor *v,
     s390_ipl_fmt_loadparm(ms->loadparm, val, errp);
 }
 
-static void ccw_machine_class_init(ObjectClass *oc, void *data)
+static void ccw_machine_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     NMIClass *nc = NMI_CLASS(oc);
@@ -875,7 +877,7 @@ static const TypeInfo ccw_machine_info = {
     .instance_init = s390_machine_initfn,
     .class_size = sizeof(S390CcwMachineClass),
     .class_init    = ccw_machine_class_init,
-    .interfaces = (InterfaceInfo[]) {
+    .interfaces = (const InterfaceInfo[]) {
         { TYPE_NMI },
         { TYPE_HOTPLUG_HANDLER},
         { TYPE_DUMP_SKEYS_INTERFACE},
@@ -892,7 +894,7 @@ static const TypeInfo ccw_machine_info = {
     }                                                                         \
     static void MACHINE_VER_SYM(class_init, ccw, __VA_ARGS__)(                \
         ObjectClass *oc,                                                      \
-        void *data)                                                           \
+        const void *data)                                                     \
     {                                                                         \
         MachineClass *mc = MACHINE_CLASS(oc);                                 \
         MACHINE_VER_SYM(class_options, ccw, __VA_ARGS__)(mc);                 \

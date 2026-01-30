@@ -19,16 +19,6 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- * Sometimes, knowing what the backend has can produce better code.
- * The exact opcode to check depends on 32- vs. 64-bit.
- */
-#ifdef TARGET_X86_64
-#define INDEX_op_extract2_tl            INDEX_op_extract2_i64
-#else
-#define INDEX_op_extract2_tl            INDEX_op_extract2_i32
-#endif
-
 #define MMX_OFFSET(reg)                        \
   ({ assert((reg) >= 0 && (reg) <= 7);         \
      offsetof(CPUX86State, fpregs[reg].mmx); })
@@ -352,7 +342,7 @@ static void gen_writeback(DisasContext *s, X86DecodedInsn *decode, int opn, TCGv
         break;
     case X86_OP_SEG:
         /* Note that gen_movl_seg takes care of interrupt shadow and TF.  */
-        gen_movl_seg(s, op->n, s->T0);
+        gen_movl_seg(s, op->n, v, op->n == R_SS);
         break;
     case X86_OP_INT:
         if (op->has_ea) {
@@ -1813,7 +1803,7 @@ static void gen_CMPXCHG(DisasContext *s, X86DecodedInsn *decode)
 static void gen_CMPXCHG16B(DisasContext *s, X86DecodedInsn *decode)
 {
 #ifdef TARGET_X86_64
-    MemOp mop = MO_TE | MO_128 | MO_ALIGN;
+    MemOp mop = MO_LE | MO_128 | MO_ALIGN;
     TCGv_i64 t0, t1;
     TCGv_i128 cmp, val;
 
@@ -1870,10 +1860,10 @@ static void gen_CMPXCHG8B(DisasContext *s, X86DecodedInsn *decode)
 
     /* Only require atomic with LOCK; non-parallel handled in generator. */
     if (s->prefix & PREFIX_LOCK) {
-        tcg_gen_atomic_cmpxchg_i64(old, s->A0, cmp, val, s->mem_index, MO_TEUQ);
+        tcg_gen_atomic_cmpxchg_i64(old, s->A0, cmp, val, s->mem_index, MO_LEUQ);
     } else {
         tcg_gen_nonatomic_cmpxchg_i64(old, s->A0, cmp, val,
-                                      s->mem_index, MO_TEUQ);
+                                      s->mem_index, MO_LEUQ);
     }
 
     /* Compute the required value of Z. */
@@ -2392,7 +2382,7 @@ static void gen_lxx_seg(DisasContext *s, X86DecodedInsn *decode, int seg)
     gen_op_ld_v(s, MO_16, s->T1, s->A0);
 
     /* load the segment here to handle exceptions properly */
-    gen_movl_seg(s, seg, s->T1);
+    gen_movl_seg(s, seg, s->T1, false);
 }
 
 static void gen_LDS(DisasContext *s, X86DecodedInsn *decode)
@@ -3023,7 +3013,7 @@ static void gen_PMOVMSKB(DisasContext *s, X86DecodedInsn *decode)
     tcg_gen_ld8u_tl(s->T0, tcg_env, offsetof(CPUX86State, xmm_t0.ZMM_B(vec_len - 1)));
     while (vec_len > 8) {
         vec_len -= 8;
-        if (tcg_op_supported(INDEX_op_extract2_tl, TCG_TYPE_TL, 0)) {
+        if (tcg_op_supported(INDEX_op_extract2, TCG_TYPE_TL, 0)) {
             /*
              * Load the next byte of the result into the high byte of T.
              * TCG does a similar expansion of deposit to shl+extract2; by

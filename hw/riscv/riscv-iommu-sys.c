@@ -26,7 +26,6 @@
 #include "qemu/host-utils.h"
 #include "qemu/module.h"
 #include "qom/object.h"
-#include "exec/exec-all.h"
 #include "trace.h"
 
 #include "riscv-iommu.h"
@@ -227,7 +226,7 @@ static void riscv_iommu_sys_reset_hold(Object *obj, ResetType type)
     trace_riscv_iommu_sys_reset_hold(type);
 }
 
-static void riscv_iommu_sys_class_init(ObjectClass *klass, void *data)
+static void riscv_iommu_sys_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     ResettableClass *rc = RESETTABLE_CLASS(klass);

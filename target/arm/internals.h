@@ -25,7 +25,10 @@
 #ifndef TARGET_ARM_INTERNALS_H
 #define TARGET_ARM_INTERNALS_H
 
+#include "exec/hwaddr.h"
+#include "exec/vaddr.h"
 #include "exec/breakpoint.h"
+#include "accel/tcg/tb-cpu-state.h"
 #include "hw/registerfields.h"
 #include "tcg/tcg-gvec-desc.h"
 #include "system/memory.h"
@@ -370,6 +373,7 @@ void arm_restore_state_to_opc(CPUState *cs,
                               const uint64_t *data);
 
 #ifdef CONFIG_TCG
+TCGTBCPUState arm_get_tb_cpu_state(CPUState *cs);
 void arm_cpu_synchronize_from_tb(CPUState *cs, const TranslationBlock *tb);
 
 /* Our implementation of TCGCPUOps::cpu_exec_halt */
@@ -726,8 +730,8 @@ typedef struct ARMMMUFaultInfo ARMMMUFaultInfo;
 struct ARMMMUFaultInfo {
     ARMFaultType type;
     ARMGPCF gpcf;
-    target_ulong s2addr;
-    target_ulong paddr;
+    hwaddr s2addr;
+    hwaddr paddr;
     ARMSecuritySpace paddr_space;
     int level;
     int domain;
@@ -1826,6 +1830,12 @@ void aarch64_add_pauth_properties(Object *obj);
 void aarch64_add_sve_properties(Object *obj);
 void aarch64_add_sme_properties(Object *obj);
 
+/* Return true if the gdbstub is presenting an AArch64 CPU */
+static inline bool arm_gdbstub_is_aarch64(ARMCPU *cpu)
+{
+    return object_dynamic_cast(OBJECT(cpu), TYPE_AARCH64_CPU);
+}
+
 /* Read the CONTROL register as the MRS instruction would. */
 uint32_t arm_v7m_mrs_control(CPUARMState *env, uint32_t secure);
 
@@ -1898,8 +1908,6 @@ static inline bool arm_fgt_active(CPUARMState *env, int el)
         (!arm_feature(env, ARM_FEATURE_EL3) || (env->cp15.scr_el3 & SCR_FGTEN));
 }
 
-void assert_hflags_rebuild_correctly(CPUARMState *env);
-
 /*
  * Although the ARM implementation of hardware assisted debugging
  * allows for different breakpoints per-core, the current GDB
@@ -1945,10 +1953,10 @@ bool find_hw_breakpoint(CPUState *cpu, target_ulong pc);
 int insert_hw_breakpoint(target_ulong pc);
 int delete_hw_breakpoint(target_ulong pc);
 
-bool check_watchpoint_in_range(int i, target_ulong addr);
-CPUWatchpoint *find_hw_watchpoint(CPUState *cpu, target_ulong addr);
-int insert_hw_watchpoint(target_ulong addr, target_ulong len, int type);
-int delete_hw_watchpoint(target_ulong addr, target_ulong len, int type);
+bool check_watchpoint_in_range(int i, vaddr addr);
+CPUWatchpoint *find_hw_watchpoint(CPUState *cpu, vaddr addr);
+int insert_hw_watchpoint(vaddr addr, vaddr len, int type);
+int delete_hw_watchpoint(vaddr addr, vaddr len, int type);
 
 /* Return the current value of the system counter in ticks */
 uint64_t gt_get_countervalue(CPUARMState *env);
