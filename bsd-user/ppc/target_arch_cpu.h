@@ -57,7 +57,7 @@ static inline void target_cpu_init(CPUPPCState *env,
     env->nip = regs->nip;
 }
 
-static inline void target_cpu_loop(CPUPPCState *env)
+static inline G_NORETURN void target_cpu_loop(CPUPPCState *env)
 {
     CPUState *cs = env_cpu(env);
     int trapnr;
