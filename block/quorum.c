@@ -1037,6 +1037,7 @@ static int quorum_open(BlockDriverState *bs, QDict *options, int flags,
 
 close_exit:
     /* cleanup on error */
+    bdrv_drain_all_begin();
     bdrv_graph_wrlock();
     for (i = 0; i < s->num_children; i++) {
         if (!opened[i]) {
@@ -1045,6 +1046,7 @@ close_exit:
         bdrv_unref_child(bs, s->children[i]);
     }
     bdrv_graph_wrunlock();
+    bdrv_drain_all_end();
     g_free(s->children);
     g_free(opened);
 exit:
@@ -1057,11 +1059,13 @@ static void quorum_close(BlockDriverState *bs)
     BDRVQuorumState *s = bs->opaque;
     int i;
 
+    bdrv_drain_all_begin();
     bdrv_graph_wrlock();
     for (i = 0; i < s->num_children; i++) {
         bdrv_unref_child(bs, s->children[i]);
     }
     bdrv_graph_wrunlock();
+    bdrv_drain_all_end();
 
     g_free(s->children);
 }
@@ -1226,7 +1230,7 @@ static void quorum_child_perm(BlockDriverState *bs, BdrvChild *c,
  * region contains zeroes, and BDRV_BLOCK_DATA otherwise.
  */
 static int coroutine_fn GRAPH_RDLOCK
-quorum_co_block_status(BlockDriverState *bs, bool want_zero,
+quorum_co_block_status(BlockDriverState *bs, unsigned int mode,
                        int64_t offset, int64_t count,
                        int64_t *pnum, int64_t *map, BlockDriverState **file)
 {
@@ -1238,7 +1242,7 @@ quorum_co_block_status(BlockDriverState *bs, bool want_zero,
     for (i = 0; i < s->num_children; i++) {
         int64_t bytes;
         ret = bdrv_co_common_block_status_above(s->children[i]->bs, NULL, false,
-                                                want_zero, offset, count,
+                                                mode, offset, count,
                                                 &bytes, NULL, NULL, NULL);
         if (ret < 0) {
             quorum_report_bad(QUORUM_OP_TYPE_READ, offset, count,

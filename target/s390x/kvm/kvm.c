@@ -298,12 +298,6 @@ void kvm_s390_set_max_pagesize(uint64_t pagesize, Error **errp)
         return;
     }
 
-    if (!hpage_1m_allowed()) {
-        error_setg(errp, "This QEMU machine does not support huge page "
-                   "mappings");
-        return;
-    }
-
     if (pagesize != 1 * MiB) {
         error_setg(errp, "Memory backing with 2G pages was specified, "
                    "but KVM does not support this memory backing");
@@ -402,6 +396,11 @@ int kvm_arch_irqchip_create(KVMState *s)
 unsigned long kvm_arch_vcpu_id(CPUState *cpu)
 {
     return cpu->cpu_index;
+}
+
+int kvm_arch_pre_create_vcpu(CPUState *cpu, Error **errp)
+{
+    return 0;
 }
 
 int kvm_arch_init_vcpu(CPUState *cs)

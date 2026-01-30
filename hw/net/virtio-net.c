@@ -382,7 +382,7 @@ static void virtio_net_drop_tx_queue_data(VirtIODevice *vdev, VirtQueue *vq)
     }
 }
 
-static void virtio_net_set_status(struct VirtIODevice *vdev, uint8_t status)
+static int virtio_net_set_status(struct VirtIODevice *vdev, uint8_t status)
 {
     VirtIONet *n = VIRTIO_NET(vdev);
     VirtIONetQueue *q;
@@ -437,6 +437,7 @@ static void virtio_net_set_status(struct VirtIODevice *vdev, uint8_t status)
             }
         }
     }
+    return 0;
 }
 
 static void virtio_net_set_link_status(NetClientState *nc)
@@ -1910,9 +1911,9 @@ static ssize_t virtio_net_receive_rcu(NetClientState *nc, const uint8_t *buf,
     VirtIONet *n = qemu_get_nic_opaque(nc);
     VirtIONetQueue *q;
     VirtIODevice *vdev = VIRTIO_DEVICE(n);
-    VirtQueueElement *elems[VIRTQUEUE_MAX_SIZE];
-    size_t lens[VIRTQUEUE_MAX_SIZE];
-    struct iovec mhdr_sg[VIRTQUEUE_MAX_SIZE];
+    QEMU_UNINITIALIZED VirtQueueElement *elems[VIRTQUEUE_MAX_SIZE];
+    QEMU_UNINITIALIZED size_t lens[VIRTQUEUE_MAX_SIZE];
+    QEMU_UNINITIALIZED struct iovec mhdr_sg[VIRTQUEUE_MAX_SIZE];
     struct virtio_net_hdr_v1_hash extra_hdr;
     unsigned mhdr_cnt = 0;
     size_t offset, i, guest_offset, j;

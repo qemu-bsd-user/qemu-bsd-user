@@ -431,12 +431,12 @@ static void object_init_with_type(Object *obj, TypeImpl *ti)
 
 static void object_post_init_with_type(Object *obj, TypeImpl *ti)
 {
-    if (ti->instance_post_init) {
-        ti->instance_post_init(obj);
-    }
-
     if (type_has_parent(ti)) {
         object_post_init_with_type(obj, type_get_parent(ti));
+    }
+
+    if (ti->instance_post_init) {
+        ti->instance_post_init(obj);
     }
 }
 
@@ -485,7 +485,7 @@ bool object_apply_global_props(Object *obj, const GPtrArray *props,
  * Slot 0: accelerator's global property defaults
  * Slot 1: machine's global property defaults
  * Slot 2: global properties from legacy command line option
- * Each is a GPtrArray of of GlobalProperty.
+ * Each is a GPtrArray of GlobalProperty.
  * Applied in order, later entries override earlier ones.
  */
 static GPtrArray *object_compat_props[3];

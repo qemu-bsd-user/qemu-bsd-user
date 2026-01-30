@@ -45,6 +45,7 @@ void vfio_region_write(void *opaque, hwaddr addr,
         uint32_t dword;
         uint64_t qword;
     } buf;
+    int ret;
 
     switch (size) {
     case 1:
@@ -64,11 +65,13 @@ void vfio_region_write(void *opaque, hwaddr addr,
         break;
     }
 
-    if (pwrite(vbasedev->fd, &buf, size, region->fd_offset + addr) != size) {
+    ret = vbasedev->io_ops->region_write(vbasedev, region->nr,
+                                         addr, size, &buf, region->post_wr);
+    if (ret != size) {
         error_report("%s(%s:region%d+0x%"HWADDR_PRIx", 0x%"PRIx64
-                     ",%d) failed: %m",
+                     ",%d) failed: %s",
                      __func__, vbasedev->name, region->nr,
-                     addr, data, size);
+                     addr, data, size, strwriteerror(ret));
     }
 
     trace_vfio_region_write(vbasedev->name, region->nr, addr, data, size);
@@ -96,11 +99,13 @@ uint64_t vfio_region_read(void *opaque,
         uint64_t qword;
     } buf;
     uint64_t data = 0;
+    int ret;
 
-    if (pread(vbasedev->fd, &buf, size, region->fd_offset + addr) != size) {
-        error_report("%s(%s:region%d+0x%"HWADDR_PRIx", %d) failed: %m",
+    ret = vbasedev->io_ops->region_read(vbasedev, region->nr, addr, size, &buf);
+    if (ret != size) {
+        error_report("%s(%s:region%d+0x%"HWADDR_PRIx", %d) failed: %s",
                      __func__, vbasedev->name, region->nr,
-                     addr, size);
+                     addr, size, strreaderror(ret));
         return (uint64_t)-1;
     }
     switch (size) {
@@ -182,7 +187,7 @@ static int vfio_setup_region_sparse_mmaps(VFIORegion *region,
 int vfio_region_setup(Object *obj, VFIODevice *vbasedev, VFIORegion *region,
                       int index, const char *name)
 {
-    g_autofree struct vfio_region_info *info = NULL;
+    struct vfio_region_info *info = NULL;
     int ret;
 
     ret = vfio_device_get_region_info(vbasedev, index, &info);
@@ -195,6 +200,7 @@ int vfio_region_setup(Object *obj, VFIODevice *vbasedev, VFIORegion *region,
     region->size = info->size;
     region->fd_offset = info->offset;
     region->nr = index;
+    region->post_wr = false;
 
     if (region->size) {
         region->mem = g_new0(MemoryRegion, 1);
@@ -236,6 +242,7 @@ int vfio_region_mmap(VFIORegion *region)
 {
     int i, ret, prot = 0;
     char *name;
+    int fd;
 
     if (!region->mem) {
         return 0;
@@ -266,14 +273,18 @@ int vfio_region_mmap(VFIORegion *region)
             goto no_mmap;
         }
 
+        /* Use the per-region fd if set, or the shared fd. */
+        fd = region->vbasedev->region_fds ?
+             region->vbasedev->region_fds[region->nr] :
+             region->vbasedev->fd,
+
         map_align = (void *)ROUND_UP((uintptr_t)map_base, (uintptr_t)align);
         munmap(map_base, map_align - map_base);
         munmap(map_align + region->mmaps[i].size,
                align - (map_align - map_base));
 
         region->mmaps[i].mmap = mmap(map_align, region->mmaps[i].size, prot,
-                                     MAP_SHARED | MAP_FIXED,
-                                     region->vbasedev->fd,
+                                     MAP_SHARED | MAP_FIXED, fd,
                                      region->fd_offset +
                                      region->mmaps[i].offset);
         if (region->mmaps[i].mmap == MAP_FAILED) {

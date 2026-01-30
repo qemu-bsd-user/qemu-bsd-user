@@ -107,6 +107,7 @@ if have_rust
 endif
 
 if have_rust
+  rustdoc = find_program('rustdoc', required: get_option('rust'))
   bindgen = find_program('bindgen', required: get_option('rust'))
   if not bindgen.found() or bindgen.version().version_compare('<0.60.0')
     if get_option('rust').enabled()
@@ -247,6 +248,8 @@ have_vhost_net_user = have_vhost_user and get_option('vhost_net').allowed()
 have_vhost_net_vdpa = have_vhost_vdpa and get_option('vhost_net').allowed()
 have_vhost_net_kernel = have_vhost_kernel and get_option('vhost_net').allowed()
 have_vhost_net = have_vhost_net_kernel or have_vhost_net_user or have_vhost_net_vdpa
+
+have_tcg = get_option('tcg').allowed() and (have_system or have_user)
 
 have_tools = get_option('tools') \
   .disable_auto_if(not have_system) \
@@ -836,11 +839,18 @@ emulator_link_args = []
 midl = not_found
 widl = not_found
 pathcch = not_found
+synchronization = not_found
 host_dsosuf = '.so'
 if host_os == 'windows'
   midl = find_program('midl', required: false)
   widl = find_program('widl', required: false)
   pathcch = cc.find_library('pathcch')
+  synchronization = cc.find_library('Synchronization', required: false)
+  if not synchronization.found()
+    # The library name is lowercase on mingw
+    synchronization = cc.find_library('synchronization', required: true)
+  endif
+
   socket = cc.find_library('ws2_32')
   winmm = cc.find_library('winmm')
 
@@ -864,7 +874,7 @@ elif host_os == 'haiku'
             cc.find_library('network'),
             cc.find_library('bsd')]
 elif host_os == 'openbsd'
-  if get_option('tcg').allowed() and target_dirs.length() > 0
+  if have_tcg
     # Disable OpenBSD W^X if available
     emulator_link_args = cc.get_supported_link_arguments('-Wl,-z,wxneeded')
   endif
@@ -905,7 +915,7 @@ if host_os == 'netbsd'
 endif
 
 tcg_arch = host_arch
-if get_option('tcg').allowed()
+if have_tcg
   if host_arch == 'unknown'
     if not get_option('tcg_interpreter')
       error('Unsupported CPU @0@, try --enable-tcg-interpreter'.format(cpu))
@@ -2535,7 +2545,7 @@ config_host_data.set('CONFIG_PIXMAN', pixman.found())
 config_host_data.set('CONFIG_SLIRP', slirp.found())
 config_host_data.set('CONFIG_SNAPPY', snappy.found())
 config_host_data.set('CONFIG_SOLARIS', host_os == 'sunos')
-if get_option('tcg').allowed()
+if have_tcg
   config_host_data.set('CONFIG_TCG', 1)
   config_host_data.set('CONFIG_TCG_INTERPRETER', tcg_arch == 'tci')
 endif
@@ -2759,6 +2769,36 @@ if linux_io_uring.found()
   config_host_data.set('HAVE_IO_URING_PREP_WRITEV2',
                        cc.has_header_symbol('liburing.h', 'io_uring_prep_writev2'))
 endif
+config_host_data.set('HAVE_TCP_KEEPCNT',
+                     cc.has_header_symbol('netinet/tcp.h', 'TCP_KEEPCNT') or
+                     cc.compiles('''
+                     #include <ws2tcpip.h>
+                     #ifndef TCP_KEEPCNT
+                     #error
+                     #endif
+                     int main(void) { return 0; }''',
+                     name: 'Win32 TCP_KEEPCNT'))
+# On Darwin TCP_KEEPIDLE is available under different name, TCP_KEEPALIVE.
+# https://github.com/apple/darwin-xnu/blob/xnu-4570.1.46/bsd/man/man4/tcp.4#L172
+config_host_data.set('HAVE_TCP_KEEPIDLE',
+                     cc.has_header_symbol('netinet/tcp.h', 'TCP_KEEPIDLE') or
+                     cc.has_header_symbol('netinet/tcp.h', 'TCP_KEEPALIVE') or
+                     cc.compiles('''
+                     #include <ws2tcpip.h>
+                     #ifndef TCP_KEEPIDLE
+                     #error
+                     #endif
+                     int main(void) { return 0; }''',
+                     name: 'Win32 TCP_KEEPIDLE'))
+config_host_data.set('HAVE_TCP_KEEPINTVL',
+                     cc.has_header_symbol('netinet/tcp.h', 'TCP_KEEPINTVL') or
+                     cc.compiles('''
+                     #include <ws2tcpip.h>
+                     #ifndef TCP_KEEPINTVL
+                     #error
+                     #endif
+                     int main(void) { return 0; }''',
+                     name: 'Win32 TCP_KEEPINTVL'))
 
 # has_member
 config_host_data.set('HAVE_SIGEV_NOTIFY_THREAD_ID',
@@ -3098,22 +3138,16 @@ config_host_data.set('CONFIG_ASM_HWPROBE_H',
                      cc.has_header_symbol('asm/hwprobe.h',
                                           'RISCV_HWPROBE_EXT_ZBA'))
 
-config_host_data.set('CONFIG_AVX2_OPT', get_option('avx2') \
-  .require(have_cpuid_h, error_message: 'cpuid.h not available, cannot enable AVX2') \
-  .require(cc.links('''
-    #include <cpuid.h>
+if have_cpuid_h
+  have_avx2 = cc.links('''
     #include <immintrin.h>
     static int __attribute__((target("avx2"))) bar(void *a) {
       __m256i x = *(__m256i *)a;
       return _mm256_testz_si256(x, x);
     }
     int main(int argc, char *argv[]) { return bar(argv[argc - 1]); }
-  '''), error_message: 'AVX2 not available').allowed())
-
-config_host_data.set('CONFIG_AVX512BW_OPT', get_option('avx512bw') \
-  .require(have_cpuid_h, error_message: 'cpuid.h not available, cannot enable AVX512BW') \
-  .require(cc.links('''
-    #include <cpuid.h>
+  ''')
+  have_avx512bw = cc.links('''
     #include <immintrin.h>
     static int __attribute__((target("avx512bw"))) bar(void *a) {
       __m512i *x = a;
@@ -3121,7 +3155,21 @@ config_host_data.set('CONFIG_AVX512BW_OPT', get_option('avx512bw') \
       return res[1];
     }
     int main(int argc, char *argv[]) { return bar(argv[0]); }
-  '''), error_message: 'AVX512BW not available').allowed())
+  ''')
+  if get_option('x86_version') >= '3' and not have_avx2
+    error('Cannot enable AVX optimizations due to missing intrinsics')
+  elif get_option('x86_version') >= '4' and not have_avx512bw
+    error('Cannot enable AVX512 optimizations due to missing intrinsics')
+  endif
+else
+  have_avx2 = false
+  have_avx512bw = false
+  if get_option('x86_version') >= '3'
+    error('Cannot enable AVX optimizations due to missing cpuid.h')
+  endif
+endif
+config_host_data.set('CONFIG_AVX2_OPT', have_avx2)
+config_host_data.set('CONFIG_AVX512BW_OPT', have_avx512bw)
 
 # For both AArch64 and AArch32, detect if builtins are available.
 config_host_data.set('CONFIG_ARM_AES_BUILTIN', cc.compiles('''
@@ -3233,6 +3281,7 @@ config_devices_mak_list = []
 config_devices_h = {}
 config_target_h = {}
 config_target_mak = {}
+config_base_arch_mak = {}
 
 disassemblers = {
   'alpha' : ['CONFIG_ALPHA_DIS'],
@@ -3424,6 +3473,11 @@ foreach target : target_dirs
     config_all_devices += config_devices
   endif
   config_target_mak += {target: config_target}
+
+  # build a merged config for all targets with the same TARGET_BASE_ARCH
+  target_base_arch = config_target['TARGET_BASE_ARCH']
+  config_base_arch = config_base_arch_mak.get(target_base_arch, {}) + config_target
+  config_base_arch_mak += {target_base_arch: config_base_arch}
 endforeach
 target_dirs = actual_target_dirs
 
@@ -3679,14 +3733,12 @@ io_ss = ss.source_set()
 qmp_ss = ss.source_set()
 qom_ss = ss.source_set()
 system_ss = ss.source_set()
-libsystem_ss = ss.source_set()
 specific_fuzz_ss = ss.source_set()
 specific_ss = ss.source_set()
 rust_devices_ss = ss.source_set()
 stub_ss = ss.source_set()
 trace_ss = ss.source_set()
 user_ss = ss.source_set()
-libuser_ss = ss.source_set()
 util_ss = ss.source_set()
 
 # accel modules
@@ -3700,6 +3752,8 @@ target_arch = {}
 target_system_arch = {}
 target_user_arch = {}
 hw_common_arch = {}
+target_common_arch = {}
+target_common_system_arch = {}
 
 # NOTE: the trace/ subdirectory needs the qapi_trace_events variable
 # that is filled in by qapi/.
@@ -3894,16 +3948,11 @@ foreach d, list : modules
                     install: true,
                     install_dir: qemu_moddir)
       if module_ss.sources() != []
-        # FIXME: Should use sl.extract_all_objects(recursive: true) as
-        # input. Sources can be used multiple times but objects are
-        # unique when it comes to lookup in compile_commands.json.
-        # Depnds on a mesion version with
-        # https://github.com/mesonbuild/meson/pull/8900
         modinfo_files += custom_target(d + '-' + m + '.modinfo',
                                        output: d + '-' + m + '.modinfo',
-                                       input: module_ss.sources() + genh,
+                                       input: sl.extract_all_objects(recursive: true),
                                        capture: true,
-                                       command: [modinfo_collect, module_ss.sources()])
+                                       command: [modinfo_collect, '@INPUT@'])
       endif
     else
       if d == 'block'
@@ -3942,12 +3991,11 @@ foreach d, list : target_modules
                     dependencies: target_module_ss.dependencies(),
                     install: true,
                     install_dir: qemu_moddir)
-            # FIXME: Should use sl.extract_all_objects(recursive: true) too.
             modinfo_files += custom_target(module_name + '.modinfo',
                                            output: module_name + '.modinfo',
-                                           input: target_module_ss.sources() + genh,
+                                           input: sl.extract_all_objects(recursive: true),
                                            capture: true,
-                                           command: [modinfo_collect, '--target', target, target_module_ss.sources()])
+                                           command: [modinfo_collect, '--target', target, '@INPUT@'])
           endif
         endif
       endforeach
@@ -4067,30 +4115,20 @@ common_ss.add(hwcore)
 system_ss.add(authz, blockdev, chardev, crypto, io, qmp)
 common_ss.add(qom, qemuutil)
 
-common_ss.add_all(when: 'CONFIG_SYSTEM_ONLY', if_true: [system_ss])
-common_ss.add_all(when: 'CONFIG_USER_ONLY', if_true: user_ss)
-
-libuser_ss = libuser_ss.apply({})
 libuser = static_library('user',
-                         libuser_ss.sources() + genh,
+                         user_ss.all_sources() + genh,
                          c_args: ['-DCONFIG_USER_ONLY',
                                   '-DCOMPILING_SYSTEM_VS_USER'],
-                         dependencies: libuser_ss.dependencies(),
+                         include_directories: common_user_inc,
+                         dependencies: user_ss.all_dependencies(),
                          build_by_default: false)
-libuser = declare_dependency(objects: libuser.extract_all_objects(recursive: false),
-                             dependencies: libuser_ss.dependencies())
-common_ss.add(when: 'CONFIG_USER_ONLY', if_true: libuser)
 
-libsystem_ss = libsystem_ss.apply({})
 libsystem = static_library('system',
-                           libsystem_ss.sources() + genh,
+                           system_ss.all_sources() + genh,
                            c_args: ['-DCONFIG_SOFTMMU',
                                     '-DCOMPILING_SYSTEM_VS_USER'],
-                           dependencies: libsystem_ss.dependencies(),
+                           dependencies: system_ss.all_dependencies(),
                            build_by_default: false)
-libsystem = declare_dependency(objects: libsystem.extract_all_objects(recursive: false),
-                               dependencies: libsystem_ss.dependencies())
-common_ss.add(when: 'CONFIG_SYSTEM_ONLY', if_true: libsystem)
 
 # Note that this library is never used directly (only through extract_objects)
 # and is not built by default; therefore, source files not used by the build
@@ -4098,35 +4136,70 @@ common_ss.add(when: 'CONFIG_SYSTEM_ONLY', if_true: libsystem)
 common_all = static_library('common',
                             build_by_default: false,
                             sources: common_ss.all_sources() + genh,
-                            include_directories: common_user_inc,
                             implicit_include_directories: false,
                             dependencies: common_ss.all_dependencies())
 
 # construct common libraries per base architecture
-hw_common_arch_libs = {}
-foreach target : target_dirs
-  config_target = config_target_mak[target]
-  target_base_arch = config_target['TARGET_BASE_ARCH']
+target_common_arch_libs = {}
+target_common_system_arch_libs = {}
+foreach target_base_arch, config_base_arch : config_base_arch_mak
+  target_inc = [include_directories('target' / target_base_arch)]
+  inc = [common_user_inc + target_inc]
 
-  # check if already generated
-  if target_base_arch in hw_common_arch_libs
-    continue
-  endif
+  target_common = common_ss.apply(config_base_arch, strict: false)
+  target_system = system_ss.apply(config_base_arch, strict: false)
+  target_user = user_ss.apply(config_base_arch, strict: false)
+  common_deps = []
+  system_deps = []
+  user_deps = []
+  foreach dep: target_common.dependencies()
+    common_deps += dep.partial_dependency(compile_args: true, includes: true)
+  endforeach
+  foreach dep: target_system.dependencies()
+    system_deps += dep.partial_dependency(compile_args: true, includes: true)
+  endforeach
+  foreach dep: target_user.dependencies()
+    user_deps += dep.partial_dependency(compile_args: true, includes: true)
+  endforeach
 
-  if target_base_arch in hw_common_arch
-    target_inc = [include_directories('target' / target_base_arch)]
-    src = hw_common_arch[target_base_arch]
+  # prevent common code to access cpu compile time definition,
+  # but still allow access to cpu.h
+  target_c_args = ['-DCPU_DEFS_H']
+  target_system_c_args = target_c_args + ['-DCOMPILING_SYSTEM_VS_USER', '-DCONFIG_SOFTMMU']
+
+  if target_base_arch in target_common_arch
+    src = target_common_arch[target_base_arch]
     lib = static_library(
-      'hw_' + target_base_arch,
+      'common_' + target_base_arch,
       build_by_default: false,
       sources: src.all_sources() + genh,
-      include_directories: common_user_inc + target_inc,
-      implicit_include_directories: false,
-      # prevent common code to access cpu compile time
-      # definition, but still allow access to cpu.h
-      c_args: ['-DCPU_DEFS_H', '-DCOMPILING_SYSTEM_VS_USER', '-DCONFIG_SOFTMMU'],
-      dependencies: src.all_dependencies())
-    hw_common_arch_libs += {target_base_arch: lib}
+      include_directories: inc,
+      c_args: target_c_args,
+      dependencies: src.all_dependencies() + common_deps +
+                    system_deps + user_deps)
+    target_common_arch_libs += {target_base_arch: lib}
+  endif
+
+  # merge hw_common_arch in target_common_system_arch
+  if target_base_arch in hw_common_arch
+    hw_src = hw_common_arch[target_base_arch]
+    if target_base_arch in target_common_system_arch
+      target_common_system_arch[target_base_arch].add_all(hw_src)
+    else
+      target_common_system_arch += {target_base_arch: hw_src}
+    endif
+  endif
+
+  if target_base_arch in target_common_system_arch
+    src = target_common_system_arch[target_base_arch]
+    lib = static_library(
+      'system_' + target_base_arch,
+      build_by_default: false,
+      sources: src.all_sources() + genh,
+      include_directories: inc,
+      c_args: target_system_c_args,
+      dependencies: src.all_dependencies() + common_deps + system_deps)
+    target_common_system_arch_libs += {target_base_arch: lib}
   endif
 endforeach
 
@@ -4300,9 +4373,25 @@ foreach target : target_dirs
   target_common = common_ss.apply(config_target, strict: false)
   objects = [common_all.extract_objects(target_common.sources())]
   arch_deps += target_common.dependencies()
-  if target_type == 'system' and target_base_arch in hw_common_arch_libs
-    src = hw_common_arch[target_base_arch].apply(config_target, strict: false)
-    lib = hw_common_arch_libs[target_base_arch]
+  if target_base_arch in target_common_arch_libs
+    src = target_common_arch[target_base_arch].apply(config_target, strict: false)
+    lib = target_common_arch_libs[target_base_arch]
+    objects += lib.extract_objects(src.sources())
+    arch_deps += src.dependencies()
+  endif
+  if target_type == 'system'
+    src = system_ss.apply(config_target, strict: false)
+    objects += libsystem.extract_objects(src.sources())
+    arch_deps += src.dependencies()
+  endif
+  if target_type == 'user'
+    src = user_ss.apply(config_target, strict: false)
+    objects += libuser.extract_objects(src.sources())
+    arch_deps += src.dependencies()
+  endif
+  if target_type == 'system' and target_base_arch in target_common_system_arch_libs
+    src = target_common_system_arch[target_base_arch].apply(config_target, strict: false)
+    lib = target_common_system_arch_libs[target_base_arch]
     objects += lib.extract_objects(src.sources())
     arch_deps += src.dependencies()
   endif
@@ -4325,7 +4414,7 @@ foreach target : target_dirs
                               build_by_default: true,
                               build_always_stale: true)
       rlib = static_library('rust_' + target.underscorify(),
-                            rlib_rs,
+                            structured_sources([], {'.': rlib_rs}),
                             dependencies: target_rust.dependencies(),
                             override_options: ['rust_std=2021', 'build.rust_std=2021'],
                             rust_abi: 'c')
@@ -4679,6 +4768,7 @@ if have_rust
   summary_info += {'Rust target':     config_host['RUST_TARGET_TRIPLE']}
   summary_info += {'rustc':           ' '.join(rustc.cmd_array())}
   summary_info += {'rustc version':   rustc.version()}
+  summary_info += {'rustdoc':         rustdoc}
   summary_info += {'bindgen':         bindgen.full_path()}
   summary_info += {'bindgen version': bindgen.version()}
 endif
@@ -4955,7 +5045,7 @@ if host_arch == 'unknown'
   message('compile or work on this host CPU. You can help by volunteering')
   message('to maintain it and providing a build host for our continuous')
   message('integration setup.')
-  if get_option('tcg').allowed() and target_dirs.length() > 0
+  if have_tcg
     message()
     message('configure has succeeded and you can continue to build, but')
     message('QEMU will use a slow interpreter to emulate the target CPU.')

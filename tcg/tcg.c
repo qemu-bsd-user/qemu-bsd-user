@@ -34,6 +34,7 @@
 #include "qemu/cacheflush.h"
 #include "qemu/cacheinfo.h"
 #include "qemu/timer.h"
+#include "exec/target_page.h"
 #include "exec/translation-block.h"
 #include "exec/tlb-common.h"
 #include "tcg/startup.h"
@@ -2365,6 +2366,11 @@ TCGv_i32 tcg_constant_i32(int32_t val)
 TCGv_i64 tcg_constant_i64(int64_t val)
 {
     return temp_tcgv_i64(tcg_constant_internal(TCG_TYPE_I64, val));
+}
+
+TCGv_vaddr tcg_constant_vaddr(uintptr_t val)
+{
+    return temp_tcgv_vaddr(tcg_constant_internal(TCG_TYPE_PTR, val));
 }
 
 TCGv_ptr tcg_constant_ptr_int(intptr_t val)
