@@ -35,12 +35,14 @@ test_timeouts = {
   'arm_sx1' : 360,
   'intel_iommu': 300,
   'mips_malta' : 120,
+  'mipsel_replay' : 480,
   'netdev_ethtool' : 180,
   'ppc_40p' : 240,
   'ppc64_hv' : 1000,
   'ppc64_powernv' : 480,
   'ppc64_pseries' : 480,
   'ppc64_tuxrun' : 420,
+  'ppc64_mac99' : 120,
   'riscv64_tuxrun' : 120,
   's390x_ccw_virtio' : 420,
   'sh4_tuxrun' : 240,
@@ -59,6 +61,10 @@ tests_generic_linuxuser = [
 tests_generic_bsduser = [
 ]
 
+tests_aarch64_system_quick = [
+  'migration',
+]
+
 tests_aarch64_system_thorough = [
   'aarch64_aspeed',
   'aarch64_raspi3',
@@ -68,14 +74,24 @@ tests_aarch64_system_thorough = [
   'aarch64_sbsaref',
   'aarch64_sbsaref_alpine',
   'aarch64_sbsaref_freebsd',
+  'aarch64_tcg_plugins',
   'aarch64_tuxrun',
   'aarch64_virt',
+  'aarch64_xen',
   'aarch64_xlnx_versal',
   'multiprocess',
 ]
 
+tests_alpha_system_quick = [
+  'migration',
+]
+
 tests_alpha_system_thorough = [
   'alpha_clipper',
+]
+
+tests_arm_system_quick = [
+  'migration',
 ]
 
 tests_arm_system_thorough = [
@@ -114,6 +130,10 @@ tests_hppa_system_quick = [
   'hppa_seabios',
 ]
 
+tests_i386_system_quick = [
+  'migration',
+]
+
 tests_i386_system_thorough = [
   'i386_tuxrun',
 ]
@@ -139,11 +159,13 @@ tests_microblazeel_system_thorough = [
 
 tests_mips_system_thorough = [
   'mips_malta',
+  'mips_replay',
   'mips_tuxrun',
 ]
 
 tests_mipsel_system_thorough = [
   'mipsel_malta',
+  'mipsel_replay',
   'mipsel_tuxrun',
 ]
 
@@ -155,6 +177,7 @@ tests_mips64el_system_thorough = [
   'mips64el_fuloong2e',
   'mips64el_loongson3v',
   'mips64el_malta',
+  'mips64el_replay',
   'mips64el_tuxrun',
 ]
 
@@ -163,6 +186,7 @@ tests_or1k_system_thorough = [
 ]
 
 tests_ppc_system_quick = [
+  'migration',
   'ppc_74xx',
 ]
 
@@ -173,8 +197,13 @@ tests_ppc_system_thorough = [
   'ppc_bamboo',
   'ppc_mac',
   'ppc_mpc8544ds',
+  'ppc_sam460ex',
   'ppc_tuxrun',
   'ppc_virtex_ml507',
+]
+
+tests_ppc64_system_quick = [
+  'migration',
 ]
 
 tests_ppc64_system_thorough = [
@@ -183,9 +212,11 @@ tests_ppc64_system_thorough = [
   'ppc64_powernv',
   'ppc64_pseries',
   'ppc64_tuxrun',
+  'ppc64_mac99',
 ]
 
 tests_riscv32_system_quick = [
+  'migration',
   'riscv_opensbi',
 ]
 
@@ -194,6 +225,7 @@ tests_riscv32_system_thorough = [
 ]
 
 tests_riscv64_system_quick = [
+  'migration',
   'riscv_opensbi',
 ]
 
@@ -220,8 +252,16 @@ tests_sh4eb_system_thorough = [
   'sh4eb_r2d',
 ]
 
+tests_sparc_system_quick = [
+  'migration',
+]
+
 tests_sparc_system_thorough = [
   'sparc_sun4m',
+]
+
+tests_sparc64_system_quick = [
+  'migration',
 ]
 
 tests_sparc64_system_thorough = [
@@ -232,6 +272,7 @@ tests_sparc64_system_thorough = [
 tests_x86_64_system_quick = [
   'cpu_queries',
   'mem_addr_space',
+  'migration',
   'pc_cpu_hotplug_props',
   'virtio_version',
   'x86_cpu_model_versions',
@@ -245,6 +286,7 @@ tests_x86_64_system_thorough = [
   'multiprocess',
   'netdev_ethtool',
   'virtio_gpu',
+  'x86_64_hotplug_blk',
   'x86_64_hotplug_cpu',
   'x86_64_kvm_xen',
   'x86_64_tuxrun',

@@ -36,7 +36,7 @@
 #include "qemu/help_option.h"
 #include "qapi/qapi-commands-net.h"
 #include "qapi/qapi-visit-net.h"
-#include "qapi/qmp/qdict.h"
+#include "qobject/qdict.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/error-report.h"
 #include "qemu/sockets.h"
@@ -822,6 +822,7 @@ static ssize_t qemu_deliver_packet_iov(NetClientState *sender,
         iov_copy[0].iov_len =  nc->vnet_hdr_len;
         memcpy(&iov_copy[1], iov, iovcnt * sizeof(*iov));
         iov = iov_copy;
+        iovcnt++;
     }
 
     if (nc->info->receive_iov) {

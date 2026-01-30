@@ -11,6 +11,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "qapi/error.h"
+#include "qobject/qjson.h"
 #include "libqtest.h"
 #include "migration/framework.h"
 #include "migration/migration-qmp.h"
@@ -205,6 +207,7 @@ static void test_validate_uuid_dst_not_set(void)
 static void do_test_validate_uri_channel(MigrateCommon *args)
 {
     QTestState *from, *to;
+    QObject *channels;
 
     if (migrate_start(&from, &to, args->listen_uri, &args->start)) {
         return;
@@ -217,7 +220,11 @@ static void do_test_validate_uri_channel(MigrateCommon *args)
      * 'uri' and 'channels' validation is checked even before the migration
      * starts.
      */
-    migrate_qmp_fail(from, args->connect_uri, args->connect_channels, "{}");
+    channels = args->connect_channels ?
+               qobject_from_json(args->connect_channels, &error_abort) :
+               NULL;
+    migrate_qmp_fail(from, args->connect_uri, channels, "{}");
+
     migrate_end(from, to, false);
 }
 
@@ -251,14 +258,24 @@ static void test_validate_uri_channels_none_set(void)
     do_test_validate_uri_channel(&args);
 }
 
+static void migration_test_add_misc_smoke(MigrationTestEnv *env)
+{
+#ifndef _WIN32
+    migration_test_add("/migration/analyze-script", test_analyze_script);
+#endif
+}
+
 void migration_test_add_misc(MigrationTestEnv *env)
 {
     tmpfs = env->tmpfs;
 
+    migration_test_add_misc_smoke(env);
+
+    if (!env->full_set) {
+        return;
+    }
+
     migration_test_add("/migration/bad_dest", test_baddest);
-#ifndef _WIN32
-    migration_test_add("/migration/analyze-script", test_analyze_script);
-#endif
 
     /*
      * Our CI system has problems with shared memory.
