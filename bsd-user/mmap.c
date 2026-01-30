@@ -184,7 +184,7 @@ int target_mprotect(abi_ulong start, abi_ulong len, int target_prot)
             goto error;
         }
     }
-    page_set_flags(start, start + len - 1, prot, PAGE_RWX);
+    page_set_flags(start, start + len - 1, page_flags, PAGE_RWX);
     mmap_unlock();
     return 0;
 error:
@@ -739,7 +739,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
         }
     }
  the_end1:
-    page_set_flags(start, start + len - 1, prot | PAGE_VALID, PAGE_VALID);
+    page_set_flags(start, start + len - 1, flags | PAGE_VALID, PAGE_VALID);
  the_end:
 #ifdef DEBUG_MMAP
     printf("ret=0x" TARGET_ABI_FMT_lx "\n", start);
