@@ -125,7 +125,7 @@ static int char_pty_chr_write(Chardev *chr, const uint8_t *buf, int len)
     rc = RETRY_ON_EINTR(g_poll(&pfd, 1, 0));
     g_assert(rc >= 0);
     if (!(pfd.revents & G_IO_HUP) && (pfd.revents & G_IO_OUT)) {
-        io_channel_send(s->ioc, buf, len);
+        return io_channel_send(s->ioc, buf, len);
     }
 
     return len;
@@ -349,8 +349,8 @@ static void char_pty_open(Chardev *chr,
     }
 
     close(slave_fd);
-    if (!g_unix_set_fd_nonblocking(master_fd, true, NULL)) {
-        error_setg_errno(errp, errno, "Failed to set FD nonblocking");
+    if (!qemu_set_blocking(master_fd, false, errp)) {
+        close(master_fd);
         return;
     }
 

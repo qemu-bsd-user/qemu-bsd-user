@@ -134,6 +134,15 @@ struct PCIHostDeviceAddress {
     unsigned int function;
 };
 
+/*
+ * Represents the Address Type (AT) field in a PCI request,
+ * see MemTxAttrs.address_type
+ */
+typedef enum PCIAddressType {
+    PCI_AT_UNTRANSLATED = 0, /* Default when no attribute is set */
+    PCI_AT_TRANSLATED = 1,
+} PCIAddressType;
+
 typedef void PCIConfigWriteFunc(PCIDevice *pci_dev,
                                 uint32_t address, uint32_t data, int len);
 typedef uint32_t PCIConfigReadFunc(PCIDevice *pci_dev,
@@ -742,7 +751,7 @@ int pci_iommu_register_iotlb_notifier(PCIDevice *dev, uint32_t pasid,
 
 /**
  * pci_iommu_unregister_iotlb_notifier: unregister a notifier that has been
- * registerd with pci_iommu_register_iotlb_notifier.
+ * registered with pci_iommu_register_iotlb_notifier.
  *
  * Returns 0 on success, or a negative errno otherwise.
  *
@@ -763,6 +772,8 @@ int pci_iommu_unregister_iotlb_notifier(PCIDevice *dev, uint32_t pasid,
  * @opaque: passed to callbacks of the @ops structure.
  */
 void pci_setup_iommu(PCIBus *bus, const PCIIOMMUOps *ops, void *opaque);
+
+void pci_setup_iommu_per_bus(PCIBus *bus, const PCIIOMMUOps *ops, void *opaque);
 
 pcibus_t pci_bar_address(PCIDevice *d,
                          int reg, uint8_t type, pcibus_t size);

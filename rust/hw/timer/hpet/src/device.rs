@@ -3,31 +3,31 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::{
-    ffi::{c_int, c_void, CStr},
+    ffi::CStr,
+    mem::MaybeUninit,
     pin::Pin,
     ptr::{addr_of_mut, null_mut, NonNull},
     slice::from_ref,
 };
 
-use qemu_api::{
-    bindings::{
-        address_space_memory, address_space_stl_le, qdev_prop_bit, qdev_prop_bool,
-        qdev_prop_uint32, qdev_prop_usize,
-    },
-    cell::{BqlCell, BqlRefCell},
-    irq::InterruptSource,
-    memory::{
-        hwaddr, MemoryRegion, MemoryRegionOps, MemoryRegionOpsBuilder, MEMTXATTRS_UNSPECIFIED,
-    },
-    prelude::*,
-    qdev::{DeviceImpl, DeviceMethods, DeviceState, Property, ResetType, ResettablePhasesImpl},
-    qom::{ObjectImpl, ObjectType, ParentField},
-    qom_isa,
-    sysbus::{SysBusDevice, SysBusDeviceImpl},
+use bql::{BqlCell, BqlRefCell};
+use common::{bitops::IntegerExt, uninit_field_mut};
+use hwcore::{
+    DeviceImpl, DeviceMethods, DeviceState, InterruptSource, ResetType, ResettablePhasesImpl,
+    SysBusDevice, SysBusDeviceImpl, SysBusDeviceMethods,
+};
+use migration::{
+    self, impl_vmstate_struct, vmstate_fields, vmstate_of, vmstate_subsections, vmstate_validate,
+    VMStateDescription, VMStateDescriptionBuilder,
+};
+use qom::{prelude::*, ObjectImpl, ParentField, ParentInit};
+use system::{
+    bindings::{address_space_memory, address_space_stl_le, hwaddr},
+    MemoryRegion, MemoryRegionOps, MemoryRegionOpsBuilder, MEMTXATTRS_UNSPECIFIED,
+};
+use util::{
+    ensure,
     timer::{Timer, CLOCK_VIRTUAL, NANOSECONDS_PER_SECOND},
-    vmstate::VMStateDescription,
-    vmstate_fields, vmstate_of, vmstate_struct, vmstate_subsections, vmstate_validate,
-    zeroable::Zeroable,
 };
 
 use crate::fw_cfg::HPETFwConfig;
@@ -99,7 +99,7 @@ const HPET_TN_CFG_FSB_CAP_SHIFT: usize = 15;
 /// Timer N Interrupt Routing Capability (bits 32:63)
 const HPET_TN_CFG_INT_ROUTE_CAP_SHIFT: usize = 32;
 
-#[derive(qemu_api_macros::TryInto)]
+#[derive(common::TryInto)]
 #[repr(u64)]
 #[allow(non_camel_case_types)]
 /// Timer registers, masked by 0x18
@@ -112,7 +112,7 @@ enum TimerRegister {
     ROUTE = 16,
 }
 
-#[derive(qemu_api_macros::TryInto)]
+#[derive(common::TryInto)]
 #[repr(u64)]
 #[allow(non_camel_case_types)]
 /// Global registers
@@ -211,14 +211,18 @@ pub struct HPETTimer {
     last: u64,
 }
 
+// SAFETY: Sync is not automatically derived due to the `state` field,
+// which is always dereferenced to a shared reference.
+unsafe impl Sync for HPETTimer {}
+
 impl HPETTimer {
-    fn init(&mut self, index: u8, state: &HPETState) {
-        *self = HPETTimer {
+    fn new(index: u8, state: *const HPETState) -> HPETTimer {
+        HPETTimer {
             index,
             // SAFETY: the HPETTimer will only be used after the timer
             // is initialized below.
             qemu_timer: unsafe { Timer::new() },
-            state: NonNull::new((state as *const HPETState).cast_mut()).unwrap(),
+            state: NonNull::new(state.cast_mut()).unwrap(),
             config: 0,
             cmp: 0,
             fsb: 0,
@@ -226,19 +230,15 @@ impl HPETTimer {
             period: 0,
             wrap_flag: 0,
             last: 0,
-        };
+        }
+    }
 
+    fn init_timer_with_cell(cell: &BqlRefCell<Self>) {
+        let mut timer = cell.borrow_mut();
         // SAFETY: HPETTimer is only used as part of HPETState, which is
         // always pinned.
-        let qemu_timer = unsafe { Pin::new_unchecked(&mut self.qemu_timer) };
-        qemu_timer.init_full(
-            None,
-            CLOCK_VIRTUAL,
-            Timer::NS,
-            0,
-            timer_handler,
-            &state.timers[self.index as usize],
-        )
+        let qemu_timer = unsafe { Pin::new_unchecked(&mut timer.qemu_timer) };
+        qemu_timer.init_full(None, CLOCK_VIRTUAL, Timer::NS, 0, timer_handler, cell);
     }
 
     fn get_state(&self) -> &HPETState {
@@ -522,7 +522,7 @@ impl HPETTimer {
 
 /// HPET Event Timer Block Abstraction
 #[repr(C)]
-#[derive(qemu_api_macros::Object)]
+#[derive(qom::Object, hwcore::Device)]
 pub struct HPETState {
     parent_obj: ParentField<SysBusDevice>,
     iomem: MemoryRegion,
@@ -542,10 +542,12 @@ pub struct HPETState {
     // Internal state
     /// Capabilities that QEMU HPET supports.
     /// bit 0: MSI (or FSB) support.
+    #[property(rename = "msi", bit = HPET_FLAG_MSI_SUPPORT_SHIFT, default = false)]
     flags: u32,
 
     /// Offset of main counter relative to qemu clock.
     hpet_offset: BqlCell<u64>,
+    #[property(rename = "hpet-offset-saved", default = true)]
     hpet_offset_saved: bool,
 
     irqs: [InterruptSource; HPET_NUM_IRQ_ROUTES],
@@ -557,11 +559,13 @@ pub struct HPETState {
     /// the timers' interrupt can be routed, and is encoded in the
     /// bits 32:64 of timer N's config register:
     #[doc(alias = "intcap")]
+    #[property(rename = "hpet-intcap", default = 0)]
     int_route_cap: u32,
 
     /// HPET timer array managed by this timer block.
     #[doc(alias = "timer")]
     timers: [BqlRefCell<HPETTimer>; HPET_MAX_TIMERS],
+    #[property(rename = "timers", default = HPET_MIN_TIMERS)]
     num_timers: usize,
     num_timers_save: BqlCell<u8>,
 
@@ -607,9 +611,18 @@ impl HPETState {
         }
     }
 
-    fn init_timer(&self) {
-        for (index, timer) in self.timers.iter().enumerate() {
-            timer.borrow_mut().init(index.try_into().unwrap(), self);
+    fn init_timers(this: &mut MaybeUninit<Self>) {
+        let state = this.as_ptr();
+        for index in 0..HPET_MAX_TIMERS {
+            let mut timer = uninit_field_mut!(*this, timers[index]);
+
+            // Initialize in two steps, to avoid calling Timer::init_full on a
+            // temporary that can be moved.
+            let timer = timer.write(BqlRefCell::new(HPETTimer::new(
+                index.try_into().unwrap(),
+                state,
+            )));
+            HPETTimer::init_timer_with_cell(timer);
         }
     }
 
@@ -690,7 +703,7 @@ impl HPETState {
             .set(self.counter.get().deposit(shift, len, val));
     }
 
-    unsafe fn init(&mut self) {
+    unsafe fn init(mut this: ParentInit<Self>) {
         static HPET_RAM_OPS: MemoryRegionOps<HPETState> =
             MemoryRegionOpsBuilder::<HPETState>::new()
                 .read(&HPETState::read)
@@ -700,16 +713,14 @@ impl HPETState {
                 .impl_sizes(4, 8)
                 .build();
 
-        // SAFETY:
-        // self and self.iomem are guaranteed to be valid at this point since callers
-        // must make sure the `self` reference is valid.
         MemoryRegion::init_io(
-            unsafe { &mut *addr_of_mut!(self.iomem) },
-            addr_of_mut!(*self),
+            &mut uninit_field_mut!(*this, iomem),
             &HPET_RAM_OPS,
             "hpet",
             HPET_REG_SPACE_LEN,
         );
+
+        Self::init_timers(&mut this);
     }
 
     fn post_init(&self) {
@@ -719,19 +730,18 @@ impl HPETState {
         }
     }
 
-    fn realize(&self) -> qemu_api::Result<()> {
-        if self.num_timers < HPET_MIN_TIMERS || self.num_timers > HPET_MAX_TIMERS {
-            Err(format!(
-                "hpet.num_timers must be between {HPET_MIN_TIMERS} and {HPET_MAX_TIMERS}"
-            ))?;
-        }
-        if self.int_route_cap == 0 {
-            Err("hpet.hpet-intcap property not initialized")?;
-        }
+    fn realize(&self) -> util::Result<()> {
+        ensure!(
+            (HPET_MIN_TIMERS..=HPET_MAX_TIMERS).contains(&self.num_timers),
+            "hpet.num_timers must be between {HPET_MIN_TIMERS} and {HPET_MAX_TIMERS}"
+        );
+        ensure!(
+            self.int_route_cap != 0,
+            "hpet.hpet-intcap property not initialized"
+        );
 
         self.hpet_id.set(HPETFwConfig::assign_hpet_id()?);
 
-        self.init_timer();
         // 64-bit General Capabilities and ID Register; LegacyReplacementRoute.
         self.capability.set(
             HPET_CAP_REV_ID_VALUE << HPET_CAP_REV_ID_SHIFT |
@@ -767,7 +777,7 @@ impl HPETState {
         self.rtc_irq_level.set(0);
     }
 
-    fn decode(&self, mut addr: hwaddr, size: u32) -> HPETAddrDecode {
+    fn decode(&self, mut addr: hwaddr, size: u32) -> HPETAddrDecode<'_> {
         let shift = ((addr & 4) * 8) as u32;
         let len = std::cmp::min(size * 8, 64 - shift);
 
@@ -837,7 +847,7 @@ impl HPETState {
         }
     }
 
-    fn pre_save(&self) -> i32 {
+    fn pre_save(&self) -> Result<(), migration::Infallible> {
         if self.is_hpet_enabled() {
             self.counter.set(self.get_ticks());
         }
@@ -848,10 +858,10 @@ impl HPETState {
          * that was configured.
          */
         self.num_timers_save.set(self.num_timers as u8);
-        0
+        Ok(())
     }
 
-    fn post_load(&self, _version_id: u8) -> i32 {
+    fn post_load(&self, _version_id: u8) -> Result<(), migration::Infallible> {
         for timer in self.timers.iter().take(self.num_timers) {
             let mut t = timer.borrow_mut();
 
@@ -865,7 +875,7 @@ impl HPETState {
                 .set(ticks_to_ns(self.counter.get()) - CLOCK_VIRTUAL.get_ns());
         }
 
-        0
+        Ok(())
     }
 
     fn is_rtc_irq_level_needed(&self) -> bool {
@@ -892,151 +902,76 @@ unsafe impl ObjectType for HPETState {
 impl ObjectImpl for HPETState {
     type ParentType = SysBusDevice;
 
-    const INSTANCE_INIT: Option<unsafe fn(&mut Self)> = Some(Self::init);
+    const INSTANCE_INIT: Option<unsafe fn(ParentInit<Self>)> = Some(Self::init);
     const INSTANCE_POST_INIT: Option<fn(&Self)> = Some(Self::post_init);
     const CLASS_INIT: fn(&mut Self::Class) = Self::Class::class_init::<Self>;
 }
 
-// TODO: Make these properties user-configurable!
-qemu_api::declare_properties! {
-    HPET_PROPERTIES,
-    qemu_api::define_property!(
-        c"timers",
-        HPETState,
-        num_timers,
-        unsafe { &qdev_prop_usize },
-        u8,
-        default = HPET_MIN_TIMERS
-    ),
-    qemu_api::define_property!(
-        c"msi",
-        HPETState,
-        flags,
-        unsafe { &qdev_prop_bit },
-        u32,
-        bit = HPET_FLAG_MSI_SUPPORT_SHIFT as u8,
-        default = false,
-    ),
-    qemu_api::define_property!(
-        c"hpet-intcap",
-        HPETState,
-        int_route_cap,
-        unsafe { &qdev_prop_uint32 },
-        u32,
-        default = 0
-    ),
-    qemu_api::define_property!(
-        c"hpet-offset-saved",
-        HPETState,
-        hpet_offset_saved,
-        unsafe { &qdev_prop_bool },
-        bool,
-        default = true
-    ),
-}
+static VMSTATE_HPET_RTC_IRQ_LEVEL: VMStateDescription<HPETState> =
+    VMStateDescriptionBuilder::<HPETState>::new()
+        .name(c"hpet/rtc_irq_level")
+        .version_id(1)
+        .minimum_version_id(1)
+        .needed(&HPETState::is_rtc_irq_level_needed)
+        .fields(vmstate_fields! {
+            vmstate_of!(HPETState, rtc_irq_level),
+        })
+        .build();
 
-unsafe extern "C" fn hpet_rtc_irq_level_needed(opaque: *mut c_void) -> bool {
-    // SAFETY:
-    // the pointer is convertible to a reference
-    let state: &HPETState = unsafe { NonNull::new(opaque.cast::<HPETState>()).unwrap().as_ref() };
-    state.is_rtc_irq_level_needed()
-}
+static VMSTATE_HPET_OFFSET: VMStateDescription<HPETState> =
+    VMStateDescriptionBuilder::<HPETState>::new()
+        .name(c"hpet/offset")
+        .version_id(1)
+        .minimum_version_id(1)
+        .needed(&HPETState::is_offset_needed)
+        .fields(vmstate_fields! {
+            vmstate_of!(HPETState, hpet_offset),
+        })
+        .build();
 
-unsafe extern "C" fn hpet_offset_needed(opaque: *mut c_void) -> bool {
-    // SAFETY:
-    // the pointer is convertible to a reference
-    let state: &HPETState = unsafe { NonNull::new(opaque.cast::<HPETState>()).unwrap().as_ref() };
-    state.is_offset_needed()
-}
-
-unsafe extern "C" fn hpet_pre_save(opaque: *mut c_void) -> c_int {
-    // SAFETY:
-    // the pointer is convertible to a reference
-    let state: &mut HPETState =
-        unsafe { NonNull::new(opaque.cast::<HPETState>()).unwrap().as_mut() };
-    state.pre_save() as c_int
-}
-
-unsafe extern "C" fn hpet_post_load(opaque: *mut c_void, version_id: c_int) -> c_int {
-    // SAFETY:
-    // the pointer is convertible to a reference
-    let state: &mut HPETState =
-        unsafe { NonNull::new(opaque.cast::<HPETState>()).unwrap().as_mut() };
-    let version: u8 = version_id.try_into().unwrap();
-    state.post_load(version) as c_int
-}
-
-static VMSTATE_HPET_RTC_IRQ_LEVEL: VMStateDescription = VMStateDescription {
-    name: c"hpet/rtc_irq_level".as_ptr(),
-    version_id: 1,
-    minimum_version_id: 1,
-    needed: Some(hpet_rtc_irq_level_needed),
-    fields: vmstate_fields! {
-        vmstate_of!(HPETState, rtc_irq_level),
-    },
-    ..Zeroable::ZERO
-};
-
-static VMSTATE_HPET_OFFSET: VMStateDescription = VMStateDescription {
-    name: c"hpet/offset".as_ptr(),
-    version_id: 1,
-    minimum_version_id: 1,
-    needed: Some(hpet_offset_needed),
-    fields: vmstate_fields! {
-        vmstate_of!(HPETState, hpet_offset),
-    },
-    ..Zeroable::ZERO
-};
-
-static VMSTATE_HPET_TIMER: VMStateDescription = VMStateDescription {
-    name: c"hpet_timer".as_ptr(),
-    version_id: 1,
-    minimum_version_id: 1,
-    fields: vmstate_fields! {
-        vmstate_of!(HPETTimer, index),
-        vmstate_of!(HPETTimer, config),
-        vmstate_of!(HPETTimer, cmp),
-        vmstate_of!(HPETTimer, fsb),
-        vmstate_of!(HPETTimer, period),
-        vmstate_of!(HPETTimer, wrap_flag),
-        vmstate_of!(HPETTimer, qemu_timer),
-    },
-    ..Zeroable::ZERO
-};
+const VMSTATE_HPET_TIMER: VMStateDescription<HPETTimer> =
+    VMStateDescriptionBuilder::<HPETTimer>::new()
+        .name(c"hpet_timer")
+        .version_id(1)
+        .minimum_version_id(1)
+        .fields(vmstate_fields! {
+            vmstate_of!(HPETTimer, index),
+            vmstate_of!(HPETTimer, config),
+            vmstate_of!(HPETTimer, cmp),
+            vmstate_of!(HPETTimer, fsb),
+            vmstate_of!(HPETTimer, period),
+            vmstate_of!(HPETTimer, wrap_flag),
+            vmstate_of!(HPETTimer, qemu_timer),
+        })
+        .build();
+impl_vmstate_struct!(HPETTimer, VMSTATE_HPET_TIMER);
 
 const VALIDATE_TIMERS_NAME: &CStr = c"num_timers must match";
 
-static VMSTATE_HPET: VMStateDescription = VMStateDescription {
-    name: c"hpet".as_ptr(),
-    version_id: 2,
-    minimum_version_id: 2,
-    pre_save: Some(hpet_pre_save),
-    post_load: Some(hpet_post_load),
-    fields: vmstate_fields! {
-        vmstate_of!(HPETState, config),
-        vmstate_of!(HPETState, int_status),
-        vmstate_of!(HPETState, counter),
-        vmstate_of!(HPETState, num_timers_save),
-        vmstate_validate!(HPETState, VALIDATE_TIMERS_NAME, HPETState::validate_num_timers),
-        vmstate_struct!(HPETState, timers[0 .. num_timers_save], &VMSTATE_HPET_TIMER, BqlRefCell<HPETTimer>, HPETState::validate_num_timers).with_version_id(0),
-    },
-    subsections: vmstate_subsections! {
-        VMSTATE_HPET_RTC_IRQ_LEVEL,
-        VMSTATE_HPET_OFFSET,
-    },
-    ..Zeroable::ZERO
-};
+const VMSTATE_HPET: VMStateDescription<HPETState> =
+    VMStateDescriptionBuilder::<HPETState>::new()
+        .name(c"hpet")
+        .version_id(2)
+        .minimum_version_id(2)
+        .pre_save(&HPETState::pre_save)
+        .post_load(&HPETState::post_load)
+        .fields(vmstate_fields! {
+            vmstate_of!(HPETState, config),
+            vmstate_of!(HPETState, int_status),
+            vmstate_of!(HPETState, counter),
+            vmstate_of!(HPETState, num_timers_save),
+            vmstate_validate!(HPETState, VALIDATE_TIMERS_NAME, HPETState::validate_num_timers),
+            vmstate_of!(HPETState, timers[0 .. num_timers_save], HPETState::validate_num_timers).with_version_id(0),
+        })
+        .subsections(vmstate_subsections!(
+            VMSTATE_HPET_RTC_IRQ_LEVEL,
+            VMSTATE_HPET_OFFSET,
+        ))
+        .build();
 
 impl DeviceImpl for HPETState {
-    fn properties() -> &'static [Property] {
-        &HPET_PROPERTIES
-    }
-
-    fn vmsd() -> Option<&'static VMStateDescription> {
-        Some(&VMSTATE_HPET)
-    }
-
-    const REALIZE: Option<fn(&Self) -> qemu_api::Result<()>> = Some(Self::realize);
+    const VMSTATE: Option<VMStateDescription<Self>> = Some(VMSTATE_HPET);
+    const REALIZE: Option<fn(&Self) -> util::Result<()>> = Some(Self::realize);
 }
 
 impl ResettablePhasesImpl for HPETState {

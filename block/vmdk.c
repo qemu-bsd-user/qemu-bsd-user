@@ -271,8 +271,7 @@ static void vmdk_free_extents(BlockDriverState *bs)
     BDRVVmdkState *s = bs->opaque;
     VmdkExtent *e;
 
-    bdrv_drain_all_begin();
-    bdrv_graph_wrlock();
+    bdrv_graph_wrlock_drained();
     for (i = 0; i < s->num_extents; i++) {
         e = &s->extents[i];
         g_free(e->l1_table);
@@ -284,7 +283,6 @@ static void vmdk_free_extents(BlockDriverState *bs)
         }
     }
     bdrv_graph_wrunlock();
-    bdrv_drain_all_end();
 
     g_free(s->extents);
 }
@@ -1091,7 +1089,7 @@ vmdk_open_vmdk4(BlockDriverState *bs, BdrvChild *file, int flags,
 static int vmdk_parse_description(const char *desc, const char *opt_name,
         char *buf, int buf_size)
 {
-    char *opt_pos, *opt_end;
+    const char *opt_pos, *opt_end;
     const char *end = desc + strlen(desc);
 
     opt_pos = strstr(desc, opt_name);
@@ -1231,9 +1229,11 @@ vmdk_parse_extents(const char *desc, BlockDriverState *bs, QDict *options,
             extent_role |= BDRV_CHILD_METADATA;
         }
 
+        bdrv_graph_rdunlock_main_loop();
         extent_file = bdrv_open_child(extent_path, options, extent_opt_prefix,
                                       bs, &child_of_bds, extent_role, false,
                                       &local_err);
+        bdrv_graph_rdlock_main_loop();
         g_free(extent_path);
         if (!extent_file) {
             error_propagate(errp, local_err);
@@ -1249,11 +1249,9 @@ vmdk_parse_extents(const char *desc, BlockDriverState *bs, QDict *options,
                             0, 0, 0, 0, 0, &extent, errp);
             if (ret < 0) {
                 bdrv_graph_rdunlock_main_loop();
-                bdrv_drain_all_begin();
-                bdrv_graph_wrlock();
+                bdrv_graph_wrlock_drained();
                 bdrv_unref_child(bs, extent_file);
                 bdrv_graph_wrunlock();
-                bdrv_drain_all_end();
                 bdrv_graph_rdlock_main_loop();
                 goto out;
             }
@@ -1270,11 +1268,9 @@ vmdk_parse_extents(const char *desc, BlockDriverState *bs, QDict *options,
             g_free(buf);
             if (ret) {
                 bdrv_graph_rdunlock_main_loop();
-                bdrv_drain_all_begin();
-                bdrv_graph_wrlock();
+                bdrv_graph_wrlock_drained();
                 bdrv_unref_child(bs, extent_file);
                 bdrv_graph_wrunlock();
-                bdrv_drain_all_end();
                 bdrv_graph_rdlock_main_loop();
                 goto out;
             }
@@ -1283,11 +1279,9 @@ vmdk_parse_extents(const char *desc, BlockDriverState *bs, QDict *options,
             ret = vmdk_open_se_sparse(bs, extent_file, bs->open_flags, errp);
             if (ret) {
                 bdrv_graph_rdunlock_main_loop();
-                bdrv_drain_all_begin();
-                bdrv_graph_wrlock();
+                bdrv_graph_wrlock_drained();
                 bdrv_unref_child(bs, extent_file);
                 bdrv_graph_wrunlock();
-                bdrv_drain_all_end();
                 bdrv_graph_rdlock_main_loop();
                 goto out;
             }
@@ -1295,11 +1289,9 @@ vmdk_parse_extents(const char *desc, BlockDriverState *bs, QDict *options,
         } else {
             error_setg(errp, "Unsupported extent type '%s'", type);
             bdrv_graph_rdunlock_main_loop();
-            bdrv_drain_all_begin();
-            bdrv_graph_wrlock();
+            bdrv_graph_wrlock_drained();
             bdrv_unref_child(bs, extent_file);
             bdrv_graph_wrunlock();
-            bdrv_drain_all_end();
             bdrv_graph_rdlock_main_loop();
             ret = -ENOTSUP;
             goto out;
@@ -1362,12 +1354,12 @@ static int vmdk_open(BlockDriverState *bs, QDict *options, int flags,
     BDRVVmdkState *s = bs->opaque;
     uint32_t magic;
 
-    GRAPH_RDLOCK_GUARD_MAINLOOP();
-
     ret = bdrv_open_file_child(NULL, options, "file", bs, errp);
     if (ret < 0) {
         return ret;
     }
+
+    GRAPH_RDLOCK_GUARD_MAINLOOP();
 
     buf = vmdk_read_desc(bs->file, 0, errp);
     if (!buf) {
@@ -2342,7 +2334,7 @@ vmdk_create_extent(const char *filename, int64_t filesize, bool flat,
     int ret;
     BlockBackend *blk = NULL;
 
-    ret = bdrv_co_create_file(filename, opts, errp);
+    ret = bdrv_co_create_file(filename, opts, false, errp);
     if (ret < 0) {
         goto exit;
     }

@@ -2,25 +2,26 @@
 // Author(s): Manos Pitsidianakis <manos.pitsidianakis@linaro.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::{ffi::CStr, mem::size_of, ptr::addr_of_mut};
+use std::{ffi::CStr, mem::size_of};
 
-use qemu_api::{
-    chardev::{CharBackend, Chardev, Event},
-    impl_vmstate_forward,
-    irq::{IRQState, InterruptSource},
-    memory::{hwaddr, MemoryRegion, MemoryRegionOps, MemoryRegionOpsBuilder},
-    prelude::*,
-    qdev::{Clock, ClockEvent, DeviceImpl, DeviceState, Property, ResetType, ResettablePhasesImpl},
-    qom::{ObjectImpl, Owned, ParentField},
-    static_assert,
-    sysbus::{SysBusDevice, SysBusDeviceImpl},
-    vmstate::VMStateDescription,
+use bql::BqlRefCell;
+use chardev::{CharFrontend, Chardev, Event};
+use common::{static_assert, uninit_field_mut};
+use hwcore::{
+    Clock, ClockEvent, DeviceImpl, DeviceMethods, DeviceState, IRQState, InterruptSource,
+    ResetType, ResettablePhasesImpl, SysBusDevice, SysBusDeviceImpl, SysBusDeviceMethods,
 };
+use migration::{
+    self, impl_vmstate_forward, impl_vmstate_struct, vmstate_fields, vmstate_of,
+    vmstate_subsections, vmstate_unused, VMStateDescription, VMStateDescriptionBuilder,
+};
+use qom::{prelude::*, ObjectImpl, Owned, ParentField, ParentInit};
+use system::{hwaddr, MemoryRegion, MemoryRegionOps, MemoryRegionOpsBuilder};
+use util::{log::Log, log_mask_ln, ResultExt};
 
-use crate::{
-    device_class,
-    registers::{self, Interrupt, RegisterOffset},
-};
+use crate::registers::{self, Interrupt, RegisterOffset};
+
+::trace::include_trace!("hw_char");
 
 // TODO: You must disable the UART before any of the control registers are
 // reprogrammed. When the UART is disabled in the middle of transmission or
@@ -98,13 +99,14 @@ pub struct PL011Registers {
 }
 
 #[repr(C)]
-#[derive(qemu_api_macros::Object)]
+#[derive(qom::Object, hwcore::Device)]
 /// PL011 Device Model in QEMU
 pub struct PL011State {
     pub parent_obj: ParentField<SysBusDevice>,
     pub iomem: MemoryRegion,
     #[doc(alias = "chr")]
-    pub char_backend: CharBackend,
+    #[property(rename = "chardev")]
+    pub char_frontend: CharFrontend,
     pub regs: BqlRefCell<PL011Registers>,
     /// QEMU interrupts
     ///
@@ -122,6 +124,7 @@ pub struct PL011State {
     #[doc(alias = "clk")]
     pub clock: Owned<Clock>,
     #[doc(alias = "migrate_clk")]
+    #[property(rename = "migrate-clk", default = true)]
     pub migrate_clock: bool,
 }
 
@@ -129,7 +132,7 @@ pub struct PL011State {
 // structs, so the size of the Rust version must not be any larger
 // than the size of the C one. If this assert triggers you need to
 // expand the padding_for_rust[] array in the C PL011State struct.
-static_assert!(size_of::<PL011State>() <= size_of::<qemu_api::bindings::PL011State>());
+static_assert!(size_of::<PL011State>() <= size_of::<crate::bindings::PL011State>());
 
 qom_isa!(PL011State : SysBusDevice, DeviceState, Object);
 
@@ -163,19 +166,14 @@ impl PL011Impl for PL011State {
 impl ObjectImpl for PL011State {
     type ParentType = SysBusDevice;
 
-    const INSTANCE_INIT: Option<unsafe fn(&mut Self)> = Some(Self::init);
+    const INSTANCE_INIT: Option<unsafe fn(ParentInit<Self>)> = Some(Self::init);
     const INSTANCE_POST_INIT: Option<fn(&Self)> = Some(Self::post_init);
     const CLASS_INIT: fn(&mut Self::Class) = Self::Class::class_init::<Self>;
 }
 
 impl DeviceImpl for PL011State {
-    fn properties() -> &'static [Property] {
-        &device_class::PL011_PROPERTIES
-    }
-    fn vmsd() -> Option<&'static VMStateDescription> {
-        Some(&device_class::VMSTATE_PL011)
-    }
-    const REALIZE: Option<fn(&Self) -> qemu_api::Result<()>> = Some(Self::realize);
+    const VMSTATE: Option<VMStateDescription<Self>> = Some(VMSTATE_PL011);
+    const REALIZE: Option<fn(&Self) -> util::Result<()>> = Some(Self::realize);
 }
 
 impl ResettablePhasesImpl for PL011State {
@@ -212,13 +210,7 @@ impl PL011Registers {
         (update, result)
     }
 
-    pub(self) fn write(
-        &mut self,
-        offset: RegisterOffset,
-        value: u32,
-        char_backend: &CharBackend,
-    ) -> bool {
-        // eprintln!("write offset {offset} value {value}");
+    pub(self) fn write(&mut self, offset: RegisterOffset, value: u32, device: &PL011State) -> bool {
         use RegisterOffset::*;
         match offset {
             DR => return self.write_data_register(value),
@@ -233,9 +225,11 @@ impl PL011Registers {
             }
             IBRD => {
                 self.ibrd = value;
+                device.trace_baudrate_change(self.ibrd, self.fbrd);
             }
             FBRD => {
                 self.fbrd = value;
+                device.trace_baudrate_change(self.ibrd, self.fbrd);
             }
             LCR_H => {
                 let new_val: registers::LineControl = value.into();
@@ -246,7 +240,7 @@ impl PL011Registers {
                 }
                 let update = (self.line_control.send_break() != new_val.send_break()) && {
                     let break_enable = new_val.send_break();
-                    let _ = char_backend.send_break(break_enable);
+                    let _ = device.char_frontend.send_break(break_enable);
                     self.loopback_break(break_enable)
                 };
                 self.line_control = new_val;
@@ -275,8 +269,7 @@ impl PL011Registers {
             DMACR => {
                 self.dmacr = value;
                 if value & 3 > 0 {
-                    // qemu_log_mask(LOG_UNIMP, "pl011: DMA not implemented\n");
-                    eprintln!("pl011: DMA not implemented");
+                    log_mask_ln!(Log::Unimp, "pl011: DMA not implemented");
                 }
             }
         }
@@ -284,12 +277,13 @@ impl PL011Registers {
     }
 
     fn read_data_register(&mut self, update: &mut bool) -> u32 {
+        let depth = self.fifo_depth();
         self.flags.set_receive_fifo_full(false);
         let c = self.read_fifo[self.read_pos];
 
         if self.read_count > 0 {
             self.read_count -= 1;
-            self.read_pos = (self.read_pos + 1) & (self.fifo_depth() - 1);
+            self.read_pos = (self.read_pos + 1) & (depth - 1);
         }
         if self.read_count == 0 {
             self.flags.set_receive_fifo_empty(true);
@@ -297,12 +291,19 @@ impl PL011Registers {
         if self.read_count + 1 == self.read_trigger {
             self.int_level &= !Interrupt::RX;
         }
+        trace::trace_pl011_read_fifo(self.read_count, depth);
         self.receive_status_error_clear.set_from_data(c);
         *update = true;
         u32::from(c)
     }
 
     fn write_data_register(&mut self, value: u32) -> bool {
+        if !self.control.enable_uart() {
+            log_mask_ln!(Log::GuestError, "PL011 data written to disabled UART");
+        }
+        if !self.control.enable_transmit() {
+            log_mask_ln!(Log::GuestError, "PL011 data written to disabled TX UART");
+        }
         // interrupts always checked
         let _ = self.loopback_tx(value.into());
         self.int_level |= Interrupt::TX;
@@ -446,7 +447,9 @@ impl PL011Registers {
         self.read_fifo[slot] = value;
         self.read_count += 1;
         self.flags.set_receive_fifo_empty(false);
+        trace::trace_pl011_fifo_rx_put(value.into(), self.read_count, depth);
         if self.read_count == depth {
+            trace::trace_pl011_fifo_rx_full();
             self.flags.set_receive_fifo_full(true);
         }
 
@@ -457,10 +460,10 @@ impl PL011Registers {
         false
     }
 
-    pub fn post_load(&mut self) -> Result<(), ()> {
+    pub fn post_load(&mut self) -> Result<(), migration::InvalidError> {
         /* Sanity-check input state */
         if self.read_pos >= self.read_fifo.len() || self.read_count > self.read_fifo.len() {
-            return Err(());
+            return Err(migration::InvalidError);
         }
 
         if !self.fifo_enabled() && self.read_count > 0 && self.read_pos > 0 {
@@ -488,7 +491,7 @@ impl PL011State {
     /// `PL011State` type. It must not be called more than once on the same
     /// location/instance. All its fields are expected to hold uninitialized
     /// values with the sole exception of `parent_obj`.
-    unsafe fn init(&mut self) {
+    unsafe fn init(mut this: ParentInit<Self>) {
         static PL011_OPS: MemoryRegionOps<PL011State> = MemoryRegionOpsBuilder::<PL011State>::new()
             .read(&PL011State::read)
             .write(&PL011State::write)
@@ -496,32 +499,44 @@ impl PL011State {
             .impl_sizes(4, 4)
             .build();
 
-        // SAFETY:
-        //
-        // self and self.iomem are guaranteed to be valid at this point since callers
-        // must make sure the `self` reference is valid.
+        // SAFETY: this and this.iomem are guaranteed to be valid at this point
         MemoryRegion::init_io(
-            unsafe { &mut *addr_of_mut!(self.iomem) },
-            addr_of_mut!(*self),
+            &mut uninit_field_mut!(*this, iomem),
             &PL011_OPS,
             "pl011",
             0x1000,
         );
 
-        self.regs = Default::default();
+        uninit_field_mut!(*this, regs).write(Default::default());
 
-        // SAFETY:
-        //
-        // self.clock is not initialized at this point; but since `Owned<_>` is
-        // not Drop, we can overwrite the undefined value without side effects;
-        // it's not sound but, because for all PL011State instances are created
-        // by QOM code which calls this function to initialize the fields, at
-        // leastno code is able to access an invalid self.clock value.
-        self.clock = self.init_clock_in("clk", &Self::clock_update, ClockEvent::ClockUpdate);
+        let clock = DeviceState::init_clock_in(
+            &mut this,
+            "clk",
+            &Self::clock_update,
+            ClockEvent::ClockUpdate,
+        );
+        uninit_field_mut!(*this, clock).write(clock);
     }
 
-    const fn clock_update(&self, _event: ClockEvent) {
-        /* pl011_trace_baudrate_change(s); */
+    pub fn trace_baudrate_change(&self, ibrd: u32, fbrd: u32) {
+        let divider = 4.0 / f64::from(ibrd * (FBRD_MASK + 1) + fbrd);
+        let hz = self.clock.hz();
+        let rate = if ibrd == 0 {
+            0
+        } else {
+            ((hz as f64) * divider) as u32
+        };
+        trace::trace_pl011_baudrate_change(rate, hz, ibrd, fbrd);
+    }
+
+    fn clock_update(&self, _event: ClockEvent) {
+        let regs = self.regs.borrow();
+        let (ibrd, fbrd) = (regs.ibrd, regs.fbrd);
+        self.trace_baudrate_change(ibrd, fbrd)
+    }
+
+    pub fn clock_needed(&self) -> bool {
+        self.migrate_clock
     }
 
     fn post_init(&self) {
@@ -538,14 +553,15 @@ impl PL011State {
                 u64::from(device_id[(offset - 0xfe0) >> 2])
             }
             Err(_) => {
-                // qemu_log_mask(LOG_GUEST_ERROR, "pl011_read: Bad offset 0x%x\n", (int)offset);
+                log_mask_ln!(Log::GuestError, "PL011State::read: Bad offset {offset}");
                 0
             }
             Ok(field) => {
                 let (update_irq, result) = self.regs.borrow_mut().read(field);
+                trace::trace_pl011_read(offset, result, c"");
                 if update_irq {
                     self.update();
-                    self.char_backend.accept_input();
+                    self.char_frontend.accept_input();
                 }
                 result.into()
             }
@@ -557,20 +573,21 @@ impl PL011State {
         if let Ok(field) = RegisterOffset::try_from(offset) {
             // qemu_chr_fe_write_all() calls into the can_receive
             // callback, so handle writes before entering PL011Registers.
+            trace::trace_pl011_write(offset, value as u32, c"");
             if field == RegisterOffset::DR {
                 // ??? Check if transmitter is enabled.
                 let ch: [u8; 1] = [value as u8];
                 // XXX this blocks entire thread. Rewrite to use
                 // qemu_chr_fe_write and background I/O callbacks
-                let _ = self.char_backend.write_all(&ch);
+                let _ = self.char_frontend.write_all(&ch);
             }
 
-            update_irq = self
-                .regs
-                .borrow_mut()
-                .write(field, value as u32, &self.char_backend);
+            update_irq = self.regs.borrow_mut().write(field, value as u32, self);
         } else {
-            eprintln!("write bad offset {offset} value {value}");
+            log_mask_ln!(
+                Log::GuestError,
+                "PL011State::write: Bad offset {offset} value {value}"
+            );
         }
         if update_irq {
             self.update();
@@ -579,11 +596,19 @@ impl PL011State {
 
     fn can_receive(&self) -> u32 {
         let regs = self.regs.borrow();
-        // trace_pl011_can_receive(s->lcr, s->read_count, r);
-        regs.fifo_depth() - regs.read_count
+        let fifo_available = regs.fifo_depth() - regs.read_count;
+        trace::trace_pl011_can_receive(
+            regs.line_control.into(),
+            regs.read_count,
+            regs.fifo_depth(),
+            fifo_available,
+        );
+        fifo_available
     }
 
     fn receive(&self, buf: &[u8]) {
+        trace::trace_pl011_receive(buf.len());
+
         let mut regs = self.regs.borrow_mut();
         if regs.loopback_enabled() {
             // In loopback mode, the RX input signal is internally disconnected
@@ -619,8 +644,8 @@ impl PL011State {
         }
     }
 
-    fn realize(&self) -> qemu_api::Result<()> {
-        self.char_backend
+    fn realize(&self) -> util::Result<()> {
+        self.char_frontend
             .enable_handlers(self, Self::can_receive, Self::receive, Self::event);
         Ok(())
     }
@@ -632,12 +657,13 @@ impl PL011State {
     fn update(&self) {
         let regs = self.regs.borrow();
         let flags = regs.int_level & regs.int_enabled;
+        trace::trace_pl011_irq_state(flags != 0);
         for (irq, i) in self.interrupts.iter().zip(IRQMASK) {
             irq.set(flags.any_set(i));
         }
     }
 
-    pub fn post_load(&self, _version_id: u32) -> Result<(), ()> {
+    pub fn post_load(&self, _version_id: u8) -> Result<(), migration::InvalidError> {
         self.regs.borrow_mut().post_load()
     }
 }
@@ -671,7 +697,7 @@ pub unsafe extern "C" fn pl011_create(
         let chr = unsafe { Owned::<Chardev>::from(&*chr) };
         dev.prop_set_chr("chardev", &chr);
     }
-    dev.sysbus_realize();
+    dev.sysbus_realize().unwrap_fatal();
     dev.mmio_map(0, addr);
     dev.connect_irq(0, &irq);
 
@@ -680,7 +706,7 @@ pub unsafe extern "C" fn pl011_create(
 }
 
 #[repr(C)]
-#[derive(qemu_api_macros::Object)]
+#[derive(qom::Object, hwcore::Device)]
 /// PL011 Luminary device model.
 pub struct PL011Luminary {
     parent_obj: ParentField<PL011State>,
@@ -706,3 +732,56 @@ impl PL011Impl for PL011Luminary {
 impl DeviceImpl for PL011Luminary {}
 impl ResettablePhasesImpl for PL011Luminary {}
 impl SysBusDeviceImpl for PL011Luminary {}
+
+/// Migration subsection for [`PL011State`] clock.
+static VMSTATE_PL011_CLOCK: VMStateDescription<PL011State> =
+    VMStateDescriptionBuilder::<PL011State>::new()
+        .name(c"pl011/clock")
+        .version_id(1)
+        .minimum_version_id(1)
+        .needed(&PL011State::clock_needed)
+        .fields(vmstate_fields! {
+             vmstate_of!(PL011State, clock),
+        })
+        .build();
+
+impl_vmstate_struct!(
+    PL011Registers,
+    VMStateDescriptionBuilder::<PL011Registers>::new()
+        .name(c"pl011/regs")
+        .version_id(2)
+        .minimum_version_id(2)
+        .fields(vmstate_fields! {
+            vmstate_of!(PL011Registers, flags),
+            vmstate_of!(PL011Registers, line_control),
+            vmstate_of!(PL011Registers, receive_status_error_clear),
+            vmstate_of!(PL011Registers, control),
+            vmstate_of!(PL011Registers, dmacr),
+            vmstate_of!(PL011Registers, int_enabled),
+            vmstate_of!(PL011Registers, int_level),
+            vmstate_of!(PL011Registers, read_fifo),
+            vmstate_of!(PL011Registers, ilpr),
+            vmstate_of!(PL011Registers, ibrd),
+            vmstate_of!(PL011Registers, fbrd),
+            vmstate_of!(PL011Registers, ifl),
+            vmstate_of!(PL011Registers, read_pos),
+            vmstate_of!(PL011Registers, read_count),
+            vmstate_of!(PL011Registers, read_trigger),
+        })
+        .build()
+);
+
+pub const VMSTATE_PL011: VMStateDescription<PL011State> =
+    VMStateDescriptionBuilder::<PL011State>::new()
+        .name(c"pl011")
+        .version_id(2)
+        .minimum_version_id(2)
+        .post_load(&PL011State::post_load)
+        .fields(vmstate_fields! {
+            vmstate_unused!(core::mem::size_of::<u32>()),
+            vmstate_of!(PL011State, regs),
+        })
+        .subsections(vmstate_subsections! {
+             VMSTATE_PL011_CLOCK
+        })
+        .build();

@@ -39,6 +39,7 @@
 #include "qemu/plugin.h"
 #include "user/guest-base.h"
 #include "user/page-protection.h"
+#include "accel/accel-ops.h"
 #include "tcg/startup.h"
 #include "qemu/timer.h"
 #include "qemu/envlist.h"
@@ -217,11 +218,6 @@ void stop_all_tasks(void)
 bool qemu_cpu_is_self(CPUState *cpu)
 {
     return thread_cpu == cpu;
-}
-
-void qemu_cpu_kick(CPUState *cpu)
-{
-    cpu_exit(cpu);
 }
 
 /* Assumes contents are already zeroed.  */
@@ -501,7 +497,7 @@ int main(int argc, char **argv)
                                  opt_one_insn_per_tb, &error_abort);
         object_property_set_int(OBJECT(accel), "tb-size",
                                 opt_tb_size, &error_abort);
-        ac->init_machine(NULL);
+        ac->init_machine(accel, NULL);
     }
 
     /*

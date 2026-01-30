@@ -7,7 +7,9 @@
 # See the COPYING file in the top-level directory.
 
 ##
-# = Audio
+# *****
+# Audio
+# *****
 ##
 
 ##
@@ -74,8 +76,8 @@
 #
 # @out: options of the playback stream
 #
-# @nsamples: set the number of samples per read/write calls (default to 480,
-# 10ms at 48kHz).
+# @nsamples: set the number of samples per read/write calls
+#     (default to 480, 10ms at 48kHz).
 #
 # Since: 10.0
 ##
@@ -534,8 +536,6 @@
 # @query-audiodevs:
 #
 # Return information about audiodev configuration
-#
-# Returns: array of @Audiodev
 #
 # Since: 8.0
 ##

@@ -425,7 +425,8 @@ static uintptr_t G_GNUC_UNUSED get_jmp_target_addr(TCGContext *s, int which)
 static int __attribute__((unused))
 tlb_mask_table_ofs(TCGContext *s, int which)
 {
-    return (offsetof(CPUNegativeOffsetState, tlb.f[which]) -
+    int fi = mmuidx_to_fast_index(which);
+    return (offsetof(CPUNegativeOffsetState, tlb.f[fi]) -
             sizeof(CPUNegativeOffsetState));
 }
 
@@ -1331,8 +1332,9 @@ void *tcg_malloc_internal(TCGContext *s, int size)
         p = s->pool_current;
         if (!p) {
             p = s->pool_first;
-            if (!p)
+            if (!p) {
                 goto new_pool;
+            }
         } else {
             if (!p->next) {
             new_pool:
@@ -1351,8 +1353,8 @@ void *tcg_malloc_internal(TCGContext *s, int size)
         }
     }
     s->pool_current = p;
-    s->pool_cur = p->data + size;
-    s->pool_end = p->data + p->size;
+    s->pool_cur = (uintptr_t)p->data + size;
+    s->pool_end = (uintptr_t)p->data + p->size;
     return p->data;
 }
 
@@ -1364,7 +1366,7 @@ void tcg_pool_reset(TCGContext *s)
         g_free(p);
     }
     s->pool_first_large = NULL;
-    s->pool_cur = s->pool_end = NULL;
+    s->pool_cur = s->pool_end = 0;
     s->pool_current = NULL;
 }
 
@@ -3037,20 +3039,22 @@ void tcg_dump_ops(TCGContext *s, FILE *f, bool have_prefs)
             case INDEX_op_qemu_ld2:
             case INDEX_op_qemu_st2:
                 {
-                    const char *s_al, *s_op, *s_at;
+                    const char *s_al, *s_tlb, *s_op, *s_at;
                     MemOpIdx oi = op->args[k++];
                     MemOp mop = get_memop(oi);
                     unsigned ix = get_mmuidx(oi);
 
+                    s_tlb = mop & MO_ALIGN_TLB_ONLY ? "tlb+" : "";
                     s_al = alignment_name[(mop & MO_AMASK) >> MO_ASHIFT];
                     s_op = ldst_name[mop & (MO_BSWAP | MO_SSIZE)];
                     s_at = atom_name[(mop & MO_ATOM_MASK) >> MO_ATOM_SHIFT];
-                    mop &= ~(MO_AMASK | MO_BSWAP | MO_SSIZE | MO_ATOM_MASK);
+                    mop &= ~(MO_AMASK | MO_BSWAP | MO_SSIZE |
+                             MO_ATOM_MASK | MO_ALIGN_TLB_ONLY);
 
                     /* If all fields are accounted for, print symbolically. */
                     if (!mop && s_al && s_op && s_at) {
-                        col += ne_fprintf(f, ",%s%s%s,%u",
-                                          s_at, s_al, s_op, ix);
+                        col += ne_fprintf(f, ",%s%s%s%s,%u",
+                                          s_at, s_al, s_tlb, s_op, ix);
                     } else {
                         mop = get_memop(oi);
                         col += ne_fprintf(f, ",$0x%x,%u", mop, ix);
@@ -5154,7 +5158,7 @@ static void tcg_reg_alloc_dup(TCGContext *s, const TCGOp *op)
 
     if (its->val_type == TEMP_VAL_CONST) {
         /* Propagate constant via movi -> dupi.  */
-        tcg_target_ulong val = its->val;
+        tcg_target_ulong val = dup_const(vece, its->val);
         if (IS_DEAD_ARG(1)) {
             temp_dead(s, its);
         }

@@ -1,5 +1,5 @@
 /*
- * QEMU target info API
+ * QEMU target info API (returning native types)
  *
  *  Copyright (c) Linaro
  *
@@ -37,5 +37,38 @@ const char *target_machine_typename(void);
  * Returns: target CPU base QOM type name (i.e. TYPE_X86_CPU).
  */
 const char *target_cpu_type(void);
+
+/**
+ * target_big_endian:
+ *
+ * Returns: %true if the (default) endianness of the target is big endian,
+ *          %false otherwise.
+ *
+ * Common code should normally never need to know about the endianness of
+ * the target, so please do *not* use this function unless you  know very
+ * well what you are doing!
+ */
+bool target_big_endian(void);
+
+/**
+ * target_base_arm:
+ *
+ * Returns whether the target architecture is ARM or Aarch64.
+ */
+bool target_base_arm(void);
+
+/**
+ * target_arm:
+ *
+ * Returns whether the target architecture is ARM (32-bit, not Aarch64).
+ */
+bool target_arm(void);
+
+/**
+ * target_aarch64:
+ *
+ * Returns whether the target architecture is Aarch64.
+ */
+bool target_aarch64(void);
 
 #endif

@@ -178,6 +178,46 @@ parser (either fixing a bug or extending/modifying the syntax). To do this:
 
   ``qapi-schema += foo.json``
 
+The reference output can be automatically updated to match the latest QAPI
+code generator by running the tests with the QEMU_TEST_REGENERATE environment
+variable set.
+
+.. code::
+
+   QEMU_TEST_REGENERATE=1 make check-qapi-schema
+
+The resulting changes must be reviewed by the author to ensure they match
+the intended results before adding the updated reference output to the
+same commit that alters the generator code.
+
+.. _tracetool-tests:
+
+Tracetool tests
+~~~~~~~~~~~~~~~
+
+The tracetool tests validate the generated source files used for defining
+probes for various tracing backends and source formats. The test operates
+by running the tracetool program against a sample trace-events file, and
+comparing the generated output against known good reference output. The
+tests can be run with:
+
+.. code::
+
+  make check-tracetool
+
+The reference output is stored in files under tests/tracetool, and when
+the tracetool backend/format output is intentionally changed, the reference
+files need to be updated. This can be automated by setting the
+QEMU_TEST_REGENERATE=1 environment variable:
+
+.. code::
+
+   QEMU_TEST_REGENERATE=1 make check-tracetool
+
+The resulting changes must be reviewed by the author to ensure they match
+the intended results, before adding the updated reference output to the
+same commit that alters the generator code.
+
 check-block
 ~~~~~~~~~~~
 
@@ -604,9 +644,9 @@ below steps to debug it:
 2. Add "V=1" to the command line, try again, to see the verbose output.
 3. Further add "DEBUG=1" to the command line. This will pause in a shell prompt
    in the container right before testing starts. You could either manually
-   build QEMU and run tests from there, or press Ctrl-D to let the Docker
+   build QEMU and run tests from there, or press :kbd:`Ctrl+d` to let the Docker
    testing continue.
-4. If you press Ctrl-D, the same building and testing procedure will begin, and
+4. If you press :kbd:`Ctrl+d`, the same building and testing procedure will begin, and
    will hopefully run into the error again. After that, you will be dropped to
    the prompt for debug.
 

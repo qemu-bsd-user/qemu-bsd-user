@@ -18,8 +18,8 @@
  *  Copyright (C) 2008, IBM, Muli Ben-Yehuda (muli@il.ibm.com)
  */
 
-#ifndef HW_VFIO_VFIO_COMMON_H
-#define HW_VFIO_VFIO_COMMON_H
+#ifndef HW_VFIO_VFIO_DEVICE_H
+#define HW_VFIO_VFIO_DEVICE_H
 
 #include "system/memory.h"
 #include "qemu/queue.h"
@@ -27,7 +27,7 @@
 #include <linux/vfio.h>
 #endif
 #include "system/system.h"
-#include "hw/vfio/vfio-container-base.h"
+#include "hw/vfio/vfio-container.h"
 #include "hw/vfio/vfio-cpr.h"
 #include "system/host_iommu_device.h"
 #include "system/iommufd.h"
@@ -36,7 +36,7 @@
 
 enum {
     VFIO_DEVICE_TYPE_PCI = 0,
-    VFIO_DEVICE_TYPE_PLATFORM = 1,
+    VFIO_DEVICE_TYPE_UNUSED = 1,
     VFIO_DEVICE_TYPE_CCW = 2,
     VFIO_DEVICE_TYPE_AP = 3,
 };
@@ -47,13 +47,14 @@ typedef struct VFIOMigration VFIOMigration;
 
 typedef struct IOMMUFDBackend IOMMUFDBackend;
 typedef struct VFIOIOASHwpt VFIOIOASHwpt;
+typedef struct VFIOUserProxy VFIOUserProxy;
 
 typedef struct VFIODevice {
     QLIST_ENTRY(VFIODevice) next;
     QLIST_ENTRY(VFIODevice) container_next;
     QLIST_ENTRY(VFIODevice) global_next;
     struct VFIOGroup *group;
-    VFIOContainerBase *bcontainer;
+    VFIOContainer *bcontainer;
     char *sysfsdev;
     char *name;
     DeviceState *dev;
@@ -66,12 +67,14 @@ typedef struct VFIODevice {
     bool ram_block_discard_allowed;
     OnOffAuto enable_migration;
     OnOffAuto migration_multifd_transfer;
+    OnOffAuto migration_load_config_after_iter;
+    uint64_t migration_max_queued_buffers_size;
     bool migration_events;
     bool use_region_fds;
     VFIODeviceOps *ops;
     VFIODeviceIOOps *io_ops;
     unsigned int num_irqs;
-    unsigned int num_regions;
+    unsigned int num_initial_regions;
     unsigned int flags;
     VFIOMigration *migration;
     Error *migration_blocker;
@@ -88,6 +91,7 @@ typedef struct VFIODevice {
     struct vfio_region_info **reginfo;
     int *region_fds;
     VFIODeviceCPR cpr;
+    VFIOUserProxy *proxy;
 } VFIODevice;
 
 struct VFIODeviceOps {
@@ -240,6 +244,7 @@ struct VFIODeviceIOOps {
      * @off: offset within the region
      * @size: size in bytes to write
      * @data: buffer to write from
+     * @post: true if this is a posted write
      *
      * Returns number of bytes write on success or -errno.
      */
@@ -247,7 +252,7 @@ struct VFIODeviceIOOps {
                         void *data, bool post);
 };
 
-void vfio_device_prepare(VFIODevice *vbasedev, VFIOContainerBase *bcontainer,
+void vfio_device_prepare(VFIODevice *vbasedev, VFIOContainer *bcontainer,
                          struct vfio_device_info *info);
 
 void vfio_device_unprepare(VFIODevice *vbasedev);
@@ -256,6 +261,18 @@ int vfio_device_get_region_info(VFIODevice *vbasedev, int index,
                                 struct vfio_region_info **info);
 int vfio_device_get_region_info_type(VFIODevice *vbasedev, uint32_t type,
                                      uint32_t subtype, struct vfio_region_info **info);
+
+/**
+ * Return the fd for mapping this region. This is either the device's fd (for
+ * e.g. kernel vfio), or a per-region fd (for vfio-user).
+ *
+ * @vbasedev: #VFIODevice to use
+ * @index: region index
+ *
+ * Returns the fd.
+ */
+int vfio_device_get_region_fd(VFIODevice *vbasedev, int index);
+
 bool vfio_device_has_region_cap(VFIODevice *vbasedev, int region, uint16_t cap_type);
 
 int vfio_device_get_irq_info(VFIODevice *vbasedev, int index,
@@ -264,8 +281,11 @@ int vfio_device_get_irq_info(VFIODevice *vbasedev, int index,
 
 /* Returns 0 on success, or a negative errno. */
 bool vfio_device_get_name(VFIODevice *vbasedev, Error **errp);
+void vfio_device_free_name(VFIODevice *vbasedev);
 void vfio_device_set_fd(VFIODevice *vbasedev, const char *str, Error **errp);
 void vfio_device_init(VFIODevice *vbasedev, int type, VFIODeviceOps *ops,
                       DeviceState *dev, bool ram_discard);
 int vfio_device_get_aw_bits(VFIODevice *vdev);
-#endif /* HW_VFIO_VFIO_COMMON_H */
+
+void vfio_kvm_device_close(void);
+#endif /* HW_VFIO_VFIO_DEVICE_H */

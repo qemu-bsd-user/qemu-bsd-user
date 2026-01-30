@@ -384,9 +384,9 @@ static uint64_t get_table_index(uint64_t iova, int8_t ett)
         return calc_sx(iova);
     case ZPCI_ETT_RT:
         return calc_rtx(iova);
+    default:
+        g_assert_not_reached();
     }
-
-    return -1;
 }
 
 static bool entry_isvalid(uint64_t entry, int8_t ett)
@@ -397,22 +397,24 @@ static bool entry_isvalid(uint64_t entry, int8_t ett)
     case ZPCI_ETT_ST:
     case ZPCI_ETT_RT:
         return rt_entry_isvalid(entry);
+    default:
+        g_assert_not_reached();
     }
-
-    return false;
 }
 
 /* Return true if address translation is done */
 static bool translate_iscomplete(uint64_t entry, int8_t ett)
 {
     switch (ett) {
-    case 0:
+    case ZPCI_ETT_ST:
         return (entry & ZPCI_TABLE_FC) ? true : false;
-    case 1:
+    case ZPCI_ETT_RT:
         return false;
+    case ZPCI_ETT_PT:
+        return true;
+    default:
+        g_assert_not_reached();
     }
-
-    return true;
 }
 
 static uint64_t get_frame_size(int8_t ett)
@@ -424,9 +426,9 @@ static uint64_t get_frame_size(int8_t ett)
         return 1ULL << 20;
     case ZPCI_ETT_RT:
         return 1ULL << 31;
+    default:
+        g_assert_not_reached();
     }
-
-    return 0;
 }
 
 static uint64_t get_next_table_origin(uint64_t entry, int8_t ett)
@@ -438,9 +440,9 @@ static uint64_t get_next_table_origin(uint64_t entry, int8_t ett)
         return get_st_pto(entry);
     case ZPCI_ETT_RT:
         return get_rt_sto(entry);
+    default:
+        g_assert_not_reached();
     }
-
-    return 0;
 }
 
 /**
@@ -650,7 +652,16 @@ static const PCIIOMMUOps s390_iommu_ops = {
     .get_address_space = s390_pci_dma_iommu,
 };
 
-static uint8_t set_ind_atomic(uint64_t ind_loc, uint8_t to_be_set)
+/**
+ * set_ind_bit_atomic - Atomically set a bit in an indicator
+ *
+ * @ind_loc:   Address of the indicator
+ * @to_be_set: Bit to set
+ *
+ * Returns true if the bit was set by this function, false if it was
+ * already set or mapping failed.
+ */
+static bool set_ind_bit_atomic(uint64_t ind_loc, uint8_t to_be_set)
 {
     uint8_t expected, actual;
     hwaddr len = 1;
@@ -660,7 +671,7 @@ static uint8_t set_ind_atomic(uint64_t ind_loc, uint8_t to_be_set)
     ind_addr = cpu_physical_memory_map(ind_loc, &len, true);
     if (!ind_addr) {
         s390_pci_generate_error_event(ERR_EVENT_AIRERR, 0, 0, 0, 0);
-        return -1;
+        return false;
     }
     actual = *ind_addr;
     do {
@@ -669,7 +680,7 @@ static uint8_t set_ind_atomic(uint64_t ind_loc, uint8_t to_be_set)
     } while (actual != expected);
     cpu_physical_memory_unmap((void *)ind_addr, len, 1, len);
 
-    return actual;
+    return (actual & to_be_set) ? false : true;
 }
 
 static void s390_msi_ctrl_write(void *opaque, hwaddr addr, uint64_t data,
@@ -691,10 +702,10 @@ static void s390_msi_ctrl_write(void *opaque, hwaddr addr, uint64_t data,
     ind_bit = pbdev->routes.adapter.ind_offset;
     sum_bit = pbdev->routes.adapter.summary_offset;
 
-    set_ind_atomic(pbdev->routes.adapter.ind_addr + (ind_bit + vec) / 8,
+    set_ind_bit_atomic(pbdev->routes.adapter.ind_addr + (ind_bit + vec) / 8,
                    0x80 >> ((ind_bit + vec) % 8));
-    if (!set_ind_atomic(pbdev->routes.adapter.summary_addr + sum_bit / 8,
-                                       0x80 >> (sum_bit % 8))) {
+    if (set_ind_bit_atomic(pbdev->routes.adapter.summary_addr + sum_bit / 8,
+                   0x80 >> (sum_bit % 8))) {
         css_adapter_interrupt(CSS_IO_ADAPTER_PCI, pbdev->isc);
     }
 }
@@ -889,6 +900,7 @@ static void s390_pcihost_realize(DeviceState *dev, Error **errp)
     s390_pci_init_default_group();
     css_register_io_adapters(CSS_IO_ADAPTER_PCI, true, false,
                              S390_ADAPTER_SUPPRESSIBLE, errp);
+    s390_pcihost_kvm_realize();
 }
 
 static void s390_pcihost_unrealize(DeviceState *dev)

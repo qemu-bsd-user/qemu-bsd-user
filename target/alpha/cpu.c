@@ -86,10 +86,10 @@ static bool alpha_cpu_has_work(CPUState *cs)
        assume that if a CPU really wants to stay asleep, it will mask
        interrupts at the chipset level, which will prevent these bits
        from being set in the first place.  */
-    return cs->interrupt_request & (CPU_INTERRUPT_HARD
-                                    | CPU_INTERRUPT_TIMER
-                                    | CPU_INTERRUPT_SMP
-                                    | CPU_INTERRUPT_MCHK);
+    return cpu_test_interrupt(cs, CPU_INTERRUPT_HARD
+                                  | CPU_INTERRUPT_TIMER
+                                  | CPU_INTERRUPT_SMP
+                                  | CPU_INTERRUPT_MCHK);
 }
 #endif /* !CONFIG_USER_ONLY */
 
@@ -286,6 +286,7 @@ static void alpha_cpu_class_init(ObjectClass *oc, const void *data)
     cc->get_pc = alpha_cpu_get_pc;
     cc->gdb_read_register = alpha_cpu_gdb_read_register;
     cc->gdb_write_register = alpha_cpu_gdb_write_register;
+    cc->gdb_core_xml_file = "alpha-core.xml";
 #ifndef CONFIG_USER_ONLY
     dc->vmsd = &vmstate_alpha_cpu;
     cc->sysemu_ops = &alpha_sysemu_ops;

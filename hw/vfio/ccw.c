@@ -484,9 +484,9 @@ static bool vfio_ccw_get_region(VFIOCCWDevice *vcdev, Error **errp)
      * We always expect at least the I/O region to be present. We also
      * may have a variable number of regions governed by capabilities.
      */
-    if (vdev->num_regions < VFIO_CCW_CONFIG_REGION_INDEX + 1) {
+    if (vdev->num_initial_regions < VFIO_CCW_CONFIG_REGION_INDEX + 1) {
         error_setg(errp, "vfio: too few regions (%u), expected at least %u",
-                   vdev->num_regions, VFIO_CCW_CONFIG_REGION_INDEX + 1);
+                   vdev->num_initial_regions, VFIO_CCW_CONFIG_REGION_INDEX + 1);
         return false;
     }
 
@@ -619,7 +619,7 @@ out_io_notifier_err:
 out_region_err:
     vfio_device_detach(vbasedev);
 out_attach_dev_err:
-    g_free(vbasedev->name);
+    vfio_device_free_name(vbasedev);
 out_unrealize:
     if (cdc->unrealize) {
         cdc->unrealize(cdev);
@@ -637,7 +637,7 @@ static void vfio_ccw_unrealize(DeviceState *dev)
     vfio_ccw_unregister_irq_notifier(vcdev, VFIO_CCW_IO_IRQ_INDEX);
     vfio_ccw_put_region(vcdev);
     vfio_device_detach(&vcdev->vdev);
-    g_free(vcdev->vdev.name);
+    vfio_device_free_name(&vcdev->vdev);
 
     if (cdc->unrealize) {
         cdc->unrealize(cdev);

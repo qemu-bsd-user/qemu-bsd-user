@@ -84,10 +84,9 @@ static void *mttcg_cpu_thread_fn(void *arg)
     cpu_thread_signal_created(cpu);
     qemu_guest_random_seed_thread_part2(cpu->random_seed);
 
-    /* process any pending work */
-    cpu->exit_request = 1;
-
     do {
+        qemu_process_cpu_events(cpu);
+
         if (cpu_can_run(cpu)) {
             int r;
             bql_unlock();
@@ -112,9 +111,6 @@ static void *mttcg_cpu_thread_fn(void *arg)
                 break;
             }
         }
-
-        qatomic_set_mb(&cpu->exit_request, 0);
-        qemu_wait_io_event(cpu);
     } while (!cpu->unplug || cpu_can_run(cpu));
 
     tcg_cpu_destroy(cpu);
@@ -122,11 +118,6 @@ static void *mttcg_cpu_thread_fn(void *arg)
     rcu_remove_force_rcu_notifier(&force_rcu.notifier);
     rcu_unregister_thread();
     return NULL;
-}
-
-void mttcg_kick_vcpu_thread(CPUState *cpu)
-{
-    cpu_exit(cpu);
 }
 
 void mttcg_start_vcpu_thread(CPUState *cpu)

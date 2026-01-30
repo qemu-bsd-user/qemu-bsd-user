@@ -13,7 +13,6 @@
 #include <linux/vfio.h>
 #endif
 
-#include "qemu/typedefs.h"
 #include "qemu/notify.h"
 
 /*
@@ -32,6 +31,7 @@
 #define VFIO_MIG_FLAG_DEV_SETUP_STATE   (0xffffffffef100003ULL)
 #define VFIO_MIG_FLAG_DEV_DATA_STATE    (0xffffffffef100004ULL)
 #define VFIO_MIG_FLAG_DEV_INIT_DATA_SENT (0xffffffffef100005ULL)
+#define VFIO_MIG_FLAG_DEV_CONFIG_LOAD_READY (0xffffffffef100006ULL)
 
 typedef struct VFIODevice VFIODevice;
 typedef struct VFIOMultifd VFIOMultifd;

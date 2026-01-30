@@ -46,9 +46,6 @@
 /* Maximum read size for checking if data reads as zero, in bytes */
 #define MAX_ZERO_CHECK_BUFFER (128 * KiB)
 
-static void coroutine_fn GRAPH_RDLOCK
-bdrv_parent_cb_resize(BlockDriverState *bs);
-
 static int coroutine_fn bdrv_co_do_pwrite_zeroes(BlockDriverState *bs,
     int64_t offset, int64_t bytes, BdrvRequestFlags flags);
 
@@ -361,7 +358,7 @@ static void bdrv_do_drained_begin(BlockDriverState *bs, BdrvChild *parent,
     GLOBAL_STATE_CODE();
 
     /* Stop things in parent-to-child order */
-    if (qatomic_fetch_inc(&bs->quiesce_counter) == 0) {
+    if (bs->quiesce_counter++ == 0) {
         GRAPH_RDLOCK_GUARD_MAINLOOP();
         bdrv_parent_drained_begin(bs, parent);
         if (bs->drv && bs->drv->bdrv_drain_begin) {
@@ -401,8 +398,6 @@ bdrv_drained_begin(BlockDriverState *bs)
  */
 static void bdrv_do_drained_end(BlockDriverState *bs, BdrvChild *parent)
 {
-    int old_quiesce_counter;
-
     IO_OR_GS_CODE();
 
     if (qemu_in_coroutine()) {
@@ -415,8 +410,7 @@ static void bdrv_do_drained_end(BlockDriverState *bs, BdrvChild *parent)
     assert(bs->quiesce_counter > 0);
 
     /* Re-enable things in child-to-parent order */
-    old_quiesce_counter = qatomic_fetch_dec(&bs->quiesce_counter);
-    if (old_quiesce_counter == 1) {
+    if (--bs->quiesce_counter == 0) {
         GRAPH_RDLOCK_GUARD_MAINLOOP();
         if (bs->drv && bs->drv->bdrv_drain_end) {
             bs->drv->bdrv_drain_end(bs);
@@ -724,11 +718,14 @@ BdrvTrackedRequest *coroutine_fn bdrv_co_get_self_request(BlockDriverState *bs)
     Coroutine *self = qemu_coroutine_self();
     IO_CODE();
 
+    qemu_mutex_lock(&bs->reqs_lock);
     QLIST_FOREACH(req, &bs->tracked_requests, list) {
         if (req->co == self) {
+            qemu_mutex_unlock(&bs->reqs_lock);
             return req;
         }
     }
+    qemu_mutex_unlock(&bs->reqs_lock);
 
     return NULL;
 }
@@ -2041,7 +2038,7 @@ bdrv_co_write_req_finish(BdrvChild *child, int64_t offset, int64_t bytes,
          end_sector > bs->total_sectors) &&
         req->type != BDRV_TRACKED_DISCARD) {
         bs->total_sectors = end_sector;
-        bdrv_parent_cb_resize(bs);
+        bdrv_co_parent_cb_resize(bs);
         bdrv_dirty_bitmap_truncate(bs, end_sector << BDRV_SECTOR_BITS);
     }
     if (req->bytes) {
@@ -3573,11 +3570,11 @@ int coroutine_fn bdrv_co_copy_range(BdrvChild *src, int64_t src_offset,
                                    bytes, read_flags, write_flags);
 }
 
-static void coroutine_fn GRAPH_RDLOCK
-bdrv_parent_cb_resize(BlockDriverState *bs)
+void coroutine_fn bdrv_co_parent_cb_resize(BlockDriverState *bs)
 {
     BdrvChild *c;
 
+    IO_CODE();
     assert_bdrv_graph_readable();
 
     QLIST_FOREACH(c, &bs->parents, next_parent) {

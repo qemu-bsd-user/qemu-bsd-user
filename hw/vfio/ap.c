@@ -10,7 +10,6 @@
  * directory.
  */
 
-#include <stdbool.h>
 #include "qemu/osdep.h"
 #include CONFIG_DEVICES /* CONFIG_IOMMUFD */
 #include <linux/vfio.h>
@@ -51,6 +50,11 @@ static QTAILQ_HEAD(, APConfigChgEvent) cfg_chg_events =
     QTAILQ_HEAD_INITIALIZER(cfg_chg_events);
 
 static QemuMutex cfg_chg_events_lock;
+
+static void __attribute__((constructor)) vfio_ap_global_init(void)
+{
+    qemu_mutex_init(&cfg_chg_events_lock);
+}
 
 OBJECT_DECLARE_SIMPLE_TYPE(VFIOAPDevice, VFIO_AP_DEVICE)
 
@@ -230,13 +234,6 @@ static void vfio_ap_realize(DeviceState *dev, Error **errp)
     VFIOAPDevice *vapdev = VFIO_AP_DEVICE(dev);
     VFIODevice *vbasedev = &vapdev->vdev;
 
-    static bool lock_initialized;
-
-    if (!lock_initialized) {
-        qemu_mutex_init(&cfg_chg_events_lock);
-        lock_initialized = true;
-    }
-
     if (!vfio_device_get_name(vbasedev, errp)) {
         return;
     }
@@ -267,7 +264,7 @@ static void vfio_ap_realize(DeviceState *dev, Error **errp)
 
 error:
     error_prepend(errp, VFIO_MSG_PREFIX, vbasedev->name);
-    g_free(vbasedev->name);
+    vfio_device_free_name(vbasedev);
 }
 
 static void vfio_ap_unrealize(DeviceState *dev)
@@ -277,7 +274,7 @@ static void vfio_ap_unrealize(DeviceState *dev)
     vfio_ap_unregister_irq_notifier(vapdev, VFIO_AP_REQ_IRQ_INDEX);
     vfio_ap_unregister_irq_notifier(vapdev, VFIO_AP_CFG_CHG_IRQ_INDEX);
     vfio_device_detach(&vapdev->vdev);
-    g_free(vapdev->vdev.name);
+    vfio_device_free_name(&vapdev->vdev);
 }
 
 static const Property vfio_ap_properties[] = {

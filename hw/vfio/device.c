@@ -28,6 +28,8 @@
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/units.h"
+#include "migration/cpr.h"
+#include "migration/blocker.h"
 #include "monitor/monitor.h"
 #include "vfio-helpers.h"
 
@@ -127,7 +129,7 @@ static inline const char *action_to_str(int action)
 
 static const char *index_to_str(VFIODevice *vbasedev, int index)
 {
-    if (vbasedev->type != VFIO_DEVICE_TYPE_PCI) {
+    if (!vfio_pci_from_vfio_device(vbasedev)) {
         return NULL;
     }
 
@@ -203,10 +205,19 @@ int vfio_device_get_region_info(VFIODevice *vbasedev, int index,
     int fd = -1;
     int ret;
 
-    /* check cache */
-    if (vbasedev->reginfo[index] != NULL) {
-        *info = vbasedev->reginfo[index];
-        return 0;
+    /*
+     * We only set up the region info cache for the initial number of regions.
+     *
+     * Since a VFIO device may later increase the number of regions then use
+     * such regions with an index past ->num_initial_regions, don't attempt to
+     * use the info cache in those cases.
+     */
+    if (index < vbasedev->num_initial_regions) {
+        /* check cache */
+        if (vbasedev->reginfo[index] != NULL) {
+            *info = vbasedev->reginfo[index];
+            return 0;
+        }
     }
 
     *info = g_malloc0(argsz);
@@ -234,13 +245,22 @@ retry:
         goto retry;
     }
 
-    /* fill cache */
-    vbasedev->reginfo[index] = *info;
-    if (vbasedev->region_fds != NULL) {
-        vbasedev->region_fds[index] = fd;
+    if (index < vbasedev->num_initial_regions) {
+        /* fill cache */
+        vbasedev->reginfo[index] = *info;
+        if (vbasedev->region_fds != NULL) {
+            vbasedev->region_fds[index] = fd;
+        }
     }
 
     return 0;
+}
+
+int vfio_device_get_region_fd(VFIODevice *vbasedev, int index)
+{
+        return vbasedev->region_fds ?
+               vbasedev->region_fds[index] :
+               vbasedev->fd;
 }
 
 int vfio_device_get_region_info_type(VFIODevice *vbasedev, uint32_t type,
@@ -248,7 +268,7 @@ int vfio_device_get_region_info_type(VFIODevice *vbasedev, uint32_t type,
 {
     int i;
 
-    for (i = 0; i < vbasedev->num_regions; i++) {
+    for (i = 0; i < vbasedev->num_initial_regions; i++) {
         struct vfio_info_cap_header *hdr;
         struct vfio_region_info_cap_type *cap_type;
 
@@ -309,28 +329,40 @@ bool vfio_device_get_name(VFIODevice *vbasedev, Error **errp)
             error_setg(errp, "Use FD passing only with iommufd backend");
             return false;
         }
-        /*
-         * Give a name with fd so any function printing out vbasedev->name
-         * will not break.
-         */
         if (!vbasedev->name) {
-            vbasedev->name = g_strdup_printf("VFIO_FD%d", vbasedev->fd);
+
+            if (vbasedev->dev->id) {
+                vbasedev->name = g_strdup(vbasedev->dev->id);
+                return true;
+            } else {
+                /*
+                 * Assign a name so any function printing it will not break.
+                 * The fd number changes across processes, so this cannot be
+                 * used as an invariant name for CPR.
+                 */
+                vbasedev->name = g_strdup_printf("VFIO_FD%d", vbasedev->fd);
+                error_setg(&vbasedev->cpr.id_blocker,
+                           "vfio device with fd=%d needs an id property",
+                           vbasedev->fd);
+                return migrate_add_blocker_modes(&vbasedev->cpr.id_blocker,
+                                                 BIT(MIG_MODE_CPR_TRANSFER),
+                                                 errp) == 0;
+            }
         }
     }
 
     return true;
 }
 
+void vfio_device_free_name(VFIODevice *vbasedev)
+{
+    g_clear_pointer(&vbasedev->name, g_free);
+    migrate_del_blocker(&vbasedev->cpr.id_blocker);
+}
+
 void vfio_device_set_fd(VFIODevice *vbasedev, const char *str, Error **errp)
 {
-    ERRP_GUARD();
-    int fd = monitor_fd_param(monitor_cur(), str, errp);
-
-    if (fd < 0) {
-        error_prepend(errp, "Could not parse remote object fd %s:", str);
-        return;
-    }
-    vbasedev->fd = fd;
+    vbasedev->fd = cpr_get_fd_param(vbasedev->dev->id, str, 0, errp);
 }
 
 static VFIODeviceIOOps vfio_device_io_ops_ioctl;
@@ -402,7 +434,7 @@ bool vfio_device_hiod_create_and_realize(VFIODevice *vbasedev,
 VFIODevice *vfio_get_vfio_device(Object *obj)
 {
     if (object_dynamic_cast(obj, TYPE_VFIO_PCI)) {
-        return &VFIO_PCI_BASE(obj)->vbasedev;
+        return &VFIO_PCI_DEVICE(obj)->vbasedev;
     } else {
         return NULL;
     }
@@ -439,11 +471,13 @@ void vfio_device_detach(VFIODevice *vbasedev)
     VFIO_IOMMU_GET_CLASS(vbasedev->bcontainer)->detach_device(vbasedev);
 }
 
-void vfio_device_prepare(VFIODevice *vbasedev, VFIOContainerBase *bcontainer,
+void vfio_device_prepare(VFIODevice *vbasedev, VFIOContainer *bcontainer,
                          struct vfio_device_info *info)
 {
+    int i;
+
     vbasedev->num_irqs = info->num_irqs;
-    vbasedev->num_regions = info->num_regions;
+    vbasedev->num_initial_regions = info->num_regions;
     vbasedev->flags = info->flags;
     vbasedev->reset_works = !!(info->flags & VFIO_DEVICE_FLAGS_RESET);
 
@@ -453,9 +487,12 @@ void vfio_device_prepare(VFIODevice *vbasedev, VFIOContainerBase *bcontainer,
     QLIST_INSERT_HEAD(&vfio_device_list, vbasedev, global_next);
 
     vbasedev->reginfo = g_new0(struct vfio_region_info *,
-                               vbasedev->num_regions);
+                               vbasedev->num_initial_regions);
     if (vbasedev->use_region_fds) {
-        vbasedev->region_fds = g_new0(int, vbasedev->num_regions);
+        vbasedev->region_fds = g_new0(int, vbasedev->num_initial_regions);
+        for (i = 0; i < vbasedev->num_initial_regions; i++) {
+            vbasedev->region_fds[i] = -1;
+        }
     }
 }
 
@@ -463,12 +500,11 @@ void vfio_device_unprepare(VFIODevice *vbasedev)
 {
     int i;
 
-    for (i = 0; i < vbasedev->num_regions; i++) {
+    for (i = 0; i < vbasedev->num_initial_regions; i++) {
         g_free(vbasedev->reginfo[i]);
         if (vbasedev->region_fds != NULL && vbasedev->region_fds[i] != -1) {
             close(vbasedev->region_fds[i]);
         }
-
     }
 
     g_clear_pointer(&vbasedev->reginfo, g_free);
