@@ -85,5 +85,5 @@ endif
 subdir('unit')
 subdir('qapi-schema')
 subdir('qtest')
-subdir('migration')
+subdir('migration-stress')
 subdir('functional')
