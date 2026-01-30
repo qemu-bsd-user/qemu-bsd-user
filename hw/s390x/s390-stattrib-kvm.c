@@ -16,7 +16,7 @@
 #include "qemu/error-report.h"
 #include "system/kvm.h"
 #include "system/memory_mapping.h"
-#include "exec/ram_addr.h"
+#include "system/ram_addr.h"
 #include "kvm/kvm_s390x.h"
 #include "qapi/error.h"
 
@@ -185,7 +185,7 @@ static long long kvm_s390_stattrib_get_dirtycount(S390StAttribState *sa)
 
 static int kvm_s390_stattrib_get_active(S390StAttribState *sa)
 {
-    return kvm_s390_cmma_active() && sa->migration_enabled;
+    return kvm_s390_cmma_active();
 }
 
 static void kvm_s390_stattrib_class_init(ObjectClass *oc, void *data)
