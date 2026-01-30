@@ -12,6 +12,7 @@
 #include "qemu/error-report.h"
 #include "system/hvf.h"
 #include "system/hvf_int.h"
+#include "hw/core/cpu.h"
 
 const char *hvf_return_string(hv_return_t ret)
 {
@@ -58,8 +59,13 @@ int hvf_sw_breakpoints_active(CPUState *cpu)
     return !QTAILQ_EMPTY(&hvf_state->hvf_sw_breakpoints);
 }
 
-int hvf_update_guest_debug(CPUState *cpu)
+static void do_hvf_update_guest_debug(CPUState *cpu, run_on_cpu_data arg)
 {
     hvf_arch_update_guest_debug(cpu);
+}
+
+int hvf_update_guest_debug(CPUState *cpu)
+{
+    run_on_cpu(cpu, do_hvf_update_guest_debug, RUN_ON_CPU_NULL);
     return 0;
 }
