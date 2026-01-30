@@ -1080,9 +1080,10 @@ int kvm_arch_init_vcpu(CPUState *cs)
     uint64_t val;
     int ret;
     Error *local_err = NULL;
+    LoongArchCPU *cpu = LOONGARCH_CPU(cs);
 
-    ret = 0;
-    qemu_add_vm_change_state_handler(kvm_loongarch_vm_stage_change, cs);
+    cpu->vmsentry = qemu_add_vm_change_state_handler(
+                    kvm_loongarch_vm_stage_change, cs);
 
     if (!kvm_get_one_reg(cs, KVM_REG_LOONGARCH_DEBUG_INST, &val)) {
         brk_insn = val;
@@ -1091,29 +1092,34 @@ int kvm_arch_init_vcpu(CPUState *cs)
     ret = kvm_cpu_check_lsx(cs, &local_err);
     if (ret < 0) {
         error_report_err(local_err);
+        return ret;
     }
 
     ret = kvm_cpu_check_lasx(cs, &local_err);
     if (ret < 0) {
         error_report_err(local_err);
+        return ret;
     }
 
     ret = kvm_cpu_check_lbt(cs, &local_err);
     if (ret < 0) {
         error_report_err(local_err);
+        return ret;
     }
 
     ret = kvm_cpu_check_pmu(cs, &local_err);
     if (ret < 0) {
         error_report_err(local_err);
+        return ret;
     }
 
     ret = kvm_cpu_check_pv_features(cs, &local_err);
     if (ret < 0) {
         error_report_err(local_err);
+        return ret;
     }
 
-    return ret;
+    return 0;
 }
 
 static bool loongarch_get_lbt(Object *obj, Error **errp)
@@ -1193,6 +1199,9 @@ void kvm_loongarch_cpu_post_init(LoongArchCPU *cpu)
 
 int kvm_arch_destroy_vcpu(CPUState *cs)
 {
+    LoongArchCPU *cpu = LOONGARCH_CPU(cs);
+
+    qemu_del_vm_change_state_handler(cpu->vmsentry);
     return 0;
 }
 

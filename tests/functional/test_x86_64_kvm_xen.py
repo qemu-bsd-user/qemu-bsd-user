@@ -41,6 +41,7 @@ class KVMXenGuest(QemuSystemTest):
     def common_vm_setup(self):
         # We also catch lack of KVM_XEN support if we fail to launch
         self.require_accelerator("kvm")
+        self.require_netdev('user')
 
         self.vm.set_console()
 
@@ -80,10 +81,6 @@ class KVMXenGuest(QemuSystemTest):
         wait_for_console_pattern(self, '#', 'Oops')
 
     def test_kvm_xen_guest(self):
-        """
-        :avocado: tags=kvm_xen_guest
-        """
-
         self.common_vm_setup()
 
         self.kernel_params = (self.KERNEL_DEFAULT +
@@ -94,10 +91,6 @@ class KVMXenGuest(QemuSystemTest):
                                 'virtio0-output')
 
     def test_kvm_xen_guest_nomsi(self):
-        """
-        :avocado: tags=kvm_xen_guest_nomsi
-        """
-
         self.common_vm_setup()
 
         self.kernel_params = (self.KERNEL_DEFAULT +
@@ -108,10 +101,6 @@ class KVMXenGuest(QemuSystemTest):
                                 'virtio0')
 
     def test_kvm_xen_guest_noapic_nomsi(self):
-        """
-        :avocado: tags=kvm_xen_guest_noapic_nomsi
-        """
-
         self.common_vm_setup()
 
         self.kernel_params = (self.KERNEL_DEFAULT +
@@ -122,10 +111,6 @@ class KVMXenGuest(QemuSystemTest):
                                 'virtio0')
 
     def test_kvm_xen_guest_vapic(self):
-        """
-        :avocado: tags=kvm_xen_guest_vapic
-        """
-
         self.common_vm_setup()
         self.vm.add_args('-cpu', 'host,+xen-vapic')
         self.kernel_params = (self.KERNEL_DEFAULT +
@@ -140,10 +125,6 @@ class KVMXenGuest(QemuSystemTest):
                                 'virtio0-output')
 
     def test_kvm_xen_guest_novector(self):
-        """
-        :avocado: tags=kvm_xen_guest_novector
-        """
-
         self.common_vm_setup()
         self.kernel_params = (self.KERNEL_DEFAULT +
                               ' xen_emul_unplug=ide-disks' +
@@ -154,10 +135,6 @@ class KVMXenGuest(QemuSystemTest):
                                 'fasteoi')
 
     def test_kvm_xen_guest_novector_nomsi(self):
-        """
-        :avocado: tags=kvm_xen_guest_novector_nomsi
-        """
-
         self.common_vm_setup()
 
         self.kernel_params = (self.KERNEL_DEFAULT +
@@ -169,10 +146,6 @@ class KVMXenGuest(QemuSystemTest):
                                 'IO-APIC')
 
     def test_kvm_xen_guest_novector_noapic(self):
-        """
-        :avocado: tags=kvm_xen_guest_novector_noapic
-        """
-
         self.common_vm_setup()
         self.kernel_params = (self.KERNEL_DEFAULT +
                               ' xen_emul_unplug=ide-disks' +

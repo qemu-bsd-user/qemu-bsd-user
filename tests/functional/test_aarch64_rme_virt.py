@@ -60,8 +60,10 @@ class Aarch64RMEVirtMachine(QemuSystemTest):
     # and launching a nested VM using it.
     def test_aarch64_rme_virt(self):
         self.set_machine('virt')
-        self.vm.set_console()
         self.require_accelerator('tcg')
+        self.require_netdev('user')
+
+        self.vm.set_console()
 
         stack_path_tar_gz = self.ASSET_RME_STACK_VIRT.fetch()
         self.archive_extract(stack_path_tar_gz, format="tar")
@@ -85,7 +87,9 @@ class Aarch64RMEVirtMachine(QemuSystemTest):
         self.vm.add_args('-fsdev', f'local,security_model=none,path={rme_stack},id=shr0')
         self.vm.add_args('-device', 'virtio-net-pci,netdev=net0')
         self.vm.add_args('-netdev', 'user,id=net0')
-        self.vm.add_args('-append', 'root=/dev/vda')
+        # We need to add nokaslr to avoid triggering this sporadic bug:
+        # https://gitlab.com/qemu-project/qemu/-/issues/2823
+        self.vm.add_args('-append', 'root=/dev/vda nokaslr')
 
         self.vm.launch()
         # Wait for host VM boot to complete.
