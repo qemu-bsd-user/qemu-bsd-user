@@ -18,7 +18,8 @@ test_timeouts = {
   'aarch64_sbsaref_alpine' : 1200,
   'aarch64_sbsaref_freebsd' : 720,
   'aarch64_tuxrun' : 240,
-  'aarch64_virt' : 720,
+  'aarch64_virt' : 360,
+  'aarch64_virt_gpu' : 480,
   'acpi_bits' : 420,
   'arm_aspeed_palmetto' : 120,
   'arm_aspeed_romulus' : 120,
@@ -33,6 +34,7 @@ test_timeouts = {
   'arm_orangepi' : 540,
   'arm_quanta_gsj' : 240,
   'arm_raspi2' : 120,
+  'arm_replay' : 240,
   'arm_tuxrun' : 240,
   'arm_sx1' : 360,
   'intel_iommu': 300,
@@ -84,6 +86,7 @@ tests_aarch64_system_thorough = [
   'aarch64_tcg_plugins',
   'aarch64_tuxrun',
   'aarch64_virt',
+  'aarch64_virt_gpu',
   'aarch64_xen',
   'aarch64_xlnx_versal',
   'multiprocess',
@@ -205,7 +208,6 @@ tests_ppc_system_quick = [
 ]
 
 tests_ppc_system_thorough = [
-  'ppc_405',
   'ppc_40p',
   'ppc_amiga',
   'ppc_bamboo',
@@ -383,7 +385,7 @@ foreach speed : ['quick', 'thorough']
       # 'run_target' logic below & in Makefile.include
       test('func-' + testname,
            python,
-           depends: [test_deps, test_emulator, emulator_modules],
+           depends: [test_deps, test_emulator, emulator_modules, plugin_modules],
            env: test_env,
            args: [testpath],
            protocol: 'tap',
