@@ -26,7 +26,6 @@
 #include "target_arch_cpu.h"
 #include "target_arch_thread.h"
 #include "tcg/startup.h"
-#include "exec/exec-all.h"
 #include "exec/tb-flush.h"
 
 #include "os-thread.h"
@@ -1578,7 +1577,7 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
      */
     if (!(cpu->tcg_cflags & CF_PARALLEL)) {
         cpu->tcg_cflags |= CF_PARALLEL;
-        tb_flush(cpu);
+        queue_tb_flush(cpu);
     }
 
     new_env = cpu_copy(env);
