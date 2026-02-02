@@ -201,9 +201,13 @@ static inline abi_long do_bsd_sendto(int fd, abi_ulong msg, size_t len,
     if ((int)addrlen < 0) {
         return -TARGET_EINVAL;
     }
-    host_msg = lock_user(VERIFY_READ, msg, len, 1);
-    if (!host_msg) {
-        return -TARGET_EFAULT;
+    if (len != 0) {
+        host_msg = lock_user(VERIFY_READ, msg, len, 1);
+        if (!host_msg) {
+            return -TARGET_EFAULT;
+        }
+    } else {
+        host_msg = NULL;
     }
     if (target_addr) {
         saddr = alloca(addrlen);
