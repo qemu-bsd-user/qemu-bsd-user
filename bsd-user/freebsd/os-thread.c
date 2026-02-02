@@ -1577,7 +1577,7 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
      */
     if (!(cpu->tcg_cflags & CF_PARALLEL)) {
         cpu->tcg_cflags |= CF_PARALLEL;
-        queue_tb_flush(cpu);
+        tb_flush__exclusive_or_serial();
     }
 
     new_env = cpu_copy(env);
