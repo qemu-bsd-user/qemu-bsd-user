@@ -144,7 +144,7 @@ abi_long host_to_target_semid_ds(abi_ulong target_addr,
         return -TARGET_EFAULT;
     }
     host_to_target_ipc_perm__locked(&target_sd->sem_perm,
-	&host_sd->sem_perm);
+                                    &host_sd->sem_perm);
     /* sem_base is not used by kernel for IPC_STAT/IPC_SET */
     /* target_sd->sem_base = h2g((void *)host_sd->sem_base); */
     target_sd->sem_nsems = tswap16(host_sd->sem_nsems);
@@ -166,7 +166,7 @@ abi_long target_to_host_msqid_ds(struct msqid_ds *host_md,
 
     memset(host_md, 0, sizeof(struct msqid_ds));
     target_to_host_ipc_perm__locked(&host_md->msg_perm,
-	&target_md->msg_perm);
+                                    &target_md->msg_perm);
 
     /* msg_first and msg_last are not used by IPC_SET/IPC_STAT in kernel. */
     host_md->msg_cbytes = tswapal(target_md->msg_cbytes);
@@ -199,7 +199,7 @@ abi_long host_to_target_msqid_ds(abi_ulong target_addr,
 
     memset(target_md, 0, sizeof(struct target_msqid_ds));
     host_to_target_ipc_perm__locked(&target_md->msg_perm,
-	&host_md->msg_perm);
+                                    &host_md->msg_perm);
 
     /* msg_first and msg_last are not used by IPC_SET/IPC_STAT in kernel. */
     target_md->msg_cbytes = tswapal(host_md->msg_cbytes);
