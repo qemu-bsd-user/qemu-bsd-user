@@ -1,1 +1,0 @@
-/* XXX NetBSD thread related helpers */
