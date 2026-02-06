@@ -1,1 +1,0 @@
-/* XXX OpenBSD thread related helpers */

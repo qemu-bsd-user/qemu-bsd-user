@@ -1,1 +1,0 @@
-/* XXX OpenBSD time related helpers */
