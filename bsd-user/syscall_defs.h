@@ -136,8 +136,7 @@ struct target_sched_param {
  */
 #define TARGET_MADV_DONTNEED            4       /* dont need these pages */
 
-/* XXX */
-#define TARGET_BSD_MAP_FLAGMASK         0x3ff7
+#define MAP_TYPE	0xf
 
 /*
  * sys/time.h
