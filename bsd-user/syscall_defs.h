@@ -76,8 +76,8 @@ union target_semun {
 
 struct target_semid_ds {
     struct target_ipc_perm sem_perm; /* operation permission struct */
-    abi_ulong   sem_base;   /* pointer to first semaphore in set */
-    uint16_t    sem_nsems;  /* number of sems in set */
+    abi_ptr     sem_base;   /* pointer to first semaphore in set */
+    abi_ushort  sem_nsems;  /* number of sems in set */
     target_time_t   sem_otime;  /* last operation time */
     target_time_t   sem_ctime;  /* times measured in secs */
 };
@@ -107,8 +107,8 @@ struct bsd_shm_regions {
  */
 struct target_msqid_ds {
     struct  target_ipc_perm msg_perm; /* msg queue permission bits */
-    abi_ulong   msg_first;  /* first message in the queue */
-    abi_ulong   msg_last;   /* last message in the queue */
+    abi_ptr     msg_first;  /* first message in the queue */
+    abi_ptr     msg_last;   /* last message in the queue */
     abi_ulong   msg_cbytes; /* # of bytes in use on the queue */
     abi_ulong   msg_qnum;   /* number of msgs in the queue */
     abi_ulong   msg_qbytes; /* max # of bytes on the queue */
