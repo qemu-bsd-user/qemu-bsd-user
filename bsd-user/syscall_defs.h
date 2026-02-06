@@ -63,13 +63,13 @@ struct target_ipc_perm {
 #define TARGET_SEM_INFO 11 /* Like IPC_INFO but treats semid as sema-index */
 
 struct target_sembuf {
-    unsigned short  sem_num;    /* semaphore # */
-    short       sem_op;         /* semaphore operation */
-    short       sem_flg;        /* operation flags */
+    abi_ushort      sem_num;        /* semaphore # */
+    abi_short       sem_op;         /* semaphore operation */
+    abi_short       sem_flg;        /* operation flags */
 };
 
 union target_semun {
-    int     val;        /* value for SETVAL */
+    abi_int     val;        /* value for SETVAL */
     abi_ulong   buf;        /* buffer for IPC_STAT & IPC_SET */
     abi_ulong   array;      /* array for GETALL & SETALL */
 };

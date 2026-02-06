@@ -81,8 +81,9 @@ abi_long target_to_host_semarray(int semid, unsigned short **host_array,
 }
 
 abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
-        unsigned short **host_array)
+        unsigned short **host_arrayp)
 {
+    g_autofree unsigned short *host_array = *host_arrayp;
     abi_long ret;
     int nsems, i;
     unsigned short *array;
@@ -93,7 +94,7 @@ abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
 
     ret = semctl(semid, 0, IPC_STAT, semun);
     if (ret == -1) {
-        free(*host_array);
+        free(host_array);
         return get_errno(ret);
     }
 
@@ -101,13 +102,13 @@ abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
     array = (unsigned short *)lock_user(VERIFY_WRITE, target_addr,
         nsems * sizeof(unsigned short), 0);
     if (array == NULL) {
-        free(*host_array);
+        free(host_array);
         return -TARGET_EFAULT;
     }
     for (i = 0; i < nsems; i++) {
-        array[i] = (*host_array)[i];
+        __put_user(array[i], host_array + i);
     }
-    free(*host_array);
+    free(host_array);
     unlock_user(array, target_addr, 1);
     return 0;
 }
@@ -120,17 +121,12 @@ abi_long target_to_host_semid_ds(struct semid_ds *host_sd,
     if (!lock_user_struct(VERIFY_READ, target_sd, target_addr, 1)) {
         return -TARGET_EFAULT;
     }
-    target_to_host_ipc_perm__locked(&(host_sd->sem_perm), &target_sd->sem_perm);
+    target_to_host_ipc_perm__locked(&host_sd->sem_perm, &target_sd->sem_perm);
     /* sem_base is not used by kernel for IPC_STAT/IPC_SET */
     /* host_sd->sem_base  = g2h_untagged(target_sd->sem_base); */
-    host_sd->sem_nsems = tswap16(target_sd->sem_nsems);
-#if defined(TARGET_I386)
-    host_sd->sem_otime = tswap32(target_sd->sem_otime);
-    host_sd->sem_ctime = tswap32(target_sd->sem_ctime);
-#else
-    host_sd->sem_otime = tswap64(target_sd->sem_otime);
-    host_sd->sem_ctime = tswap64(target_sd->sem_ctime);
-#endif
+    __get_user(host_sd->sem_nsems, &target_sd->sem_nsems);
+    __get_user(host_sd->sem_otime, &target_sd->sem_otime);
+    __get_user(host_sd->sem_ctime, &target_sd->sem_ctime);
     unlock_user_struct(target_sd, target_addr, 0);
     return 0;
 }
@@ -147,9 +143,9 @@ abi_long host_to_target_semid_ds(abi_ulong target_addr,
                                     &host_sd->sem_perm);
     /* sem_base is not used by kernel for IPC_STAT/IPC_SET */
     /* target_sd->sem_base = h2g((void *)host_sd->sem_base); */
-    target_sd->sem_nsems = tswap16(host_sd->sem_nsems);
-    target_sd->sem_otime = tswapal(host_sd->sem_otime);
-    target_sd->sem_ctime = tswapal(host_sd->sem_ctime);
+    __put_user(target_sd->sem_nsems, &host_sd->sem_nsems);
+    __put_user(target_sd->sem_otime, &host_sd->sem_otime);
+    __put_user(target_sd->sem_ctime, &host_sd->sem_ctime);
     unlock_user_struct(target_sd, target_addr, 1);
 
     return 0;
@@ -169,20 +165,14 @@ abi_long target_to_host_msqid_ds(struct msqid_ds *host_md,
                                     &target_md->msg_perm);
 
     /* msg_first and msg_last are not used by IPC_SET/IPC_STAT in kernel. */
-    host_md->msg_cbytes = tswapal(target_md->msg_cbytes);
-    host_md->msg_qnum = tswapal(target_md->msg_qnum);
-    host_md->msg_qbytes = tswapal(target_md->msg_qbytes);
-    host_md->msg_lspid = tswapal(target_md->msg_lspid);
-    host_md->msg_lrpid = tswapal(target_md->msg_lrpid);
-#if defined(TARGET_I386)
-    host_md->msg_stime = tswap32(target_md->msg_stime);
-    host_md->msg_rtime = tswap32(target_md->msg_rtime);
-    host_md->msg_ctime = tswap32(target_md->msg_ctime);
-#else
-    host_md->msg_stime = tswap64(target_md->msg_stime);
-    host_md->msg_rtime = tswap64(target_md->msg_rtime);
-    host_md->msg_ctime = tswap64(target_md->msg_ctime);
-#endif
+    __get_user(host_md->msg_cbytes, &target_md->msg_cbytes);
+    __get_user(host_md->msg_qnum, &target_md->msg_qnum);
+    __get_user(host_md->msg_qbytes, &target_md->msg_qbytes);
+    __get_user(host_md->msg_lspid, &target_md->msg_lspid);
+    __get_user(host_md->msg_lrpid, &target_md->msg_lrpid);
+    __get_user(host_md->msg_stime, &target_md->msg_stime);
+    __get_user(host_md->msg_rtime, &target_md->msg_rtime);
+    __get_user(host_md->msg_ctime, &target_md->msg_ctime);
     unlock_user_struct(target_md, target_addr, 0);
 
     return 0;
@@ -202,20 +192,14 @@ abi_long host_to_target_msqid_ds(abi_ulong target_addr,
                                     &host_md->msg_perm);
 
     /* msg_first and msg_last are not used by IPC_SET/IPC_STAT in kernel. */
-    target_md->msg_cbytes = tswapal(host_md->msg_cbytes);
-    target_md->msg_qnum = tswapal(host_md->msg_qnum);
-    target_md->msg_qbytes = tswapal(host_md->msg_qbytes);
-    target_md->msg_lspid = tswapal(host_md->msg_lspid);
-    target_md->msg_lrpid = tswapal(host_md->msg_lrpid);
-#if defined(TARGET_I386)
-    target_md->msg_stime = tswap32(host_md->msg_stime);
-    target_md->msg_rtime = tswap32(host_md->msg_rtime);
-    target_md->msg_ctime = tswap32(host_md->msg_ctime);
-#else
-    target_md->msg_stime = tswap64(host_md->msg_stime);
-    target_md->msg_rtime = tswap64(host_md->msg_rtime);
-    target_md->msg_ctime = tswap64(host_md->msg_ctime);
-#endif
+    __put_user(target_md->msg_cbytes, &host_md->msg_cbytes);
+    __put_user(target_md->msg_qnum, &host_md->msg_qnum);
+    __put_user(target_md->msg_qbytes, &host_md->msg_qbytes);
+    __put_user(target_md->msg_lspid, &host_md->msg_lspid);
+    __put_user(target_md->msg_lrpid, &host_md->msg_lrpid);
+    __put_user(target_md->msg_stime, &host_md->msg_stime);
+    __put_user(target_md->msg_rtime, &host_md->msg_rtime);
+    __put_user(target_md->msg_ctime, &host_md->msg_ctime);
     unlock_user_struct(target_md, target_addr, 1);
 
     return 0;

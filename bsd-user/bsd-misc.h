@@ -28,11 +28,7 @@
 
 #include "qemu-bsd.h"
 
-#ifdef MSGMAX
-static int bsd_msgmax = MSGMAX;
-#else
 static int bsd_msgmax;
-#endif
 
 /* quotactl(2) */
 static inline abi_long do_bsd_quotactl(abi_ulong path, abi_long cmd,
@@ -54,17 +50,13 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
 {
     int i;
     abi_long ret;
-    struct uuid *host_uuid;
+    g_autofree struct uuid *host_uuid;
 
     if (count < 1 || count > 2048) {
         return -TARGET_EINVAL;
     }
 
     host_uuid = g_malloc(count * sizeof(struct uuid));
-
-    if (host_uuid == NULL) {
-        return -TARGET_ENOMEM;
-    }
 
     ret = get_errno(uuidgen(host_uuid, count));
     if (is_error(ret)) {
@@ -79,10 +71,8 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
     }
 
 out:
-    g_free(host_uuid);
     return ret;
 }
-
 
 /*
  * System V Semaphores
@@ -120,14 +110,16 @@ static inline abi_long do_bsd_semop(int semid, abi_long ptr, unsigned nsops)
 
 /* __semctl(2) */
 static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
-        union target_semun target_su)
+                                       abi_ptr un_ptr)
 {
+    void *target_un;
     union semun arg;
     struct semid_ds dsarg;
     unsigned short *array = NULL;
     int host_cmd;
     abi_long ret = 0;
     abi_long err;
+    abi_ulong target_array, target_buffer;
 
     switch (target_cmd) {
     case TARGET_GETVAL:
@@ -174,34 +166,29 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
         return -TARGET_EINVAL;
     }
 
+    /*
+     * Unlike Linux and the semctl system call, we take a pointer
+     * to the union arg here.
+     */
+    target_un = lock_user(VERIFY_READ, un_ptr, sizeof(union target_semun), 0);
+
     switch (host_cmd) {
     case GETVAL:
     case SETVAL:
-        /*
-         * In 64 bit cross-endian situations, we will erroneously pick up the
-         * wrong half of the union for the "val" element.  To rectify this, the
-         * entire 8-byte structure is byteswapped, followed by a swap of the 4
-         * byte val field. In other cases, the data is already in proper host
-         * byte order.
-         */
-        if (sizeof(target_su.val) != (sizeof(target_su.buf))) {
-            target_su.buf = tswapal(target_su.buf);
-            arg.val = tswap32(target_su.val);
-        } else {
-            arg.val = target_su.val;
-        }
+        __get_user(arg.val, (abi_int *)target_un);
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
         break;
 
     case GETALL:
     case SETALL:
-        err = target_to_host_semarray(semid, &array, target_su.array);
+        __get_user(target_array, (abi_ulong *)target_un);
+        err = target_to_host_semarray(semid, &array, target_array);
         if (is_error(err)) {
             return err;
         }
         arg.array = array;
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semarray(semid, target_su.array, &array);
+        err = host_to_target_semarray(semid, target_array, &array);
         if (is_error(err)) {
             return err;
         }
@@ -209,13 +196,14 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
 
     case IPC_STAT:
     case IPC_SET:
-        err = target_to_host_semid_ds(&dsarg, target_su.buf);
+        __get_user(target_buffer, (abi_ulong *)target_un);
+        err = target_to_host_semid_ds(&dsarg, target_buffer);
         if (is_error(err)) {
             return err;
         }
         arg.buf = &dsarg;
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semid_ds(target_su.buf, &dsarg);
+        err = host_to_target_semid_ds(target_buffer, &dsarg);
         if (is_error(err)) {
             return err;
         }
