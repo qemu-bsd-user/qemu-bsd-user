@@ -213,6 +213,7 @@ F: hw/cpu/a*mpcore.c
 F: include/hw/cpu/a*mpcore.h
 F: docs/system/target-arm.rst
 F: docs/system/arm/cpu-features.rst
+F: docs/system/arm/emulation.rst
 F: gdb-xml/arm*.xml
 F: gdb-xml/aarch64*.xml
 
@@ -301,12 +302,12 @@ F: tests/tcg/mips/
 OpenRISC TCG CPUs
 M: Stafford Horne <shorne@gmail.com>
 S: Odd Fixes
-F: docs/system/openrisc/cpu-features.rst
-F: target/openrisc/
-F: hw/openrisc/
-F: include/hw/openrisc/
+F: docs/system/or1k/cpu-features.rst
+F: target/or1k/
+F: hw/or1k/
+F: include/hw/or1k/
 F: tests/functional/or1k/meson.build
-F: tests/tcg/openrisc/
+F: tests/tcg/or1k/
 
 PowerPC TCG CPUs
 M: Nicholas Piggin <npiggin@gmail.com>
@@ -1248,11 +1249,13 @@ F: hw/net/ftgmac100.c
 F: include/hw/net/ftgmac100.h
 F: docs/system/arm/aspeed.rst
 F: docs/system/arm/fby35.rst
+F: docs/specs/aspeed*
 F: tests/functional/*/*aspeed*
 F: tests/*/*aspeed*
 F: tests/*/*ast2700*
 F: hw/arm/fby35.c
 F: pc-bios/ast27x0_bootrom.bin
+F: roms/vbootrom
 
 NRF51
 M: Joel Stanley <joel@jms.id.au>
@@ -1490,9 +1493,9 @@ OpenRISC Machines
 or1k-sim
 M: Jia Liu <proljc@gmail.com>
 S: Maintained
-F: docs/system/openrisc/or1k-sim.rst
+F: docs/system/or1k/or1k-sim.rst
 F: hw/intc/ompic.c
-F: hw/openrisc/openrisc_sim.c
+F: hw/or1k/or1k-sim.c
 F: tests/functional/or1k/test_sim.py
 
 PowerPC Machines
@@ -2196,7 +2199,7 @@ S: Maintained
 F: hw/riscv/virt-acpi-build.c
 
 ACPI/VIOT
-M: Jean-Philippe Brucker <jean-philippe@linaro.org>
+M: Eric Auger <eric.auger@redhat.com>
 S: Supported
 F: hw/acpi/viot.c
 F: hw/acpi/viot.h
@@ -2554,6 +2557,12 @@ S: Supported
 F: hw/virtio/vhost-user-scmi*
 F: include/hw/virtio/vhost-user-scmi.h
 F: tests/qtest/libqos/virtio-scmi.*
+
+vhost-user-spi
+M: Haixu Cui <quic_haixcui@quicinc.com>
+S: Maintained
+F: include/hw/virtio/vhost-user-spi.h
+F: hw/virtio/vhost-user-spi*
 
 virtio-crypto
 M: Gonglei <arei.gonglei@huawei.com>

@@ -31,7 +31,6 @@
 
 #include "qemu.h"
 #include "signal-common.h"
-#include "user/syscall-trace.h"
 #include "truss_hdr.h"
 #include "systruss.h"
 
