@@ -50,8 +50,12 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
 {
     int i;
     abi_long ret;
-    g_autofree struct uuid *host_uuid;
+    g_autofree struct uuid *host_uuid = NULL;
 
+    /*
+     * 2048 is the kernel limit, but there's no #define for it, nor any sysctl
+     * to query it.
+     */
     if (count < 1 || count > 2048) {
         return -TARGET_EINVAL;
     }
@@ -66,7 +70,7 @@ static inline abi_long do_bsd_uuidgen(abi_ulong target_addr, int count)
         ret = host_to_target_uuid(target_addr +
             (abi_ulong)(sizeof(struct target_uuid) * i), &host_uuid[i]);
         if (is_error(ret)) {
-            goto out;
+            break;
         }
     }
 
@@ -170,7 +174,7 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
      * Unlike Linux and the semctl system call, we take a pointer
      * to the union arg here.
      */
-    target_un = lock_user(VERIFY_READ, un_ptr, sizeof(union target_semun), 0);
+    target_un = lock_user(VERIFY_READ, un_ptr, sizeof(union target_semun), 1);
 
     switch (host_cmd) {
     case GETVAL:
@@ -220,6 +224,7 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
         ret = -TARGET_EINVAL;
         break;
     }
+    unlock_user(target_un, un_ptr, 1);
     return ret;
 }
 

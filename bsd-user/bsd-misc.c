@@ -94,7 +94,6 @@ abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
 
     ret = semctl(semid, 0, IPC_STAT, semun);
     if (ret == -1) {
-        free(host_array);
         return get_errno(ret);
     }
 
@@ -102,13 +101,11 @@ abi_long host_to_target_semarray(int semid, abi_ulong target_addr,
     array = (unsigned short *)lock_user(VERIFY_WRITE, target_addr,
         nsems * sizeof(unsigned short), 0);
     if (array == NULL) {
-        free(host_array);
         return -TARGET_EFAULT;
     }
     for (i = 0; i < nsems; i++) {
         __put_user(array[i], host_array + i);
     }
-    free(host_array);
     unlock_user(array, target_addr, 1);
     return 0;
 }
