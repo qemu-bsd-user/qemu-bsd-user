@@ -277,7 +277,8 @@ struct MachineClass {
     void (*reset)(MachineState *state, ResetType type);
     void (*wakeup)(MachineState *state);
     int (*kvm_type)(MachineState *machine, const char *arg);
-    int (*hvf_get_physical_address_range)(MachineState *machine);
+    int (*get_physical_address_range)(MachineState *machine,
+        int default_ipa_size, int max_ipa_size);
 
     BlockInterfaceType block_default_type;
     int units_per_default_bus;
@@ -881,11 +882,5 @@ extern const size_t hw_compat_2_9_len;
 
 extern GlobalProperty hw_compat_2_8[];
 extern const size_t hw_compat_2_8_len;
-
-extern GlobalProperty hw_compat_2_7[];
-extern const size_t hw_compat_2_7_len;
-
-extern GlobalProperty hw_compat_2_6[];
-extern const size_t hw_compat_2_6_len;
 
 #endif
