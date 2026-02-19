@@ -54,7 +54,7 @@ abi_long target_to_host_semarray(int semid, unsigned short **host_array,
         return get_errno(ret);
     }
     nsems = semid_ds.sem_nsems;
-    *host_array = (unsigned short *)g_malloc(nsems * sizeof(unsigned short));
+    *host_array = g_new(unsigned short, nsems);
     array = lock_user(VERIFY_READ, target_addr,
         nsems * sizeof(unsigned short), 1);
     if (array == NULL) {
