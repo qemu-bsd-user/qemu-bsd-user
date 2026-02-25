@@ -119,6 +119,9 @@ struct target_msqid_ds {
     target_time_t   msg_ctime;  /* time of last msgctl() */
 };
 
+/*
+ * sys/msgbuf.h
+ */
 struct target_msgbuf {
     abi_long    mtype;      /* message type */
     char        mtext[1];   /* body of message */

@@ -177,14 +177,11 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
         __get_user(target_array, (abi_ulong *)target_un);
         err = target_to_host_semarray(semid, &array, target_array);
         if (is_error(err)) {
-            return err;
+            goto out;
         }
         arg.array = array;
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
         err = host_to_target_semarray(semid, target_array, &array);
-        if (is_error(err)) {
-            return err;
-        }
         break;
 
     case IPC_STAT:
@@ -192,14 +189,11 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
         __get_user(target_buffer, (abi_ulong *)target_un);
         err = target_to_host_semid_ds(&dsarg, target_buffer);
         if (is_error(err)) {
-            return err;
+            goto out;
         }
         arg.buf = &dsarg;
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
         err = host_to_target_semid_ds(target_buffer, &dsarg);
-        if (is_error(err)) {
-            return err;
-        }
         break;
 
     case IPC_RMID:
@@ -213,6 +207,7 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
         ret = -TARGET_EINVAL;
         break;
     }
+out:
     unlock_user(target_un, un_ptr, 1);
     return ret;
 }
