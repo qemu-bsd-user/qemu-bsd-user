@@ -470,6 +470,12 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
                      int flags, int fd, off_t offset)
 {
     abi_ulong ret, end, real_start, real_end, retaddr, host_offset, host_len;
+    int page_flags;
+
+    page_flags = validate_prot_to_pageflags(target_prot);
+    if (!page_flags) {
+        return -TARGET_EINVAL;
+    }
 
     mmap_lock();
     if (qemu_loglevel_mask(CPU_LOG_PAGE)) {
@@ -741,7 +747,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
         }
     }
  the_end1:
-    page_set_flags(start, start + len - 1, flags | PAGE_VALID, PAGE_VALID);
+    page_set_flags(start, start + len - 1, page_flags, PAGE_VALID);
  the_end:
 #ifdef DEBUG_MMAP
     printf("ret=0x" TARGET_ABI_FMT_lx "\n", start);
