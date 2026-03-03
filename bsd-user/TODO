@@ -27,3 +27,5 @@ https://patchew.org/QEMU/20210706234932.356913-1-richard.henderson@linaro.org/
 14. Add plugin support:
     More generally, plugins were not enabled for bsd-user until recently (I
     added it in 9b23bf5024b5c7d91cfe9233f71859208f4ffa94 around a year ago).
+15. From qemu.h:
+    TODO: Remove these and rely only on qemu_real_host_page_size().
