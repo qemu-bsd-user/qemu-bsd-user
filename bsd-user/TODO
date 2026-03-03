@@ -24,3 +24,6 @@ https://patchew.org/QEMU/20210706234932.356913-1-richard.henderson@linaro.org/
 12. static inline junk
 13. in do_bsd_readlink, need to revisit the test for
     "/proc/curproc/file" when on !FreeBSD
+14. Add plugin support:
+    More generally, plugins were not enabled for bsd-user until recently (I
+    added it in 9b23bf5024b5c7d91cfe9233f71859208f4ffa94 around a year ago).
