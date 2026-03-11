@@ -27,6 +27,27 @@
 
 #include "os-syscall.h"
 
+/*
+ * machine/_types.h
+ * or x86/_types.h
+ */
+
+/*
+ * time_t seems to be very inconsistly defined for the different *BSD's...
+ *
+ * FreeBSD uses a 64bits time_t except on i386
+ * so we have to add a special case here.
+ *
+ * On NetBSD time_t is always defined as an int64_t.  On OpenBSD time_t
+ * is always defined as an int.
+ *
+ */
+#if (!defined(TARGET_I386))
+typedef int64_t target_time_t;
+#else
+typedef int32_t target_time_t;
+#endif
+
 struct target_iovec {
     abi_long iov_base;   /* Starting address */
     abi_long iov_len;   /* Number of bytes */
@@ -59,8 +80,6 @@ struct target_ipc_perm {
 #define TARGET_GETZCNT  7   /* Return the value of semzcnt {READ} */
 #define TARGET_SETVAL   8   /* Set the value of semval to arg.val {ALTER} */
 #define TARGET_SETALL   9   /* Set semvals from arg.array {ALTER} */
-#define TARGET_SEM_STAT 10 /* Like IPC_STAT but treats semid as sema-index */
-#define TARGET_SEM_INFO 11 /* Like IPC_INFO but treats semid as sema-index */
 
 struct target_sembuf {
     abi_ushort      sem_num;        /* semaphore # */
@@ -833,7 +852,6 @@ struct target_procctl_reaper_kill {
     uint32_t rk_fpid;
     uint32_t rk_pad0[15];
 };
-
 
 #define safe_syscall0(type, name) \
 type safe_##name(void) \

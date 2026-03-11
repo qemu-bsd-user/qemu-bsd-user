@@ -27,13 +27,13 @@
 #include "qemu/module.h"
 #include "qemu/hw-version.h"
 #include "qemu/memalign.h"
+#include "qemu/target-info.h"
 #include "hw/scsi/scsi.h"
 #include "migration/misc.h"
 #include "migration/qemu-file-types.h"
 #include "migration/vmstate.h"
 #include "hw/scsi/emulation.h"
 #include "scsi/constants.h"
-#include "system/arch_init.h"
 #include "system/block-backend.h"
 #include "system/blockdev.h"
 #include "hw/block/block.h"
@@ -2747,14 +2747,14 @@ static SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
 static int scsi_block_migration_notifier(NotifierWithReturn *notifier,
                                          MigrationEvent *e, Error **errp)
 {
-    if (e->type == MIG_EVENT_PRECOPY_FAILED) {
+    if (e->type == MIG_EVENT_FAILED) {
         SCSIDiskState *s =
             container_of(notifier, SCSIDiskState, migration_notifier);
         SCSIDevice *d = &s->qdev;
         Error *local_err = NULL;
 
         if (!scsi_generic_pr_state_preempt(d, &local_err)) {
-            /* MIG_EVENT_PRECOPY_FAILED cannot fail, so just warn */
+            /* MIG_EVENT_FAILED cannot fail, so just warn */
             error_prepend(&local_err, "scsi-block migration rollback: ");
             warn_report_err(local_err);
         }
@@ -3180,7 +3180,7 @@ static void scsi_property_add_specifics(DeviceClass *dc)
     ObjectClass *oc = OBJECT_CLASS(dc);
 
     /* The loadparm property is only supported on s390x */
-    if (qemu_arch_available(QEMU_ARCH_S390X)) {
+    if (target_s390x()) {
         object_class_property_add_str(oc, "loadparm",
                                       scsi_property_get_loadparm,
                                       scsi_property_set_loadparm);

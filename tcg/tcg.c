@@ -236,10 +236,6 @@ static TCGAtomAlign atom_and_align_for_opc(TCGContext *s, MemOp opc,
                                            MemOp host_atom, bool allow_two_ops)
     __attribute__((unused));
 
-#ifdef CONFIG_USER_ONLY
-bool tcg_use_softmmu;
-#endif
-
 TCGContext tcg_init_ctx;
 __thread TCGContext *tcg_ctx;
 
@@ -3391,11 +3387,9 @@ static void process_constraint_sets(void)
     }
 }
 
-static const TCGArgConstraint *opcode_args_ct(const TCGOp *op)
+static const TCGArgConstraint *op_args_ct(TCGOpcode opc, TCGType type,
+                                          unsigned flags)
 {
-    TCGOpcode opc = op->opc;
-    TCGType type = TCGOP_TYPE(op);
-    unsigned flags = TCGOP_FLAGS(op);
     const TCGOpDef *def = &tcg_op_defs[opc];
     const TCGOutOp *outop = all_outop[opc];
     TCGConstraintSetIndex con_set;
@@ -3420,6 +3414,21 @@ static const TCGArgConstraint *opcode_args_ct(const TCGOp *op)
     tcg_debug_assert(constraint_sets[con_set].nb_iargs == def->nb_iargs);
 
     return all_cts[con_set];
+}
+
+static const TCGArgConstraint *opcode_args_ct(const TCGOp *op)
+{
+    return op_args_ct(op->opc, TCGOP_TYPE(op), TCGOP_FLAGS(op));
+}
+
+bool tcg_op_imm_match(TCGOpcode opc, TCGType type, tcg_target_ulong imm)
+{
+    const TCGArgConstraint *args_ct = op_args_ct(opc, type, 0);
+    const TCGOpDef *def = &tcg_op_defs[opc];
+
+    tcg_debug_assert(def->nb_oargs == 1);
+    tcg_debug_assert(def->nb_iargs == 2);
+    return tcg_target_const_match(imm, args_ct[2].ct, type, 0, 0);
 }
 
 static void remove_label_use(TCGOp *op, int idx)

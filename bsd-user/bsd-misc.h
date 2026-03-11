@@ -111,7 +111,6 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
     unsigned short *array = NULL;
     int host_cmd;
     abi_long ret = 0;
-    abi_long err;
     abi_ulong target_array, target_buffer;
 
     switch (target_cmd) {
@@ -175,25 +174,29 @@ static inline abi_long do_bsd___semctl(int semid, int semnum, int target_cmd,
     case GETALL:
     case SETALL:
         __get_user(target_array, (abi_ulong *)target_un);
-        err = target_to_host_semarray(semid, &array, target_array);
-        if (is_error(err)) {
+        ret = target_to_host_semarray(semid, &array, target_array);
+        if (is_error(ret)) {
             goto out;
         }
         arg.array = array;
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semarray(semid, target_array, &array);
+        if (!is_error(ret)) {
+            ret = host_to_target_semarray(semid, target_array, &array);
+        }
         break;
 
     case IPC_STAT:
     case IPC_SET:
         __get_user(target_buffer, (abi_ulong *)target_un);
-        err = target_to_host_semid_ds(&dsarg, target_buffer);
-        if (is_error(err)) {
+        ret = target_to_host_semid_ds(&dsarg, target_buffer);
+        if (is_error(ret)) {
             goto out;
         }
         arg.buf = &dsarg;
         ret = get_errno(semctl(semid, semnum, host_cmd, arg));
-        err = host_to_target_semid_ds(target_buffer, &dsarg);
+        if (!is_error(ret)) {
+            ret = host_to_target_semid_ds(target_buffer, &dsarg);
+        }
         break;
 
     case IPC_RMID:

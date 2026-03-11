@@ -152,6 +152,13 @@ F: tools/i386/
 F: tests/functional/i386/
 F: tests/functional/x86_64/
 
+X86 VM file descriptor change on reset test
+M: Ani Sinha <anisinha@redhat.com>
+M: Paolo Bonzini <pbonzini@redhat.com>
+S: Maintained
+F: stubs/kvm.c
+F: tests/functional/x86_64/test_rebuild_vmfd.py
+
 Guest CPU cores (TCG)
 ---------------------
 Overall TCG CPUs
@@ -159,7 +166,7 @@ M: Richard Henderson <richard.henderson@linaro.org>
 R: Paolo Bonzini <pbonzini@redhat.com>
 S: Maintained
 F: system/watchpoint.c
-F: page-vary-target.c
+F: page-vary-system.c
 F: page-vary-common.c
 F: accel/tcg/
 F: accel/stubs/tcg-stub.c
@@ -286,7 +293,7 @@ F: target/microblaze/
 F: hw/microblaze/
 F: disas/microblaze.c
 F: tests/docker/dockerfiles/debian-microblaze-cross.d/build-toolchain.sh
-F: tests/functional/microblaze*/meson.build
+F: tests/functional/microblaze/
 
 MIPS TCG CPUs
 M: Philippe Mathieu-Daudé <philmd@linaro.org>
@@ -304,6 +311,7 @@ M: Stafford Horne <shorne@gmail.com>
 S: Odd Fixes
 F: docs/system/or1k/cpu-features.rst
 F: target/or1k/
+F: gdb-xml/or1k-core.xml
 F: hw/or1k/
 F: include/hw/or1k/
 F: tests/functional/or1k/meson.build
@@ -312,6 +320,7 @@ F: tests/tcg/or1k/
 PowerPC TCG CPUs
 M: Nicholas Piggin <npiggin@gmail.com>
 R: Chinmay Rath <rathc@linux.ibm.com>
+R: Glenn Miles <milesg@linux.ibm.com>
 L: qemu-ppc@nongnu.org
 S: Odd Fixes
 F: target/ppc/
@@ -350,6 +359,7 @@ F: common-user/host/riscv*
 F: tests/functional/riscv32
 F: tests/functional/riscv64
 F: tests/tcg/riscv64/
+F: tests/qtest/iommu-riscv-test.c
 
 RISC-V XThead* extensions
 M: Christoph Muellner <christoph.muellner@vrull.eu>
@@ -401,6 +411,7 @@ M: Mark Cave-Ayland <mark.cave-ayland@ilande.co.uk>
 M: Artyom Tarasenko <atar4qemu@gmail.com>
 S: Maintained
 F: target/sparc/
+F: gdb-xml/sparc*.xml
 F: hw/sparc/
 F: hw/sparc64/
 F: include/hw/sparc/sparc64.h
@@ -575,7 +586,7 @@ F: include/system/whpx-common.h
 F: include/system/whpx-internal.h
 
 MSHV
-M: Magnus Kulke <magnus.kulke@linux.microsoft.com>
+M: Magnus Kulke <magnuskulke@linux.microsoft.com>
 R: Wei Liu <wei.liu@kernel.org>
 S: Supported
 F: accel/mshv/
@@ -583,8 +594,14 @@ F: include/system/mshv.h
 F: include/hw/hyperv/hvgdk*.h
 F: include/hw/hyperv/hvhdk*.h
 
+Nitro Enclaves (native)
+M: Alexander Graf <graf@amazon.com>
+S: Maintained
+F: accel/nitro/
+F: include/system/nitro-accel.h
+
 X86 MSHV CPUs
-M: Magnus Kulke <magnus.kulke@linux.microsoft.com>
+M: Magnus Kulke <magnuskulke@linux.microsoft.com>
 R: Wei Liu <wei.liu@kernel.org>
 S: Supported
 F: target/i386/mshv/
@@ -602,7 +619,6 @@ Guest CPU Cores (Xen)
 X86 Xen CPUs
 M: Stefano Stabellini <sstabellini@kernel.org>
 M: Anthony PERARD <anthony@xenproject.org>
-M: Paul Durrant <paul@xen.org>
 M: Edgar E. Iglesias <edgar.iglesias@gmail.com>
 L: xen-devel@lists.xenproject.org
 S: Supported
@@ -815,15 +831,6 @@ F: hw/*/exynos*
 F: include/hw/*/exynos*
 F: docs/system/arm/exynos.rst
 F: tests/functional/arm/test_smdkc210.py
-
-Calxeda Highbank
-M: Rob Herring <robh@kernel.org>
-M: Peter Maydell <peter.maydell@linaro.org>
-L: qemu-arm@nongnu.org
-S: Odd Fixes
-F: hw/arm/highbank.c
-F: hw/net/xgmac.c
-F: docs/system/arm/highbank.rst
 
 Canon DIGIC
 M: Antony Pavlov <antonynpavlov@gmail.com>
@@ -1350,13 +1357,13 @@ F: gdb-xml/loongarch*.xml
 M68K Machines
 -------------
 an5206
-M: Thomas Huth <huth@tuxfamily.org>
+M: Thomas Huth <th.huth+qemu@posteo.eu>
 S: Odd Fixes
 F: hw/m68k/an5206.c
 F: hw/m68k/mcf5206.c
 
 mcf5208
-M: Thomas Huth <huth@tuxfamily.org>
+M: Thomas Huth <th.huth+qemu@posteo.eu>
 S: Odd Fixes
 F: hw/m68k/mcf5208.c
 F: hw/m68k/mcf_intc.c
@@ -1366,7 +1373,7 @@ F: include/hw/m68k/mcf*.h
 F: tests/functional/m68k/test_mcf5208evb.py
 
 NeXTcube
-M: Thomas Huth <huth@tuxfamily.org>
+M: Thomas Huth <th.huth+qemu@posteo.eu>
 S: Odd Fixes
 F: hw/m68k/next-*.c
 F: hw/display/next-fb.c
@@ -1421,7 +1428,7 @@ M: Edgar E. Iglesias <edgar.iglesias@gmail.com>
 S: Maintained
 F: hw/microblaze/petalogix_s3adsp1800_mmu.c
 F: include/hw/char/xilinx_uartlite.h
-F: tests/functional/microblaze*/test_s3adsp1800.py
+F: tests/functional/microblaze/test_s3adsp1800.py
 
 petalogix_ml605
 M: Edgar E. Iglesias <edgar.iglesias@gmail.com>
@@ -1875,6 +1882,7 @@ R: Eric Farman <farman@linux.ibm.com>
 S: Supported
 F: hw/s390x/s390-pci*
 F: include/hw/s390x/s390-pci*
+F: include/hw/s390x/ipl/s390-pci*
 F: util/s390x_pci_mmio.c
 L: qemu-s390x@nongnu.org
 
@@ -2405,6 +2413,7 @@ F: subprojects/libvhost-user/
 F: block/export/vhost-user*
 F: util/vhost-user-server.c
 F: net/vhost*
+F: tests/functional/x86_64/test_vhost_user_bridge.py
 
 vhost-shadow-virtqueue
 R: Eugenio Pérez <eperezma@redhat.com>
@@ -2600,7 +2609,7 @@ F: include/hw/virtio/virtio-mem.h
 
 virtio-snd
 M: Gerd Hoffmann <kraxel@redhat.com>
-R: Manos Pitsidianakis <manos.pitsidianakis@linaro.org>
+M: Manos Pitsidianakis <manos.pitsidianakis@linaro.org>
 S: Supported
 F: hw/audio/virtio-snd.c
 F: hw/audio/virtio-snd-pci.c
@@ -2734,7 +2743,7 @@ F: tests/qtest/hexloader-test.c
 F: tests/data/hex-loader/test.hex
 
 CHRP NVRAM
-M: Thomas Huth <thuth@redhat.com>
+M: Mark Cave-Ayland <mark.cave-ayland@ilande.co.uk>
 S: Maintained
 F: hw/nvram/chrp_nvram.c
 F: include/hw/nvram/chrp_nvram.h
@@ -3016,6 +3025,13 @@ F: hw/vmapple/*
 F: include/hw/vmapple/*
 F: docs/system/arm/vmapple.rst
 
+Nitro Enclaves (native)
+M: Alexander Graf <graf@amazon.com>
+S: Maintained
+F: hw/nitro/
+F: include/hw/nitro/
+F: docs/system/nitro.rst
+
 Subsystems
 ----------
 Overall Audio backends
@@ -3034,6 +3050,7 @@ X: audio/sndioaudio.c
 X: audio/spiceaudio.c
 F: include/qemu/audio*.h
 F: qapi/audio.json
+F: tests/audio/
 
 ALSA Audio backend
 M: Gerd Hoffmann <kraxel@redhat.com>
@@ -3072,7 +3089,7 @@ F: audio/paaudio.c
 
 SDL Audio backend
 M: Gerd Hoffmann <kraxel@redhat.com>
-R: Thomas Huth <huth@tuxfamily.org>
+R: Thomas Huth <th.huth+qemu@posteo.eu>
 S: Odd Fixes
 F: audio/sdlaudio.c
 
@@ -3600,6 +3617,7 @@ M: Tao Tang <tangtao1634@phytium.com.cn>
 S: Maintained
 F: tests/qtest/libqos/qos-iommu*
 F: tests/qtest/libqos/qos-smmuv3*
+F: tests/qtest/libqos/qos-riscv-iommu*
 
 Device Fuzzing
 M: Alexander Bulekov <alxndr@bu.edu>
@@ -3863,12 +3881,14 @@ F: include/qemu/yank.h
 F: qapi/yank.json
 
 COLO Framework
-M: Hailiang Zhang <zhanghailiang@xfusion.com>
+M: Lukas Straub <lukasstraub2@web.de>
 S: Maintained
 F: migration/colo*
+F: migration/multifd-colo.*
 F: include/migration/colo.h
 F: include/migration/failover.h
-F: docs/COLO-FT.txt
+F: tests/qtest/migration/colo-tests.c
+F: docs/system/qemu-colo.rst
 
 COLO Proxy
 M: Zhang Chen <zhangckid@gmail.com>
@@ -3929,6 +3949,19 @@ F: include/hw/i2c/smbus_master.h
 F: include/hw/i2c/smbus_slave.h
 F: include/hw/i2c/smbus_eeprom.h
 
+I3C
+M: Joe Komlodi <komlodi@google.com>
+M: Cédric Le Goater <clg@kaod.org>
+M: Jamin Lin <jamin_lin@aspeedtech.com>
+R: Nabih Estefan <nabihestefan@google.com>
+S: Maintained
+F: hw/i3c/*.c
+F: hw/i3c/.h
+F: hw/i3c/Kconfig
+F: hw/i3c/meson.build
+F: hw/i3c/trace-events
+F: include/hw/i3c/*.h
+
 PMBus
 M: Titus Rwantare <titusr@google.com>
 S: Maintained
@@ -3986,7 +4019,7 @@ VT-d Emulation
 M: Michael S. Tsirkin <mst@redhat.com>
 R: Jason Wang <jasowang@redhat.com>
 R: Yi Liu <yi.l.liu@intel.com>
-R: Clément Mathieu--Drif <clement.mathieu--drif@eviden.com>
+R: Clément Mathieu--Drif <clement.mathieu--drif@bull.com>
 S: Supported
 F: hw/i386/intel_iommu.c
 F: hw/i386/intel_iommu_internal.h
@@ -4077,6 +4110,7 @@ S: Maintained
 F: docs/devel/tcg-plugins.rst
 F: plugins/
 F: tests/tcg/plugins/
+F: tests/tcg/multiarch/plugin/
 F: tests/functional/aarch64/test_tcg_plugins.py
 F: contrib/plugins/
 F: scripts/qemu-plugin-symbols.py

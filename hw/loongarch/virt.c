@@ -34,6 +34,7 @@
 #include "hw/misc/unimp.h"
 #include "hw/loongarch/fw_cfg.h"
 #include "target/loongarch/cpu.h"
+#include "target/loongarch/cpu-mmu.h"
 #include "hw/firmware/smbios.h"
 #include "qapi/qapi-visit-common.h"
 #include "hw/acpi/generic_event_device.h"
@@ -776,7 +777,9 @@ static MemTxResult virt_iocsr_misc_read(void *opaque, hwaddr addr,
     LoongArchVirtMachineState *lvms = LOONGARCH_VIRT_MACHINE(opaque);
     uint64_t ret = 0;
     int features;
+    CPULoongArchState *env;
 
+    env = &LOONGARCH_CPU(first_cpu)->env;
     switch (addr) {
     case VERSION_REG:
         ret = 0x11ULL;
@@ -791,10 +794,10 @@ static MemTxResult virt_iocsr_misc_read(void *opaque, hwaddr addr,
         }
         break;
     case VENDOR_REG:
-        ret = 0x6e6f73676e6f6f4cULL; /* "Loongson" */
+        ret = env->vendor_id;
         break;
     case CPUNAME_REG:
-        ret = 0x303030354133ULL;     /* "3A5000" */
+        ret = env->cpu_id;
         break;
     case MISC_FUNC_REG:
         if (kvm_irqchip_in_kernel()) {
@@ -928,6 +931,7 @@ static void virt_init(MachineState *machine)
     hwaddr base, size, ram_size = machine->ram_size;
     MachineClass *mc = MACHINE_GET_CLASS(machine);
     Object *cpuobj;
+    uint64_t phys_addr_mask = 0;
 
     if (!cpu_model) {
         cpu_model = LOONGARCH_CPU_TYPE_NAME("la464");
@@ -1017,7 +1021,8 @@ static void virt_init(MachineState *machine)
     qemu_register_powerdown_notifier(&lvms->powerdown_notifier);
 
     lvms->bootinfo.ram_size = ram_size;
-    loongarch_load_kernel(machine, &lvms->bootinfo);
+    phys_addr_mask = loongarch_palen_mask(&LOONGARCH_CPU(first_cpu)->env);
+    loongarch_load_kernel(machine, &lvms->bootinfo, phys_addr_mask);
 }
 
 static void virt_get_acpi(Object *obj, Visitor *v, const char *name,

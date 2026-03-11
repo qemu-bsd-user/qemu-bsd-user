@@ -4,8 +4,9 @@
 # (e.g. tests that fetch assets from the internet) should be put into
 # the 'thorough' category instead.
 
-# Most tests run too slow with TCI enabled, so skip the functional tests there
-if get_option('tcg_interpreter')
+# Most tests run too slow with TCI enabled, and they haven't been adapted
+# to Windows yet, so skip the functional tests in these environments
+if get_option('tcg_interpreter') or host_os == 'windows'
   subdir_done()
 endif
 
@@ -18,7 +19,6 @@ subdir('i386')
 subdir('loongarch64')
 subdir('m68k')
 subdir('microblaze')
-subdir('microblazeel')
 subdir('mips')
 subdir('mipsel')
 subdir('mips64')
@@ -57,6 +57,8 @@ foreach speed : ['quick', 'thorough']
       continue
     endif
 
+    test_deps = [roms, keymap_targets]
+
     if speed == 'quick'
       suites = ['func-quick', 'func-' + target_base]
       target_tests = get_variable('tests_' + target_base + '_' + sysmode + '_quick', []) \
@@ -64,9 +66,9 @@ foreach speed : ['quick', 'thorough']
     else
       suites = ['func-' + speed, 'func-' + target_base + '-' + speed, speed]
       target_tests = get_variable('tests_' + target_base + '_' + sysmode + '_' + speed, [])
+      test_deps += [pyvenv_functests_group]
     endif
 
-    test_deps = [roms, keymap_targets]
     test_env = environment()
     if have_tools
       test_env.set('QEMU_TEST_QEMU_IMG', meson.global_build_root() / 'qemu-img')
@@ -99,6 +101,7 @@ foreach speed : ['quick', 'thorough']
       precache = custom_target('func-precache-' + testname,
                                output: teststamp,
                                command: [python, testpath],
+                               depends: pyvenv_functests_group,
                                depend_files: files(testpath),
                                build_by_default: false,
                                env: test_precache_env)

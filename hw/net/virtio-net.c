@@ -301,7 +301,7 @@ static void virtio_net_vhost_status(VirtIONet *n, uint8_t status)
         if (n->needs_vnet_hdr_swap) {
             error_report("backend does not support %s vnet headers; "
                          "falling back on userspace virtio",
-                         virtio_is_big_endian(vdev) ? "BE" : "LE");
+                         virtio_vdev_is_big_endian(vdev) ? "BE" : "LE");
             return;
         }
 
@@ -343,7 +343,7 @@ static int virtio_net_set_vnet_endian_one(VirtIODevice *vdev,
                                           NetClientState *peer,
                                           bool enable)
 {
-    if (virtio_is_big_endian(vdev)) {
+    if (virtio_vdev_is_big_endian(vdev)) {
         return qemu_set_vnet_be(peer, enable);
     } else {
         return qemu_set_vnet_le(peer, enable);
@@ -935,8 +935,7 @@ static void virtio_net_set_features(VirtIODevice *vdev,
     int i;
 
     virtio_features_copy(features, in_features);
-    if (n->mtu_bypass_backend &&
-            !virtio_has_feature(vdev->backend_features, VIRTIO_NET_F_MTU)) {
+    if (!virtio_has_feature(vdev->backend_features, VIRTIO_NET_F_MTU)) {
         virtio_clear_feature_ex(features, VIRTIO_NET_F_MTU);
     }
 
@@ -3160,8 +3159,7 @@ static void virtio_net_get_features(VirtIODevice *vdev, uint64_t *features,
     vhost_net_get_features_ex(get_vhost_net(nc->peer), features);
     virtio_features_copy(vdev->backend_features_ex, features);
 
-    if (n->mtu_bypass_backend &&
-            (n->host_features & 1ULL << VIRTIO_NET_F_MTU)) {
+    if ((n->host_features & 1ULL << VIRTIO_NET_F_MTU) != 0) {
         virtio_add_feature_ex(features, VIRTIO_NET_F_MTU);
     }
 
@@ -3789,7 +3787,7 @@ static void virtio_net_handle_migration_primary(VirtIONet *n, MigrationEvent *e)
 
     should_be_hidden = qatomic_read(&n->failover_primary_hidden);
 
-    if (e->type == MIG_EVENT_PRECOPY_SETUP && !should_be_hidden) {
+    if (e->type == MIG_EVENT_SETUP && !should_be_hidden) {
         if (failover_unplug_primary(n, dev)) {
             vmstate_unregister(VMSTATE_IF(dev), qdev_get_vmsd(dev), dev);
             qapi_event_send_unplug_primary(dev->id);
@@ -3797,7 +3795,7 @@ static void virtio_net_handle_migration_primary(VirtIONet *n, MigrationEvent *e)
         } else {
             warn_report("couldn't unplug primary device");
         }
-    } else if (e->type == MIG_EVENT_PRECOPY_FAILED) {
+    } else if (e->type == MIG_EVENT_FAILED) {
         /* We already unplugged the device let's plug it back */
         if (!failover_replug_primary(n, dev, &err)) {
             if (err) {
@@ -4251,8 +4249,6 @@ static const Property virtio_net_properties[] = {
     DEFINE_PROP_UINT16("tx_queue_size", VirtIONet, net_conf.tx_queue_size,
                        VIRTIO_NET_TX_QUEUE_DEFAULT_SIZE),
     DEFINE_PROP_UINT16("host_mtu", VirtIONet, net_conf.mtu, 0),
-    DEFINE_PROP_BOOL("x-mtu-bypass-backend", VirtIONet, mtu_bypass_backend,
-                     true),
     DEFINE_PROP_INT32("speed", VirtIONet, net_conf.speed, SPEED_UNKNOWN),
     DEFINE_PROP_STRING("duplex", VirtIONet, net_conf.duplex_str),
     DEFINE_PROP_BOOL("failover", VirtIONet, failover, false),

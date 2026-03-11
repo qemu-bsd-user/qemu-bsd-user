@@ -97,7 +97,8 @@ static GSList *migration_blockers[MIG_MODE__MAX];
 
 static bool migration_object_check(MigrationState *ms, Error **errp);
 static bool migration_switchover_start(MigrationState *s, Error **errp);
-static bool close_return_path_on_source(MigrationState *s);
+static bool stop_return_path_thread_on_source(MigrationState *s);
+static void migration_release_dst_files(MigrationState *ms);
 static void migration_completion_end(MigrationState *s);
 
 static void migration_downtime_start(MigrationState *s)
@@ -454,6 +455,9 @@ void migration_incoming_state_destroy(void)
      * BQL and retake unconditionally.
      */
     assert(bql_locked());
+    if (migrate_colo()) {
+        colo_release_ram_cache();
+    }
     qemu_loadvm_state_cleanup(mis);
 
     if (mis->to_src_file) {
@@ -604,40 +608,6 @@ int migrate_send_rp_req_pages(MigrationIncomingState *mis,
     return migrate_send_rp_message_req_pages(mis, rb, start);
 }
 
-static bool migration_colo_enabled;
-bool migration_incoming_colo_enabled(void)
-{
-    return migration_colo_enabled;
-}
-
-void migration_incoming_disable_colo(void)
-{
-    ram_block_discard_disable(false);
-    migration_colo_enabled = false;
-}
-
-int migration_incoming_enable_colo(Error **errp)
-{
-#ifndef CONFIG_REPLICATION
-    error_setg(errp, "ENABLE_COLO command come in migration stream, but the "
-               "replication module is not built in");
-    return -ENOTSUP;
-#endif
-
-    if (!migrate_colo()) {
-        error_setg(errp, "ENABLE_COLO command come in migration stream"
-                   ", but x-colo capability is not set");
-        return -EINVAL;
-    }
-
-    if (ram_block_discard_disable(true)) {
-        error_setg(errp, "COLO: cannot disable RAM discard");
-        return -EBUSY;
-    }
-    migration_colo_enabled = true;
-    return 0;
-}
-
 void migrate_add_address(SocketAddress *address)
 {
     MigrationIncomingState *mis = migration_incoming_get_current();
@@ -743,8 +713,7 @@ static void process_incoming_migration_bh(void *opaque)
         } else {
             runstate_set(RUN_STATE_PAUSED);
         }
-    } else if (migration_incoming_colo_enabled()) {
-        migration_incoming_disable_colo();
+    } else if (migrate_colo()) {
         vm_start();
     } else {
         runstate_set(global_state_get_runstate());
@@ -769,6 +738,20 @@ process_incoming_migration_co(void *opaque)
     Error *local_err = NULL;
 
     assert(mis->from_src_file);
+
+    if (migrate_colo()) {
+        if (ram_block_discard_disable(true)) {
+            error_setg(&local_err, "COLO: cannot disable RAM discard");
+            goto fail;
+        }
+
+        ret = colo_init_ram_cache(&local_err);
+        if (ret) {
+            error_prepend(&local_err, "failed to init colo RAM cache: %d: ",
+                          ret);
+            goto fail;
+        }
+    }
 
     mis->largest_page_size = qemu_ram_pagesize_largest();
     postcopy_state_set(POSTCOPY_INCOMING_NONE);
@@ -797,7 +780,7 @@ process_incoming_migration_co(void *opaque)
         goto fail;
     }
 
-    if (migration_incoming_colo_enabled()) {
+    if (migrate_colo()) {
         /* yield until COLO exit */
         colo_incoming_co();
     }
@@ -1016,6 +999,7 @@ bool migration_is_running(void)
     case MIGRATION_STATUS_DEVICE:
     case MIGRATION_STATUS_WAIT_UNPLUG:
     case MIGRATION_STATUS_CANCELLING:
+    case MIGRATION_STATUS_FAILING:
     case MIGRATION_STATUS_COLO:
         return true;
     default:
@@ -1158,6 +1142,7 @@ static void fill_source_migration_info(MigrationInfo *info)
     case MIGRATION_STATUS_POSTCOPY_PAUSED:
     case MIGRATION_STATUS_POSTCOPY_RECOVER_SETUP:
     case MIGRATION_STATUS_POSTCOPY_RECOVER:
+    case MIGRATION_STATUS_FAILING:
         /* TODO add some postcopy stats */
         populate_time_info(info, s);
         populate_ram_info(info, s);
@@ -1210,6 +1195,7 @@ static void fill_destination_migration_info(MigrationInfo *info)
     case MIGRATION_STATUS_POSTCOPY_PAUSED:
     case MIGRATION_STATUS_POSTCOPY_RECOVER:
     case MIGRATION_STATUS_FAILED:
+    case MIGRATION_STATUS_FAILING:
     case MIGRATION_STATUS_COLO:
         info->has_status = true;
         break;
@@ -1283,7 +1269,6 @@ static void migration_cleanup_json_writer(MigrationState *s)
 
 static void migration_cleanup(MigrationState *s)
 {
-    MigrationEventType type;
     QEMUFile *tmp = NULL;
 
     trace_migration_cleanup();
@@ -1297,7 +1282,8 @@ static void migration_cleanup(MigrationState *s)
     cpr_state_close();
     cpr_transfer_source_destroy(s);
 
-    close_return_path_on_source(s);
+    stop_return_path_thread_on_source(s);
+    migration_release_dst_files(s);
 
     if (s->migration_thread_running) {
         bql_unlock();
@@ -1331,11 +1317,19 @@ static void migration_cleanup(MigrationState *s)
     if (s->state == MIGRATION_STATUS_CANCELLING) {
         migrate_set_state(&s->state, MIGRATION_STATUS_CANCELLING,
                           MIGRATION_STATUS_CANCELLED);
+    } else if (s->state == MIGRATION_STATUS_FAILING) {
+        migrate_set_state(&s->state, MIGRATION_STATUS_FAILING,
+                          MIGRATION_STATUS_FAILED);
     }
 
-    type = migration_has_failed(s) ? MIG_EVENT_PRECOPY_FAILED :
-                                     MIG_EVENT_PRECOPY_DONE;
-    migration_call_notifiers(type, NULL);
+    /*
+     * FAILED notification should have already happened.  Notify DONE if
+     * migration completed successfully.
+     */
+    if (!migration_has_failed(s)) {
+        migration_call_notifiers(MIG_EVENT_DONE, NULL);
+    }
+
     yank_unregister_instance(MIGRATION_YANK_INSTANCE);
 }
 
@@ -1383,7 +1377,7 @@ void migration_connect_error_propagate(MigrationState *s, Error *error)
 
     switch (current) {
     case MIGRATION_STATUS_SETUP:
-        next = MIGRATION_STATUS_FAILED;
+        next = MIGRATION_STATUS_FAILING;
         break;
 
     case MIGRATION_STATUS_POSTCOPY_PAUSED:
@@ -1397,9 +1391,10 @@ void migration_connect_error_propagate(MigrationState *s, Error *error)
         break;
 
     case MIGRATION_STATUS_CANCELLING:
+    case MIGRATION_STATUS_FAILING:
         /*
-         * Don't move out of CANCELLING, the only valid transition is to
-         * CANCELLED, at migration_cleanup().
+         * Keep the current state, next transition is to be done
+         * in migration_cleanup().
          */
         break;
 
@@ -1469,8 +1464,8 @@ void migration_cancel(void)
     }
 
     /*
-     * If qmp_migrate_finish has not been called, then there is no path that
-     * will complete the cancellation.  Do it now.
+     * If migration_connect_outgoing has not been called, then there
+     * is no path that will complete the cancellation. Do it now.
      */
     if (setup && !s->to_dst_file) {
         migrate_set_state(&s->state, MIGRATION_STATUS_CANCELLING,
@@ -1528,6 +1523,8 @@ int migration_call_notifiers(MigrationEventType type, Error **errp)
     GSList *elem, *next;
     int ret;
 
+    trace_migration_call_notifiers(type);
+
     e.type = type;
 
     for (elem = migration_state_notifiers[mode]; elem; elem = next) {
@@ -1535,7 +1532,7 @@ int migration_call_notifiers(MigrationEventType type, Error **errp)
         notifier = (NotifierWithReturn *)elem->data;
         ret = notifier->notify(notifier, &e, errp);
         if (ret) {
-            assert(type == MIG_EVENT_PRECOPY_SETUP);
+            assert(type == MIG_EVENT_SETUP);
             return ret;
         }
     }
@@ -1547,6 +1544,7 @@ bool migration_has_failed(MigrationState *s)
 {
     return (s->state == MIGRATION_STATUS_CANCELLING ||
             s->state == MIGRATION_STATUS_CANCELLED ||
+            s->state == MIGRATION_STATUS_FAILING ||
             s->state == MIGRATION_STATUS_FAILED);
 }
 
@@ -2051,11 +2049,12 @@ void qmp_migrate(const char *uri, bool has_channels,
      * For cpr-transfer, the target may not be listening yet on the migration
      * channel, because first it must finish cpr_load_state.  The target tells
      * us it is listening by closing the cpr-state socket.  Wait for that HUP
-     * event before connecting in qmp_migrate_finish.
+     * event before connecting in migration_connect_outgoing.
      *
      * The HUP could occur because the target fails while reading CPR state,
      * in which case the target will not listen for the incoming migration
-     * connection, so qmp_migrate_finish will fail to connect, and then recover.
+     * connection, so migration_connect_outgoing will fail to connect,
+     * and then recover.
      */
     if (migrate_mode() == MIG_MODE_CPR_TRANSFER) {
         cpr_transfer_add_hup_watch(s, migration_connect_outgoing_cb,
@@ -2220,6 +2219,7 @@ static void migration_release_dst_files(MigrationState *ms)
      * locking needed because this qemufile should only be managed by
      * return path thread.
      */
+    assert(!ms->rp_state.rp_thread_created);
     if (ms->postcopy_qemufile_src) {
         migration_ioc_unregister_yank_from_file(ms->postcopy_qemufile_src);
         qemu_file_shutdown(ms->postcopy_qemufile_src);
@@ -2227,7 +2227,9 @@ static void migration_release_dst_files(MigrationState *ms)
         ms->postcopy_qemufile_src = NULL;
     }
 
-    qemu_fclose(file);
+    if (file) {
+        qemu_fclose(file);
+    }
 }
 
 /*
@@ -2413,7 +2415,7 @@ static void open_return_path_on_source(MigrationState *ms)
 }
 
 /* Return true if error detected, or false otherwise */
-static bool close_return_path_on_source(MigrationState *ms)
+static bool stop_return_path_thread_on_source(MigrationState *ms)
 {
     if (!ms->rp_state.rp_thread_created) {
         return false;
@@ -2435,7 +2437,6 @@ static bool close_return_path_on_source(MigrationState *ms)
 
     qemu_thread_join(&ms->rp_state.rp_thread);
     ms->rp_state.rp_thread_created = false;
-    migration_release_dst_files(ms);
     trace_migration_return_path_end_after();
 
     /* Return path will persist the error in MigrationState when quit */
@@ -2472,7 +2473,7 @@ static int postcopy_start(MigrationState *ms, Error **errp)
         if (postcopy_preempt_establish_channel(ms)) {
             if (ms->state != MIGRATION_STATUS_CANCELLING) {
                 migrate_set_state(&ms->state, ms->state,
-                                  MIGRATION_STATUS_FAILED);
+                                  MIGRATION_STATUS_FAILING);
             }
             error_setg(errp, "%s: Failed to establish preempt channel",
                        __func__);
@@ -2545,9 +2546,9 @@ static int postcopy_start(MigrationState *ms, Error **errp)
      */
     qemu_savevm_send_postcopy_listen(fb);
 
-    ret = qemu_savevm_state_complete_precopy_non_iterable(fb, true);
+    ret = qemu_savevm_state_non_iterable(fb, errp);
     if (ret) {
-        error_setg(errp, "Postcopy save non-iterable device states failed");
+        error_prepend(errp, "Postcopy save non-iterable states failed: ");
         goto fail_closefb;
     }
 
@@ -2589,7 +2590,7 @@ static int postcopy_start(MigrationState *ms, Error **errp)
      * at the transition to postcopy and after the device state; in particular
      * spice needs to trigger a transition now
      */
-    migration_call_notifiers(MIG_EVENT_PRECOPY_DONE, NULL);
+    migration_call_notifiers(MIG_EVENT_POSTCOPY_START, NULL);
 
     migration_downtime_end(ms);
 
@@ -2635,10 +2636,8 @@ fail_closefb:
     qemu_fclose(fb);
 fail:
     if (ms->state != MIGRATION_STATUS_CANCELLING) {
-        migrate_set_state(&ms->state, ms->state, MIGRATION_STATUS_FAILED);
+        migrate_set_state(&ms->state, ms->state, MIGRATION_STATUS_FAILING);
     }
-    migration_block_activate(NULL);
-    migration_call_notifiers(MIG_EVENT_PRECOPY_FAILED, NULL);
     bql_unlock();
     return -1;
 }
@@ -2752,7 +2751,7 @@ static int migration_completion_precopy(MigrationState *s)
         goto out_unlock;
     }
 
-    ret = qemu_savevm_state_complete_precopy(s->to_dst_file, false);
+    ret = qemu_savevm_state_complete_precopy(s);
 out_unlock:
     bql_unlock();
     return ret;
@@ -2800,7 +2799,7 @@ static void migration_completion(MigrationState *s)
         goto fail;
     }
 
-    if (close_return_path_on_source(s)) {
+    if (stop_return_path_thread_on_source(s)) {
         goto fail;
     }
 
@@ -2828,7 +2827,7 @@ fail:
     }
 
     if (s->state != MIGRATION_STATUS_CANCELLING) {
-        migrate_set_state(&s->state, s->state, MIGRATION_STATUS_FAILED);
+        migrate_set_state(&s->state, s->state, MIGRATION_STATUS_FAILING);
     }
 }
 
@@ -2865,7 +2864,7 @@ static void bg_migration_completion(MigrationState *s)
 
 fail:
     migrate_set_state(&s->state, current_active_state,
-                      MIGRATION_STATUS_FAILED);
+                      MIGRATION_STATUS_FAILING);
 }
 
 typedef enum MigThrError {
@@ -2954,7 +2953,8 @@ static MigThrError postcopy_pause(MigrationState *s)
          * path and just wait for the thread to finish. It will be
          * re-created when we resume.
          */
-        close_return_path_on_source(s);
+        stop_return_path_thread_on_source(s);
+        migration_release_dst_files(s);
 
         /*
          * Current channel is possibly broken. Release it.  Note that this is
@@ -3066,7 +3066,7 @@ static MigThrError migration_detect_error(MigrationState *s)
          * For precopy (or postcopy with error outside IO, or before dest
          * starts), we fail with no time.
          */
-        migrate_set_state(&s->state, state, MIGRATION_STATUS_FAILED);
+        migrate_set_state(&s->state, state, MIGRATION_STATUS_FAILING);
         trace_migration_thread_file_err();
 
         /* Time to stop the migration, now. */
@@ -3297,7 +3297,7 @@ static void migration_iteration_finish(MigrationState *s)
         migrate_start_colo_process(s);
         s->vm_old_state = RUN_STATE_RUNNING;
         /* Fallthrough */
-    case MIGRATION_STATUS_FAILED:
+    case MIGRATION_STATUS_FAILING:
     case MIGRATION_STATUS_CANCELLED:
     case MIGRATION_STATUS_CANCELLING:
         if (!migration_block_activate(&local_err)) {
@@ -3322,6 +3322,13 @@ static void migration_iteration_finish(MigrationState *s)
             error_free(local_err);
             break;
         }
+
+        /*
+         * Notify FAILED before starting VM, so that devices can invoke
+         * necessary fallbacks before vCPUs run again.
+         */
+        migration_call_notifiers(MIG_EVENT_FAILED, NULL);
+
         if (runstate_is_live(s->vm_old_state)) {
             if (!runstate_check(RUN_STATE_SHUTDOWN)) {
                 vm_start();
@@ -3356,7 +3363,7 @@ static void bg_migration_iteration_finish(MigrationState *s)
     switch (s->state) {
     case MIGRATION_STATUS_COMPLETED:
     case MIGRATION_STATUS_ACTIVE:
-    case MIGRATION_STATUS_FAILED:
+    case MIGRATION_STATUS_FAILING:
     case MIGRATION_STATUS_CANCELLED:
     case MIGRATION_STATUS_CANCELLING:
         break;
@@ -3517,18 +3524,13 @@ static void *migration_thread(void *opaque)
         qemu_savevm_send_postcopy_advise(s->to_dst_file);
     }
 
-    if (migrate_colo()) {
-        /* Notify migration destination that we enable COLO */
-        qemu_savevm_send_colo_enable(s->to_dst_file);
-    }
-
     if (migrate_auto_converge()) {
         /* Start RAMBlock dirty bitmap sync timer */
         cpu_throttle_dirty_sync_timer(true);
     }
 
     bql_lock();
-    ret = qemu_savevm_state_setup(s->to_dst_file, &local_err);
+    ret = qemu_savevm_state_do_setup(s->to_dst_file, &local_err);
     bql_unlock();
 
     qemu_savevm_wait_unplug(s, MIGRATION_STATUS_SETUP,
@@ -3541,7 +3543,7 @@ static void *migration_thread(void *opaque)
     if (ret) {
         migrate_error_propagate(s, local_err);
         migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
-                          MIGRATION_STATUS_FAILED);
+                          MIGRATION_STATUS_FAILING);
         goto out;
     }
 
@@ -3616,7 +3618,6 @@ static void *bg_migration_thread(void *opaque)
     int64_t setup_start;
     MigThrError thr_error;
     QEMUFile *fb;
-    bool early_fail = true;
     Error *local_err = NULL;
     int ret;
 
@@ -3651,7 +3652,7 @@ static void *bg_migration_thread(void *opaque)
 
     bql_lock();
     qemu_savevm_state_header(s->to_dst_file);
-    ret = qemu_savevm_state_setup(s->to_dst_file, &local_err);
+    ret = qemu_savevm_state_do_setup(s->to_dst_file, &local_err);
     bql_unlock();
 
     qemu_savevm_wait_unplug(s, MIGRATION_STATUS_SETUP,
@@ -3662,10 +3663,7 @@ static void *bg_migration_thread(void *opaque)
      * devices to unplug. This to preserve migration state transitions.
      */
     if (ret) {
-        migrate_error_propagate(s, local_err);
-        migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
-                          MIGRATION_STATUS_FAILED);
-        goto fail_setup;
+        goto fail;
     }
 
     s->setup_time = qemu_clock_get_ms(QEMU_CLOCK_HOST) - setup_start;
@@ -3675,12 +3673,17 @@ static void *bg_migration_thread(void *opaque)
     bql_lock();
 
     if (migration_stop_vm(s, RUN_STATE_PAUSED)) {
-        goto fail;
+        error_setg(&local_err, "Failed to stop the VM");
+        goto fail_with_bql;
     }
 
-    if (qemu_savevm_state_complete_precopy_non_iterable(fb, false)) {
-        goto fail;
+    if (qemu_savevm_state_non_iterable(fb, &local_err)) {
+        error_prepend(&local_err, "Failed to save non-iterable devices ");
+        goto fail_with_bql;
     }
+
+    qemu_savevm_state_end_precopy(s, fb);
+
     /*
      * Since we are going to get non-iterable state data directly
      * from s->bioc->data, explicit flush is needed here.
@@ -3689,9 +3692,9 @@ static void *bg_migration_thread(void *opaque)
 
     /* Now initialize UFFD context and start tracking RAM writes */
     if (ram_write_tracking_start()) {
-        goto fail;
+        error_setg(&local_err, "Failed to start write tracking");
+        goto fail_with_bql;
     }
-    early_fail = false;
 
     /*
      * Start VM from BH handler to avoid write-fault lock here.
@@ -3723,21 +3726,22 @@ static void *bg_migration_thread(void *opaque)
     }
 
     trace_migration_thread_after_loop();
+    goto done;
+
+fail_with_bql:
+    bql_unlock();
 
 fail:
-    if (early_fail) {
-        migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
-                MIGRATION_STATUS_FAILED);
-        bql_unlock();
-    }
+    /* local_err is guaranteed to be set when reaching here */
+    migrate_error_propagate(s, local_err);
+    migrate_set_state(&s->state, MIGRATION_STATUS_ACTIVE,
+                      MIGRATION_STATUS_FAILING);
 
-fail_setup:
+done:
     bg_migration_iteration_finish(s);
-
     qemu_fclose(fb);
     object_unref(OBJECT(s));
     rcu_unregister_thread();
-
     return NULL;
 }
 
@@ -3758,7 +3762,7 @@ void migration_start_outgoing(MigrationState *s)
         rate_limit = migrate_max_bandwidth();
 
         /* Notify before starting migration thread */
-        if (migration_call_notifiers(MIG_EVENT_PRECOPY_SETUP, &local_err)) {
+        if (migration_call_notifiers(MIG_EVENT_SETUP, &local_err)) {
             goto fail;
         }
     }

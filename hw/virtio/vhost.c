@@ -1168,14 +1168,12 @@ static void vhost_log_stop(MemoryListener *listener,
  */
 static inline bool vhost_needs_vring_endian(VirtIODevice *vdev)
 {
-    if (virtio_vdev_has_feature(vdev, VIRTIO_F_VERSION_1)) {
-        return false;
+    if (virtio_vdev_is_legacy(vdev)) {
+        return vdev->device_endian == (HOST_BIG_ENDIAN
+                                       ? VIRTIO_DEVICE_ENDIAN_LITTLE
+                                       : VIRTIO_DEVICE_ENDIAN_BIG);
     }
-#if HOST_BIG_ENDIAN
-    return vdev->device_endian == VIRTIO_DEVICE_ENDIAN_LITTLE;
-#else
-    return vdev->device_endian == VIRTIO_DEVICE_ENDIAN_BIG;
-#endif
+    return false;
 }
 
 static int vhost_virtqueue_set_vring_endian_legacy(struct vhost_dev *dev,
@@ -1306,7 +1304,7 @@ int vhost_virtqueue_start(struct vhost_dev *dev,
 
     if (vhost_needs_vring_endian(vdev)) {
         r = vhost_virtqueue_set_vring_endian_legacy(dev,
-                                                    virtio_is_big_endian(vdev),
+                                                    virtio_vdev_is_big_endian(vdev),
                                                     vhost_vq_index);
         if (r) {
             return r;
@@ -1423,7 +1421,7 @@ static int do_vhost_virtqueue_stop(struct vhost_dev *dev,
      */
     if (vhost_needs_vring_endian(vdev)) {
         vhost_virtqueue_set_vring_endian_legacy(dev,
-                                                !virtio_is_big_endian(vdev),
+                                                !virtio_vdev_is_big_endian(vdev),
                                                 vhost_vq_index);
     }
 
@@ -1926,8 +1924,8 @@ static bool vhost_inflight_buffer_pre_load(void *opaque, Error **errp)
     void *addr = qemu_memfd_alloc("vhost-inflight", inflight->size,
                                   F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL,
                                   &fd, errp);
-    if (*errp) {
-        return -ENOMEM;
+    if (!addr) {
+        return false;
     }
 
     inflight->offset = 0;

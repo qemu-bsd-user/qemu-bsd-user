@@ -2739,7 +2739,7 @@ void vfio_pci_post_reset(VFIOPCIDevice *vdev)
 
 bool vfio_pci_host_match(PCIHostDeviceAddress *addr, const char *name)
 {
-    char tmp[13];
+    char tmp[36];
 
     sprintf(tmp, "%04x:%02x:%02x.%1x", addr->domain,
             addr->bus, addr->slot, addr->function);
@@ -3056,11 +3056,10 @@ bool vfio_pci_populate_device(VFIOPCIDevice *vdev, Error **errp)
         char *name = g_strdup_printf("%s BAR %d", vbasedev->name, i);
 
         ret = vfio_region_setup(OBJECT(vdev), vbasedev,
-                                &vdev->bars[i].region, i, name);
+                                &vdev->bars[i].region, i, name, errp);
         g_free(name);
 
         if (ret) {
-            error_setg_errno(errp, -ret, "failed to get region %d info", i);
             return false;
         }
 
