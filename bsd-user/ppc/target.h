@@ -1,7 +1,7 @@
 /*
  * PowerPC general target stuff that's common to all aarch details
  *
- * Copyright (c) 2022 M. Warner Losh <imp@bsdimp.com>
+ * Copyright (c) 2022 Warner Losh
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */

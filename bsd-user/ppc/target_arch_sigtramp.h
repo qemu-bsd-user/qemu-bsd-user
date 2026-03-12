@@ -1,4 +1,11 @@
-
+/*
+ * powerpc thread support
+ *
+ * Copyright (c) 2014 Justin Hibbits
+ * Copyright (c) 2019 Brandon Bergren
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 #ifndef TARGET_ARCH_SIGTRAMP_H
 #define TARGET_ARCH_SIGTRAMP_H
 
