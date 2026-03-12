@@ -1,3 +1,10 @@
+/*
+ * FreeBSD file related system call shims and definitions
+ *
+ * Copyright (c) 2014 Stacey D. Son
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 /* sys/ttycom.h tty(4) */
 IOCTL(TIOCSETD, IOC_W, MK_PTR(TYPE_INT))
