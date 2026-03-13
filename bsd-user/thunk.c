@@ -431,6 +431,39 @@ const argtype *thunk_print(void *arg, const argtype *type_ptr)
     return type_ptr;
 }
 
+/* from em86 */
+
+/* Utility function: Table-driven functions to translate bitmasks
+ * between host and target formats
+ */
+unsigned int target_to_host_bitmask_len(unsigned int target_mask,
+                                        const bitmask_transtbl *tbl,
+                                        size_t len)
+{
+    unsigned int host_mask = 0;
+
+    for (size_t i = 0; i < len; ++i) {
+        if ((target_mask & tbl[i].target_mask) == tbl[i].target_bits) {
+            host_mask |= tbl[i].host_bits;
+        }
+    }
+    return host_mask;
+}
+
+unsigned int host_to_target_bitmask_len(unsigned int host_mask,
+                                        const bitmask_transtbl *tbl,
+                                        size_t len)
+{
+    unsigned int target_mask = 0;
+
+    for (size_t i = 0; i < len; ++i) {
+        if ((host_mask & tbl[i].host_mask) == tbl[i].host_bits) {
+            target_mask |= tbl[i].target_bits;
+        }
+    }
+    return target_mask;
+}
+
 int thunk_type_size_array(const argtype *type_ptr, int is_host)
 {
     return thunk_type_size(type_ptr, is_host);
