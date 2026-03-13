@@ -436,4 +436,3 @@ void init_bsd_ioctl(void)
     }
 
 }
-
