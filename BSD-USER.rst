@@ -1,4 +1,4 @@
-===============
+
 BSD USER README
 ===============
 
@@ -167,3 +167,15 @@ jail:
 whill run it looking in the jail's root directory for all the dynamic parts of
 the binary (ld-elf.so, libc.so, etc).
 
+Upstreaming
+===========
+When upstreaming, we try to attribute commits.
+
+ % git clone https://github.com/qemu-bsd-user/qemu
+ % cd qemu
+ % git remote add seanbruno https://github.com/seanbruno/qemu-bsd-user.git
+ # The following makes git blame work because of my copying
+ % git replace --graft e31b768202c seanbruno/bsd-user
+
+makes seanbruno/bsd-user the parent of the hash e31b768202c which makes
+`git blame` work better.
