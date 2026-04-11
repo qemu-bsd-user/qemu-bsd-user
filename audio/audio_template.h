@@ -172,7 +172,7 @@ static int glue (audio_pcm_sw_init_, TYPE) (
     sw->empty = true;
 #endif
 
-    if (audio_format_is_float(hw->info.af)) {
+    if (audio_format_is_float(sw->info.af)) {
 #ifdef DAC
         sw->conv = mixeng_conv_float[sw->info.nchannels == 2]
             [sw->info.swap_endianness];
@@ -187,9 +187,9 @@ static int glue (audio_pcm_sw_init_, TYPE) (
         sw->clip = mixeng_clip
 #endif
             [sw->info.nchannels == 2]
-            [audio_format_is_signed(hw->info.af)]
+            [audio_format_is_signed(sw->info.af)]
             [sw->info.swap_endianness]
-            [audio_format_to_index(hw->info.af)];
+            [audio_format_to_index(sw->info.af)];
     }
 
     sw->name = g_strdup (name);
@@ -496,12 +496,6 @@ static SW *glue(audio_mixeng_backend_open_, TYPE) (
     AudioMixengBackend *s = AUDIO_MIXENG_BACKEND(be);
     AudioMixengBackendClass *k;
     AudiodevPerDirectionOptions *pdo;
-
-    if (!be || !name || !callback_fn || !as) {
-        audio_bug("backend=%p name=%p callback_fn=%p as=%p",
-                  be, name, callback_fn, as);
-        goto fail;
-    }
 
     k = AUDIO_MIXENG_BACKEND_GET_CLASS(s);
     pdo = glue(audio_get_pdo_, TYPE)(s->dev);

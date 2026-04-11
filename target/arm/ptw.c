@@ -611,12 +611,14 @@ static ARMSecuritySpace S2_security_space(ARMSecuritySpace s1_space,
 static bool fault_s1ns(ARMSecuritySpace space, ARMMMUIdx s2_mmu_idx)
 {
     /*
-     * For stage 2 faults in Secure EL22, S1NS indicates
-     * whether the faulting IPA is in the Secure or NonSecure
-     * IPA space. For all other kinds of fault, it is false.
+     * For stage 2 faults, S1NS indicates whether the faulting IPA is
+     * in the Non-Secure (true) or Secure (false) IPA space. For all
+     * other kinds of fault, it is false. Note that we do not
+     * distinguish "s2 fault on NS IPA taken to Secure EL2" from
+     * "s2 fault on NS IPA taken to NS EL2 or Realm EL2" here, but
+     * instead do that when setting HPFAR_EL2.NS.
      */
-    return space == ARMSS_Secure && regime_is_stage2(s2_mmu_idx)
-        && s2_mmu_idx == ARMMMUIdx_Stage2_S;
+    return space == ARMSS_NonSecure && regime_is_stage2(s2_mmu_idx);
 }
 
 /* Translate a S1 pagetable walk through S2 if needed.  */
@@ -2118,6 +2120,14 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
     descaddr &= ~(hwaddr)(page_size - 1);
     descaddr |= (address & (page_size - 1));
 
+    if (likely(!ptw->in_debug)) {
+        /* Check descriptor AF bit */
+        if (!(descriptor & (1 << 10)) && !param.ha) {
+            fi->type = ARMFault_AccessFlag;
+            goto do_fault;
+        }
+    }
+
     /*
      * For AccessType_AT, DB is not updated (AArch64.SetDirtyFlag),
      * and it is IMPLEMENTATION DEFINED whether AF is updated
@@ -2127,15 +2137,9 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
         /*
          * Access flag.
          * If HA is enabled, prepare to update the descriptor below.
-         * Otherwise, pass the access fault on to software.
          */
-        if (!(descriptor & (1 << 10))) {
-            if (param.ha) {
-                new_descriptor |= 1 << 10; /* AF */
-            } else {
-                fi->type = ARMFault_AccessFlag;
-                goto do_fault;
-            }
+        if (!(descriptor & (1 << 10)) && param.ha) {
+            new_descriptor |= 1 << 10; /* AF */
         }
 
         /*
@@ -3200,6 +3204,13 @@ static bool get_phys_addr_pmsav8(CPUARMState *env,
 
     ret = pmsav8_mpu_lookup(env, address, access_type, ptw->in_prot_check,
                             mmu_idx, secure, result, fi, NULL);
+    /*
+     * For two-stage PMSA translations, s2prot holds the stage 2
+     * permissions to be combined with stage 1 in get_phys_addr_twostage().
+     */
+    if (regime_is_stage2(mmu_idx)) {
+        result->s2prot = result->f.prot;
+    }
     if (sattrs.subpage) {
         result->f.lg_page_size = 0;
     }

@@ -1170,7 +1170,7 @@ FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
             "tsc-scale", "vmcb-clean",  "flushbyasid", "decodeassists",
             NULL, NULL, "pause-filter", NULL,
             "pfthreshold", "avic", NULL, "v-vmsave-vmload",
-            "vgif", NULL, NULL, NULL,
+            "vgif", "gmet", NULL, NULL,
             NULL, NULL, NULL, NULL,
             NULL, "vnmi", NULL, NULL,
             "svme-addr-chk", NULL, NULL, NULL,
@@ -8087,7 +8087,7 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w)
         r = hvf_get_supported_cpuid(wi->cpuid.eax,
                                     wi->cpuid.ecx,
                                     wi->cpuid.reg);
-    } else if (tcg_enabled()) {
+    } else if (tcg_enabled() || qtest_enabled()) {
         r = wi->tcg_features;
     } else {
         return ~0;
@@ -9628,9 +9628,9 @@ void x86_cpu_expand_features(X86CPU *cpu, Error **errp)
     if ((env->features[FEAT_7_0_EBX] & CPUID_7_0_EBX_MPX) &&
         (env->features[FEAT_7_1_EDX] & CPUID_7_1_EDX_APXF)) {
         mark_unavailable_features(cpu, FEAT_7_0_EBX, CPUID_7_0_EBX_MPX,
-            "this feature is conflict with APX");
+            "this feature conflicts with APX");
         mark_unavailable_features(cpu, FEAT_7_1_EDX, CPUID_7_1_EDX_APXF,
-            "this feature is conflict with MPX");
+            "this feature conflicts with MPX");
     }
 
     x86_cpu_enable_xsave_components(cpu);
@@ -10107,10 +10107,11 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
 
     /* Cache information initialization */
     if (!cpu->legacy_cache) {
-        const CPUCaches *cache_info =
-            x86_cpu_get_versioned_cache_info(cpu, xcc->model);
+        const CPUCaches *cache_info = xcc->model
+            ? x86_cpu_get_versioned_cache_info(cpu, xcc->model)
+            : NULL;
 
-        if (!xcc->model || !cache_info) {
+        if (!cache_info) {
             g_autofree char *name = x86_cpu_class_get_model_name(xcc);
             error_setg(errp,
                        "CPU model '%s' doesn't support legacy-cache=off", name);

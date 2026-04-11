@@ -2595,7 +2595,6 @@ struct target_drm_i915_getparam {
 #define FUTEX_CLOCK_REALTIME    256
 #define FUTEX_CMD_MASK          ~(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME)
 
-#ifdef CONFIG_EPOLL
 #if defined(TARGET_X86_64)
 #define TARGET_EPOLL_PACKED QEMU_PACKED
 #else
@@ -2615,8 +2614,6 @@ struct target_epoll_event {
 } TARGET_EPOLL_PACKED;
 
 #define TARGET_EP_MAX_EVENTS (INT_MAX / sizeof(struct target_epoll_event))
-
-#endif
 
 struct target_ucred {
     abi_uint pid;
@@ -2777,7 +2774,12 @@ struct target_open_how_ver0 {
 #ifndef RESOLVE_NO_SYMLINKS
 #define RESOLVE_NO_SYMLINKS     0x04
 #endif
-
+#ifndef RESOLVE_BENEATH
+#define RESOLVE_BENEATH         0x08
+#endif
+#ifndef RESOLVE_IN_ROOT
+#define RESOLVE_IN_ROOT         0x10
+#endif
 #if (defined(TARGET_I386) && defined(TARGET_ABI32)) || \
     (defined(TARGET_ARM) && defined(TARGET_ABI32)) || \
     defined(TARGET_M68K) || defined(TARGET_MICROBLAZE) || \

@@ -545,8 +545,7 @@ static void test_multifd_tcp_cancel(MigrateCommon *args, bool postcopy_ram)
     migrate_cancel(from);
 
     /* Make sure QEMU process "to" exited */
-    qtest_set_expected_status(to, EXIT_FAILURE);
-    qtest_wait_qemu(to);
+    migration_event_wait(to, "failed");
     qtest_quit(to);
 
     /*
@@ -634,7 +633,7 @@ static void test_cancel_src_after_cancelled(QTestState *from, QTestState *to,
                                             const char *uri, const char *phase,
                                             MigrateStart *args)
 {
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     wait_for_serial("src_serial");
     migrate_ensure_converge(from);
@@ -659,7 +658,7 @@ static void test_cancel_src_after_complete(QTestState *from, QTestState *to,
                                            const char *uri, const char *phase,
                                            MigrateStart *args)
 {
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     wait_for_serial("src_serial");
     migrate_ensure_converge(from);
@@ -690,7 +689,7 @@ static void test_cancel_src_after_none(QTestState *from, QTestState *to,
     wait_for_serial("src_serial");
     migrate_cancel(from);
 
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     migrate_ensure_converge(from);
     migrate_qmp(from, to, uri, NULL, "{}");
@@ -709,7 +708,7 @@ static void test_cancel_src_pre_switchover(QTestState *from, QTestState *to,
     migrate_set_capability(from, "multifd", true);
     migrate_set_capability(to, "multifd", true);
 
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     wait_for_serial("src_serial");
     migrate_ensure_converge(from);
@@ -1071,11 +1070,10 @@ static void test_dirty_limit(char *name, MigrateCommon *args)
     args->start.hide_stderr = true;
     args->start.use_dirty_ring = true;
 
-    args->listen_uri = uri;
     args->connect_uri = uri;
 
     /* Start src, dst vm */
-    if (migrate_start(&from, &to, args->listen_uri, &args->start)) {
+    if (migrate_start(&from, &to, "defer", &args->start)) {
         return;
     }
 
@@ -1083,6 +1081,7 @@ static void test_dirty_limit(char *name, MigrateCommon *args)
     migrate_dirty_limit_wait_showup(from, dirtylimit_period, dirtylimit_value);
 
     /* Start migrate */
+    migrate_incoming_qmp(to, args->connect_uri, NULL, "{}");
     migrate_qmp(from, to, args->connect_uri, NULL, "{}");
 
     /* Wait for dirty limit throttle begin */
@@ -1101,7 +1100,6 @@ static void test_dirty_limit(char *name, MigrateCommon *args)
 
     /* destination always fails after cancel */
     migration_event_wait(to, "failed");
-    qtest_set_expected_status(to, EXIT_FAILURE);
     qtest_quit(to);
 
     /* Check if dirty limit throttle switched off, set timeout 1ms */
