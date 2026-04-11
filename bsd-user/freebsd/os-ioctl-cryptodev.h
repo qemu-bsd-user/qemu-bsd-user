@@ -13,7 +13,7 @@
 struct target_session_op {
 	u_int32_t	cipher;
 	u_int32_t	mac;
-	
+
 	u_int32_t	keylen;
 	abi_ulong	key;
 	int32_t		mackeylen;
@@ -26,7 +26,7 @@ struct target_session_op {
 struct target_session2_op {
 	u_int32_t	cipher;
 	u_int32_t	mac;
-	
+
 	u_int32_t	keylen;
 	abi_ulong	key;
 	int32_t		mackeylen;
@@ -47,7 +47,7 @@ struct target_crparam {
         u_int		crp_nbits;
 };
 
-#define	TARGET_CRK_MAXPARAM	8 
+#define	TARGET_CRK_MAXPARAM	8
 
 struct target_crypt_kop {
 	u_int		crk_op;
