@@ -119,9 +119,6 @@ IOCTL(GREGOPTS, IOC_W | IOC_R, MK_PTR(MK_STRUCT(STRUCT_ifreq_ptr)))
 /* net/if_gif.h */
 IOCTL(GIFGOPTS, IOC_W | IOC_R, MK_PTR(MK_STRUCT(STRUCT_ifreq_ptr)))
 
-/* netinet/ip_carp.h */
-IOCTL(SIOCGVH, IOC_W | IOC_R, MK_PTR(MK_STRUCT(STRUCT_ifreq_ptr)))
-
 /* net/if_pfsync.h */
 #ifdef SIOCGETPFSYNC
 IOCTL(SIOCGETPFSYNC, IOC_W | IOC_R, MK_PTR(MK_STRUCT(STRUCT_ifreq_ptr)))
