@@ -8,7 +8,6 @@
 #include "qemu/osdep.h"
 
 #include "qemu.h"
-// #include "qemu-os.h"
 
 /*
  * stat conversion

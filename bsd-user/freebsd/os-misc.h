@@ -137,7 +137,7 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
     abi_ulong target_setid;
 
     target_to_host_cpuset_which(&which, arg1)
-	;
+        ;
     target_to_host_cpuset_level(&level, arg2);
 #if TARGET_ABI_BITS == 32
     id = target_arg64(arg3, arg4);
@@ -154,55 +154,55 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
 }
 
 static abi_ulong copy_from_user_cpuset_mask(cpuset_t *mask,
-	abi_ulong target_mask_addr)
+        abi_ulong target_mask_addr)
 {
-	int i, j, k;
-	abi_ulong b, *target_mask;
+        int i, j, k;
+        abi_ulong b, *target_mask;
 
-	target_mask = lock_user(VERIFY_READ, target_mask_addr,
-					(CPU_SETSIZE / 8), 1);
-	if (target_mask == NULL) {
-		return -TARGET_EFAULT;
-	}
-	CPU_ZERO(mask);
-	k = 0;
-	for (i = 0; i < ((CPU_SETSIZE/8)/sizeof(abi_ulong)); i++) {
-		__get_user(b, &target_mask[i]);
-		for (j = 0; j < TARGET_ABI_BITS; j++) {
-			if ((b >> j) & 1) {
-				CPU_SET(k, mask);
-			}
-			k++;
-		}
-	}
-	unlock_user(target_mask, target_mask_addr, 0);
+        target_mask = lock_user(VERIFY_READ, target_mask_addr,
+                                CPU_SETSIZE / 8, 1);
+        if (target_mask == NULL) {
+                return -TARGET_EFAULT;
+        }
+        CPU_ZERO(mask);
+        k = 0;
+        for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
+                __get_user(b, &target_mask[i]);
+                for (j = 0; j < TARGET_ABI_BITS; j++) {
+                        if ((b >> j) & 1) {
+                                CPU_SET(k, mask);
+                        }
+                        k++;
+                }
+        }
+        unlock_user(target_mask, target_mask_addr, 0);
 
-	return 0;
+        return 0;
 }
 
 static abi_ulong copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
-	cpuset_t *mask)
+        cpuset_t *mask)
 {
-	int i, j, k;
-	abi_ulong b, *target_mask;
+        int i, j, k;
+        abi_ulong b, *target_mask;
 
-	target_mask = lock_user(VERIFY_WRITE, target_mask_addr,
-					(CPU_SETSIZE / 8), 0);
-	if (target_mask == NULL) {
-		return -TARGET_EFAULT;
-	}
-	k = 0;
-	for (i = 0; i < ((CPU_SETSIZE/8)/sizeof(abi_ulong)); i++) {
-		b = 0;
-		for (j = 0; j < TARGET_ABI_BITS; j++) {
-			b |= ((CPU_ISSET(k, mask) != 0) << j);
-			k++;
-		}
-		__put_user(b, &target_mask[i]);
-	}
-	unlock_user(target_mask, target_mask_addr, (CPU_SETSIZE / 8));
+        target_mask = lock_user(VERIFY_WRITE, target_mask_addr,
+                                CPU_SETSIZE / 8, 0);
+        if (target_mask == NULL) {
+                return -TARGET_EFAULT;
+        }
+        k = 0;
+        for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
+                b = 0;
+                for (j = 0; j < TARGET_ABI_BITS; j++) {
+                        b |= ((CPU_ISSET(k, mask) != 0) << j);
+                        k++;
+                }
+                __put_user(b, &target_mask[i]);
+        }
+        unlock_user(target_mask, target_mask_addr, (CPU_SETSIZE / 8));
 
-	return 0;
+        return 0;
 }
 
 /* cpuset_getaffinity(2) */
@@ -211,8 +211,8 @@ static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
         cpuwhich_t which, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
         abi_ulong arg6)
 {
-	cpuset_t mask;
-	abi_long ret;
+        cpuset_t mask;
+        abi_long ret;
     id_t id;    /* 64-bit */
     abi_ulong setsize, target_mask;
 
@@ -226,10 +226,10 @@ static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
     target_mask = arg5;
 #endif
 
-	ret = get_errno(cpuset_getaffinity(level, which, id, setsize, &mask));
-	if (ret == 0) {
-		ret = copy_to_user_cpuset_mask(target_mask, &mask);
-	}
+        ret = get_errno(cpuset_getaffinity(level, which, id, setsize, &mask));
+        if (ret == 0) {
+                ret = copy_to_user_cpuset_mask(target_mask, &mask);
+        }
 
     return ret;
 }
@@ -240,8 +240,8 @@ static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
         cpuwhich_t which, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
         abi_ulong arg6)
 {
-	cpuset_t mask;
-	abi_long ret;
+        cpuset_t mask;
+        abi_long ret;
     id_t id; /* 64-bit */
     abi_ulong setsize, target_mask;
 
@@ -255,12 +255,13 @@ static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
     target_mask = arg5;
 #endif
 
-	ret = copy_from_user_cpuset_mask(&mask, target_mask);
-	if (ret == 0) {
-		ret = get_errno(cpuset_setaffinity(level, which, id, setsize, &mask));
-	}
+        ret = copy_from_user_cpuset_mask(&mask, target_mask);
+        if (ret == 0) {
+                ret = get_errno(cpuset_setaffinity(level, which, id, setsize,
+                                                   &mask));
+        }
 
-	return ret;
+        return ret;
 }
 
 /*
@@ -284,19 +285,19 @@ static inline abi_long do_freebsd_modfind(abi_ulong target_name)
 /* kldload(2) */
 static inline abi_long do_freebsd_kldload(abi_ulong target_name)
 {
-    return -TARGET_EPERM;        /* You can't load kernel modules is the best error */
+    return -TARGET_EPERM;
 }
 
 /* kldunload(2) */
 static inline abi_long do_freebsd_kldunload(abi_long fileid)
 {
-    return -TARGET_EPERM;        /* You can't unload kernel modules is the best error */
+    return -TARGET_EPERM;
 }
 
 /* kldunloadf(2) */
 static inline abi_long do_freebsd_kldunloadf(abi_long fileid, abi_long flags)
 {
-    return -TARGET_EPERM;        /* You can't unload kernel modules is the best error */
+    return -TARGET_EPERM;
 }
 
 /* kldfind(2) */
@@ -353,10 +354,11 @@ static inline uint64_t target_offset64(uint64_t word0, uint64_t word1)
 #endif /* TARGET_ABI_BITS != 32 */
 
 /* posix_fallocate(2) */
-static inline abi_long do_freebsd_posix_fallocate(abi_long arg1, abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
+static inline abi_long do_freebsd_posix_fallocate(abi_long arg1, abi_long arg2,
+    abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
 {
 
-#if TARGET_ABI_BITS == 32                           
+#if TARGET_ABI_BITS == 32
     return get_errno(posix_fallocate(arg1, target_offset64(arg3, arg4),
         target_offset64(arg5, arg6)));
 #else
@@ -460,74 +462,78 @@ static inline abi_long do_freebsd_kenv(abi_long action, abi_ulong name,
     abi_ulong value, abi_long len)
 {
     abi_long ret;
-    void *gname = NULL;		/* unlocked in cases where set */
+    void *gname = NULL;         /* unlocked in cases where set */
     void *gvalue = NULL;        /* unlocked in cases where set */
 
     ret = -TARGET_EINVAL;
     switch (action) {
     case KENV_GET:
         gname = lock_user_string(name);
-	if (gname == NULL) {
-	    ret = -TARGET_EFAULT;
-	    break;
-	}
-	gvalue = lock_user(VERIFY_WRITE, value, len, 0);
-	if (gvalue == NULL) {
-	    ret = -TARGET_EFAULT;
-	    break;
-	}
-	ret = kenv(action, gname, gvalue, len);
-	if (ret > 0) {
-		len = ret;
-	}
-	break;
+        if (gname == NULL) {
+            ret = -TARGET_EFAULT;
+            break;
+        }
+        gvalue = lock_user(VERIFY_WRITE, value, len, 0);
+        if (gvalue == NULL) {
+            ret = -TARGET_EFAULT;
+            break;
+        }
+        ret = kenv(action, gname, gvalue, len);
+        if (ret > 0) {
+                len = ret;
+        }
+        break;
     case KENV_SET:
         gname = lock_user_string(name);
-	if (gname == NULL) {
-	    ret = -TARGET_EFAULT;
-	    break;
-	}
-	gvalue = lock_user(VERIFY_READ, value, len, 1);
-	if (gvalue == NULL) {
-	    ret = -TARGET_EFAULT;
-	    break;
-	}
-	ret = kenv(action, gname, gvalue, len);
-	break;
+        if (gname == NULL) {
+            ret = -TARGET_EFAULT;
+            break;
+        }
+        gvalue = lock_user(VERIFY_READ, value, len, 1);
+        if (gvalue == NULL) {
+            ret = -TARGET_EFAULT;
+            break;
+        }
+        ret = kenv(action, gname, gvalue, len);
+        break;
     case KENV_UNSET:
         gname = lock_user_string(name);
-	if (gname == NULL) {
-	    ret = -TARGET_EFAULT;
-	    break;
-	}
-	ret = kenv(action, gname, NULL, 0);	/* value and name ignored, per kenv(2) */
-	break;
-    case KENV_DUMP:		/* All three treated the same */
+        if (gname == NULL) {
+            ret = -TARGET_EFAULT;
+            break;
+        }
+        /* value and name ignored, per kenv(2) */
+        ret = kenv(action, gname, NULL, 0);
+        break;
+    /* All three treated the same */
+    case KENV_DUMP:
     case KENV_DUMP_LOADER:
     case KENV_DUMP_STATIC:
-	if (value != 0) {			/* value == NULL -> just return length */
-	    gvalue = lock_user(VERIFY_WRITE, value, len, 0);
-	    if (gvalue == NULL) {
-		ret = -TARGET_EFAULT;
-		break;
-	    }
-	}
-	ret = kenv(action, NULL, gvalue, len);	/* name is ignored, per kenv(2) */
-	if (ret > 0) {
-		len = ret;
-	}
-	break;
+        /* value == NULL -> just return length */
+        if (value != 0) {
+            gvalue = lock_user(VERIFY_WRITE, value, len, 0);
+            if (gvalue == NULL) {
+                ret = -TARGET_EFAULT;
+                break;
+            }
+        }
+        /* name is ignored, per kenv(2) */
+        ret = kenv(action, NULL, gvalue, len);
+        if (ret > 0) {
+                len = ret;
+        }
+        break;
     default:
-	ret = -TARGET_EINVAL;
-	break;
+        ret = -TARGET_EINVAL;
+        break;
     }
 
     /* Unmap everything mapped */
     if (gvalue != NULL) {
-	unlock_user(gvalue, value, len);
+        unlock_user(gvalue, value, len);
     }
     if (gname != NULL) {
-	unlock_user(gname, name, 0);
+        unlock_user(gname, name, 0);
     }
 
     return ret;

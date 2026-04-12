@@ -3,7 +3,7 @@
  *
  * Copyright 2021 Warner Losh <imp@bsdimp.com>
  *
- * SPDX-License-Identifier: GPL-2.0-or-later OR BSD-3-Clause
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #ifndef TARGET_OS_UCONTEXT_H
 #define TARGET_OS_UCONTEXT_H

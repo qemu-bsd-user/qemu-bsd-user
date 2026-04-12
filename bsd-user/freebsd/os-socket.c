@@ -24,32 +24,33 @@ abi_long t2h_freebsd_cmsg(struct msghdr *msgh,
     socklen_t space = 0;
 
     msg_controllen = tswap32(target_msgh->msg_controllen);
-    if (msg_controllen < sizeof(struct target_cmsghdr))
+    if (msg_controllen < sizeof(struct target_cmsghdr)) {
         goto the_end;
+    }
     target_cmsg_addr = tswapal(target_msgh->msg_control);
     target_cmsg = lock_user(VERIFY_READ, target_cmsg_addr, msg_controllen, 1);
     target_cmsg_start = target_cmsg;
-    if (!target_cmsg)
+    if (!target_cmsg) {
         return -TARGET_EFAULT;
+    }
 
     while (cmsg && target_cmsg) {
         void *data = CMSG_DATA(cmsg);
         void *target_data = TARGET_CMSG_DATA(target_cmsg);
-
-        int len = (unsigned char *)(target_cmsg) + tswap32(target_cmsg->cmsg_len) -
-		    (unsigned char *)target_data;
+        int len = (unsigned char *)(target_cmsg) +
+            tswap32(target_cmsg->cmsg_len) - (unsigned char *)target_data;
 
         space += CMSG_SPACE(len);
         if (space > msgh->msg_controllen) {
             space -= CMSG_SPACE(len);
-            /* This is a QEMU bug, since we allocated the payload
-             * area ourselves (unlike overflow in host-to-target
-             * conversion, which is just the guest giving us a buffer
-             * that's too small). It can't happen for the payload types
-             * we currently support; if it becomes an issue in future
-             * we would need to improve our allocation strategy to
-             * something more intelligent than "twice the size of the
-             * target buffer we're reading from".
+            /*
+             * This is a QEMU bug, since we allocated the payload area ourselves
+             * (unlike overflow in host-to-target conversion, which is just the
+             * guest giving us a buffer that's too small). It can't happen for
+             * the payload types we currently support; if it becomes an issue in
+             * future we would need to improve our allocation strategy to
+             * something more intelligent than "twice the size of the target
+             * buffer we're reading from".
              */
             gemu_log("Host cmsg overflow\n");
             break;
@@ -112,22 +113,22 @@ abi_long h2t_freebsd_cmsg(struct target_msghdr *target_msgh,
     target_cmsg_addr = tswapal(target_msgh->msg_control);
     target_cmsg = lock_user(VERIFY_WRITE, target_cmsg_addr, msg_controllen, 0);
     target_cmsg_start = target_cmsg;
-    if (!target_cmsg)
+    if (!target_cmsg) {
         return -TARGET_EFAULT;
+    }
 
     while (cmsg && target_cmsg) {
         void *data = CMSG_DATA(cmsg);
         void *target_data = TARGET_CMSG_DATA(target_cmsg);
-
         int len = (unsigned char *)(cmsg) + cmsg->cmsg_len -
-		    (unsigned char *)data;
+            (unsigned char *)data;
 
         int tgt_len, tgt_space;
 
-        /* We never copy a half-header but may copy half-data;
-         * this is Linux's behaviour in put_cmsg(). Note that
-         * truncation here is a guest problem (which we report
-         * to the guest via the CTRUNC bit), unlike truncation
+        /*
+         * We never copy a half-header but may copy half-data; this is Linux's
+         * behaviour in put_cmsg(). Note that truncation here is a guest problem
+         * (which we report to the guest via the CTRUNC bit), unlike truncation
          * in target_to_host_cmsg, which is a QEMU bug.
          */
         if (msg_controllen < sizeof(struct target_cmsghdr)) {
@@ -142,8 +143,9 @@ abi_long h2t_freebsd_cmsg(struct target_msghdr *target_msgh,
         }
         target_cmsg->cmsg_type = tswap32(cmsg->cmsg_type);
 
-        /* Payload types which need a different size of payload on
-         * the target must adjust tgt_len here.
+        /*
+         * Payload types which need a different size of payload on the target
+         * must adjust tgt_len here.
          */
         tgt_len = len;
         switch (cmsg->cmsg_level) {
@@ -165,10 +167,10 @@ abi_long h2t_freebsd_cmsg(struct target_msghdr *target_msgh,
             tgt_len = msg_controllen - sizeof(struct target_cmsghdr);
         }
 
-        /* We must now copy-and-convert len bytes of payload
-         * into tgt_len bytes of destination space. Bear in mind
-         * that in both source and destination we may be dealing
-         * with a truncated value!
+        /*
+         * We must now copy-and-convert len bytes of payload into tgt_len bytes
+         * of destination space. Bear in mind that in both source and
+         * destination we may be dealing with a truncated value!
          */
         switch (cmsg->cmsg_level) {
         case SOL_SOCKET:
@@ -203,7 +205,7 @@ abi_long h2t_freebsd_cmsg(struct target_msghdr *target_msgh,
             default:
                 goto unimplemented;
             }
-            break; // switch (cmsg->cmsg_type)
+            break;
         default:
         unimplemented:
             gemu_log("Unsupported host ancillary data: %d/%d\n",

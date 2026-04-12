@@ -5,7 +5,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-// XXX Likely need to hoist these up into qemu-os.h or something
 #include <sys/extattr.h>
 #include <sys/acl.h>
 
@@ -298,8 +297,8 @@ static inline abi_long do_freebsd_extattr_delete_link(abi_ulong arg1,
 }
 
 /* extattr_list_fd(2) */
-static inline abi_long do_freebsd_extattr_list_fd(abi_long arg1, abi_long arg2,
-                                                  abi_ulong arg3, abi_ulong arg4)
+static inline abi_long do_freebsd_extattr_list_fd(
+    abi_long arg1, abi_long arg2, abi_ulong arg3, abi_ulong arg4)
 {
     abi_long ret;
     void *d;
@@ -318,8 +317,8 @@ static inline abi_long do_freebsd_extattr_list_fd(abi_long arg1, abi_long arg2,
 }
 
 /* extattr_list_file(2) */
-static inline abi_long do_freebsd_extattr_list_file(abi_long arg1, abi_long arg2,
-                                                    abi_ulong arg3, abi_ulong arg4)
+static inline abi_long do_freebsd_extattr_list_file(
+    abi_long arg1, abi_long arg2, abi_ulong arg3, abi_ulong arg4)
 {
     abi_long ret;
     void *p, *d;
@@ -345,8 +344,8 @@ static inline abi_long do_freebsd_extattr_list_file(abi_long arg1, abi_long arg2
 }
 
 /* extattr_list_link(2) */
-static inline abi_long do_freebsd_extattr_list_link(abi_long arg1, abi_long arg2,
-                                                    abi_ulong arg3, abi_ulong arg4)
+static inline abi_long do_freebsd_extattr_list_link(
+    abi_long arg1, abi_long arg2, abi_ulong arg3, abi_ulong arg4)
 {
     abi_long ret;
     void *p, *d;

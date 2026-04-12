@@ -23,7 +23,7 @@ static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
     /* XXXss - flags should be translated from target to host. */
 
     if (is_error(host_ret)) {
-		return get_errno(host_ret);
+                return get_errno(host_ret);
     }
 
     /*
@@ -41,7 +41,7 @@ static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
 
 /* chflagsat(2) */
 static inline abi_long do_bsd_chflagsat(int fd, abi_ulong path,
-	abi_ulong flags, int atflags)
+        abi_ulong flags, int atflags)
 {
     abi_long ret;
     void *p;
@@ -58,7 +58,7 @@ static inline abi_long do_freebsd_close_range(unsigned int lowfd,
     unsigned int highfd, int flags)
 {
 
-    return (close_range(lowfd, highfd, flags));
+    return close_range(lowfd, highfd, flags);
 }
 
 ssize_t safe_copy_file_range(int, off_t *, int, off_t *, size_t, unsigned int);
@@ -88,10 +88,12 @@ static inline abi_long do_freebsd_copy_file_range(int infd,
     ret = get_errno(safe_copy_file_range(infd, inp, outfd, outp, len,
         flags));
 
-    if (inofftp != 0)
+    if (inofftp != 0) {
         *(off_t *)g2h_untagged(inofftp) = tswap64(inoff);
-    if (outofftp != 0)
+    }
+    if (outofftp != 0) {
         *(off_t *)g2h_untagged(outofftp) = tswap64(outoff);
+    }
     return ret;
 }
 

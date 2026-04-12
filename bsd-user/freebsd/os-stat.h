@@ -386,11 +386,12 @@ static inline abi_long do_freebsd11_getfsstat(abi_ulong target_addr,
         return -TARGET_EINVAL;
     }
 
-    ret = count = get_errno(freebsd11_getfsstat(host_stfs, host_bufsize, flags));
+    ret = get_errno(freebsd11_getfsstat(host_stfs, host_bufsize, flags));
     if (is_error(ret)) {
         return ret;
     }
 
+    count = ret;
     while (count--) {
         if (h2t_freebsd11_statfs((target_addr +
                         (count * sizeof(struct target_freebsd11_statfs))),
@@ -482,7 +483,8 @@ static inline abi_long do_freebsd11_getdirentries(abi_long arg1,
     if (dirp == NULL) {
         return -TARGET_EFAULT;
     }
-    ret = get_errno(freebsd11_getdirentries(arg1, (char *)dirp, nbytes, &basep));
+    ret = get_errno(freebsd11_getdirentries(arg1, (char *)dirp, nbytes,
+                                            &basep));
     if (!is_error(ret)) {
         struct freebsd11_dirent *de;
         int len = ret;

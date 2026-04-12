@@ -30,7 +30,7 @@ int safe_kevent(int, const struct kevent *, int, struct kevent *, int,
 int __sys_ktimer_create(clockid_t, struct sigevent *restrict,
      int *restrict);
 int __sys_ktimer_gettime(int, struct itimerspec *);
-int __sys_ktimer_settime(int, int, const struct itimerspec * restrict,
+int __sys_ktimer_settime(int, int, const struct itimerspec *restrict,
      struct itimerspec *restrict);
 int __sys_ktimer_delete(int);
 
@@ -353,7 +353,7 @@ static inline abi_long do_freebsd_ktimer_create(abi_long arg1, abi_long arg2,
             }
         }
     }
-    return (ret);
+    return ret;
 }
 
 /* timer_delete(2) */
@@ -370,18 +370,20 @@ static inline abi_long do_freebsd_ktimer_delete(abi_long arg1)
         ret = get_errno(__sys_ktimer_delete(htimer));
         g_posix_timers[timerid] = 0;
     }
-    return(ret);
+    return ret;
 }
 
 /* timer_settime(2) */
 static inline abi_long do_freebsd_ktimer_settime(abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4)
 {
-    /* args: int timerid, int flags, const struct itimerspec *new_value,
-     * struct itimerspec * old_value */
+    /*
+     * args: int timerid, int flags, const struct itimerspec *new_value,
+     * struct itimerspec * old_value
+     */
     abi_long ret;
     int timerid = get_timer_id(arg1);
- 
+
     if (timerid < 0) {
         ret = timerid;
     } else if (arg3 == 0) {
@@ -389,17 +391,17 @@ static inline abi_long do_freebsd_ktimer_settime(abi_long arg1, abi_long arg2,
     } else {
         int htimer = g_posix_timers[timerid];
         struct itimerspec hspec_new = {{0},}, hspec_old = {{0},};
- 
+
         if (target_to_host_itimerspec(&hspec_new, arg3)) {
             return -TARGET_EFAULT;
         }
         ret = get_errno(
-                      __sys_ktimer_settime(htimer, arg2, &hspec_new, &hspec_old));
+            __sys_ktimer_settime(htimer, arg2, &hspec_new, &hspec_old));
         if (arg4 && host_to_target_itimerspec(arg4, &hspec_old)) {
             return -TARGET_EFAULT;
         }
     }
-    return (ret);
+    return ret;
 }
 
 /* timer_gettime(2) */
@@ -422,13 +424,13 @@ static inline abi_long do_freebsd_ktimer_gettime(abi_long arg1, abi_long arg2)
             ret = -TARGET_EFAULT;
         }
     }
-    return (ret);
+    return ret;
 }
 
 /* select(2) */
 static inline abi_long do_freebsd_select(CPUArchState *env, int n,
-	abi_ulong rfd_addr, abi_ulong wfd_addr, abi_ulong efd_addr,
-	abi_ulong target_tv_addr)
+        abi_ulong rfd_addr, abi_ulong wfd_addr, abi_ulong efd_addr,
+        abi_ulong target_tv_addr)
 {
     fd_set rfds, wfds, efds;
     fd_set *rfds_ptr, *wfds_ptr, *efds_ptr;
@@ -580,9 +582,10 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
     void *p;
 
     target_pfd = lock_user(VERIFY_WRITE, arg1,
-            sizeof(struct target_pollfd) * nfds, 1);
-	if (!target_pfd)
+                           sizeof(struct target_pollfd) * nfds, 1);
+    if (!target_pfd) {
         return -TARGET_EFAULT;
+    }
     pfd = alloca(sizeof(struct pollfd) * nfds);
     for (i = 0; i < nfds; i++) {
         pfd[i].fd = tswap32(target_pfd[i].fd);
@@ -591,8 +594,9 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
 
     /* Unlike poll(), ppoll() uses struct timespec. */
     if (arg3) {
-        if (t2h_freebsd_timespec(&ts, arg3))
+        if (t2h_freebsd_timespec(&ts, arg3)) {
             return -TARGET_EFAULT;
+        }
         ts_ptr = &ts;
     } else {
         ts_ptr = NULL;
@@ -600,8 +604,9 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
 
     if (arg4 != 0) {
         p = lock_user(VERIFY_READ, arg4, sizeof(target_sigset_t), 1);
-        if (p == NULL)
+        if (p == NULL) {
             return -TARGET_EFAULT;
+        }
         target_to_host_sigset(&tstate->sigsuspend_mask, p);
         unlock_user(p, arg4, 0);
         set_ptr = &tstate->sigsuspend_mask;
@@ -614,8 +619,9 @@ static inline abi_long do_freebsd_ppoll(void *cpu_env, abi_long arg1,
         tstate->in_sigsuspend = true;
     }
     if (!is_error(ret)) {
-        for (i = 0; i < nfds; i++)
+        for (i = 0; i < nfds; i++) {
             target_pfd[i].revents = tswap16(pfd[i].revents);
+        }
     }
     unlock_user(target_pfd, arg1, sizeof(struct target_pollfd) * nfds);
 
@@ -631,8 +637,8 @@ static inline abi_long do_freebsd_kqueue(void)
 
 /* kevent(2) */
 /* XXX Maybe some day, consolidate these two... */
-static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1, abi_ulong arg2,
-        abi_long arg3, abi_ulong arg4, abi_long arg5, abi_long arg6)
+static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1,
+    abi_ulong arg2, abi_long arg3, abi_ulong arg4, abi_long arg5, abi_long arg6)
 {
     abi_long ret;
     struct kevent *changelist = NULL, *eventlist = NULL;
@@ -642,7 +648,7 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1, abi_ulong arg2
 
     if (arg3 != 0) {
         target_changelist = lock_user(VERIFY_READ, arg2,
-                sizeof(*target_changelist) * arg3, 1);
+                                      sizeof(*target_changelist) * arg3, 1);
         if (target_changelist == NULL) {
             return -TARGET_EFAULT;
         }
@@ -676,16 +682,17 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1, abi_ulong arg2
         }
     }
     ret = get_errno(safe_kevent(arg1, changelist, arg3, eventlist, arg5,
-                arg6 != 0 ? &ts : NULL));
+                                arg6 != 0 ? &ts : NULL));
 
-    if (arg5 == 0)
+    if (arg5 == 0) {
         return ret;
+    }
 
     if (!is_error(ret)) {
         target_eventlist = lock_user(VERIFY_WRITE, arg4,
-                sizeof(*target_eventlist) * arg5, 0);
+                                     sizeof(*target_eventlist) * arg5, 0);
         if (target_eventlist == NULL) {
-                return -TARGET_EFAULT;
+            return -TARGET_EFAULT;
         }
         for (i = 0; i < arg5; i++) {
             __put_user(eventlist[i].ident, &target_eventlist[i].ident);
@@ -704,7 +711,7 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1, abi_ulong arg2
 #endif
         }
         unlock_user(target_eventlist, arg4,
-                sizeof(*target_eventlist) * arg5);
+                    sizeof(*target_eventlist) * arg5);
     }
     return ret;
 }
@@ -758,16 +765,17 @@ static inline abi_long do_freebsd_kevent(abi_long arg1, abi_ulong arg2,
         }
     }
     ret = get_errno(safe_kevent(arg1, changelist, arg3, eventlist, arg5,
-                arg6 != 0 ? &ts : NULL));
+                                arg6 != 0 ? &ts : NULL));
 
-    if (arg5 == 0)
+    if (arg5 == 0) {
         return ret;
+    }
 
     if (!is_error(ret)) {
         target_eventlist = lock_user(VERIFY_WRITE, arg4,
-                sizeof(struct target_freebsd_kevent) * arg5, 0);
+            sizeof(struct target_freebsd_kevent) * arg5, 0);
         if (target_eventlist == NULL) {
-                return -TARGET_EFAULT;
+            return -TARGET_EFAULT;
         }
         for (i = 0; i < arg5; i++) {
             __put_user(eventlist[i].ident, &target_eventlist[i].ident);
@@ -829,44 +837,48 @@ static inline abi_long do_freebsd_sigtimedwait(abi_ulong arg1, abi_ulong arg2,
 }
 
 /* setitimer(2) */
-static inline abi_long do_freebsd_setitimer(int arg1, abi_ulong arg2, abi_ulong arg3)
+static inline abi_long do_freebsd_setitimer(int arg1, abi_ulong arg2,
+    abi_ulong arg3)
 {
-   abi_long ret = 0;
-   struct itimerval value, ovalue, *pvalue;
+    abi_long ret = 0;
+    struct itimerval value, ovalue, *pvalue;
 
-   if (arg2) {
-       pvalue = &value;
-       if (t2h_freebsd_timeval(&pvalue->it_interval, arg2) ||
-           t2h_freebsd_timeval(&pvalue->it_value, arg2 + sizeof(struct target_freebsd_timeval))) {
-             return -TARGET_EFAULT;
-       } 
-   } else {
-       pvalue = NULL;
-   }
-   ret = get_errno(setitimer(arg1, pvalue, &ovalue));
-   if (!is_error(ret) && arg3) {
-       if (h2t_freebsd_timeval(&ovalue.it_interval, arg3)
-          || h2t_freebsd_timeval(&ovalue.it_value, arg3 + sizeof(struct target_freebsd_timeval))) {
-             return -TARGET_EFAULT;
-       }
-   }
-   return ret;
+    if (arg2) {
+        pvalue = &value;
+        if (t2h_freebsd_timeval(&pvalue->it_interval, arg2) ||
+            t2h_freebsd_timeval(&pvalue->it_value,
+            arg2 + sizeof(struct target_freebsd_timeval))) {
+            return -TARGET_EFAULT;
+        }
+    } else {
+        pvalue = NULL;
+    }
+    ret = get_errno(setitimer(arg1, pvalue, &ovalue));
+    if (!is_error(ret) && arg3) {
+        if (h2t_freebsd_timeval(&ovalue.it_interval, arg3) ||
+            h2t_freebsd_timeval(&ovalue.it_value,
+            arg3 + sizeof(struct target_freebsd_timeval))) {
+            return -TARGET_EFAULT;
+        }
+    }
+    return ret;
 }
 
 /* getitimer(2) */
 static inline abi_long do_freebsd_getitimer(int arg1, abi_ulong arg2)
 {
-   abi_long ret = 0;
-   struct itimerval value;
+    abi_long ret = 0;
+    struct itimerval value;
 
-   ret = get_errno(getitimer(arg1, &value));
-   if (!is_error(ret) && arg2) {
-       if (h2t_freebsd_timeval(&value.it_interval, arg2) ||
-           h2t_freebsd_timeval(&value.it_value, arg2 + sizeof(struct target_freebsd_timeval))) {
+    ret = get_errno(getitimer(arg1, &value));
+    if (!is_error(ret) && arg2) {
+        if (h2t_freebsd_timeval(&value.it_interval, arg2) ||
+            h2t_freebsd_timeval(&value.it_value,
+            arg2 + sizeof(struct target_freebsd_timeval))) {
             return -TARGET_EFAULT;
-       }
-   }
-   return ret;
+        }
+    }
+    return ret;
 }
 
 /* clock_getcpuclockid2(id_t, int, clockid_t *)  Not documented. */
@@ -889,10 +901,11 @@ static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1,
     target_clk_id_addr = arg3;
 #endif
 
-    if (target_clk_id_addr == 0)
+    if (target_clk_id_addr == 0) {
         return -TARGET_EINVAL;
+    }
 
-    switch(which) {
+    switch (which) {
     case TARGET_CPUCLOCK_WHICH_PID:
         ret = get_errno(clock_getcpuclockid2(id, CPUCLOCK_WHICH_PID, &clk_id));
         break;
@@ -906,8 +919,9 @@ static inline abi_long do_freebsd_clock_getcpuclockid2(abi_ulong arg1,
         break;
     }
 
-    if (!ret && put_user_s32(clk_id, target_clk_id_addr))
+    if (!ret && put_user_s32(clk_id, target_clk_id_addr)) {
         ret = -TARGET_EFAULT;
+    }
 
     return ret;
 }
@@ -918,9 +932,9 @@ static inline abi_long do_freebsd_futimens(abi_ulong arg1,
     struct timespec *tvp, tv[2];
 
     if (arg2 != 0) {
-        if (t2h_freebsd_timespec(&tv[0], arg2) || 
-                t2h_freebsd_timespec(&tv[1], arg2 +
-                        sizeof(struct target_freebsd_timeval))) {
+        if (t2h_freebsd_timespec(&tv[0], arg2) ||
+            t2h_freebsd_timespec(&tv[1], arg2 +
+                sizeof(struct target_freebsd_timeval))) {
             return -TARGET_EFAULT;
         }
         tvp = tv;
@@ -954,7 +968,7 @@ static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
         return -TARGET_EFAULT;
     }
     ret = get_errno(utimensat(arg1, p, tvp,
-	target_to_host_bitmask(arg4, fcntl_flags_tbl)));
+        target_to_host_bitmask(arg4, fcntl_flags_tbl)));
     unlock_user(p, arg2, 0);
     return ret;
 }

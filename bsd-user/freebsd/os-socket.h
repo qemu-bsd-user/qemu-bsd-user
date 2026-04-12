@@ -30,15 +30,16 @@ static abi_long do_sendrecvmsg_locked(int fd, struct target_msghdr *msgp,
 
     if (msgp->msg_name) {
         msg.msg_namelen = tswap32(msgp->msg_namelen);
-        msg.msg_name = alloca(msg.msg_namelen+1);
+        msg.msg_name = alloca(msg.msg_namelen + 1);
         ret = target_to_host_sockaddr(msg.msg_name,
                                       tswapal(msgp->msg_name),
                                       msg.msg_namelen);
         if (ret == -TARGET_EFAULT) {
-            /* For connected sockets msg_name and msg_namelen must
-             * be ignored, so returning EFAULT immediately is wrong.
-             * Instead, pass a bad msg_name to the host kernel, and
-             * let it decide whether to return EFAULT or not.
+            /*
+             * For connected sockets msg_name and msg_namelen must be ignored,
+             * so returning EFAULT immediately is wrong.  Instead, pass a bad
+             * msg_name to the host kernel, and let it decide whether to return
+             * EFAULT or not.
              */
             msg.msg_name = (void *)-1;
         } else if (ret) {
@@ -62,7 +63,8 @@ static abi_long do_sendrecvmsg_locked(int fd, struct target_msghdr *msgp,
     target_vec = tswapal(msgp->msg_iov);
 
     if (count > IOV_MAX) {
-        /* sendrcvmsg returns a different errno for this condition than
+        /*
+         * sendrcvmsg returns a different errno for this condition than
          * readv/writev, so we must catch it here before lock_iovec() does.
          */
         ret = -TARGET_EMSGSIZE;
@@ -161,8 +163,9 @@ static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
         switch (optname) {
         case IP_OPTIONS:
             p = lock_user(VERIFY_READ, optval_addr, optlen, 0);
-            if (p == NULL)
+            if (p == NULL) {
                 return -TARGET_EFAULT;
+            }
             ret = get_errno(setsockopt(sockfd, level, optname, p, optlen));
             unlock_user(p, optval_addr, 0);
             break;
@@ -511,16 +514,19 @@ int_case:
     case IPPROTO_IP:
         switch (optname) {
         case IP_OPTIONS:
-            if (get_user_u32(len, optlen))
+            if (get_user_u32(len, optlen)) {
                 return -TARGET_EFAULT;
+            }
             lv = (socklen_t)len;
             p = lock_user(VERIFY_WRITE, optval_addr, len, 0);
-            if (p == NULL)
+            if (p == NULL) {
                 return -TARGET_EFAULT;
+            }
             ret = get_errno(getsockopt(sockfd, level, optname, p, &lv));
             unlock_user(p, optval_addr, len);
-            if (put_user_u32(lv, optlen))
+            if (put_user_u32(lv, optlen)) {
                 return -TARGET_EFAULT;
+            }
             break;
         case IP_HDRINCL:
         case IP_TOS:
@@ -683,7 +689,7 @@ static inline abi_long do_freebsd_setfib(abi_long fib)
 
 /* bindat(2) */
 static inline abi_long do_freebsd_bindat(int fd, int sockfd,
-	abi_ulong target_addr, socklen_t addrlen)
+        abi_ulong target_addr, socklen_t addrlen)
 {
     abi_long ret;
     void *addr;
@@ -703,7 +709,7 @@ static inline abi_long do_freebsd_bindat(int fd, int sockfd,
 
 /* connectat(2) */
 static inline abi_long do_freebsd_connectat(int fd, int sockfd,
-	abi_ulong target_addr, socklen_t addrlen)
+        abi_ulong target_addr, socklen_t addrlen)
 {
     abi_long ret;
     void *addr;

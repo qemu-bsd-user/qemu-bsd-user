@@ -34,33 +34,33 @@
  * Note: Not all types appear to be used in-tree.
  */
 static const int guest_ctl_size[CTLTYPE + 1] = {
-	[CTLTYPE_INT] = sizeof(abi_int),
-	[CTLTYPE_UINT] = sizeof(abi_uint),
-	[CTLTYPE_LONG] = sizeof(abi_long),
-	[CTLTYPE_ULONG] = sizeof(abi_ulong),
-	[CTLTYPE_S8] = sizeof(int8_t),
-	[CTLTYPE_S16] = sizeof(int16_t),
-	[CTLTYPE_S32] = sizeof(int32_t),
-	[CTLTYPE_S64] = sizeof(int64_t),
-	[CTLTYPE_U8] = sizeof(uint8_t),
-	[CTLTYPE_U16] = sizeof(uint16_t),
-	[CTLTYPE_U32] = sizeof(uint32_t),
-	[CTLTYPE_U64] = sizeof(uint64_t),
+        [CTLTYPE_INT] = sizeof(abi_int),
+        [CTLTYPE_UINT] = sizeof(abi_uint),
+        [CTLTYPE_LONG] = sizeof(abi_long),
+        [CTLTYPE_ULONG] = sizeof(abi_ulong),
+        [CTLTYPE_S8] = sizeof(int8_t),
+        [CTLTYPE_S16] = sizeof(int16_t),
+        [CTLTYPE_S32] = sizeof(int32_t),
+        [CTLTYPE_S64] = sizeof(int64_t),
+        [CTLTYPE_U8] = sizeof(uint8_t),
+        [CTLTYPE_U16] = sizeof(uint16_t),
+        [CTLTYPE_U32] = sizeof(uint32_t),
+        [CTLTYPE_U64] = sizeof(uint64_t),
 };
 
 static const int host_ctl_size[CTLTYPE + 1] = {
-	[CTLTYPE_INT] = sizeof(int),
-	[CTLTYPE_UINT] = sizeof(u_int),
-	[CTLTYPE_LONG] = sizeof(long),
-	[CTLTYPE_ULONG] = sizeof(u_long),
-	[CTLTYPE_S8] = sizeof(int8_t),
-	[CTLTYPE_S16] = sizeof(int16_t),
-	[CTLTYPE_S32] = sizeof(int32_t),
-	[CTLTYPE_S64] = sizeof(int64_t),
-	[CTLTYPE_U8] = sizeof(uint8_t),
-	[CTLTYPE_U16] = sizeof(uint16_t),
-	[CTLTYPE_U32] = sizeof(uint32_t),
-	[CTLTYPE_U64] = sizeof(uint64_t),
+        [CTLTYPE_INT] = sizeof(int),
+        [CTLTYPE_UINT] = sizeof(u_int),
+        [CTLTYPE_LONG] = sizeof(long),
+        [CTLTYPE_ULONG] = sizeof(u_long),
+        [CTLTYPE_S8] = sizeof(int8_t),
+        [CTLTYPE_S16] = sizeof(int16_t),
+        [CTLTYPE_S32] = sizeof(int32_t),
+        [CTLTYPE_S64] = sizeof(int64_t),
+        [CTLTYPE_U8] = sizeof(uint8_t),
+        [CTLTYPE_U16] = sizeof(uint16_t),
+        [CTLTYPE_U32] = sizeof(uint32_t),
+        [CTLTYPE_U64] = sizeof(uint64_t),
 };
 
 #ifdef TARGET_ABI32
@@ -125,32 +125,41 @@ get_target_arch(TaskState *ts, char **machine_arch)
     ep = NULL;
     rv = 1;
     fd = open(ts->bprm->fullpath, O_RDONLY);
-    if (fd < 0)
-        return (1);
+    if (fd < 0) {
+        return 1;
+    }
 
-    if (elf_version(EV_CURRENT) == EV_NONE)
+    if (elf_version(EV_CURRENT) == EV_NONE) {
         goto out;
+    }
 
     ep = elf_begin(fd, ELF_C_READ, NULL);
-    if (ep == NULL)
+    if (ep == NULL) {
         goto out;
+    }
 
     scnp = elf_getscn(ep, 0);
-    if (scnp == NULL)
+    if (scnp == NULL) {
         goto out;
+    }
     do {
-        if (gelf_getshdr(scnp, &shdr) != &shdr)
+        if (gelf_getshdr(scnp, &shdr) != &shdr) {
             continue;
-        if (shdr.sh_type != SHT_NOTE)
+        }
+        if (shdr.sh_type != SHT_NOTE) {
             continue;
-        if ((dp = elf_getdata(scnp, NULL)) == NULL)
+        }
+        dp = elf_getdata(scnp, NULL);
+        if (dp == NULL) {
             continue;
+        }
 
         buf = dp->d_buf;
         end = buf + dp->d_size;
         while (buf < end) {
-            if (buf + sizeof(*note) > end)
+            if (buf + sizeof(*note) > end) {
                 break;
+            }
             note = (Elf_Note *)(uintptr_t) buf;
             if (note->n_type == NT_FREEBSD_ARCH_TAG) {
                 buf += sizeof(*note) + roundup2(note->n_namesz, 4);
@@ -163,10 +172,11 @@ get_target_arch(TaskState *ts, char **machine_arch)
         }
     } while ((scnp = elf_nextscn(ep, scnp)) != NULL);
 out:
-    if (ep != NULL)
+    if (ep != NULL) {
         elf_end(ep);
+    }
     close(fd);
-    return (rv);
+    return rv;
 }
 #endif
 
@@ -209,8 +219,9 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     __put_user(hki->ki_svgid, &tki->ki_svgid);
     __put_user(hki->ki_ngroups, &tki->ki_ngroups);
 
-    for (i=0; i < TARGET_KI_NGROUPS; i++)
+    for (i = 0; i < TARGET_KI_NGROUPS; i++) {
         __put_user(hki->ki_groups[i], &tki->ki_groups[i]);
+    }
 
     __put_user(hki->ki_size, &tki->ki_size);
 
@@ -247,13 +258,13 @@ host_to_target_kinfo_proc(struct target_kinfo_proc *tki, struct kinfo_proc *hki)
     __put_user(hki->ki_oncpu_old, &tki->ki_oncpu_old);
     __put_user(hki->ki_lastcpu_old, &tki->ki_lastcpu_old);
 
-    strncpy(tki->ki_tdname, hki->ki_tdname, TARGET_TDNAMLEN+1);
-    strncpy(tki->ki_wmesg, hki->ki_wmesg, TARGET_WMESGLEN+1);
-    strncpy(tki->ki_login, hki->ki_login, TARGET_LOGNAMELEN+1);
-    strncpy(tki->ki_lockname, hki->ki_lockname, TARGET_LOCKNAMELEN+1);
-    strncpy(tki->ki_comm, hki->ki_comm, TARGET_COMMLEN+1);
-    strncpy(tki->ki_emul, hki->ki_emul, TARGET_KI_EMULNAMELEN+1);
-    strncpy(tki->ki_loginclass, hki->ki_loginclass, TARGET_LOGINCLASSLEN+1);
+    strncpy(tki->ki_tdname, hki->ki_tdname, TARGET_TDNAMLEN + 1);
+    strncpy(tki->ki_wmesg, hki->ki_wmesg, TARGET_WMESGLEN + 1);
+    strncpy(tki->ki_login, hki->ki_login, TARGET_LOGNAMELEN + 1);
+    strncpy(tki->ki_lockname, hki->ki_lockname, TARGET_LOCKNAMELEN + 1);
+    strncpy(tki->ki_comm, hki->ki_comm, TARGET_COMMLEN + 1);
+    strncpy(tki->ki_emul, hki->ki_emul, TARGET_KI_EMULNAMELEN + 1);
+    strncpy(tki->ki_loginclass, hki->ki_loginclass, TARGET_LOGINCLASSLEN + 1);
 
     __put_user(hki->ki_oncpu, &tki->ki_oncpu);
     __put_user(hki->ki_lastcpu, &tki->ki_lastcpu);
@@ -288,8 +299,9 @@ do_sysctl_kern_getprocs(int op, int arg, size_t olen,
     int mib[4], num, i, miblen;
     size_t len;
 
-    if (tlen == NULL)
+    if (tlen == NULL) {
         return -TARGET_EINVAL;
+    }
 
     mib[0] = CTL_KERN;
     mib[1] = KERN_PROC;
@@ -300,28 +312,33 @@ do_sysctl_kern_getprocs(int op, int arg, size_t olen,
 
     len = 0;
     ret = get_errno(sysctl(mib, miblen, NULL, &len, NULL, 0));
-    if (is_error(ret))
+    if (is_error(ret)) {
         return ret;
+    }
 
     num = len / sizeof(*kipp);
     *tlen = num * sizeof(struct target_kinfo_proc);
-    if (tki == NULL)
+    if (tki == NULL) {
         return ret;
+    }
 
-    if (olen < *tlen)
+    if (olen < *tlen) {
         return -TARGET_EINVAL;
+    }
 
     kipp = g_malloc(len);
-    if (kipp == NULL)
+    if (kipp == NULL) {
         return -TARGET_ENOMEM;
+    }
     ret = get_errno(sysctl(mib, miblen, kipp, &len, NULL, 0));
     num = len / sizeof(*kipp);
     *tlen = num * sizeof(struct target_kinfo_proc);
     if (len % sizeof(*kipp) != 0 || kipp->ki_structsize != sizeof(*kipp)) {
         ret = -TARGET_EINVAL; /* XXX */
     } else if (!is_error(ret)) {
-        for(i=0; i < num; i++)
+        for (i = 0; i < num; i++) {
             host_to_target_kinfo_proc(&tki[i], &kipp[i]);
+        }
     }
 
     g_free(kipp);
@@ -370,14 +387,15 @@ host_to_target_kinfo_file(struct target_kinfo_file *tkif,
                 &tkif->kf_un.kf_sock.kf_sock_type0);
         __put_user(hkif->kf_un.kf_sock.kf_sock_protocol0,
                 &tkif->kf_un.kf_sock.kf_sock_protocol0);
-/*  XXX - Implement copy function for sockaddr_storage
+#ifdef notyet
+/*  XXX - Implement copy function for sockaddr_storage */
         host_to_target_copy_sockaddr_storage(
                 &hkif->kf_un.kf_file.kf_sa_local,
                 &kif->kf_un.kf_file.kf_sa_local);
         host_to_target_copy_sockaddr_storage(
                 &hkif->kf_un.kf_file.kf_sa_peer,
                 &kif->kf_un.kf_file.kf_sa_peer);
-*/
+#endif
         __put_user(hkif->kf_un.kf_sock.kf_sock_pcb,
                 &tkif->kf_un.kf_sock.kf_sock_pcb);
         __put_user(hkif->kf_un.kf_sock.kf_sock_inpcb,
@@ -1264,7 +1282,7 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
         static int oid_vfs_conflist;
 
         if (!oid_vfs_conflist) {
-            int real_oid[CTL_MAXNAME+2];
+            int real_oid[CTL_MAXNAME + 2];
             size_t len = sizeof(real_oid) / sizeof(int);
 
             if (sysctlnametomib("vfs.conflist", real_oid, &len) >= 0) {
@@ -1327,13 +1345,13 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 
         case HW_MACHINE_ARCH:
         {
-#ifdef	TARGET_ARM
+#ifdef TARGET_ARM
             /*
-             * For ARM, we'll try to grab the MACHINE_ARCH from the ELF that we are
-             * currently emulating. It should have a .note containing the
-             * MACHINE_ARCH that this binary has been compiled for, so we'll assume
-             * this is right and otherwise matches the jail/environment we're
-             * operating out of.
+             * For ARM, we'll try to grab the MACHINE_ARCH from the ELF that we
+             * are currently emulating. It should have a .note containing the
+             * MACHINE_ARCH that this binary has been compiled for, so we'll
+             * assume this is right and otherwise matches the jail/environment
+             * we're operating out of.
              *
              * If we can't find the expected ARCH tag, fallback to armv7 as a
              * sensible default.
@@ -1438,7 +1456,8 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
 
             if (oid_hw_pagesizes && snamep[1] == oid_hw_pagesizes) {
                 if (oldlen) {
-                    (*(abi_ulong *)holdp) = tswapal((abi_ulong)TARGET_PAGE_SIZE);
+                    (*(abi_ulong *)holdp) =
+                        tswapal((abi_ulong)TARGET_PAGE_SIZE);
                     ((abi_ulong *)holdp)[1] = 0;
                 }
                 holdlen = sizeof(abi_ulong) * 2;
