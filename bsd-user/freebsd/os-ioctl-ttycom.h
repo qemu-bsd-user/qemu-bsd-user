@@ -215,31 +215,23 @@ struct target_winsize {
 #define     TARGET_TIOCPKT_START        0x08    /* start output */
 #define     TARGET_TIOCPKT_NOSTOP       0x10    /* no more ^S, ^Q */
 #define     TARGET_TIOCPKT_DOSTOP       0x20    /* now do ^S ^Q */
-#define     TARGET_TIOCPKT_IOCTL        0x40    /* state change of pty
-                               driver */
-#define TARGET_TIOCNOTTY     TARGET_IO('t', 113)    /* void tty
-                               association */
-#define TARGET_TIOCSTI      TARGET_IOW('t', 114, char)  /* simulate
-                            terminal input */
+#define     TARGET_TIOCPKT_IOCTL        0x40    /* state change of pty driver */
+#define TARGET_TIOCNOTTY TARGET_IO('t', 113)    /* void tty association */
+#define TARGET_TIOCSTI TARGET_IOW('t', 114, char)  /* simulate terminal input */
 #define TARGET_TIOCOUTQ TARGET_IOR('t', 115, int)   /* output queue size */
                         /* 116-117 compat */
 #define TARGET_TIOCSPGRP    TARGET_IOW('t', 118, int) /* set pgrp of tty */
 #define TARGET_TIOCGPGRP    TARGET_IOR('t', 119, int) /* get pgrp of tty */
-#define TARGET_TIOCCDTR  TARGET_IO('t', 120)        /* clear data terminal
-                               ready */
-#define TARGET_TIOCSDTR  TARGET_IO('t', 121)        /* set data terminal
-                               ready */
+#define TARGET_TIOCCDTR  TARGET_IO('t', 120) /* clear data terminal ready */
+#define TARGET_TIOCSDTR  TARGET_IO('t', 121) /* set data terminal ready */
 #define TARGET_TIOCCBRK  TARGET_IO('t', 122)        /* clear break bit */
 #define TARGET_TIOCSBRK  TARGET_IO('t', 123)        /* set break bit */
                         /* 124-127 compat */
 
-#define TARGET_TTYDISC      0       /* termios tty line
-                           discipline */
+#define TARGET_TTYDISC      0       /* termios tty line discipline */
 #define TARGET_SLIPDISC     4       /* serial IP discipline */
 #define TARGET_PPPDISC      5       /* PPP discipline */
-#define TARGET_NETGRAPHDISC 6       /* Netgraph tty node
-                           discipline */
-#define TARGET_H4DISC       7       /* Netgraph Bluetooth H4
-                           discipline */
+#define TARGET_NETGRAPHDISC 6       /* Netgraph tty node discipline */
+#define TARGET_H4DISC       7       /* Netgraph Bluetooth H4 discipline */
 
 #endif /* BSD_USER_FREEBSD_OS_IOCTL_TTYCOM_H */

@@ -117,7 +117,7 @@ struct target_ifconf {
     } ifc_ifcu;
 };
 
-#define TARGET_SIOCGIFCONF     	TARGET_IOWR('i', 36, struct target_ifconf)
+#define TARGET_SIOCGIFCONF     TARGET_IOWR('i', 36, struct target_ifconf)
 
 /* See net/if.h */
 struct  target_ifdrv {
@@ -143,7 +143,7 @@ struct target_ifgroupreq {
     uint32_t        ifgr_len;
     union {
         char        ifgru_group[TARGET_IFNAMSIZ];
-	abi_ulong   ifgru_groups;
+        abi_ulong   ifgru_groups;
     } ifgr_ifgru;
 };
 

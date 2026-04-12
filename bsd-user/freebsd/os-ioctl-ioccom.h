@@ -27,8 +27,8 @@
 #define TARGET_IOC_VOID     0x20000000  /* no parameters */
 #define TARGET_IOC_OUT      0x40000000  /* copy out parameters */
 #define TARGET_IOC_IN       0x80000000  /* copy in parameters */
-#define TARGET_IOC_INOUT    (TARGET_IOC_IN|TARGET_IOC_OUT)
-#define TARGET_IOC_DIRMASK  (TARGET_IOC_VOID|TARGET_IOC_OUT|TARGET_IOC_IN)
+#define TARGET_IOC_INOUT    (TARGET_IOC_IN | TARGET_IOC_OUT)
+#define TARGET_IOC_DIRMASK  (TARGET_IOC_VOID | TARGET_IOC_OUT | TARGET_IOC_IN)
 
 #define TARGET_IOC(inout, group, num, len) ((abi_ulong) \
     ((inout) | (((len) & TARGET_IOCPARM_MASK) << 16) | ((group) << 8) \
