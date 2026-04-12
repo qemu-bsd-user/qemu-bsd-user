@@ -8,11 +8,8 @@
 #ifndef FREEBSD_OS_FILE_H
 #define FREEBSD_OS_FILE_H
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 #include <sys/specialfd.h>
-
 int __sys___specialfd(int, const void *, size_t);
-#endif
 
 /*
  * Asynchronous I/O.
@@ -56,7 +53,6 @@ static inline abi_long do_bsd_chflagsat(int fd, abi_ulong path,
     return ret;
 }
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300091
 /* close_range(2) */
 static inline abi_long do_freebsd_close_range(unsigned int lowfd,
     unsigned int highfd, int flags)
@@ -65,9 +61,6 @@ static inline abi_long do_freebsd_close_range(unsigned int lowfd,
     return (close_range(lowfd, highfd, flags));
 }
 
-#endif /* __FreeBSD_version >= 1300091 */
-
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300037
 ssize_t safe_copy_file_range(int, off_t *, int, off_t *, size_t, unsigned int);
 
 /* copy_file_range(2) */
@@ -101,9 +94,6 @@ static inline abi_long do_freebsd_copy_file_range(int infd,
         *(off_t *)g2h_untagged(outofftp) = tswap64(outoff);
     return ret;
 }
-#endif /* __FreeBSD_version >= 1300037 */
-
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 
 static inline abi_long do_freebsd___specialfd(int type, abi_ulong req,
     size_t len)
@@ -130,6 +120,5 @@ static inline abi_long do_freebsd___specialfd(int type, abi_ulong req,
 
     return ret;
 }
-#endif /* __FreeBSD_version >= 1300037 */
 
 #endif /* FREEBSD_OS_FILE_H */

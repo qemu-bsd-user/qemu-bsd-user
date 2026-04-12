@@ -111,10 +111,8 @@ safe_syscall4(int, ppoll, struct pollfd *, fds, nfds_t, nfds,
               const struct timespec * restrict, timeout,
               const sigset_t * restrict, newsigmask);
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
 safe_syscall6(ssize_t, copy_file_range, int, infd, off_t *, inoffp, int, outfd,
     off_t *, outoffp, size_t, len, unsigned int, flags);
-#endif
 
 int g_posix_timers[32] = { 0, } ;
 
@@ -541,11 +539,9 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_closefrom(arg1);
         break;
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300091
     case TARGET_FREEBSD_NR_close_range: /* close_range(2) */
         ret = do_freebsd_close_range(arg1, arg2, arg3);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_revoke: /* revoke(2) */
         ret = do_bsd_revoke(arg1);
@@ -789,24 +785,18 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_swapoff(arg1, arg2);
         break;
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300080
     case TARGET_FREEBSD_NR___realpathat:
         /* __realpathat(2) (XXX no realpathat()) */
         ret = do_freebsd_realpathat(arg1, arg2, arg3, arg4, arg5);
         break;
-#endif
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300037
     case TARGET_FREEBSD_NR_copy_file_range:
         ret = do_freebsd_copy_file_range(arg1, arg2, arg3, arg4, arg5, arg6);
         break;
-#endif
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300133
     case TARGET_FREEBSD_NR___specialfd:
         ret = do_freebsd___specialfd(arg1, arg2, arg3);
         break;
-#endif
 
         /*
          * Memory management system calls.
@@ -860,17 +850,13 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         ret = do_bsd_shm_open(arg1, arg2, arg3);
         break;
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300048
     case TARGET_FREEBSD_NR_shm_open2: /* shm_open2(2) */
         ret = do_freebsd_shm_open2(arg1, arg2, arg3, arg4, arg5);
         break;
-#endif
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300049
     case TARGET_FREEBSD_NR_shm_rename: /* shm_rename(2) */
         ret = do_freebsd_shm_rename(arg1, arg2, arg3);
         break;
-#endif
 
     case TARGET_FREEBSD_NR_shm_unlink: /* shm_unlink(2) */
         ret = do_bsd_shm_unlink(arg1);

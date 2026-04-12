@@ -378,7 +378,6 @@ static inline abi_long do_freebsd_posix_openpt(abi_long flags)
 int __sys_shm_open2(const char *path, int flags, mode_t mode, int shmflags,
     const char *);
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300048
 /* shm_open2(2) */
 static inline abi_long do_freebsd_shm_open2(abi_ulong pathptr, abi_ulong flags,
     abi_long mode, abi_ulong shmflags, abi_ulong nameptr)
@@ -415,9 +414,7 @@ static inline abi_long do_freebsd_shm_open2(abi_ulong pathptr, abi_ulong flags,
     }
     return ret;
 }
-#endif /* __FreeBSD_version >= 1300048 */
 
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 1300049
 /* shm_rename(2) */
 static inline abi_long do_freebsd_shm_rename(abi_ulong fromptr, abi_ulong toptr,
         abi_ulong flags)
@@ -440,7 +437,6 @@ static inline abi_long do_freebsd_shm_rename(abi_ulong fromptr, abi_ulong toptr,
 
     return ret;
 }
-#endif /* __FreeBSD_version >= 1300049 */
 
 #if defined(CONFIG_GETRANDOM)
 static inline abi_long do_freebsd_getrandom(abi_ulong buf, abi_ulong buflen,
