@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2023 Warner Losh <imp@bsdimp.com>
  *
- * SPDX-License-Identifier: BSD-2-Clause
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * OS-Specific portion of syscall_defs.h
  */
