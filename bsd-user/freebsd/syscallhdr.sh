@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (c) 2026 Warner Losh <imp@bsdimp.com>
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 in="$1"
 out="$2"
