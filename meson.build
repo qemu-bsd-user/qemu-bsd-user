@@ -29,7 +29,6 @@ fs = import('fs')
 
 host_os = host_machine.system()
 config_host = keyval.load(meson.current_build_dir() / 'config-host.mak')
-targetos = 'freebsd'
 
 # Temporary directory used for files created while
 # configure runs. Since it is in the build directory
@@ -4310,7 +4309,7 @@ foreach target : target_dirs
       dir = base_dir / abi
       arch_srcs += files(dir / 'signal.c', dir / 'target_arch_cpu.c')
       arch_srcs += bsd_syscall_nr.process('/usr/include/sys/syscall.h',
-					  extra_args : targetos.to_upper())
+					  extra_args : host_os.to_upper())
     endif
     target_inc += include_directories(
       base_dir,
