@@ -267,7 +267,7 @@ void unlock_iovec(struct iovec *vec, abi_ulong target_addr,
 /*
  * All errnos that freebsd_syscall() returns must be -TARGET_<errcode>.
  */
-static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
+static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
                                 abi_long arg2, abi_long arg3, abi_long arg4,
                                 abi_long arg5, abi_long arg6, abi_long arg7,
                                 abi_long arg8)
@@ -279,19 +279,19 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
          * process system calls
          */
     case TARGET_FREEBSD_NR_fork: /* fork(2) */
-        ret = do_freebsd_fork(cpu_env);
+        ret = do_freebsd_fork(env);
         break;
 
     case TARGET_FREEBSD_NR_vfork: /* vfork(2) */
-        ret = do_freebsd_vfork(cpu_env);
+        ret = do_freebsd_vfork(env);
         break;
 
     case TARGET_FREEBSD_NR_rfork: /* rfork(2) */
-        ret = do_freebsd_rfork(cpu_env, arg1);
+        ret = do_freebsd_rfork(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_pdfork: /* pdfork(2) */
-        ret = do_freebsd_pdfork(cpu_env, arg1, arg2);
+        ret = do_freebsd_pdfork(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_execve: /* execve(2) */
@@ -307,12 +307,12 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_wait6: /* wait6(2) */
-        ret = do_freebsd_wait6(cpu_env, arg1, arg2, arg3,
+        ret = do_freebsd_wait6(env, arg1, arg2, arg3,
                                arg4, arg5, arg6, arg7, arg8);
         break;
 
     case TARGET_FREEBSD_NR_exit: /* exit(2) */
-        ret = do_bsd_exit(cpu_env, arg1);
+        ret = do_bsd_exit(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_getgroups: /* getgroups(2) */
@@ -476,7 +476,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_procctl: /* procctl(2) */
-        ret = do_freebsd_procctl(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_procctl(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
         /*
@@ -487,7 +487,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_pread: /* pread(2) */
-        ret = do_bsd_pread(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_bsd_pread(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_readv: /* readv(2) */
@@ -495,7 +495,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_preadv: /* preadv(2) */
-        ret = do_bsd_preadv(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_bsd_preadv(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_write: /* write(2) */
@@ -503,7 +503,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_pwrite: /* pwrite(2) */
-        ret = do_bsd_pwrite(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_bsd_pwrite(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_writev: /* writev(2) */
@@ -511,7 +511,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_pwritev: /* pwritev(2) */
-        ret = do_bsd_pwritev(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_bsd_pwritev(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_open: /* open(2) */
@@ -615,11 +615,11 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_truncate: /* truncate(2) */
-        ret = do_bsd_truncate(cpu_env, arg1, arg2, arg3, arg4);
+        ret = do_bsd_truncate(env, arg1, arg2, arg3, arg4);
         break;
 
     case TARGET_FREEBSD_NR_ftruncate: /* ftruncate(2) */
-        ret = do_bsd_ftruncate(cpu_env, arg1, arg2, arg3, arg4);
+        ret = do_bsd_ftruncate(env, arg1, arg2, arg3, arg4);
         break;
 
     case TARGET_FREEBSD_NR_acct: /* acct(2) */
@@ -651,7 +651,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_readlink: /* readlink(2) */
-        ret = do_bsd_readlink(cpu_env, arg1, arg2, arg3);
+        ret = do_bsd_readlink(env, arg1, arg2, arg3);
         break;
 
     case TARGET_FREEBSD_NR_readlinkat: /* readlinkat(2) */
@@ -683,7 +683,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_mknodat: /* mknodat(2) */
-        ret = do_bsd_mknodat(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_bsd_mknodat(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_chown: /* chown(2) */
@@ -755,19 +755,19 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_ppoll: /* ppoll(2) */
-        ret = do_freebsd_ppoll(cpu_env, arg1, arg2, arg3, arg4);
+        ret = do_freebsd_ppoll(env, arg1, arg2, arg3, arg4);
         break;
 
     case TARGET_FREEBSD_NR_lseek: /* lseek(2) */
-        ret = do_bsd_lseek(cpu_env, arg1, arg2, arg3, arg4, arg5);
+        ret = do_bsd_lseek(env, arg1, arg2, arg3, arg4, arg5);
         break;
 
     case TARGET_FREEBSD_NR_freebsd10_pipe: /* pipe(2) */
-        ret = do_bsd_pipe(cpu_env, arg1);
+        ret = do_bsd_pipe(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_pipe2: /* pipe2(2) */
-        ret = do_bsd_pipe2(cpu_env, arg1, arg2);
+        ret = do_bsd_pipe2(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_swapon: /* swapon(2) */
@@ -801,7 +801,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
          * Memory management system calls.
          */
     case TARGET_FREEBSD_NR_mmap: /* mmap(2) */
-        ret = do_bsd_mmap(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
+        ret = do_bsd_mmap(env, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
            arg8);
         break;
 
@@ -961,11 +961,11 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_select: /* select(2) */
-        ret = do_freebsd_select(cpu_env, arg1, arg2, arg3, arg4, arg5);
+        ret = do_freebsd_select(env, arg1, arg2, arg3, arg4, arg5);
         break;
 
     case TARGET_FREEBSD_NR_pselect: /* pselect(2) */
-        ret = do_freebsd_pselect(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_pselect(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_kqueue: /* kqueue(2) */
@@ -1016,11 +1016,11 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_sigsuspend: /* sigsuspend(2) */
-        ret = do_bsd_sigsuspend(cpu_env, arg1, arg2);
+        ret = do_bsd_sigsuspend(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_sigreturn: /* sigreturn(2) */
-        ret = do_bsd_sigreturn(cpu_env, arg1);
+        ret = do_bsd_sigreturn(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_sigwait: /* sigwait(2) */
@@ -1036,7 +1036,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_sigaltstack: /* sigaltstack(2) */
-        ret = do_bsd_sigaltstack(cpu_env, arg1, arg2);
+        ret = do_bsd_sigaltstack(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_kill: /* kill(2) */
@@ -1130,7 +1130,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
          * thread system calls
          */
     case TARGET_FREEBSD_NR_thr_new: /* thr_new(2) */
-        ret = do_freebsd_thr_new(cpu_env, arg1, arg2);
+        ret = do_freebsd_thr_new(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_thr_set_name: /* thr_set_name(2) */
@@ -1158,7 +1158,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_thr_exit: /* thr_exit(2) */
-        ret = do_freebsd_thr_exit(cpu_env, arg1);
+        ret = do_freebsd_thr_exit(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_rtprio_thread: /* rtprio_thread(2) */
@@ -1166,15 +1166,15 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_getcontext: /* getcontext(2) */
-        ret = do_freebsd_getcontext(cpu_env, arg1);
+        ret = do_freebsd_getcontext(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_setcontext: /* setcontext(2) */
-        ret = do_freebsd_setcontext(cpu_env, arg1);
+        ret = do_freebsd_setcontext(env, arg1);
         break;
 
     case TARGET_FREEBSD_NR_swapcontext: /* swapcontext(2) */
-        ret = do_freebsd_swapcontext(cpu_env, arg1, arg2);
+        ret = do_freebsd_swapcontext(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR__umtx_op: /* undocumented */
@@ -1298,20 +1298,20 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
          * sys{ctl, arch, call}
          */
     case TARGET_FREEBSD_NR___sysctl: /* sysctl(3) */
-        ret = do_freebsd_sysctl(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_sysctl(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR___sysctlbyname: /* sysctlbyname(2) */
-        ret = do_freebsd_sysctlbyname(cpu_env, arg1, arg2, arg3, arg4, arg5, arg6);
+        ret = do_freebsd_sysctlbyname(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
     case TARGET_FREEBSD_NR_sysarch: /* sysarch(2) */
-        ret = do_freebsd_sysarch(cpu_env, arg1, arg2);
+        ret = do_freebsd_sysarch(env, arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_syscall: /* syscall(2) */
     case TARGET_FREEBSD_NR___syscall: /* __syscall(2) */
-        ret = do_freebsd_syscall(cpu_env, arg1 & 0xffff, arg2, arg3, arg4,
+        ret = do_freebsd_syscall(env, arg1 & 0xffff, arg2, arg3, arg4,
                 arg5, arg6, arg7, arg8, 0);
         break;
 
@@ -1497,7 +1497,7 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_cpuset_setid: /* cpuset_setid(2) */
-        ret = do_freebsd_cpuset_setid(cpu_env, arg1, arg2, arg3, arg4, arg5);
+        ret = do_freebsd_cpuset_setid(env, arg1, arg2, arg3, arg4, arg5);
         break;
 
     case TARGET_FREEBSD_NR_cpuset_getid: /* cpuset_getid(2) */
@@ -1638,12 +1638,12 @@ static abi_long freebsd_syscall(void *cpu_env, int num, abi_long arg1,
  * as a wrapper around freebsd_syscall() so that actually happens. Since
  * that is a singleton, modern compilers will inline it anyway...
  */
-abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
+abi_long do_freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
                             abi_long arg2, abi_long arg3, abi_long arg4,
                             abi_long arg5, abi_long arg6, abi_long arg7,
                             abi_long arg8)
 {
-    CPUState *cpu = env_cpu(cpu_env);
+    CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
     abi_long ret;
 
@@ -1651,10 +1651,10 @@ abi_long do_freebsd_syscall(void *cpu_env, int num, abi_long arg1,
         record_syscall(ts, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
     }
 
-    ret = freebsd_syscall(cpu_env, num, arg1, arg2, arg3, arg4, arg5, arg6,
+    ret = freebsd_syscall(env, num, arg1, arg2, arg3, arg4, arg5, arg6,
                           arg7, arg8);
     if (do_strace) {
-        record_syscall_ret(ts, num, ret, get_second_rval(cpu_env));
+        record_syscall_ret(ts, num, ret, get_second_rval(env));
     }
 
     return ret;

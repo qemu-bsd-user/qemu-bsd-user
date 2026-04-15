@@ -16,7 +16,7 @@ int __sys___specialfd(int, const void *, size_t);
  */
 
 /* pipe2(2) */
-static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
+static abi_long do_bsd_pipe2(CPUArchState *env, abi_ulong pipedes, int flags)
 {
     int host_pipe[2];
     int host_ret = pipe2(host_pipe, flags);
@@ -28,7 +28,7 @@ static abi_long do_bsd_pipe2(void *cpu_env, abi_ulong pipedes, int flags)
 
     /*
      * pipe2() returns it's second FD by copying it back to userspace and not in
-     * a second register like pipe(2): set_second_rval(cpu_env, host_pipe[1]);
+     * a second register like pipe(2): set_second_rval(env, host_pipe[1]);
      *
      * Copy the FD's back to userspace:
      */

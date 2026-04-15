@@ -44,10 +44,10 @@ static inline abi_long do_freebsd_thr_self(abi_ulong target_id)
     return ret;
 }
 
-static inline abi_long do_freebsd_thr_exit(CPUArchState *cpu_env,
+static inline abi_long do_freebsd_thr_exit(CPUArchState *env,
         abi_ulong tid_addr)
 {
-    CPUState *cpu = env_cpu(cpu_env);
+    CPUState *cpu = env_cpu(env);
     TaskState *ts;
 
     if (block_signals()) {
@@ -65,8 +65,8 @@ static inline abi_long do_freebsd_thr_exit(CPUArchState *cpu_env,
         }
     }
 
-    object_unparent(OBJECT(env_cpu(cpu_env)));
-    object_unref(OBJECT(env_cpu(cpu_env)));
+    object_unparent(OBJECT(env_cpu(env)));
+    object_unref(OBJECT(env_cpu(env)));
     /*
      * At this point the CPU should be unrealized and removed
      * from cpu lists. We can clean-up the rest of the thread
@@ -148,7 +148,7 @@ static inline abi_long do_freebsd_rtprio_thread(int function, lwpid_t lwpid,
     return ret;
 }
 
-static inline abi_long do_freebsd_getcontext(void *cpu_env, abi_ulong arg1)
+static inline abi_long do_freebsd_getcontext(CPUArchState *env, abi_ulong arg1)
 {
     abi_long ret;
     target_ucontext_t *ucp;
@@ -163,7 +163,7 @@ static inline abi_long do_freebsd_getcontext(void *cpu_env, abi_ulong arg1)
         if (ucp == 0) {
             return -TARGET_EFAULT;
         }
-        ret = get_mcontext(cpu_env, &ucp->uc_mcontext, TARGET_MC_GET_CLEAR_RET);
+        ret = get_mcontext(env, &ucp->uc_mcontext, TARGET_MC_GET_CLEAR_RET);
         host_to_target_sigset(&ucp->uc_sigmask, &sigmask);
         memset(ucp->__spare__, 0, sizeof(ucp->__spare__));
         unlock_user(ucp, arg1, sizeof(target_ucontext_t));
@@ -171,7 +171,7 @@ static inline abi_long do_freebsd_getcontext(void *cpu_env, abi_ulong arg1)
     return ret;
 }
 
-static inline abi_long do_freebsd_setcontext(void *cpu_env, abi_ulong arg1)
+static inline abi_long do_freebsd_setcontext(CPUArchState *env, abi_ulong arg1)
 {
     abi_long ret;
     target_ucontext_t *ucp;
@@ -183,7 +183,7 @@ static inline abi_long do_freebsd_setcontext(void *cpu_env, abi_ulong arg1)
     if (ucp == 0) {
         return -TARGET_EFAULT;
     }
-    ret = set_mcontext(cpu_env, &ucp->uc_mcontext, 0);
+    ret = set_mcontext(env, &ucp->uc_mcontext, 0);
     target_to_host_sigset(&sigmask, &ucp->uc_sigmask);
     unlock_user(ucp, arg1, sizeof(target_ucontext_t));
     if (!is_error(ret)) {
@@ -193,7 +193,7 @@ static inline abi_long do_freebsd_setcontext(void *cpu_env, abi_ulong arg1)
 }
 
 /* swapcontext(2) */
-static inline abi_long do_freebsd_swapcontext(void *cpu_env, abi_ulong arg1,
+static inline abi_long do_freebsd_swapcontext(CPUArchState *env, abi_ulong arg1,
         abi_ulong arg2)
 {
     abi_long ret;
@@ -210,7 +210,7 @@ static inline abi_long do_freebsd_swapcontext(void *cpu_env, abi_ulong arg1,
         if (ucp == 0) {
             return -TARGET_EFAULT;
         }
-        ret = get_mcontext(cpu_env, &ucp->uc_mcontext, TARGET_MC_GET_CLEAR_RET);
+        ret = get_mcontext(env, &ucp->uc_mcontext, TARGET_MC_GET_CLEAR_RET);
         host_to_target_sigset(&ucp->uc_sigmask, &sigmask);
         memset(ucp->__spare__, 0, sizeof(ucp->__spare__));
         unlock_user(ucp, arg1, sizeof(target_ucontext_t));
@@ -224,7 +224,7 @@ static inline abi_long do_freebsd_swapcontext(void *cpu_env, abi_ulong arg1,
     if (ucp == 0) {
         return -TARGET_EFAULT;
     }
-    ret = set_mcontext(cpu_env, &ucp->uc_mcontext, 0);
+    ret = set_mcontext(env, &ucp->uc_mcontext, 0);
     target_to_host_sigset(&sigmask, &ucp->uc_sigmask);
     unlock_user(ucp, arg2, sizeof(target_ucontext_t));
     if (!is_error(ret)) {

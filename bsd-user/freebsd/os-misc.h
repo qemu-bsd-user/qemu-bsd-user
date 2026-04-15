@@ -101,7 +101,7 @@ static inline abi_long do_freebsd_cpuset(abi_ulong target_cpuid)
 } while (0)
 
 /* cpuset_setid(2) */
-static inline abi_long do_freebsd_cpuset_setid(void *cpu_env, abi_long arg1,
+static inline abi_long do_freebsd_cpuset_setid(CPUArchState *env, abi_long arg1,
         abi_ulong arg2, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
 {
     id_t id;    /* 64-bit value */
@@ -111,7 +111,7 @@ static inline abi_long do_freebsd_cpuset_setid(void *cpu_env, abi_long arg1,
     target_to_host_cpuset_which(&which, arg1);
 #if TARGET_ABI_BITS == 32
     /* See if we need to align the register pairs */
-    if (regpairs_aligned(cpu_env)) {
+    if (regpairs_aligned(env)) {
         id = target_arg64(arg3, arg4);
         setid = arg5;
     } else {

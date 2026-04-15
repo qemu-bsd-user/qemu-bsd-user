@@ -110,10 +110,10 @@ static inline abi_long do_bsd_sigpending(abi_long arg1)
 }
 
 /* sigsuspend(2) */
-static inline abi_long do_bsd_sigsuspend(void *cpu_env, abi_long arg1,
+static inline abi_long do_bsd_sigsuspend(CPUArchState *env, abi_long arg1,
                                          abi_long arg2)
 {
-    CPUState *cpu = env_cpu(cpu_env);
+    CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
     void *p;
     abi_long ret;
@@ -135,12 +135,12 @@ static inline abi_long do_bsd_sigsuspend(void *cpu_env, abi_long arg1,
 }
 
 /* sigreturn(2) */
-static inline abi_long do_bsd_sigreturn(void *cpu_env, abi_long arg1)
+static inline abi_long do_bsd_sigreturn(CPUArchState *env, abi_long arg1)
 {
     if (block_signals()) {
         return -TARGET_ERESTART;
     }
-    return do_sigreturn(cpu_env, arg1);
+    return do_sigreturn(env, arg1);
 }
 
 /* sigvec(2) - not defined */
@@ -210,10 +210,10 @@ static inline abi_long do_bsd_sigqueue(abi_long arg1, abi_long arg2,
 }
 
 /* sigaltstck(2) */
-static inline abi_long do_bsd_sigaltstack(void *cpu_env, abi_ulong arg1,
+static inline abi_long do_bsd_sigaltstack(CPUArchState *env, abi_ulong arg1,
                                           abi_ulong arg2)
 {
-    return do_sigaltstack(arg1, arg2, get_sp_from_cpustate(cpu_env));
+    return do_sigaltstack(arg1, arg2, get_sp_from_cpustate(env));
 }
 
 /* kill(2) */
