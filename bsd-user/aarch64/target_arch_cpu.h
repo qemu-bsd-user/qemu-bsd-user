@@ -69,8 +69,13 @@ static inline G_NORETURN void target_cpu_loop(CPUARMState *env)
                 arg7 = env->xregs[6];
                 arg8 = env->xregs[7];
             }
-            ret = do_freebsd_syscall(env, code, arg1, arg2, arg3,
-                    arg4, arg5, arg6, arg7, arg8);
+            ret = do_freebsd_syscall(
+                &(os_syscall_args_t){
+                    .env = env,
+                    .number = code,
+                    .args = { arg1, arg2, arg3, arg4,
+                              arg5, arg6, arg7, arg8 },
+                });
             /*
              * The carry bit is cleared for no error; set for error.
              * See arm64/arm64/vm_machdep.c cpu_set_syscall_retval()

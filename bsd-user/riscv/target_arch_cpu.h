@@ -66,28 +66,29 @@ static inline G_NORETURN void target_cpu_loop(CPURISCVState *env)
             /* Compare to cpu_fetch_syscall_args() in riscv/riscv/trap.c */
             if (TARGET_FREEBSD_NR___syscall == syscall_num ||
                 TARGET_FREEBSD_NR_syscall == syscall_num) {
-                ret = do_freebsd_syscall(env,
-                                         env->gpr[xA0],
-                                         env->gpr[xA1],
-                                         env->gpr[xA2],
-                                         env->gpr[xA3],
-                                         env->gpr[xA4],
-                                         env->gpr[xA5],
-                                         env->gpr[xA6],
-                                         env->gpr[xA7],
-                                         0);
+                ret = do_freebsd_syscall(
+                    &(os_syscall_args_t){
+                        .env = env,
+                        .number = env->gpr[xA0],
+                        .args = {
+                            env->gpr[xA1], env->gpr[xA2],
+                            env->gpr[xA3], env->gpr[xA4],
+                            env->gpr[xA5], env->gpr[xA6],
+                            env->gpr[xA7],
+                        },
+                    });
             } else {
-                ret = do_freebsd_syscall(env,
-                                         syscall_num,
-                                         env->gpr[xA0],
-                                         env->gpr[xA1],
-                                         env->gpr[xA2],
-                                         env->gpr[xA3],
-                                         env->gpr[xA4],
-                                         env->gpr[xA5],
-                                         env->gpr[xA6],
-                                         env->gpr[xA7]
-                    );
+                ret = do_freebsd_syscall(
+                    &(os_syscall_args_t){
+                        .env = env,
+                        .number = syscall_num,
+                        .args = {
+                            env->gpr[xA0], env->gpr[xA1],
+                            env->gpr[xA2], env->gpr[xA3],
+                            env->gpr[xA4], env->gpr[xA5],
+                            env->gpr[xA6], env->gpr[xA7],
+                        },
+                    });
             }
 
             /*

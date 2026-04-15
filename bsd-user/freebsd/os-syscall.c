@@ -267,11 +267,18 @@ void unlock_iovec(struct iovec *vec, abi_ulong target_addr,
 /*
  * All errnos that freebsd_syscall() returns must be -TARGET_<errcode>.
  */
-static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
-                                abi_long arg2, abi_long arg3, abi_long arg4,
-                                abi_long arg5, abi_long arg6, abi_long arg7,
-                                abi_long arg8)
+static abi_long freebsd_syscall(const os_syscall_args_t *sa)
 {
+    CPUArchState *env = sa->env;
+    int num = sa->number;
+    abi_long arg1 = sa->args[0];
+    abi_long arg2 = sa->args[1];
+    abi_long arg3 = sa->args[2];
+    abi_long arg4 = sa->args[3];
+    abi_long arg5 = sa->args[4];
+    abi_long arg6 = sa->args[5];
+    abi_long arg7 = sa->args[6];
+    abi_long arg8 = sa->args[7];
     abi_long ret;
 
     switch (num) {
@@ -1311,8 +1318,11 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
 
     case TARGET_FREEBSD_NR_syscall: /* syscall(2) */
     case TARGET_FREEBSD_NR___syscall: /* __syscall(2) */
-        ret = do_freebsd_syscall(env, arg1 & 0xffff, arg2, arg3, arg4,
-                arg5, arg6, arg7, arg8, 0);
+        ret = do_freebsd_syscall(&(os_syscall_args_t){
+            .env = env,
+            .number = arg1 & 0xffff,
+            .args = { arg2, arg3, arg4, arg5, arg6, arg7, arg8 },
+        });
         break;
 
         /*
@@ -1638,23 +1648,20 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
  * as a wrapper around freebsd_syscall() so that actually happens. Since
  * that is a singleton, modern compilers will inline it anyway...
  */
-abi_long do_freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
-                            abi_long arg2, abi_long arg3, abi_long arg4,
-                            abi_long arg5, abi_long arg6, abi_long arg7,
-                            abi_long arg8)
+abi_long do_freebsd_syscall(const os_syscall_args_t *sa)
 {
+    CPUArchState *env = sa->env;
     CPUState *cpu = env_cpu(env);
     TaskState *ts = cpu->opaque;
     abi_long ret;
 
     if (do_strace) {
-        record_syscall(ts, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+        record_syscall(ts, sa);
     }
 
-    ret = freebsd_syscall(env, num, arg1, arg2, arg3, arg4, arg5, arg6,
-                          arg7, arg8);
+    ret = freebsd_syscall(sa);
     if (do_strace) {
-        record_syscall_ret(ts, num, ret, get_second_rval(env));
+        record_syscall_ret(ts, sa->number, ret, get_second_rval(env));
     }
 
     return ret;

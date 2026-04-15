@@ -191,10 +191,14 @@ abi_long memcpy_to_target(abi_ulong dest, const void *src,
 void target_set_brk(abi_ulong new_brk);
 abi_long do_brk(abi_ulong new_brk);
 void syscall_init(void);
-abi_long do_freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
-                            abi_long arg2, abi_long arg3, abi_long arg4,
-                            abi_long arg5, abi_long arg6, abi_long arg7,
-                            abi_long arg8);
+
+typedef struct os_syscall_args {
+    CPUArchState *env;
+    int number;
+    abi_long args[8];
+} os_syscall_args_t;
+
+abi_long do_freebsd_syscall(const os_syscall_args_t *sa);
 void gemu_log(const char *fmt, ...) G_GNUC_PRINTF(1, 2);
 extern __thread CPUState *thread_cpu;
 char *target_strerror(int err);

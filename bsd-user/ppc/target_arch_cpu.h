@@ -388,9 +388,17 @@ static inline G_NORETURN void target_cpu_loop(CPUPPCState *env)
              */
             env->crf[0] &= ~0x1;
             env->nip += 4;
-            ret = do_freebsd_syscall(env, env->gpr[0], env->gpr[3], env->gpr[4],
-                             env->gpr[5], env->gpr[6], env->gpr[7],
-                             env->gpr[8], env->gpr[9], env->gpr[10]);
+            ret = do_freebsd_syscall(
+                &(os_syscall_args_t){
+                    .env = env,
+                    .number = env->gpr[0],
+                    .args = {
+                        env->gpr[3], env->gpr[4],
+                        env->gpr[5], env->gpr[6],
+                        env->gpr[7], env->gpr[8],
+                        env->gpr[9], env->gpr[10],
+                    },
+                });
             if (ret == (target_ulong)(-TARGET_EJUSTRETURN)) {
                 /* Returning from a successful sigreturn syscall.
                    Avoid corrupting register state.  */

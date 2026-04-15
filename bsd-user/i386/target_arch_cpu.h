@@ -134,16 +134,13 @@ static inline G_NORETURN void target_cpu_loop(CPUX86State *env)
             get_user_s32(arg7, params);
             params += sizeof(int32_t);
             get_user_s32(arg8, params);
-            env->regs[R_EAX] = do_freebsd_syscall(env,
-                                                  syscall_nr,
-                                                  arg1,
-                                                  arg2,
-                                                  arg3,
-                                                  arg4,
-                                                  arg5,
-                                                  arg6,
-                                                  arg7,
-                                                  arg8);
+            env->regs[R_EAX] = do_freebsd_syscall(
+                &(os_syscall_args_t){
+                    .env = env,
+                    .number = syscall_nr,
+                    .args = { arg1, arg2, arg3, arg4,
+                              arg5, arg6, arg7, arg8 },
+                });
             if (((abi_ulong)env->regs[R_EAX]) >= (abi_ulong)(-515)) {
                 env->regs[R_EAX] = -env->regs[R_EAX];
                 env->eflags |= CC_C;

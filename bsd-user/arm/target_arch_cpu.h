@@ -98,8 +98,13 @@ static inline G_NORETURN void target_cpu_loop(CPUARMState *env)
                     params += sizeof(int32_t);
                     get_user_s32(arg8, params);
                 }
-                ret = do_freebsd_syscall(env, syscall_nr, arg1, arg2, arg3,
-                                         arg4, arg5, arg6, arg7, arg8);
+                ret = do_freebsd_syscall(
+                    &(os_syscall_args_t){
+                        .env = env,
+                        .number = syscall_nr,
+                        .args = { arg1, arg2, arg3, arg4,
+                                  arg5, arg6, arg7, arg8 },
+                    });
                 /*
                  * Compare to arm/arm/vm_machdep.c
                  * cpu_set_syscall_retval()

@@ -91,23 +91,15 @@ static char *print_arg(TaskState *ts, const struct syscall_arg *sc,
     return (tmp);
 }
 
-void record_syscall(TaskState *ts, int num, abi_long arg1, abi_long arg2,
-                    abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6,
-                    abi_long arg7, abi_long arg8)
+void record_syscall(TaskState *ts, const os_syscall_args_t *sa)
 {
     u_int narg, i;
 
-    alloc_syscall(ts, num);
+    alloc_syscall(ts, sa->number);
     narg = MIN(ts->cs.nargs, nitems(ts->cs.args));
-    i = 0;
-    ts->cs.args[i++] = arg1;
-    ts->cs.args[i++] = arg2;
-    ts->cs.args[i++] = arg3;
-    ts->cs.args[i++] = arg4;
-    ts->cs.args[i++] = arg5;
-    ts->cs.args[i++] = arg6;
-    ts->cs.args[i++] = arg7;
-    ts->cs.args[i++] = arg8;
+    for (i = 0; i < nitems(sa->args); i++) {
+        ts->cs.args[i] = sa->args[i];
+    }
     for (i = 0; i < narg; i++) {
         if (!(ts->cs.sc->args[i].type & OUT)) {
             ts->cs.s_args[i] = print_arg(ts, &ts->cs.sc->args[i], ts->cs.args, 0, 0);

@@ -115,14 +115,19 @@ static inline G_NORETURN void target_cpu_loop(CPUX86State *env)
         switch (trapnr) {
         case EXCP_SYSCALL:
             /* syscall from syscall instruction */
-            env->regs[R_EAX] = do_freebsd_syscall(env,
-                                                  env->regs[R_EAX],
-                                                  env->regs[R_EDI],
-                                                  env->regs[R_ESI],
-                                                  env->regs[R_EDX],
-                                                  env->regs[R_ECX],
-                                                  env->regs[8],
-                                                  env->regs[9], 0, 0);
+            env->regs[R_EAX] = do_freebsd_syscall(
+                &(os_syscall_args_t){
+                    .env = env,
+                    .number = env->regs[R_EAX],
+                    .args = {
+                        env->regs[R_EDI],
+                        env->regs[R_ESI],
+                        env->regs[R_EDX],
+                        env->regs[R_ECX],
+                        env->regs[8],
+                        env->regs[9],
+                    },
+                });
             env->eip = env->exception_next_eip;
             if (((abi_ulong)env->regs[R_EAX]) >= (abi_ulong)(-515)) {
                 env->regs[R_EAX] = -env->regs[R_EAX];
