@@ -32,7 +32,6 @@
 #include "qemu.h"
 #include "signal-common.h"
 #include "truss_hdr.h"
-#include "systruss.h"
 
 /* BSD independent syscall shims */
 #include "bsd-file.h"
