@@ -1,3 +1,8 @@
+bsd_syscall_nr = custom_target('bsd-syscall-h',
+    output: '@BASENAME@_nr.h',
+    input: ['/usr/include/sys/syscall.h'],
+    command: [sh, meson.current_source_dir() / 'syscallhdr.sh', '@INPUT@', '@OUTPUT@', 'FREEBSD'])
+
 bsd_user_ss.add(files(
   'os-extattr.c',
   'os-proc.c',
@@ -8,9 +13,6 @@ bsd_user_ss.add(files(
   'os-syscall.c',
   'os-thread.c',
   'os-time.c',
-  'truss.c'
-))
-
-bsd_syscall_nr = generator(sh,
-			   arguments: [ meson.current_source_dir() / 'syscallhdr.sh', '@INPUT@', '@OUTPUT@', '@EXTRA_ARGS@'],
-			   output: '@BASENAME@_nr.h')
+  'truss.c'),
+  bsd_syscall_nr
+)
