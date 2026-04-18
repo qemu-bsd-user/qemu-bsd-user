@@ -197,6 +197,7 @@ typedef struct os_syscall_args {
     int number;
     abi_long args[8];
 } os_syscall_args_t;
+typedef abi_long (*os_syscall_t)(const os_syscall_args_t *);
 
 abi_long do_freebsd_syscall(const os_syscall_args_t *sa);
 void gemu_log(const char *fmt, ...) G_GNUC_PRINTF(1, 2);
@@ -276,11 +277,6 @@ extern unsigned long target_maxdsiz;
 extern unsigned long target_dflssiz;
 extern unsigned long target_maxssiz;
 extern unsigned long target_sgrowsiz;
-
-/* os-syscall.c */
-abi_long get_errno(abi_long ret);
-bool is_error(abi_long ret);
-int host_to_target_errno(int err);
 
 /* os-proc.c */
 abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
@@ -588,5 +584,32 @@ target_arg64(uint64_t word0, uint64_t word1)
 
 /* Clone cpu state */
 CPUArchState *cpu_copy(CPUArchState *env);
+
+/*
+ * errno conversion.
+ */
+static inline int host_to_target_errno(int err)
+{
+    /*
+     * All the BSDs have the property that the error numbers are uniform across
+     * all architectures for a given BSD, though they may vary between different
+     * BSDs.
+     */
+    return err;
+}
+
+static inline abi_long get_errno(abi_long ret)
+{
+    if (ret == -1) {
+        return -host_to_target_errno(errno);
+    } else {
+        return ret;
+    }
+}
+
+static inline bool is_error(abi_long ret)
+{
+    return (abi_ulong)ret >= (abi_ulong)(-4096);
+}
 
 #endif /* QEMU_H */

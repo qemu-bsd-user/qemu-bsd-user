@@ -32,19 +32,21 @@ sysproto_h = custom_target(
     env: flua_env,
     command: [gen_sysproto_h, '@INPUT@', '@OUTPUT@'])
 
+# Generate the system calls
+gen_syscalls = find_program(meson.current_source_dir() / 'scripts/gen_qemu_syscalls.lua')
+syscalls = custom_target(
+    'syscall-gen',
+    output: ['@BASENAME@.c'],
+    input: [ syscalls_master ],
+    env: flua_env,
+    command: [gen_syscalls, '@INPUT@', '@OUTPUT@'])
+
 bsd_user_ss.add(files(
-  'os-extattr.c',
-  'os-proc.c',
-  'os-socket.c',
-  'os-stat.c',
-  'os-proc.c',
-  'os-sys.c',
-  'os-syscall.c',
-  'os-thread.c',
-  'os-time.c',
+  'stubs.c',
   'truss.c'),
   bsd_syscall_nr,
   systruss,
   special_syscall_h,
-  sysproto_h
+  sysproto_h,
+  syscalls
 )
