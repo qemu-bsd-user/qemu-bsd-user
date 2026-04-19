@@ -3,6 +3,15 @@ bsd_syscall_nr = custom_target('bsd-syscall-h',
     input: ['/usr/include/sys/syscall.h'],
     command: [sh, meson.current_source_dir() / 'scripts/syscallhdr.sh', '@INPUT@', '@OUTPUT@', 'FREEBSD'])
 
+# Generate the systruss.h-like file
+gen_systruss_h = find_program(meson.current_source_dir() / 'scripts/systruss.lua')
+systruss = custom_target(
+    'systruss-gen',
+    output: ['systruss.h'],
+    input: [ freebsd_syscall_dir / '../../kern/syscalls.master'],
+    env: flua_env,
+    command: [gen_systruss_h, '@INPUT@', '@OUTPUT@'])
+
 bsd_user_ss.add(files(
   'os-extattr.c',
   'os-proc.c',
@@ -14,5 +23,6 @@ bsd_user_ss.add(files(
   'os-thread.c',
   'os-time.c',
   'truss.c'),
-  bsd_syscall_nr
+  bsd_syscall_nr,
+  systruss
 )
