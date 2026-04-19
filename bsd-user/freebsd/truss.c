@@ -70,11 +70,15 @@ static char *print_arg(TaskState *ts, const struct syscall_arg *sc,
         fprintf(fp, "%u", (unsigned int)args[sc->offset]);
         break;
     default:
+    case QuadHex:
     case LongHex:
         fprintf(fp, "0x%lx", (long)args[sc->offset]);
         break;
     case Long:
         fprintf(fp, "%ld", (long)args[sc->offset]);
+        break;
+    case Ulong:
+        fprintf(fp, "%lu", (long)args[sc->offset]);
         break;
     case Sizet:
         fprintf(fp, "%zu", (size_t)args[sc->offset]);
@@ -146,7 +150,7 @@ static void print_syscall_ret(TaskState *ts, abi_ulong ret, abi_ulong ret2, int 
     else if (ts->cs.sc->ret_type == 2) {
         off_t off;
 #ifdef TARGET_BIG_ENDIAN
-        off = (off_t)ret << 32 | ret;
+        off = (off_t)ret << 32 | ret2;
 #else
         off = (off_t)ret2 << 32 | ret;
 #endif

@@ -29,6 +29,7 @@ enum Argtype {
 	LongHex,
 	Itimerval,
 	Long,
+	Ulong,
 	Timeval,
 	Stat11,
 	Rlimit,
