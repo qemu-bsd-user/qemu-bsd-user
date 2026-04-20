@@ -1,0 +1,22 @@
+[
+    {
+	"name": "_exit",
+	"custom_impl": true
+    },
+    {
+	"name": "fork",
+	"custom_impl": true
+    },
+    {
+	"name": "syscall",
+	"custom_impl": true
+    },
+    {
+	"name": "__syscall",
+	"custom_impl": true
+    },
+    {
+	"name": "vfork",
+	"custom_impl": true
+    },
+]
