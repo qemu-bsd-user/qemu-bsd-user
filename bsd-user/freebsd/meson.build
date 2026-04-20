@@ -12,6 +12,15 @@ systruss = custom_target(
     env: flua_env,
     command: [gen_systruss_h, '@INPUT@', '@OUTPUT@'])
 
+# Generate the special system call prototypes, etc file
+gen_special_syscall_h = find_program(meson.current_source_dir() / 'scripts/special_syscall_h.lua')
+special_syscall_h = custom_target(
+    'special-syscall-h-gen',
+    output: ['special-syscall.h'],
+    input: [meson.current_source_dir() / 'scripts/syscall-meta.json'],
+    env: flua_env,
+    command: [gen_special_syscall_h, '@INPUT@', '@OUTPUT@'])
+
 bsd_user_ss.add(files(
   'os-extattr.c',
   'os-proc.c',
@@ -24,5 +33,6 @@ bsd_user_ss.add(files(
   'os-time.c',
   'truss.c'),
   bsd_syscall_nr,
-  systruss
+  systruss,
+  special_syscall_h
 )
