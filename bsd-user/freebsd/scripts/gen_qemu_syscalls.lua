@@ -37,6 +37,19 @@ function get_meta(fn)
 	return meta
 end
 
+--
+-- System call taking no args. Use the system call interface to avoid type
+-- mismatches.
+--
+function gen_zero_arg(fout, v)
+	fout:write(string.format([[
+static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
+{
+    return get_errno(syscall(SYS_%s));
+}
+]], v:symbol(), v.num, v:symbol()))
+end
+
 function generate(tbl, fn, metafn)
 	local fout = assert(io.open(fn, "w+"))
 	meta = get_meta(metafn)
@@ -63,9 +76,13 @@ static abi_long do_nosys(const os_syscall_args_t *arg __unused)
 		if not meta[v:symbol()] then
 			meta[v:symbol()] = {}
 		end
-		if v:bsd_user_impl() then
-			fout:write(string.format("#define do_gen_%s do_nosys /* %d */\n",
-			    v:symbol(), v.num))
+		if v:bsd_user_impl() and not meta[v:symbol()].custom_impl then
+			if #v.args == 0 then
+				gen_zero_arg(fout, v)
+			else
+				fout:write(string.format("#define do_gen_%s do_nosys /* %d */\n",
+				    v:symbol(), v.num))
+			end
 		end
 	end
 
