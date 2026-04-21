@@ -1,3 +1,5 @@
+syscalls_master = freebsd_syscall_dir / '../../kern/syscalls.master'
+
 bsd_syscall_nr = custom_target('bsd-syscall-h',
     output: '@BASENAME@_nr.h',
     input: ['/usr/include/sys/syscall.h'],
@@ -8,7 +10,7 @@ gen_systruss_h = find_program(meson.current_source_dir() / 'scripts/systruss.lua
 systruss = custom_target(
     'systruss-gen',
     output: ['systruss.h'],
-    input: [ freebsd_syscall_dir / '../../kern/syscalls.master'],
+    input: [ syscalls_master ],
     env: flua_env,
     command: [gen_systruss_h, '@INPUT@', '@OUTPUT@'])
 
@@ -20,6 +22,15 @@ special_syscall_h = custom_target(
     input: [meson.current_source_dir() / 'scripts/syscall-meta.json'],
     env: flua_env,
     command: [gen_special_syscall_h, '@INPUT@', '@OUTPUT@'])
+
+# Generate a target_sysproto.h file with all the target_$SYSCALL_args structs
+gen_sysproto_h = find_program(meson.current_source_dir() / 'scripts/sysproto_h.lua')
+sysproto_h = custom_target(
+    'sysproto-gen',
+    output: ['os-sysproto.h'],
+    input: [ syscalls_master ],
+    env: flua_env,
+    command: [gen_sysproto_h, '@INPUT@', '@OUTPUT@'])
 
 bsd_user_ss.add(files(
   'os-extattr.c',
@@ -34,5 +45,6 @@ bsd_user_ss.add(files(
   'truss.c'),
   bsd_syscall_nr,
   systruss,
-  special_syscall_h
+  special_syscall_h,
+  sysproto_h
 )
