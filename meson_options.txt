@@ -38,6 +38,8 @@ option('coroutine_backend', type: 'combo',
        value: 'auto', description: 'coroutine backend to use')
 option('gdb', type: 'string', value: '',
        description: 'Path to GDB')
+option('freebsd_syscall_dir', type : 'string', value : '',
+       description: 'Absolute path to FreeBSD system call library directory (required for bsd-user)')
 
 # Everything else can be set via --enable/--disable-* option
 # on the configure script command line.  After adding an option

@@ -2283,6 +2283,16 @@ if not get_option('libdw').auto() or \
                        required: get_option('libdw'))
 endif
 
+# FreeBSD system call lua library
+freebsd_syscall_dir = get_option('freebsd_syscall_dir')
+if have_bsd_user
+  if freebsd_syscall_dir == ''
+    error('bsd-user requires --freebsd-syscall-dir=<path>')
+  endif
+  flua_env=environment()
+  flua_env.set('FREEBSD_SYSCALL_DIR', freebsd_syscall_dir)
+endif
+
 #################
 # config-host.h #
 #################
@@ -4999,6 +5009,9 @@ summary_info += {'selinux':           selinux}
 summary_info += {'libdw':             libdw}
 if host_os == 'freebsd'
   summary_info += {'libinotify-kqueue': inotify}
+  if have_bsd_user
+    summary_info += {'FreeBSD Lua Syscall': freebsd_syscall_dir}
+  endif
 endif
 if host_os == 'darwin'
   summary_info += {'ParavirtualizedGraphics support': pvg}
