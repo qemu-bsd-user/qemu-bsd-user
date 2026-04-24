@@ -37,6 +37,38 @@ function get_meta(fn)
 	return meta
 end
 
+-- These types are always 64-bit on 32-bit and 64-bit platforms
+function type_always_64(t)
+	if t == "int64_t" or t == "uint64_t" or t == "id_t" or t == "off_t" or t == "rlim_t" then
+		return true
+	end
+	return false
+end
+
+-- Does this system call have any always 64-bit args?
+function syscall_has_always_64(v)
+	for _, arg in ipairs(v.args) do
+		if type_always_64(arg.type) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Simple args: no pointers, no struct (though maybe the latter is redundant since
+-- all structs are of the form struct foo *
+function syscall_simple_args(v)
+	for _, arg in ipairs(v.args) do
+		t = arg.type
+		if t:find("*") then
+			return false
+		elseif t:find("struct ") or t:find("union ") then
+			return false
+		end
+	end
+	return true
+end
+
 --
 -- System call taking no args. Use the system call interface to avoid type
 -- mismatches.
@@ -48,6 +80,24 @@ static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
     return get_errno(syscall(SYS_%s));
 }
 ]], v:symbol(), v.num, v:symbol()))
+end
+
+--
+-- Generate the system call when syscall_simple_args is true
+--
+-- Note: We're always a 64-bit host, so syscall is always correct.
+--
+function gen_simple_args(fout, v)
+	fout:write(string.format([[
+static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
+{
+    ARGS(%s, sa);
+
+    return get_errno(syscall(SYS_%s]], v:symbol(), v.num, v:symbol(), v:symbol()))
+	for _, arg in ipairs(v.args) do
+		fout:write(", uap->" .. arg.name)
+	end
+	fout:write("));\n}\n")
 end
 
 function generate(tbl, fn, metafn)
@@ -79,6 +129,8 @@ static abi_long do_nosys(const os_syscall_args_t *arg __unused)
 		if v:bsd_user_impl() and not meta[v:symbol()].custom_impl then
 			if #v.args == 0 then
 				gen_zero_arg(fout, v)
+			elseif syscall_simple_args(v) then
+				gen_simple_args(fout, v)
 			else
 				fout:write(string.format("#define do_gen_%s do_nosys /* %d */\n",
 				    v:symbol(), v.num))
