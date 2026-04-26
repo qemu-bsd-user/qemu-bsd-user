@@ -107,11 +107,20 @@ end
 function can_gen(v)
 	for _, arg in ipairs(v.args) do
 		ann = arg.annotation
-		if ann:find("_")  and not ann:find("_In_z_") then
+		if ann:find("_")  and not ann:find("_In_z_") and
+		    not ann:find("_Out_writes_bytes_") and
+		    not ann:find("_In_reads_bytes_") then
 			return false
 		end
 	end
 	return true
+end
+
+function length_arg(x)
+	if x:match("%d") then
+		return x
+	end
+	return "uap->" .. x
 end
 
 --
@@ -134,6 +143,18 @@ static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
     char *host_%s = lock_user_string(uap->%s);
     if (host_%s == NULL) { goto err_%s; }
 ]], arg.name, arg.name, arg.name, arg.name))
+		elseif has_annotation(arg, "_Out_writes_bytes_") then
+			local len=arg.annotation:match("%b()"):gsub("[()]", "")
+			fout:write(string.format([[
+    void *host_%s = lock_user(VERIFY_WRITE, uap->%s, %s, 0);
+    if (host_%s == NULL) { goto err_%s; }
+]], arg.name, arg.name, length_arg(len), arg.name, arg.name))
+		elseif has_annotation(arg, "_In_reads_bytes_") then
+			local len=arg.annotation:match("%b()"):gsub("[()]", "")
+			fout:write(string.format([[
+    void *host_%s = lock_user(VERIFY_READ, uap->%s, %s, 0);
+    if (host_%s == NULL) { goto err_%s; }
+]], arg.name, arg.name, length_arg(len), arg.name, arg.name))
 		else
 			fout:write(string.format([[
     %s host_%s = uap->%s;
@@ -152,6 +173,20 @@ static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
     unlock_user(host_%s, uap->%s, 0);
 err_%s:
 ]], arg.name, arg.name, arg.name))
+		elseif has_annotation(arg, "_Out_writes_bytes_") then
+			local len=arg.annotation:match("%b()"):gsub("[()]", "")
+			fout:write(string.format([[
+    unlock_user(host_%s, uap->%s, %s);
+err_%s:
+]], arg.name, arg.name, length_arg(len), arg.name))
+			-- No way to do return value here yet XXX
+		elseif has_annotation(arg, "_In_reads_bytes_") then
+			local len=arg.annotation:match("%b()"):gsub("[()]", "")
+			fout:write(string.format([[
+    unlock_user(host_%s, uap->%s, %s);
+err_%s:
+]], arg.name, arg.name, length_arg(len), arg.name))
+			-- No way to do return value here yet XXX
 		end
 	end
 	fout:write("    return ret;\n}\n")
