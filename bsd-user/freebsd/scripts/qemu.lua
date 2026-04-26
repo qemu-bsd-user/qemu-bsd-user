@@ -60,4 +60,14 @@ function syscall.bsd_user_impl(self)
 		not self.type.NOTSTATIC
 end
 
+-- Function to reverser iterate
+function qemu.ripairs(t)
+    return function(t, i)
+        i = i - 1
+        if i > 0 then
+            return i, t[i]
+        end
+    end, t, #t + 1
+end
+
 return qemu
