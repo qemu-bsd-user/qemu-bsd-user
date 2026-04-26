@@ -182,6 +182,7 @@ err_%s:
 ]], arg.name, arg.name, arg.name))
 		elseif has_annotation(arg, "_Out_writes_z_") then
 			local len=arg.annotation:match("%b()"):gsub("[()]", "")
+			-- TODO: Should we do strlen(host_%s) + 1 instead here?
 			fout:write(string.format([[
     unlock_user(host_%s, uap->%s, %s);
 err_%s:

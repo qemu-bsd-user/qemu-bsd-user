@@ -1,6 +1,18 @@
 [
     {
+	"name": "__mac_execve",
+	"custom_impl": true
+    },
+    {
 	"name": "_exit",
+	"custom_impl": true
+    },
+    {
+	"name": "execve",
+	"custom_impl": true
+    },
+    {
+	"name": "fexecve",
 	"custom_impl": true
     },
     {
