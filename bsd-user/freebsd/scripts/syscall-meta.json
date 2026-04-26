@@ -8,6 +8,10 @@
 	"custom_impl": true
     },
     {
+	"name": "break",
+	"custom_impl": true
+    },
+    {
 	"name": "execve",
 	"custom_impl": true
     },

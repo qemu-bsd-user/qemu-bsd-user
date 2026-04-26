@@ -28,6 +28,11 @@ abi_long do_custom__exit(const os_syscall_args_t *sa)
     return 0;
 }
 
+abi_long do_custom_break(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
 abi_long do_custom_execve(const os_syscall_args_t *sa)
 {
     return -ENOSYS;
