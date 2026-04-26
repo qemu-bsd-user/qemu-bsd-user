@@ -77,7 +77,7 @@ function gen_zero_arg(fout, v)
 	fout:write(string.format([[
 static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
 {
-    return get_errno(syscall(SYS_%s));
+    return get_errno(safe_syscall(SYS_%s));
 }
 ]], v:symbol(), v.num, v:symbol()))
 end
@@ -93,7 +93,7 @@ static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
 {
     ARGS(%s, sa);
 
-    return get_errno(syscall(SYS_%s]], v:symbol(), v.num, v:symbol(), v:symbol()))
+    return get_errno(safe_syscall(SYS_%s]], v:symbol(), v.num, v:symbol(), v:symbol()))
 	for _, arg in ipairs(v.args) do
 		fout:write(", uap->" .. arg.name)
 	end
@@ -141,7 +141,7 @@ static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
 		end
 	end
 	fout:write(string.format([[
-    ret = get_errno(syscall(/* SYS_%s */ %d]], v:symbol(), v.num))
+    ret = get_errno(safe_syscall(/* SYS_%s */ %d]], v:symbol(), v.num))
 	for _, arg in ipairs(v.args) do
 		fout:write(", host_" .. arg.name)
 	end
