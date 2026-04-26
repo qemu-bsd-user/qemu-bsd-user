@@ -43,6 +43,7 @@ syscalls = custom_target(
 
 bsd_user_ss.add(files(
   'stubs.c',
+  'sys_custom.c',
   'truss.c'),
   bsd_syscall_nr,
   systruss,

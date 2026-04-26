@@ -73,8 +73,14 @@ static abi_long do_nosys(const os_syscall_args_t *arg __unused)
 	fout:write("\nos_syscall_t sysent[] = {\n")
 	for _, v in pairs(tbl.syscalls) do
 		if v:bsd_user_impl() then
-			fout:write(string.format("[%d] = do_gen_%s,\n",
-			    v.num, v:symbol()))
+			local prefix
+			if meta[v:symbol()].custom_impl then
+				prefix = "do_custom_"
+			else
+				prefix = "do_gen_"
+			end
+			fout:write(string.format("[%d] = %s%s,\n",
+			    v.num, prefix, v:symbol()))
 		end
 	end
 	fout:write("\n};\n")
