@@ -38,7 +38,7 @@ function qemu.target_type(t)
 	return "target_" .. t
 end
 
-local freebsd_compat_level = 9
+local freebsd_compat_level = 13
 
 function syscall.struct_args(self)
 	return "target_" .. self:symbol() .. "_args"
