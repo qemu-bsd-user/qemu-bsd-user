@@ -100,6 +100,63 @@ static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
 	fout:write("));\n}\n")
 end
 
+function has_annotation(arg, a)
+	return arg.annotation:find(a)
+end
+
+function can_gen(v)
+	for _, arg in ipairs(v.args) do
+		ann = arg.annotation
+		if ann:find("_")  and not ann:find("_In_z_") then
+			return false
+		end
+	end
+	return true
+end
+
+--
+-- Generate supported system calls. These are the system calls with annotations that
+-- we know how to implement
+--
+function gen_general(fout, v)
+	fout:write(string.format([[
+static abi_long do_gen_%s(const os_syscall_args_t *sa) /* %d */
+{
+    ARGS(%s, sa);
+    abi_long ret = -TARGET_EFAULT;
+
+]], v:symbol(), v.num, v:symbol()))
+
+	-- Scan for args we need to copy in
+	for _, arg in ipairs(v.args) do
+		if has_annotation(arg, "_In_z_") then
+			fout:write(string.format([[
+    char *host_%s = lock_user_string(uap->%s);
+    if (host_%s == NULL) { goto err_%s; }
+]], arg.name, arg.name, arg.name, arg.name))
+		else
+			fout:write(string.format([[
+    %s host_%s = uap->%s;
+]], arg.type, arg.name, arg.name))
+		end
+	end
+	fout:write(string.format([[
+    ret = get_errno(syscall(/* SYS_%s */ %d]], v:symbol(), v.num))
+	for _, arg in ipairs(v.args) do
+		fout:write(", host_" .. arg.name)
+	end
+	fout:write("));\n")
+	for _, arg in qemu.ripairs(v.args) do
+		if has_annotation(arg, "_In_z_") then
+			fout:write(string.format([[
+    unlock_user(host_%s, uap->%s, 0);
+err_%s:
+]], arg.name, arg.name, arg.name))
+		end
+	end
+	fout:write("    return ret;\n}\n")
+end
+
 function generate(tbl, fn, metafn)
 	local fout = assert(io.open(fn, "w+"))
 	meta = get_meta(metafn)
@@ -131,6 +188,8 @@ static abi_long do_nosys(const os_syscall_args_t *arg __unused)
 				gen_zero_arg(fout, v)
 			elseif syscall_simple_args(v) then
 				gen_simple_args(fout, v)
+			elseif can_gen(v) then
+				gen_general(fout, v)
 			else
 				fout:write(string.format("#define do_gen_%s do_nosys /* %d */\n",
 				    v:symbol(), v.num))
