@@ -16,6 +16,11 @@
 #include "os-types.h"
 #include "os-sysproto.h"
 
+abi_long do_custom___mac_execve(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
 /* exit(2) */
 abi_long do_custom__exit(const os_syscall_args_t *sa)
 {
@@ -43,7 +48,7 @@ abi_long do_custom_fexecve(const os_syscall_args_t *sa)
     return -ENOSYS;
 }
 
-abi_long do_custom___mac_execve(const os_syscall_args_t *sa)
+abi_long do_custom_fork(const os_syscall_args_t *sa)
 {
     return -ENOSYS;
 }
