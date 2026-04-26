@@ -121,7 +121,15 @@ static void bswap_note(struct elf_note *en) { }
 
 #endif /* HOST_BIG_ENDIAN != TARGET_BIG_ENDIAN */
 
-#include "elfcore.c"
+static int elf_core_dump(int signr, CPUArchState *env)
+{
+    struct elf_note en = { 0 };
+
+    bswap_note(&en);
+
+    return 0;
+}
+//#include "elfcore.c"
 
 /*
  * 'copy_elf_strings()' copies argument/envelope strings from user
