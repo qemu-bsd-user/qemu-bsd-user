@@ -21,6 +21,21 @@ abi_long do_custom___mac_execve(const os_syscall_args_t *sa)
     return -ENOSYS;
 }
 
+abi_long do_custom___semctl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom___sysctl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom___sysctlbyname(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
 /* exit(2) */
 abi_long do_custom__exit(const os_syscall_args_t *sa)
 {
@@ -49,6 +64,36 @@ abi_long do_custom_fexecve(const os_syscall_args_t *sa)
 }
 
 abi_long do_custom_fork(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom_fspacectl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom_ioctl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom_msgctl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom_quotactl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom_procctl(const os_syscall_args_t *sa)
+{
+    return -ENOSYS;
+}
+
+abi_long do_custom_shmctl(const os_syscall_args_t *sa)
 {
     return -ENOSYS;
 }

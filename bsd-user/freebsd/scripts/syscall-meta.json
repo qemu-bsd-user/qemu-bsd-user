@@ -4,6 +4,18 @@
 	"custom_impl": true
     },
     {
+	"name": "__semctl",
+	"custom_impl": true
+    },
+    {
+	"name": "__sysctl",
+	"custom_impl": true
+    },
+    {
+	"name": "__sysctlbyname",
+	"custom_impl": true
+    },
+    {
 	"name": "_exit",
 	"custom_impl": true
     },
@@ -21,6 +33,30 @@
     },
     {
 	"name": "fork",
+	"custom_impl": true
+    },
+    {
+	"name": "fspacectl",
+	"custom_impl": true
+    },
+    {
+	"name": "ioctl",
+	"custom_impl": true
+    },
+    {
+	"name": "msgctl",
+	"custom_impl": true
+    },
+    {
+	"name": "quotactl",
+	"custom_impl": true
+    },
+    {
+	"name": "procctl",
+	"custom_impl": true
+    },
+    {
+	"name": "shmctl",
 	"custom_impl": true
     },
     {
