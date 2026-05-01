@@ -115,9 +115,9 @@ struct target_in6_ifreq {
         union {
                 struct  target_sockaddr_in6 ifru_addr;
                 struct  target_sockaddr_in6 ifru_dstaddr;
-                int     ifru_flags;
-                int     ifru_flags6;
-                int     ifru_metric;
+                abi_int     ifru_flags;
+                abi_int     ifru_flags6;
+                abi_int     ifru_metric;
                 abi_ulong       ifru_data;
                 struct target_in6_addrlifetime ifru_lifetime;
                 struct target_in6_ifstat ifru_stat;
