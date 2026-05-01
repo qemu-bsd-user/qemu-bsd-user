@@ -34,7 +34,7 @@ struct target_session2_op {
 
         u_int32_t       ses;
         int32_t         crid;
-        int             pad[4];
+        abi_int         pad[4];
 };
 
 struct target_crypt_op {
@@ -53,23 +53,23 @@ struct target_crypt_op {
 };
 
 struct target_crypt_find_op {
-        int             crid;
+        abi_int         crid;
         char            name[32];
 };
 
 struct target_crparam {
         abi_ulong       crp_p;
-        u_int           crp_nbits;
+        abi_uint        crp_nbits;
 };
 
 #define TARGET_CRK_MAXPARAM     8
 
 struct target_crypt_kop {
-        u_int           crk_op;
-        u_int           crk_status;
-        u_short         crk_iparams;
-        u_short         crk_oparams;
-        u_int           crk_crid;
+        abi_uint        crk_op;
+        abi_uint        crk_status;
+        abi_ushort      crk_iparams;
+        abi_ushort      crk_oparams;
+        abi_uint        crk_crid;
         struct target_crparam   crk_param[TARGET_CRK_MAXPARAM];
 };
 
