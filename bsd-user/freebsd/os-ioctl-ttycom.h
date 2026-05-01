@@ -50,6 +50,7 @@
 #define TARGET_IXOFF    0x00000400  /* enable input flow control */
 #define TARGET_IXANY    0x00000800  /* any char will restart after stop */
 #define TARGET_IMAXBEL  0x00002000  /* ring bell on input queue full */
+#define TARGET_IUTF8    0x00004000  /* assume input is utf-8 encoded */
 
 /*
  * Output flags - software output processing
@@ -85,6 +86,7 @@
 #define TARGET_CDTR_IFLOW   0x00040000  /* DTR flow control of input */
 #define TARGET_CDSR_OFLOW   0x00080000  /* DSR flow control of output */
 #define TARGET_CCAR_OFLOW   0x00100000  /* DCD flow control of output */
+#define TARGET_CNO_RTSDTR   0x00200000  /* Do not assert RTS or DTR automatically */
 
 /*
  * "Local" flags - dumping ground for other state
