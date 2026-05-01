@@ -207,11 +207,11 @@ struct target_lagg_reqport {
 
 struct target_lagg_reqall {
     char            ra_ifname[TARGET_IFNAMSIZ];
-    uint32_t        ra_proto;
+    abi_uint        ra_proto;
 
     abi_ulong       ra_size;
     abi_ulong       ra_port;
-    int32_t         ra_ports;
+    abi_int         ra_ports;
     union {
         struct target_lacp_opreq rpsc_lacp;
     } ra_psc;
@@ -226,11 +226,12 @@ struct target_lagg_reqflags {
 
 struct target_lagg_reqopts {
     char            ro_ifname[TARGET_IFNAMSIZ];
-    int32_t         ro_opts;
-    uint32_t        ro_count;
-    uint32_t        ro_active;
-    uint32_t        ro_flapping;
-    int32_t         ro_flowid_shift;
+    abi_int         ro_opts;
+    abi_uint        ro_count;
+    abi_uint        ro_active;
+    abi_uint        ro_flapping;
+    abi_int         ro_flowid_shift;
+    uint32_t        ro_bkt;
 };
 #define TARGET_SIOCGLAGGOPTS TARGET_IOWR('i', 152, struct target_lagg_reqopts)
 
