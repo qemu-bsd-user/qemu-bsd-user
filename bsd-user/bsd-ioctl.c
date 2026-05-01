@@ -276,7 +276,7 @@ static abi_long do_ioctl_in6_ifreq_sockaddr_int(const IOCTLEntry *ie,
     struct in6_ifreq hin6ifreq;
     struct sockaddr_in6 *hsa_in6 = &hin6ifreq.ifr_ifru.ifru_addr;
 
-    tin6ifreq = lock_user(VERIFY_WRITE, arg, sizeof(*tin6ifreq), 0);
+    tin6ifreq = lock_user(VERIFY_WRITE, arg, sizeof(*tin6ifreq), 1);
     if (tin6ifreq == NULL) {
         return -TARGET_EFAULT;
     }
@@ -289,7 +289,7 @@ static abi_long do_ioctl_in6_ifreq_sockaddr_int(const IOCTLEntry *ie,
         put_user_s32(hin6ifreq.ifr_ifru.ifru_flags6,
                 arg + offsetof(struct target_in6_ifreq, ifr_ifru.ifru_flags6));
     }
-    unlock_user(tin6ifreq, arg, 1);
+    unlock_user(tin6ifreq, arg, sizeof(*tin6ifreq));
 
     return ret;
 }
