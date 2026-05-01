@@ -37,6 +37,21 @@ struct target_session2_op {
         int             pad[4];
 };
 
+struct target_crypt_op {
+        uint32_t        ses;
+        uint16_t        op;             /* i.e. COP_ENCRYPT */
+#define TARGET_COP_ENCRYPT     1
+#define TARGET_COP_DECRYPT     2
+        uint16_t        flags;
+#define TARGET_COP_F_CIPHER_FIRST      0x0001  /* Cipher before MAC. */
+#define TARGET_COP_F_BATCH             0x0008  /* Batch op if possible */
+        abi_uint        len;
+        abi_ulong       src;            /* become iov[] inside kernel */
+        abi_ulong       dst;
+        abi_ulong       mac;            /* must be big enough for chosen MAC */
+        abi_ulong       iv;
+};
+
 struct target_crypt_find_op {
         int             crid;
         char            name[32];
