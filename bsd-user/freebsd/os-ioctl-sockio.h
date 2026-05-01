@@ -101,9 +101,6 @@ struct target_ifreq {
 /* netinet/ip_carp.h */
 #define TARGET_SIOCGVH          TARGET_IOWR('i', 246, struct target_ifreq)
 
-/* netinet/ip_carp.h */
-#define TARGET_SIOCGVH          TARGET_IOWR('i', 246, struct target_ifreq)
-
 /* net/if_pfsync.h */
 #define TARGET_SIOCGETPFSYNC    TARGET_IOWR('i', 248, struct target_ifreq)
 
