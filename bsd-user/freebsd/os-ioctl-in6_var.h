@@ -8,6 +8,8 @@
 #ifndef BSD_USER_FREEBSD_OS_IOCTL_IN6_VAR_H
 #define BSD_USER_FREEBSD_OS_IOCTL_IN6_VAR_H
 
+#include "os-ioctl-sockio.h"
+
 /*
  * see netinet6/in6_var.h
  * and see netinet/in6.h
@@ -107,10 +109,6 @@ struct target_icmp6_ifstat {
         uint64_t ifs6_out_mldreport;
         uint64_t ifs6_out_mlddone;
 };
-
-#ifndef TARGET_IFNAMSIZ
-#define TARGET_IFNAMSIZ 16
-#endif
 
 struct target_in6_ifreq {
         char ifr_name[TARGET_IFNAMSIZ];
