@@ -45,11 +45,11 @@
 #include "syscall_defs.h"
 #include "bsd-ioctl.h"
 #include "os-ioctl-cryptodev.h"
-#include "os-ioctl-disk.h"
 #include "os-ioctl-filio.h"
 #include "os-ioctl-in6_var.h"
 #include "os-ioctl-sockio.h"
 #include "os-ioctl-ttycom.h"
+#include "os-ioctl-disk.h"
 
 static void target_to_host_termios(void *dst, const void *src)
 {
