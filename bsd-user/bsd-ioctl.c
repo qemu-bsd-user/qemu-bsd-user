@@ -160,7 +160,6 @@ static const StructEntry struct_termios_def = {
         __alignof__(struct termios) },
 };
 
-
 /* ioctl structure type definitions */
 #define STRUCT(name, ...) STRUCT_ ## name,
 #define STRUCT_SPECIAL(name) STRUCT_ ## name,

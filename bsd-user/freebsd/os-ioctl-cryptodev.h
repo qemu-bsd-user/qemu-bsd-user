@@ -11,79 +11,74 @@
 /* see opencrypto/cryptodev.h */
 
 struct target_session_op {
-        u_int32_t       cipher;
-        u_int32_t       mac;
+    u_int32_t       cipher;
+    u_int32_t       mac;
 
-        u_int32_t       keylen;
-        abi_ulong       key;
-        int32_t         mackeylen;
-        abi_ulong       mackey;
+    u_int32_t       keylen;
+    abi_ulong       key;
+    int32_t         mackeylen;
+    abi_ulong       mackey;
 
-        u_int32_t       ses;
+     u_int32_t       ses;
 };
 
 
 struct target_session2_op {
-        u_int32_t       cipher;
-        u_int32_t       mac;
+    u_int32_t       cipher;
+    u_int32_t       mac;
 
-        u_int32_t       keylen;
-        abi_ulong       key;
-        int32_t         mackeylen;
-        abi_ulong       mackey;
+    u_int32_t       keylen;
+    abi_ulong       key;
+    int32_t         mackeylen;
+    abi_ulong       mackey;
 
-        u_int32_t       ses;
-        int32_t         crid;
-        abi_int         pad[4];
+    u_int32_t       ses;
+    int32_t         crid;
+    abi_int         ivlen;
+    abi_int         maclen;
+    abi_int         pad[2];
 };
 
 struct target_crypt_op {
-        uint32_t        ses;
-        uint16_t        op;             /* i.e. COP_ENCRYPT */
+    uint32_t        ses;
+    uint16_t        op;             /* i.e. COP_ENCRYPT */
 #define TARGET_COP_ENCRYPT     1
 #define TARGET_COP_DECRYPT     2
-        uint16_t        flags;
+    uint16_t        flags;
 #define TARGET_COP_F_CIPHER_FIRST      0x0001  /* Cipher before MAC. */
 #define TARGET_COP_F_BATCH             0x0008  /* Batch op if possible */
-        abi_uint        len;
-        abi_ulong       src;            /* become iov[] inside kernel */
-        abi_ulong       dst;
-        abi_ulong       mac;            /* must be big enough for chosen MAC */
-        abi_ulong       iv;
+    abi_uint        len;
+    abi_ulong       src;            /* become iov[] inside kernel */
+    abi_ulong       dst;
+    abi_ulong       mac;            /* must be big enough for chosen MAC */
+    abi_ulong       iv;
+};
+
+/* op and flags the same as crypt_op */
+struct target_crypt_aead {
+    uint32_t        ses;
+    uint16_t        op;             /* i.e. COP_ENCRYPT */
+    uint16_t        flags;
+    abi_uint        len;
+    abi_uint        aadlen;
+    abi_uint        ivlen;
+    abi_ulong       src;           /* become iov[] inside kernel */
+    abi_ulong       dst;
+    abi_ulong       aad;           /* additional authenticated data */
+    abi_ulong       tag;           /* must fit for chosen TAG length */
+    abi_ulong       iv;
 };
 
 struct target_crypt_find_op {
-        abi_int         crid;
-        char            name[32];
+    abi_int         crid;
+    char            name[32];
 };
-
-struct target_crparam {
-        abi_ulong       crp_p;
-        abi_uint        crp_nbits;
-};
-
-#define TARGET_CRK_MAXPARAM     8
-
-struct target_crypt_kop {
-        abi_uint        crk_op;
-        abi_uint        crk_status;
-        abi_ushort      crk_iparams;
-        abi_ushort      crk_oparams;
-        abi_uint        crk_crid;
-        struct target_crparam   crk_param[TARGET_CRK_MAXPARAM];
-};
-
-#define TARGET_CRIOGET          TARGET_IOWR('c', 100, u_int32_t)
-#define TARGET_CRIOASYMFEAT     TARGET_CIOCASYMFEAT
-#define TARGET_CRIOFINDDEV      TARGET_CIOCFINDDEV
 
 #define TARGET_CIOCGSESSION     TARGET_IOWR('c', 101, struct target_session_op)
 #define TARGET_CIOCFSESSION     TARGET_IOW('c', 102, u_int32_t)
 #define TARGET_CIOCCRYPT        TARGET_IOWR('c', 103, struct target_crypt_op)
-#define TARGET_CIOCKEY          TARGET_IOWR('c', 104, struct target_crypt_kop)
-#define TARGET_CIOCASYMFEAT     TARGET_IOR('c', 105, u_int32_t)
 #define TARGET_CIOCGSESSION2    TARGET_IOWR('c', 106, struct target_session2_op)
-#define TARGET_CIOCKEY2         TARGET_IOWR('c', 107, struct target_crypt_kop)
-#define TARGET_CIOCFINDDEV TARGET_IOWR('c', 108, struct target_crypt_find_op)
+#define TARGET_CIOCFINDDEV      TARGET_IOWR('c', 108, struct target_crypt_find_op)
+#define TARGET_CIOCCRYPTAEAD    TARGET_IOWR('c', 109, struct target_crypt_aead)
 
 #endif /* BSD_USER_FREEBSD_OS_IOCTL_CRYPTODEV_H */
