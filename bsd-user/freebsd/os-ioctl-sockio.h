@@ -23,6 +23,12 @@ struct target_ifreq_buffer {
     abi_ulong  buffer;
 };
 
+struct target_ifreq_nv_req {
+    abi_uint   buf_length;     /* Total size of buffer */
+    abi_uint   length;         /* Length of the filled part */
+    abi_ulong  buffer;        /* Buffer itself, containing packed nv */
+};
+
 #define TARGET_IFNAMSIZ 16
 
 struct target_ifreq {
@@ -32,16 +38,18 @@ struct target_ifreq {
         struct  target_sockaddr ifru_dstaddr;
         struct  target_sockaddr ifru_broadaddr;
         struct  target_ifreq_buffer ifru_buffer;
-        int16_t   ifru_flags[2];
-        int16_t   ifru_index;
-        int32_t     ifru_jid;
-        int32_t     ifru_metric;
-        int32_t     ifru_mtu;
-        int32_t     ifru_phys;
-        int32_t     ifru_media;
-        abi_ulong ifru_data;
-        int32_t     ifru_cap[2];
-        uint32_t   ifru_fib;
+        abi_short   ifru_flags[2];
+        abi_short   ifru_index;
+        abi_int     ifru_jid;
+        abi_int     ifru_metric;
+        abi_int     ifru_mtu;
+        abi_int     ifru_phys;
+        abi_int     ifru_media;
+        abi_ulong   ifru_data;
+        abi_int     ifru_cap[2];
+        uint32_t    ifru_fib;
+        uint8_t     ifru_vlan_pcp;
+        struct target_ifreq_nv_req ifru_nv;
     } ifr_ifru;
 };
 
