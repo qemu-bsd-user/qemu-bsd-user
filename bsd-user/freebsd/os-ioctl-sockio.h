@@ -225,7 +225,7 @@ struct target_lagg_reqflags {
 #define TARGET_SIOCGLAGGFLAGS TARGET_IOWR('i', 145, struct target_lagg_reqflags)
 
 struct target_lagg_reqopts {
-    char            ro_ifname[IFNAMSIZ];
+    char            ro_ifname[TARGET_IFNAMSIZ];
     int32_t         ro_opts;
     uint32_t        ro_count;
     uint32_t        ro_active;
