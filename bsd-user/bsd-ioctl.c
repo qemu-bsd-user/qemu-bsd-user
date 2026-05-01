@@ -31,7 +31,6 @@
 #include <net/if_media.h>
 #include <net/pfvar.h>
 #include <net/if_pfsync.h>
-#include <net/ethernet.h>
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <netinet/ip_carp.h>
