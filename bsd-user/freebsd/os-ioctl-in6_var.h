@@ -184,7 +184,6 @@ struct  target_in6_ndifreq {
 #define TARGET_SIOCSRTRFLUSH_IN6 TARGET_IOWR('i', 80, struct target_in6_ifreq)
 
 #define TARGET_SIOCGIFALIFETIME_IN6 TARGET_IOWR('i', 81, struct target_in6_ifreq)
-#define TARGET_SIOCSIFALIFETIME_IN6 TARGET_IOWR('i', 82, struct target_in6_ifreq)
 #define TARGET_SIOCGIFSTAT_IN6 TARGET_IOWR('i', 83, struct target_in6_ifreq)
 #define TARGET_SIOCGIFSTAT_ICMP6 TARGET_IOWR('i', 84, struct target_in6_ifreq)
 
