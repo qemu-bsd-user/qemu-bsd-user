@@ -149,7 +149,7 @@ struct target_in6_ndireq {
 };
 
 struct  target_in6_ndifreq {
-    char ifname[IFNAMSIZ];
+    char ifname[TARGET_IFNAMSIZ];
     abi_ulong ifindex;
 };
 
