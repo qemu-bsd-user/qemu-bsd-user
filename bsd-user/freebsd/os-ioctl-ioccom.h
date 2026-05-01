@@ -33,11 +33,11 @@
 #define TARGET_IOC(inout, group, num, len) ((abi_ulong) \
     ((inout) | (((len) & TARGET_IOCPARM_MASK) << 16) | ((group) << 8) \
      | (num)))
-#define TARGET_IO(g, n)       TARGET_IOC(IOC_VOID,    (g), (n), 0)
-#define TARGET_IOWINT(g, n)   TARGET_IOC(IOC_VOID,    (g), (n), sizeof(int))
-#define TARGET_IOR(g, n, t)   TARGET_IOC(IOC_OUT, (g), (n), sizeof(t))
-#define TARGET_IOW(g, n, t)   TARGET_IOC(IOC_IN,  (g), (n), sizeof(t))
+#define TARGET_IO(g, n)       TARGET_IOC(TARGET_IOC_VOID,    (g), (n), 0)
+#define TARGET_IOWINT(g, n)   TARGET_IOC(TARGET_IOC_VOID,    (g), (n), sizeof(int))
+#define TARGET_IOR(g, n, t)   TARGET_IOC(TARGET_IOC_OUT, (g), (n), sizeof(t))
+#define TARGET_IOW(g, n, t)   TARGET_IOC(TARGET_IOC_IN,  (g), (n), sizeof(t))
 /* this should be _IORW, but stdio got there first */
-#define TARGET_IOWR(g, n, t)  TARGET_IOC(IOC_INOUT,   (g), (n), sizeof(t))
+#define TARGET_IOWR(g, n, t)  TARGET_IOC(TARGET_IOC_INOUT,   (g), (n), sizeof(t))
 
 #endif /* BSD_USER_FREEBSD_OS_IOCTL_IOCCOM_H */
