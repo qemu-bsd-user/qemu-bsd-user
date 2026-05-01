@@ -118,7 +118,7 @@ struct target_ifconf {
     int32_t ifc_len;
     union {
         abi_ulong   ifcu_buf;
-        abi_ulong   ifcu_reg;
+        abi_ulong   ifcu_req;
     } ifc_ifcu;
 };
 
