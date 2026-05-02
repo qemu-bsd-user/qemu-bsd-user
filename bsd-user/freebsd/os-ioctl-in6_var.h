@@ -162,7 +162,8 @@ struct  target_in6_ndifreq {
 #define TARGET_OSIOCAIFADDR_IN6 TARGET_IOW('i', 26, struct target_oin6_aliasreq)
 #define TARGET_SIOCAIFADDR_IN6 TARGET_IOW('i', 27, struct target_in6_aliasreq)
 
-#define TARGET_SIOCSIFPHYADDR_IN6 TARGET_IOW('i', 70, struct target_in6_aliasreq)
+#define TARGET_SIOCSIFPHYADDR_IN6 TARGET_IOW('i', 70, \
+                                             struct target_in6_aliasreq)
 #endif
 #define TARGET_SIOCGIFPSRCADDR_IN6 TARGET_IOWR('i', 71, struct target_in6_ifreq)
 #define TARGET_SIOCGIFPDSTADDR_IN6 TARGET_IOWR('i', 72, struct target_in6_ifreq)
@@ -183,7 +184,8 @@ struct  target_in6_ndifreq {
 #define TARGET_SIOCSPFXFLUSH_IN6 TARGET_IOWR('i', 79, struct target_in6_ifreq)
 #define TARGET_SIOCSRTRFLUSH_IN6 TARGET_IOWR('i', 80, struct target_in6_ifreq)
 
-#define TARGET_SIOCGIFALIFETIME_IN6 TARGET_IOWR('i', 81, struct target_in6_ifreq)
+#define TARGET_SIOCGIFALIFETIME_IN6 TARGET_IOWR('i', 81, \
+                                                struct target_in6_ifreq)
 #define TARGET_SIOCGIFSTAT_IN6 TARGET_IOWR('i', 83, struct target_in6_ifreq)
 #define TARGET_SIOCGIFSTAT_ICMP6 TARGET_IOWR('i', 84, struct target_in6_ifreq)
 
@@ -196,19 +198,29 @@ struct  target_in6_ndifreq {
 #define TARGET_SIOCGSCOPE6 TARGET_IOWR('i', 89, struct target_in6_ifreq)
 #define TARGET_SIOCGSCOPE6DEF TARGET_IOWR('i', 90, struct target_in6_ifreq)
 
-#ifdef notyet
-#define TARGET_SIOCSIFPREFIX_IN6 TARGET_IOW('i', 100, struct target_in6_prefixreq)
-#define TARGET_SIOCGIFPREFIX_IN6 TARGET_IOWR('i', 101, struct target_in6_prefixreq)
-#define TARGET_SIOCDIFPREFIX_IN6 TARGET_IOW('i', 102, struct target_in6_prefixreq)
-#define TARGET_SIOCAIFPREFIX_IN6 TARGET_IOW('i', 103, struct target_in6_rrenumreq)
-#define TARGET_SIOCCIFPREFIX_IN6 TARGET_IOW('i', 104, struct target_in6_rrenumreq)
-#define TARGET_SIOCSGIFPREFIX_IN6 TARGET_IOW('i', 105, struct target_in6_rrenumreq)
+#ifdefnotyet
+#define TARGET_SIOCSIFPREFIX_IN6 TARGET_IOW('i', 100, \
+                                            struct target_in6_prefixreq)
+#define TARGET_SIOCGIFPREFIX_IN6 TARGET_IOWR('i', 101, \
+                                             struct target_in6_prefixreq)
+#define TARGET_SIOCDIFPREFIX_IN6 TARGET_IOW('i', 102, \
+                                            struct target_in6_prefixreq)
+#define TARGET_SIOCAIFPREFIX_IN6 TARGET_IOW('i', 103, \
+                                            struct target_in6_rrenumreq)
+#define TARGET_SIOCCIFPREFIX_IN6 TARGET_IOW('i', 104, \
+                                            struct target_in6_rrenumreq)
+#define TARGET_SIOCSGIFPREFIX_IN6 TARGET_IOW('i', 105, \
+                                             struct target_in6_rrenumreq)
 
-#define TARGET_SIOCGETSGCNT_IN6 TARGET_IOWR('u', 106, struct target_sioc_sg_req6)
-#define TARGET_SIOCGETMIFCNT_IN6 TARGET_IOWR('u', 107, struct target_sioc_mif_req6)
+#define TARGET_SIOCGETSGCNT_IN6 TARGET_IOWR('u', 106, \
+                                            struct target_sioc_sg_req6)
+#define TARGET_SIOCGETMIFCNT_IN6 TARGET_IOWR('u', 107, \
+                                             struct target_sioc_mif_req6)
 
-#define TARGET_SIOCAADDRCTL_POLICY TARGET_IOW('u', 108, struct target_in6_addrpolicy)
-#define TARGET_SIOCDADDRCTL_POLICY TARGET_IOW('u', 109, struct target_in6_addrpolicy)
+#define TARGET_SIOCAADDRCTL_POLICY TARGET_IOW('u', 108, \
+                                              struct target_in6_addrpolicy)
+#define TARGET_SIOCDADDRCTL_POLICY TARGET_IOW('u', 109, \
+                                              struct target_in6_addrpolicy)
 #endif
 
 #endif /* BSD_USER_FREEBSD_OS_IOCTL_IN6_VAR_H */

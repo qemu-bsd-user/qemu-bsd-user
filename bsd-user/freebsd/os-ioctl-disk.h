@@ -19,12 +19,14 @@
 #define TARGET_DIOCGFLUSH           TARGET_IO('d', 135)
 #define TARGET_DIOCGDELETE          TARGET_IOW('d', 136, int64_t[2])
 #define TARGET_DISK_IDENT_SIZE 256
-#define TARGET_DIOCGIDENT           TARGET_IOR('d', 137,            \
+#define TARGET_DIOCGIDENT           TARGET_IOR('d', 137, \
                                         char[TARGET_DISK_IDENT_SIZE])
-#define TARGET_DIOCGPROVIDERNAME    TARGET_IOR('d', 138, char[TARGET_MAXPATHLEN])
+#define TARGET_DIOCGPROVIDERNAME    TARGET_IOR('d', 138, \
+                                        char[TARGET_MAXPATHLEN])
 #define TARGET_DIOCGSTRIPESIZE      TARGET_IOR('d', 139, int64_t)
 #define TARGET_DIOCGSTRIPEOFFSET    TARGET_IOR('d', 140, int64_t)
-#define TARGET_DIOCGPHYSPATH        TARGET_IOR('d', 141, char[TARGET_MAXPATHLEN])
+#define TARGET_DIOCGPHYSPATH        TARGET_IOR('d', 141, \
+                                        char[TARGET_MAXPATHLEN])
 
 struct target_diocgattr_arg {
     char name[64];
@@ -40,7 +42,7 @@ struct target_diocgattr_arg {
 #define TARGET_DIOCGATTR    TARGET_IOWR('d', 142, struct target_diocgattr_arg)
 
 /* Unsupported, target_disk_zone_args is complicated */
-/* #define	DIOCZONECMD	_IOWR('d', 143, struct target_disk_zone_args) */
+/* #define DIOCZONECMD _IOWR('d', 143, struct target_disk_zone_args) */
 
 /* Enable/Disable the device for kernel core dumps. */
 /* #define DIOCSKERNELDUMP _IOW('d', 145, struct diocskerneldump_arg) */
