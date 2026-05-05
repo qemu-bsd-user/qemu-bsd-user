@@ -36,8 +36,8 @@ def get_symbols(elf_file):
     out = out.strip().split('\n')
     for line in out:
         info = line.split(' ')
-        if len(info) == 3:
-            # missing size information
+        if len(info) != 4:
+            # missing size/address information
             continue
         addr, size, type, name = info
         # add only symbols from .text section
@@ -70,7 +70,10 @@ def find_symbols_locations(elf_file, symbols):
         file, line = out[i].split(':')
         # addr2line may return 'line (discriminator [0-9]+)' sometimes,
         # remove this to keep only line number.
-        line = line.split(' ')[0]
+        if line == '?':
+            line = 0
+        else:
+            line = int(line.split(' ')[0])
         s.set_loc(file, line)
 
 class BinaryFile:

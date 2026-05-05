@@ -15,7 +15,6 @@ config ARM_VIRT
     select GPIO_KEY
     select DEVICE_TREE
     select FW_CFG_DMA
-    select PCI_EXPRESS
     select PCI_EXPRESS_GENERIC_BRIDGE
     select PFLASH_CFI01
     select PL011 # UART
@@ -618,6 +617,30 @@ config FSL_IMX8MP_EVK
     depends on TCG
     select FSL_IMX8MP
 
+config FSL_IMX8MM
+    bool
+    imply PCI_DEVICES
+    imply I2C_DEVICES
+    select ARM_GIC
+    select FSL_IMX8MP_ANALOG
+    select FSL_IMX8MP_CCM
+    select IMX
+    select IMX_FEC
+    select IMX_I2C
+    select OR_IRQ
+    select SDHCI
+    select PCI_EXPRESS_DESIGNWARE
+    select PCI_EXPRESS_FSL_IMX8M_PHY
+    select USB_DWC3
+    select WDT_IMX2
+
+config FSL_IMX8MM_EVK
+    bool
+    default y
+    depends on AARCH64
+    depends on TCG
+    select FSL_IMX8MM
+
 config ARM_SMMUV3_ACCEL
     bool
     depends on ARM_SMMUV3
@@ -633,6 +656,7 @@ config FSL_IMX6UL
     imply I2C_DEVICES
     select A15MPCORE
     select IMX
+    select IMX6UL_LCDIF
     select IMX_FEC
     select IMX_I2C
     select IMX_USBPHY

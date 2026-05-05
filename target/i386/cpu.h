@@ -225,6 +225,7 @@ typedef enum X86Seg {
 #define HF2_NPT_SHIFT            6 /* Nested Paging enabled */
 #define HF2_IGNNE_SHIFT          7 /* Ignore CR0.NE=0 */
 #define HF2_VGIF_SHIFT           8 /* Can take VIRQ*/
+#define HF2_HYPERV_HLT_SHIFT     9 /* Hyper-V HV_X64_MSR_GUEST_IDLE */
 
 #define HF2_GIF_MASK            (1 << HF2_GIF_SHIFT)
 #define HF2_HIF_MASK            (1 << HF2_HIF_SHIFT)
@@ -235,6 +236,7 @@ typedef enum X86Seg {
 #define HF2_NPT_MASK            (1 << HF2_NPT_SHIFT)
 #define HF2_IGNNE_MASK          (1 << HF2_IGNNE_SHIFT)
 #define HF2_VGIF_MASK           (1 << HF2_VGIF_SHIFT)
+#define HF2_HYPERV_HLT_MASK     (1 << HF2_HYPERV_HLT_SHIFT)
 
 #define CR0_PE_SHIFT 0
 #define CR0_MP_SHIFT 1
@@ -417,12 +419,12 @@ typedef enum X86Seg {
 #define MSR_IA32_CORE_CAPABILITY        0xcf
 
 #define MSR_IA32_ARCH_CAPABILITIES      0x10a
-#define ARCH_CAP_TSX_CTRL_MSR		(1<<7)
+#define ARCH_CAP_TSX_CTRL_MSR           (1 << 7)
 
 #define MSR_IA32_PERF_CAPABILITIES      0x345
 #define PERF_CAP_LBR_FMT                0x3f
 
-#define MSR_IA32_TSX_CTRL		0x122
+#define MSR_IA32_TSX_CTRL               0x122
 #define MSR_IA32_TSCDEADLINE            0x6e0
 #define MSR_IA32_PKRS                   0x6e1
 #define MSR_RAPL_POWER_UNIT             0x00000606
@@ -879,6 +881,7 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w);
 #define CPUID_SVM_AVIC            (1U << 13)
 #define CPUID_SVM_V_VMSAVE_VMLOAD (1U << 15)
 #define CPUID_SVM_VGIF            (1U << 16)
+#define CPUID_SVM_GMET            (1U << 17)
 #define CPUID_SVM_VNMI            (1U << 25)
 #define CPUID_SVM_SVME_ADDR_CHK   (1U << 28)
 
@@ -1482,24 +1485,24 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w);
 #define HYPERV_SPINLOCK_NEVER_NOTIFY             0xFFFFFFFF
 #endif
 
-#define EXCP00_DIVZ	0
-#define EXCP01_DB	1
-#define EXCP02_NMI	2
-#define EXCP03_INT3	3
-#define EXCP04_INTO	4
-#define EXCP05_BOUND	5
-#define EXCP06_ILLOP	6
-#define EXCP07_PREX	7
-#define EXCP08_DBLE	8
-#define EXCP09_XERR	9
-#define EXCP0A_TSS	10
-#define EXCP0B_NOSEG	11
-#define EXCP0C_STACK	12
-#define EXCP0D_GPF	13
-#define EXCP0E_PAGE	14
-#define EXCP10_COPR	16
-#define EXCP11_ALGN	17
-#define EXCP12_MCHK	18
+#define EXCP00_DIVZ     0
+#define EXCP01_DB       1
+#define EXCP02_NMI      2
+#define EXCP03_INT3     3
+#define EXCP04_INTO     4
+#define EXCP05_BOUND    5
+#define EXCP06_ILLOP    6
+#define EXCP07_PREX     7
+#define EXCP08_DBLE     8
+#define EXCP09_XERR     9
+#define EXCP0A_TSS      10
+#define EXCP0B_NOSEG    11
+#define EXCP0C_STACK    12
+#define EXCP0D_GPF      13
+#define EXCP0E_PAGE     14
+#define EXCP10_COPR     16
+#define EXCP11_ALGN     17
+#define EXCP12_MCHK     18
 
 #define EXCP_VMEXIT     0x100 /* only for system emulation */
 #define EXCP_SYSCALL    0x101 /* only for user emulation */
@@ -2267,10 +2270,8 @@ typedef struct CPUArchState {
     int64_t user_tsc_khz; /* for sanity check only */
     uint64_t apic_bus_freq;
     uint64_t tsc;
-#if defined(CONFIG_KVM) || defined(CONFIG_HVF)
     void *xsave_buf;
     uint32_t xsave_buf_len;
-#endif
 #if defined(CONFIG_KVM)
     struct kvm_nested_state *nested_state;
     MemoryRegion *xen_vcpu_info_mr;
@@ -3023,6 +3024,8 @@ void x86_cpu_xrstor_all_areas(X86CPU *cpu, const void *buf, uint32_t buflen);
 void x86_cpu_xsave_all_areas(X86CPU *cpu, void *buf, uint32_t buflen);
 uint32_t xsave_area_size(uint64_t mask, bool compacted);
 void x86_update_hflags(CPUX86State* env);
+int decompact_xsave_area(const void *buf, size_t buflen, CPUX86State *env);
+int compact_xsave_area(CPUX86State *env, void *buf, size_t buflen);
 
 static inline bool hyperv_feat_enabled(X86CPU *cpu, int feat)
 {
@@ -3082,6 +3085,13 @@ static inline bool ctl_has_irq(CPUX86State *env)
     }
 
     return (env->int_ctl & V_IRQ_MASK) && (int_prio >= tpr);
+}
+
+static inline bool x86_cpu_interrupts_enabled(CPUX86State *env)
+{
+    return ((env->eflags & IF_MASK) &&
+            !(env->hflags & HF_INHIBIT_IRQ_MASK)) ||
+           (env->hflags2 & HF2_HYPERV_HLT_MASK);
 }
 
 #if defined(TARGET_X86_64) && \

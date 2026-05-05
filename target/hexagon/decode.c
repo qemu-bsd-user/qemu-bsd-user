@@ -647,6 +647,22 @@ decode_set_slot_number(Packet *pkt)
     return has_valid_slot_assignment(pkt);
 }
 
+bool opcode_supported(uint16_t opcode, const HexagonCPUDef *hex_def)
+{
+    HexagonVersion hex_version = hex_def->hex_version;
+#include "tag_rev_info.c.inc"
+
+    struct tag_rev_info info = tag_rev_info[opcode];
+    if (hex_version == HEX_VER_ANY) {
+        return true;
+    }
+    if ((info.introduced != HEX_VER_NONE && hex_version < info.introduced) ||
+        (info.removed != HEX_VER_NONE && hex_version >= info.removed)) {
+        return false;
+    }
+    return true;
+}
+
 /*
  * Check for GPR write conflicts in the packet.
  * A conflict exists when a register is written by more than one instruction
@@ -746,6 +762,17 @@ int decode_packet(DisasContext *ctx, int max_words, const uint32_t *words,
         /* Ran out of words! */
         return 0;
     }
+
+    /*
+     * Check that all the opcodes are supported in this Hexagon definition
+     * If not, return decode error
+     */
+    for (i = 0; i < num_insns; i++) {
+        if (!opcode_supported(pkt->insn[i].opcode, ctx->hex_def)) {
+            return 0;
+        }
+    }
+
     pkt->encod_pkt_size_in_bytes = words_read * 4;
     pkt->pkt_has_hvx = false;
     for (i = 0; i < num_insns; i++) {
@@ -801,19 +828,34 @@ int decode_packet(DisasContext *ctx, int max_words, const uint32_t *words,
 
 /* Used for "-d in_asm" logging */
 int disassemble_hexagon(uint32_t *words, int nwords, bfd_vma pc,
-                        GString *buf)
+                        GString *buf, const HexagonCPUDef  *hex_def)
 {
+    HexagonCPUDef any_def = {
+        .hex_version = HEX_VER_ANY,  /* Allow decode to accept anything */
+    };
     DisasContext ctx;
-    Packet pkt;
 
     memset(&ctx, 0, sizeof(DisasContext));
-    ctx.pkt = &pkt;
+    ctx.hex_def = &any_def;
 
-    if (decode_packet(&ctx, nwords, words, &pkt, true) > 0) {
-        snprint_a_pkt_disas(buf, &pkt, words, pc);
-        return pkt.encod_pkt_size_in_bytes;
+    if (decode_packet(&ctx, nwords, words, &ctx.pkt, true) > 0) {
+        snprint_a_pkt_disas(buf, &ctx.pkt, words, pc, hex_def);
+        return ctx.pkt.encod_pkt_size_in_bytes;
     } else {
-        g_string_assign(buf, "<invalid>");
-        return 0;
+        for (int i = 0; i < nwords; i++) {
+            g_string_append_printf(buf, "0x" TARGET_FMT_lx "\t", words[i]);
+            if (i == 0) {
+                g_string_append(buf, "{");
+            }
+            g_string_append(buf, "\t");
+            g_string_append(buf, "<invalid>");
+            if (i < nwords - 1) {
+                pc += 4;
+                g_string_append_printf(buf, "\n0x" TARGET_FMT_lx ":  ",
+                                       (target_ulong)pc);
+            }
+        }
+        g_string_append(buf, " }");
+        return nwords * sizeof(uint32_t);
     }
 }
