@@ -94,21 +94,21 @@ safe_syscall4(ssize_t, pwritev, int, fd, const struct iovec *, iov, int, iovcnt,
 
 safe_syscall5(int, select, int, nfds, fd_set *, readfs, fd_set *, writefds,
     fd_set *, exceptfds, struct timeval *, timeout);
-safe_syscall6(int, pselect, int, nfds, fd_set * restrict, readfs,
-    fd_set * restrict, writefds, fd_set * restrict, exceptfds,
-    const struct timespec * restrict, timeout,
-    const sigset_t * restrict, newsigmask);
+safe_syscall6(int, pselect, int, nfds, fd_set *restrict, readfs,
+    fd_set *restrict, writefds, fd_set *restrict, exceptfds,
+    const struct timespec *restrict, timeout,
+    const sigset_t *restrict, newsigmask);
 
 safe_syscall6(ssize_t, recvfrom, int, fd, void *, buf, size_t, len, int, flags,
-    struct sockaddr * restrict, from, socklen_t * restrict, fromlen);
+    struct sockaddr *restrict, from, socklen_t *restrict, fromlen);
 safe_syscall6(ssize_t, sendto, int, fd, const void *, buf, size_t, len, int,
     flags, const struct sockaddr *, to, socklen_t, tolen);
 safe_syscall3(ssize_t, recvmsg, int, s, struct msghdr *, msg, int, flags);
 safe_syscall3(ssize_t, sendmsg, int, s, const struct msghdr *, msg, int, flags);
 
 safe_syscall4(int, ppoll, struct pollfd *, fds, nfds_t, nfds,
-              const struct timespec * restrict, timeout,
-              const sigset_t * restrict, newsigmask);
+              const struct timespec *restrict, timeout,
+              const sigset_t *restrict, newsigmask);
 
 safe_syscall6(ssize_t, copy_file_range, int, infd, off_t *, inoffp, int, outfd,
     off_t *, outoffp, size_t, len, unsigned int, flags);
