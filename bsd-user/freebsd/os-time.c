@@ -83,8 +83,9 @@ abi_long t2h_freebsd_umtx_time(abi_ulong target_ut_addr,
 
     if (target_ut_size <= sizeof(struct target_freebsd_timespec)) {
         ret = t2h_freebsd_timespec((struct timespec *)host_t, target_ut_addr);
-        if (ret == 0)
+        if (ret == 0) {
             *host_tsz = sizeof(struct timespec);
+        }
         return ret;
     } else {
         struct target_freebsd__umtx_time *target_ut;
@@ -100,10 +101,11 @@ abi_long t2h_freebsd_umtx_time(abi_ulong target_ut_addr,
         __get_user(ut->_clockid, &target_ut->_clockid);
         unlock_user_struct(target_ut, target_ut_addr, 1);
 
-        if (target_ut_size > sizeof(struct target_freebsd__umtx_time))
+        if (target_ut_size > sizeof(struct target_freebsd__umtx_time)) {
             *host_tsz = sizeof(struct _umtx_time) + sizeof(struct timespec);
-        else
+        } else {
             *host_tsz = sizeof(struct _umtx_time);
+        }
 
         return 0;
     }
@@ -247,8 +249,9 @@ int host_to_target_timerid(int timerid)
     int k;
 
     for (k = 0; k < ARRAY_SIZE(g_posix_timers); k++) {
-        if (g_posix_timers[k] == timerid)
+        if (g_posix_timers[k] == timerid) {
             return TIMER_MAGIC | k;
+        }
     }
 
     return -1;
