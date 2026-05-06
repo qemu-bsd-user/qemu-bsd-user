@@ -35,17 +35,17 @@ extern bool bsd_ppc_is_elfv1(CPUPPCState *env);
 #endif
 
 typedef struct target_mcontext {
-	abi_int     mc_vers;
-	abi_int     mc_flags;
-#define TARGET_MC_FP_VALID		0x0001
-#define TARGET_MC_AV_VALID		0x0002
-	abi_int     mc_onstack;     /* sigstack state to restore */
-	abi_int     mc_len;
-	uint64_t    mc_avec[32*2];
-	uint32_t    mc_av[2];
-	abi_long    mc_frame[42];    /* process regs 0 to 31 */
-	uint64_t    mc_fpreg[33];  /* fp regs 0 to 31  */
-	uint64_t    mc_vsxfpreg[32]; /* low-order half of VSR0-31 */
+        abi_int     mc_vers;
+        abi_int     mc_flags;
+#define TARGET_MC_FP_VALID              0x0001
+#define TARGET_MC_AV_VALID              0x0002
+        abi_int     mc_onstack;     /* sigstack state to restore */
+        abi_int     mc_len;
+        uint64_t    mc_avec[32*2];
+        uint32_t    mc_av[2];
+        abi_long    mc_frame[42];    /* process regs 0 to 31 */
+        uint64_t    mc_fpreg[33];  /* fp regs 0 to 31  */
+        uint64_t    mc_vsxfpreg[32]; /* low-order half of VSR0-31 */
 } target_mcontext_t __aligned(16);
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
@@ -59,8 +59,8 @@ typedef struct target_mcontext {
 #include "target_os_ucontext.h"
 
 struct target_sigframe {
-	target_ucontext_t sf_uc;
-	target_siginfo_t  sf_si;
+        target_ucontext_t sf_uc;
+        target_siginfo_t  sf_si;
 };
 
 #define TARGET_SIGSTACK_ALIGN 16

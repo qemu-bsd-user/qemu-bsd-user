@@ -35,9 +35,9 @@
 
 enum
 {
-	PPC_FEATURE_64		= 0x40000000,	/* Defined on a 64-bit CPU */
-	PPC_FEATURE_HAS_ALTIVEC	= 0x10000000,
-	PPC_FEATURE_HAS_FPU	= 0x08000000,
+        PPC_FEATURE_64          = 0x40000000,   /* Defined on a 64-bit CPU */
+        PPC_FEATURE_HAS_ALTIVEC = 0x10000000,
+        PPC_FEATURE_HAS_FPU     = 0x08000000,
 };
 
 #define ELF_HWCAP target_get_elf_hwcap()

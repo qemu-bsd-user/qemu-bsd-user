@@ -20,6 +20,6 @@ static inline void do_freebsd_arch_print_sysarch(
         const struct syscallname *name, abi_long arg1, abi_long arg2,
         abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
 {
-	gemu_log("UNKNOWN OP: %d, " TARGET_ABI_FMT_lx ")", (int)arg1, arg2);
+        gemu_log("UNKNOWN OP: %d, " TARGET_ABI_FMT_lx ")", (int)arg1, arg2);
 }
 #endif

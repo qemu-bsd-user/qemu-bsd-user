@@ -14,29 +14,29 @@
  */
 
 struct target_pt_regs {
-	abi_ulong gpr[32];
-	abi_ulong lr;
-	abi_ulong cr;
-	abi_ulong xer;
-	abi_ulong ctr;
-	abi_ulong nip;
-	abi_ulong srr1;
-	abi_ulong exc;
-	union {
-		struct {
-			abi_ulong dar;		/* Fault registers */
-			abi_ulong dsisr;
-		} aim;
-		struct {
-			abi_ulong dear;
-			abi_ulong esr;
-			abi_ulong dbcr0;
-		} booke;
-	} cpu;
+        abi_ulong gpr[32];
+        abi_ulong lr;
+        abi_ulong cr;
+        abi_ulong xer;
+        abi_ulong ctr;
+        abi_ulong nip;
+        abi_ulong srr1;
+        abi_ulong exc;
+        union {
+                struct {
+                        abi_ulong dar;          /* Fault registers */
+                        abi_ulong dsisr;
+                } aim;
+                struct {
+                        abi_ulong dear;
+                        abi_ulong esr;
+                        abi_ulong dbcr0;
+                } booke;
+        } cpu;
 };
 
 
-#define UNAME_MACHINE			"powerpc"
+#define UNAME_MACHINE                   "powerpc"
 #define TARGET_HW_MACHINE       "powerpc"
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
 #define TARGET_HW_MACHINE_ARCH  UNAME_MACHINE"64"

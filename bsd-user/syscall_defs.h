@@ -130,7 +130,7 @@ struct target_sched_param {
  */
 #define TARGET_MADV_DONTNEED            4       /* dont need these pages */
 
-#define MAP_TYPE	0xf
+#define MAP_TYPE 0xf
 
 /*
  * sys/time.h

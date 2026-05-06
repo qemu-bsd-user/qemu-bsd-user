@@ -17,7 +17,7 @@ abi_long
 set_sigtramp_args(CPUPPCState *regs, int sig, struct target_sigframe *frame,
     abi_ulong frame_addr, struct target_sigaction *ka)
 {
-	/* XXX:TODO: set_sigtramp_args(). */
+        /* XXX:TODO: set_sigtramp_args(). */
     /* frame->sf_si.si_addr = regs->CP0_BadVAddr; */
 
     /*
@@ -82,7 +82,7 @@ abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
         mcp->mc_onstack = 0;
     }
 
-	mcp->mc_flags = 0;
+        mcp->mc_flags = 0;
 
     for (i = 1; i < 32; i++) {
         mcp->mc_frame[i] = tswapal(regs->gpr[i]);
@@ -136,7 +136,7 @@ abi_long get_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
         mcp->mc_frame[4] = 0;    /* r4 = 0 */
     }
 
-	mcp->mc_len = sizeof(*mcp);
+        mcp->mc_len = sizeof(*mcp);
     /* Don't do any of the status and cause registers. */
 
     return err;
@@ -150,9 +150,9 @@ abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
     int i, err = 0;
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-	tls = regs->gpr[13];
+        tls = regs->gpr[13];
 #else
-	tls = regs->gpr[2];
+        tls = regs->gpr[2];
 #endif
     for (i = 1; i < 32; i++) {
         regs->gpr[i] = tswapal(mcp->mc_frame[i]);
@@ -170,9 +170,9 @@ abi_long set_mcontext(CPUPPCState *regs, target_mcontext_t *mcp,
     regs->nip = tswapal(mcp->mc_frame[36]);
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-	regs->gpr[13] = tls;
+        regs->gpr[13] = tls;
 #else
-	regs->gpr[2] = tls;
+        regs->gpr[2] = tls;
 #endif
 
     if (mcp->mc_flags & TARGET_MC_FP_VALID) {

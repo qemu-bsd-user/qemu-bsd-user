@@ -85,11 +85,11 @@ struct emulated_sigtable {
  */
 struct syscall_decode;
 struct current_syscall {
-	const struct syscall_decode *sc;
-	unsigned int number;
-	unsigned int nargs;
-	abi_long args[10];
-	char *s_args[10];	/* the printable arguments */
+        const struct syscall_decode *sc;
+        unsigned int number;
+        unsigned int nargs;
+        abi_long args[10];
+        char *s_args[10];       /* the printable arguments */
 };
 
 /*

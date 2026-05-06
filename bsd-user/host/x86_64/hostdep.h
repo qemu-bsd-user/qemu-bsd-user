@@ -15,9 +15,9 @@
 /* We have a safe-syscall.inc.S */
 #define HAVE_SAFE_SYSCALL
 
-#define	ADJUST_SYSCALL_RETCODE \
+#define ADJUST_SYSCALL_RETCODE \
     jnb 2f;                    \
-    neg	%rax;                  \
+    neg %rax;                  \
     2:
 
 #endif

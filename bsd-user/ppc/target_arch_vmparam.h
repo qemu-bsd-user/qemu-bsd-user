@@ -25,7 +25,7 @@
 
                 /* KERNBASE - 512 MB */
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
-#define TARGET_VM_MAXUSER_ADDRESS	0x00007fffff000000ULL
+#define TARGET_VM_MAXUSER_ADDRESS       0x00007fffff000000ULL
 #else
 #define TARGET_VM_MAXUSER_ADDRESS   0xfffff000UL
 #endif

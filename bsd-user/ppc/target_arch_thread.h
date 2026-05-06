@@ -48,8 +48,8 @@ static inline void target_thread_set_upcall(CPUPPCState *regs, abi_ulong entry,
 static inline void target_thread_init(struct target_pt_regs *regs,
         struct image_info *infop)
 {
-	abi_long stack = infop->start_stack;
-	abi_long argc;
+        abi_long stack = infop->start_stack;
+        abi_long argc;
 
 #if defined(TARGET_PPC64) && !defined(TARGET_ABI32)
     regs->gpr[1] = -roundup(-stack + 48, 16);

@@ -17,7 +17,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#define _ACL_PRIVATE 1	// XXX Don't upstream: we need to sort out this junk and the twisty maze of .h
+#define _ACL_PRIVATE 1 // XXX Don't upstream: we need to sort out this junk and the twisty maze of .h
 
 #include "qemu/osdep.h"
 
@@ -1473,20 +1473,20 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         break;
 
     case TARGET_FREEBSD_NR_sched_get_priority_max: /* sched_get_priority_max(2)*/
-		ret = do_bsd_sched_get_priority_max(arg1);
-		break;
+                ret = do_bsd_sched_get_priority_max(arg1);
+                break;
 
     case TARGET_FREEBSD_NR_sched_get_priority_min: /* sched_get_priority_min(2)*/
-		ret = do_bsd_sched_get_priority_min(arg1);
-		break;
+                ret = do_bsd_sched_get_priority_min(arg1);
+                break;
 
     case TARGET_FREEBSD_NR_sched_rr_get_interval: /* sched_rr_get_interval(2) */
         ret = do_freebsd_sched_rr_get_interval(arg1, arg2);
         break;
 
     case TARGET_FREEBSD_NR_sched_yield: /* sched_yield(2)*/
-		ret = do_bsd_sched_yield();
-		break;
+                ret = do_bsd_sched_yield();
+                break;
 
 
         /*
@@ -1595,18 +1595,18 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         break;
 #endif
     case TARGET_FREEBSD_NR_kenv:
-	ret = do_freebsd_kenv(arg1, arg2, arg3, arg4);
-	break;
+        ret = do_freebsd_kenv(arg1, arg2, arg3, arg4);
+        break;
 
-	/* XXX */
+        /* XXX */
     case TARGET_FREEBSD_NR_cap_rights_limit:
     case TARGET_FREEBSD_NR_cap_ioctls_limit:
     case TARGET_FREEBSD_NR_cap_fcntls_limit:
-	ret = EINVAL;
-	break;
+        ret = EINVAL;
+        break;
     case TARGET_FREEBSD_NR_cap_enter:
-	ret = 0;
-	break;
+        ret = 0;
+        break;
 
     default:
     {
