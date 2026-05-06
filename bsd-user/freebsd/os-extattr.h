@@ -226,6 +226,8 @@ static inline abi_long do_freebsd_extattr_get_link(abi_ulong arg1,
     if (arg4 && arg5 > 0) {
         d = lock_user(VERIFY_WRITE, arg4, arg5, 0);
         if (d == NULL) {
+            unlock_user(a, arg3, 0);
+            unlock_user(p, arg1, 0);
             return -TARGET_EFAULT;
         }
         ret = get_errno(extattr_get_link(path(p), arg2, a, d, arg5));

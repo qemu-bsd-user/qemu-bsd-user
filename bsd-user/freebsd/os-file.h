@@ -58,7 +58,7 @@ static inline abi_long do_freebsd_close_range(unsigned int lowfd,
     unsigned int highfd, int flags)
 {
 
-    return close_range(lowfd, highfd, flags);
+    return get_errno(close_range(lowfd, highfd, flags));
 }
 
 ssize_t safe_copy_file_range(int, off_t *, int, off_t *, size_t, unsigned int);

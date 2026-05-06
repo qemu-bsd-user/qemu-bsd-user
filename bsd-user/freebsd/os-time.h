@@ -934,7 +934,7 @@ static inline abi_long do_freebsd_futimens(abi_ulong arg1,
     if (arg2 != 0) {
         if (t2h_freebsd_timespec(&tv[0], arg2) ||
             t2h_freebsd_timespec(&tv[1], arg2 +
-                sizeof(struct target_freebsd_timeval))) {
+                sizeof(struct target_freebsd_timespec))) {
             return -TARGET_EFAULT;
         }
         tvp = tv;
@@ -955,7 +955,7 @@ static inline abi_long do_freebsd_utimensat(abi_ulong arg1,
     if (arg3 != 0) {
         if (t2h_freebsd_timespec(&tv[0], arg3) ||
                 t2h_freebsd_timespec(&tv[1], arg3 +
-                        sizeof(struct target_freebsd_timeval))) {
+                        sizeof(struct target_freebsd_timespec))) {
             return -TARGET_EFAULT;
         }
         tvp = tv;

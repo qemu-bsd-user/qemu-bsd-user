@@ -14,7 +14,7 @@
 static inline abi_long do_freebsd_pdkill(abi_long arg1, abi_long arg2)
 {
 
-    return get_errno(pdkill(arg1, arg2));
+    return get_errno(pdkill(arg1, target_to_host_signal(arg2)));
 }
 
 #endif /* FREEBSD_OS_SIGNAL_H */

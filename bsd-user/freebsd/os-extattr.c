@@ -92,7 +92,7 @@ abi_long t2h_freebsd_acl_type(acl_type_t *host_type, abi_long target_type)
         break;
 
     case TARGET_FREEBSD_ACL_TYPE_DEFAULT:
-        *host_type = ACL_TYPE_ACCESS;
+        *host_type = ACL_TYPE_DEFAULT;
         break;
 
     case TARGET_FREEBSD_ACL_TYPE_NFS4:

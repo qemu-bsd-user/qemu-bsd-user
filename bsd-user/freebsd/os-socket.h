@@ -299,7 +299,7 @@ static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
             break;
 
         case TARGET_SO_REUSEPORT:
-            optname = SO_REUSEADDR;
+            optname = SO_REUSEPORT;
             break;
 
         case TARGET_SO_KEEPALIVE:
@@ -366,7 +366,7 @@ static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
             break;
 
         case TARGET_SO_SETFIB:
-            optname = SO_ERROR;
+            optname = SO_SETFIB;
             break;
 
 #ifdef SO_USER_COOKIE
