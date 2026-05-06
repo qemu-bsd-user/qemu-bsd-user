@@ -198,7 +198,7 @@ struct  target_in6_ndifreq {
 #define TARGET_SIOCGSCOPE6 TARGET_IOWR('i', 89, struct target_in6_ifreq)
 #define TARGET_SIOCGSCOPE6DEF TARGET_IOWR('i', 90, struct target_in6_ifreq)
 
-#ifdefnotyet
+#ifdef notyet
 #define TARGET_SIOCSIFPREFIX_IN6 TARGET_IOW('i', 100, \
                                             struct target_in6_prefixreq)
 #define TARGET_SIOCGIFPREFIX_IN6 TARGET_IOWR('i', 101, \
