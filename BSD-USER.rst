@@ -179,3 +179,7 @@ When upstreaming, we try to attribute commits.
 
 makes seanbruno/bsd-user the parent of the hash e31b768202c which makes
 `git blame` work better.
+
+Podman
+======
+ % sudo podman run -it --rm --arch=arm64 -v /usr/local/bin/qemu-aarch64-static:/usr/local/bin/qemu-aarch64-static ghcr.io/freebsd/freebsd-runtime:15.1.beta2 uname -a`
