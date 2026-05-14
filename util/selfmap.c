@@ -10,6 +10,75 @@
 #include "qemu/cutils.h"
 #include "qemu/selfmap.h"
 
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+#include <sys/user.h>
+
+IntervalTreeRoot *read_self_maps(void)
+{
+    IntervalTreeRoot *root;
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_VMMAP, getpid()};
+    size_t len;
+    char *buf, *p;
+
+    if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0) {
+        return NULL;
+    }
+
+    /* Add some slack in case mappings change between calls. */
+    len = len * 4 / 3;
+    buf = g_malloc(len);
+    if (sysctl(mib, 4, buf, &len, NULL, 0) < 0) {
+        g_free(buf);
+        return NULL;
+    }
+
+    root = g_new0(IntervalTreeRoot, 1);
+
+    for (p = buf; p < buf + len; ) {
+        struct kinfo_vmentry *kve = (struct kinfo_vmentry *)p;
+        MapInfo *e;
+        size_t path_len;
+
+        if (kve->kve_structsize == 0) {
+            break;
+        }
+
+        /* Skip guard/dead entries. */
+        if (kve->kve_type != KVME_TYPE_GUARD &&
+            kve->kve_type != KVME_TYPE_DEAD) {
+            const char *path = NULL;
+
+            if (kve->kve_path[0] != '\0') {
+                path = kve->kve_path;
+                path_len = strlen(path) + 1;
+            } else {
+                path_len = 0;
+            }
+
+            e = g_malloc0(sizeof(*e) + path_len);
+            e->itree.start = kve->kve_start;
+            e->itree.last = kve->kve_end - 1;
+            e->offset = kve->kve_offset;
+            e->is_read = (kve->kve_protection & KVME_PROT_READ) != 0;
+            e->is_write = (kve->kve_protection & KVME_PROT_WRITE) != 0;
+            e->is_exec = (kve->kve_protection & KVME_PROT_EXEC) != 0;
+            e->is_priv = (kve->kve_flags & KVME_FLAG_COW) != 0;
+            if (path_len) {
+                e->path = memcpy(e + 1, path, path_len);
+            }
+            interval_tree_insert(&e->itree, root);
+        }
+
+        p += kve->kve_structsize;
+    }
+
+    g_free(buf);
+    return root;
+}
+
+#else /* !__FreeBSD__ */
+
 IntervalTreeRoot *read_self_maps(void)
 {
     IntervalTreeRoot *root;
@@ -81,6 +150,8 @@ IntervalTreeRoot *read_self_maps(void)
 
     return root;
 }
+
+#endif /* __FreeBSD__ */
 
 /**
  * free_self_maps:
