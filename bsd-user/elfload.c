@@ -80,7 +80,7 @@ static int pgb_try_mmap(uintptr_t addr, uintptr_t addr_last, bool keep)
     int ret;
 
     if (p == MAP_FAILED) {
-        return errno == EEXIST ? 0 : -1;
+        return errno == EINVAL ? 0 : -1;
     }
     ret = p == (void *)addr;
     if (!keep || !ret) {
