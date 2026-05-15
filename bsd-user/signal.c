@@ -356,7 +356,8 @@ abi_long target_to_host_sigevent(struct sigevent *host_sevp,
         return -TARGET_EFAULT;
     }
 
-    /* This union is awkward on 64 bit systems because it has a 32 bit
+    /*
+     * This union is awkward on 64 bit systems because it has a 32 bit
      * integer and a pointer in it; we follow the conversion approach
      * used for handling sigval types in signal.c so the guest should get
      * the correct value back even if we did a 64 bit byteswap and it's
