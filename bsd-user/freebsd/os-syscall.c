@@ -1602,7 +1602,7 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
     case TARGET_FREEBSD_NR_cap_rights_limit:
     case TARGET_FREEBSD_NR_cap_ioctls_limit:
     case TARGET_FREEBSD_NR_cap_fcntls_limit:
-        ret = EINVAL;
+        ret = -TARGET_EINVAL;
         break;
     case TARGET_FREEBSD_NR_cap_enter:
         ret = 0;
