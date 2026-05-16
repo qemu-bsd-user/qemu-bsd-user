@@ -116,7 +116,7 @@ static inline abi_long do_freebsd___specialfd(int type, abi_ulong req,
 
         evfd.initval = tswap32(target_eventfd->initval);
         evfd.flags = tswap32(target_eventfd->flags);
-        ret = get_errno(__sys___specialfd(type, &evfd, sizeof(evfd)));
+        ret = get_errno(syscall(SYS___specialfd, type, &evfd, sizeof(evfd)));
         unlock_user_struct(target_eventfd, req, 0);
         break;
     }
