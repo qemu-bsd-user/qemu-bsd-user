@@ -8,7 +8,11 @@
 #ifndef BSD_USER_FREEBSD_OS_STAT_H
 #define BSD_USER_FREEBSD_OS_STAT_H
 
+#if __FreeBSD_version < 1500000
+#include <unistd.h>
+#else
 #include <libsys.h>
+#endif
 
 int freebsd11_stat(const char *path, struct freebsd11_stat *stat);
 __sym_compat(stat, freebsd11_stat, FBSD_1.0);

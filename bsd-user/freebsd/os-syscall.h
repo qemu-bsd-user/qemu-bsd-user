@@ -7,6 +7,9 @@
  */
 
 #include "syscall_nr.h"
+#ifndef SYS__exit
+#define SYS__exit SYS_exit
+#endif
 
 /*
  * FreeBSD uses a 64bits time_t except on i386 so we have to add a special case
