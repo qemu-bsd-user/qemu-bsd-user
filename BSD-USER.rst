@@ -67,14 +67,12 @@ Setting up Pouduriere
 Poudriere is the standard way that FreeBSD builds package. It has a great many
 feaetures one won't use when developing bsd-user, unless you are using it to
 build package. There's a number of tutorials on poduriere online, so I won't
-repeat them here. I will show how to build a jail, however
+repeat them here. I will show how to build a jail, however, which is fairly
+fast with pkgbase.
 
 .. code-block:: shell
 
-  # poudriere jail -c -j 132armv7 -a arm.armv7 -m git+ssh -v releng/13.2
-
-Here we're building a armv7 tree. For armv7 in 13.2 and earlier, you have to
-build from sources. This takes a while.
+ # poudriere -e ~/FreeBSD/etc jail -c -j 15armv7 -a armv7 -m pkgbase -p local -v 15 -X
 
 Note about packages
 ===================
@@ -182,4 +180,26 @@ makes seanbruno/bsd-user the parent of the hash e31b768202c which makes
 
 Podman
 ======
+
+Creating the container
+--------------------
+Creating the container, note the dns stuff is due to weird firewalls
+ # podman build --dns=10.0.0.5 --dns-search=bsdimp.com -f Containerfile.freebsd-15 -t qemu-15 .
+
+Building with podman
+--------------------
+
+The first two commands are needed to bootstrap, once we have that, then the
+third rebuilds.
+
+.. codeblock:: shell
+ # mkdir 16-freebsd
+ # podman run --rm --dns=10.0.0.5 --dns-search=bsdimp.com -v ~/git/qemu-claude-bsd-user:/home/qemu qemu-16 sh -c "cd /home/qemu/16-freebsd; ../configure --disable-system --static"
+ # podman run --rm --dns=10.0.0.5 --dns-search=bsdimp.com -v ~/git/qemu-claude-bsd-user:/home/qemu qemu-16 sh -c "cd /home/qemu/16-freebsd; gmake -j 100"
+
+--rm is needed because we don't put anything new into the image and don't need
+the container to stick around.
+
+Testing with a container
+-------------
  % sudo podman run -it --rm --arch=arm64 -v /usr/local/bin/qemu-aarch64-static:/usr/local/bin/qemu-aarch64-static ghcr.io/freebsd/freebsd-runtime:15.1.beta2 uname -a`
