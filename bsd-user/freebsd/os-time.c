@@ -126,6 +126,7 @@ abi_long t2h_freebsd_timex(struct timex *host_tx, abi_ulong target_tx_addr)
     __get_user(host_tx->status, &target_tx->status);
     __get_user(host_tx->constant, &target_tx->constant);
     __get_user(host_tx->precision, &target_tx->precision);
+    __get_user(host_tx->tolerance, &target_tx->tolerance);
     __get_user(host_tx->ppsfreq, &target_tx->ppsfreq);
     __get_user(host_tx->jitter, &target_tx->jitter);
     __get_user(host_tx->shift, &target_tx->shift);
