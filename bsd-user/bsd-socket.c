@@ -89,7 +89,7 @@ abi_long target_to_host_ip_mreq(struct ip_mreqn *mreqn, abi_ulong target_addr,
     mreqn->imr_multiaddr.s_addr = target_smreqn->imr_multiaddr.s_addr;
     mreqn->imr_address.s_addr = target_smreqn->imr_address.s_addr;
     if (len == sizeof(struct target_ip_mreqn)) {
-        mreqn->imr_ifindex = tswapal(target_smreqn->imr_ifindex);
+        mreqn->imr_ifindex = tswap32(target_smreqn->imr_ifindex);
     }
     unlock_user(target_smreqn, target_addr, 0);
 
