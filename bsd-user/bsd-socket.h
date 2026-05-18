@@ -92,8 +92,10 @@ static inline abi_long do_bsd_accept(int fd, abi_ulong target_addr,
 
     ret = get_errno(accept(fd, addr, &addrlen));
     if (!is_error(ret)) {
-        host_to_target_sockaddr(target_addr, addr, addrlen);
-        if (put_user_u32(addrlen, target_addrlen_addr)) {
+        ret = host_to_target_sockaddr(target_addr, addr, addrlen);
+        if (is_error(ret)) {
+            ret = -TARGET_EFAULT;
+        } else if (put_user_u32(addrlen, target_addrlen_addr)) {
             ret = -TARGET_EFAULT;
         }
     }
@@ -120,8 +122,10 @@ static inline abi_long do_bsd_getpeername(int fd, abi_ulong target_addr,
     addr = alloca(addrlen);
     ret = get_errno(getpeername(fd, addr, &addrlen));
     if (!is_error(ret)) {
-        host_to_target_sockaddr(target_addr, addr, addrlen);
-        if (put_user_u32(addrlen, target_addrlen_addr)) {
+        ret = host_to_target_sockaddr(target_addr, addr, addrlen);
+        if (is_error(ret)) {
+            ret = -TARGET_EFAULT;
+        } else if (put_user_u32(addrlen, target_addrlen_addr)) {
             ret = -TARGET_EFAULT;
         }
     }
@@ -149,8 +153,10 @@ static inline abi_long do_bsd_getsockname(int fd, abi_ulong target_addr,
 
     ret = get_errno(getsockname(fd, addr, &addrlen));
     if (!is_error(ret)) {
-        host_to_target_sockaddr(target_addr, addr, addrlen);
-        if (put_user_u32(addrlen, target_addrlen_addr)) {
+        ret = host_to_target_sockaddr(target_addr, addr, addrlen);
+        if (is_error(ret)) {
+            ret = -TARGET_EFAULT;
+        } else if (put_user_u32(addrlen, target_addrlen_addr)) {
             ret = -TARGET_EFAULT;
         }
     }
