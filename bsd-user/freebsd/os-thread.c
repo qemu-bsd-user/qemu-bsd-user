@@ -711,12 +711,12 @@ abi_long freebsd_umtx_sem_wake(abi_ulong obj)
         uint32_t flags, *addr;
         abi_long ret;
 
-        if (!lock_user_struct(VERIFY_WRITE, t__usem, obj, 0)) {
+        if (!lock_user_struct(VERIFY_READ, t__usem, obj, 1)) {
                 return -TARGET_EFAULT;
         }
         __get_user(flags, &t__usem->_flags);
         addr = &t__usem->_count;
-        unlock_user_struct(t__usem, obj, 1);
+        unlock_user_struct(t__usem, obj, 0);
 
         if ((flags & USYNC_PROCESS_SHARED) == 0) {
             DEBUG_UMTX("<WAKE SEM> %s: _umtx_op(%p, %d, %d, NULL, NULL)\n",
