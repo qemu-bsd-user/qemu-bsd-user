@@ -92,10 +92,11 @@ static inline abi_long do_bsd_accept(int fd, abi_ulong target_addr,
 
     ret = get_errno(accept(fd, addr, &addrlen));
     if (!is_error(ret)) {
-        ret = host_to_target_sockaddr(target_addr, addr, addrlen);
-        if (is_error(ret)) {
+        if (is_error(host_to_target_sockaddr(target_addr, addr, addrlen))) {
+            close(ret);
             ret = -TARGET_EFAULT;
         } else if (put_user_u32(addrlen, target_addrlen_addr)) {
+            close(ret);
             ret = -TARGET_EFAULT;
         }
     }
