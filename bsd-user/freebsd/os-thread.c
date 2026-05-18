@@ -1303,6 +1303,8 @@ rdlock_decrement:
             }
         }
         if (is_error(ret)) {
+            /* tcmpset_32 operates on the target memory, so don't double copy */
+            unlock_user_struct(target_urwlock, target_addr, 0);
             return ret;
         }
     }
@@ -1417,6 +1419,8 @@ wrlock_decrement:
             blocked_readers = 0;
         }
         if (is_error(ret)) {
+            /* tcmpset_32 operates on the target memory, so don't double copy */
+            unlock_user_struct(target_urwlock, target_addr, 0);
             return ret;
         }
     }
