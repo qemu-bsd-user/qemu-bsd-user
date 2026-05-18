@@ -1,0 +1,30 @@
+FROM ghcr.io/freebsd/freebsd-runtime:14.4
+
+ENV ASSUME_ALWAYS_YES="yes"
+
+# Note: FreeBSD 14 has a bug, so we can't pkg upgrade here.  Also note that
+# pkgbase support in 14 was a little weak, so we can't use pkg sets like newer
+# versions. This is the minimal set that will build bsd-user.
+
+RUN /usr/sbin/pkg bootstrap && \
+    pkg update && \
+    pkg install -y \
+	FreeBSD-certctl \
+	FreeBSD-clang FreeBSD-clang-dev \
+	FreeBSD-clibs-dev \
+	FreeBSD-libbsm FreeBSD-libbsm-dev \
+	FreeBSD-libcompiler_rt-dev \
+	FreeBSD-lld \
+	FreeBSD-openssl-lib \
+	FreeBSD-pf-dev \
+	FreeBSD-runtime-dev \
+	FreeBSD-utilities FreeBSD-utilities-dev
+RUN pkg install -y bash git gmake python pkgconf pixman bison glib ninja
+
+RUN pw groupadd -n imps -g 730
+RUN pw useradd -n imp -u 730 -g 730 -d /home/qemu -m -s /bin/tcsh -c "Warner Losh QEMU"
+
+ENV LANG="en_US.UTF-8"
+ENV MAKE="/usr/local/bin/gmake"
+ENV NINJA="/usr/local/bin/ninja"
+ENV PYTHON="/usr/local/bin/python3"

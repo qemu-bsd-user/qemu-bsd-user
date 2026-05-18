@@ -1,0 +1,17 @@
+FROM ghcr.io/freebsd/freebsd-runtime:15.1.beta3
+
+ENV ASSUME_ALWAYS_YES="yes"
+
+RUN cat /etc/resolv.conf
+RUN /usr/sbin/pkg bootstrap && \
+    pkg update && \
+    pkg install -y FreeBSD-set-devel FreeBSD-utilities && \
+    pkg install -y bash git gcc gmake python pkgconf pixman bison glib ninja
+
+RUN pw groupadd -n imps -g 730
+RUN pw useradd -n imp -u 730 -g 730 -d /home/qemu -m -s /bin/tcsh -c "Warner Losh QEMU"
+
+ENV LANG="en_US.UTF-8"
+ENV MAKE="/usr/local/bin/gmake"
+ENV NINJA="/usr/local/bin/ninja"
+ENV PYTHON="/usr/local/bin/python3"
