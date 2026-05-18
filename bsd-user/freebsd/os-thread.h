@@ -226,7 +226,7 @@ static inline abi_long do_freebsd_swapcontext(CPUArchState *env, abi_ulong arg1,
     }
     ret = set_mcontext(env, &ucp->uc_mcontext, 0);
     target_to_host_sigset(&sigmask, &ucp->uc_sigmask);
-    unlock_user(ucp, arg2, sizeof(target_ucontext_t));
+    unlock_user(ucp, arg2, 0);
     if (!is_error(ret)) {
         (void)do_sigprocmask(SIG_SETMASK, &sigmask, NULL);
     }
