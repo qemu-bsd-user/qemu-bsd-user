@@ -370,7 +370,7 @@ abi_long target_to_host_sigevent(struct sigevent *host_sevp,
     host_sevp->sigev_notify = tswap32(target_sevp->sigev_notify);
     host_sevp->_sigev_un._threadid = tswap32(target_sevp->_sigev_un._threadid);
 
-    unlock_user_struct(target_sevp, target_addr, 1);
+    unlock_user_struct(target_sevp, target_addr, 0);
     return 0;
 }
 
