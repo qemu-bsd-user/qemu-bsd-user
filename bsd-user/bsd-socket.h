@@ -251,8 +251,7 @@ static inline abi_long do_bsd_recvfrom(int fd, abi_ulong msg, size_t len,
     }
     if (!is_error(ret)) {
         if (target_addr) {
-            ret = host_to_target_sockaddr(target_addr, saddr, addrlen);
-            if (is_error(ret)) {
+            if (is_error(host_to_target_sockaddr(target_addr, saddr, addrlen))) {
                 ret = -TARGET_EFAULT;
                 goto fail;
             } else if (put_user_u32(addrlen, target_addrlen)) {
