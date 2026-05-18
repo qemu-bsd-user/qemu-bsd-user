@@ -212,7 +212,7 @@ static inline abi_long do_freebsd_ntp_gettime(abi_ulong target_ntv_addr)
     struct ntptimeval host_ntv;
 
     ret = get_errno(ntp_gettime(&host_ntv));
-    if (ret == 0) {
+    if (!is_error(ret)) {
         ret = h2t_freebsd_ntptimeval(target_ntv_addr, &host_ntv);
     }
 
