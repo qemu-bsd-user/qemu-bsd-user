@@ -199,7 +199,7 @@ static inline abi_long do_freebsd_ntp_adjtime(abi_ulong target_tx_addr)
         ret = get_errno(ntp_adjtime(&host_tx));
     }
     if (!is_error(ret)) {
-        h2t_freebsd_timex(target_tx_addr, &host_tx);
+        ret = h2t_freebsd_timex(target_tx_addr, &host_tx);
     }
 
     return ret;
