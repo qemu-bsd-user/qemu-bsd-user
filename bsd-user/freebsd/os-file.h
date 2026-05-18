@@ -22,8 +22,8 @@ static abi_long do_bsd_pipe2(CPUArchState *env, abi_ulong pipedes, int flags)
     int host_ret = pipe2(host_pipe, flags);
     /* XXXss - flags should be translated from target to host. */
 
-    if (is_error(host_ret)) {
-                return get_errno(host_ret);
+    if (host_ret == -1) {
+        return get_errno(host_ret);
     }
 
     /*
