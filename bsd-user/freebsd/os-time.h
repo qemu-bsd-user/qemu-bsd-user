@@ -701,8 +701,7 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1,
             __put_user(eventlist[i].filter, &target_eventlist[i].filter);
             __put_user(eventlist[i].flags, &target_eventlist[i].flags);
             __put_user(eventlist[i].fflags, &target_eventlist[i].fflags);
-            __put_user(eventlist[i].data & 0xffffffff,
-                &target_eventlist[i].data);
+            __put_user(eventlist[i].data, &target_eventlist[i].data);
             /* __put_user(eventlist[i].udata, &target_eventlist[i].udata);*/
 #if TARGET_ABI_BITS == 32
             tswap32s((uint32_t *)&eventlist[i].udata);
