@@ -162,7 +162,7 @@ static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
     case IPPROTO_IP:
         switch (optname) {
         case IP_OPTIONS:
-            p = lock_user(VERIFY_READ, optval_addr, optlen, 0);
+            p = lock_user(VERIFY_READ, optval_addr, optlen, 1);
             if (p == NULL) {
                 return -TARGET_EFAULT;
             }
