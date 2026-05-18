@@ -473,7 +473,8 @@ abi_long freebsd_umtx_mutex_wake2(abi_ulong target_addr, uint32_t flags)
         __get_user(owner, &target_umutex->m_owner);
     }
     pthread_mutex_unlock(&umtx_wait_lck);
-    addr = g2h_untagged((uintptr_t)&target_umutex->m_owner);
+    addr = &target_umutex->m_owner;
+    /* tcmpset_32 above writes to guest, and addr is just a key below */
     unlock_user_struct(target_umutex, target_addr, 0);
 
     return get_errno(safe__umtx_op(addr, UMTX_OP_WAKE_PRIVATE, 1, NULL,
@@ -995,8 +996,9 @@ abi_long freebsd_lock_umutex(abi_ulong target_addr, uint32_t id,
         __put_user(count, &target_umutex->m_count);
         pthread_mutex_unlock(&umtx_wait_lck);
 
-        addr = g2h_untagged((uintptr_t)&target_umutex->m_owner);
+        addr = &target_umutex->m_owner;
 
+        /* addr used only as key below, not dereferenced */
         unlock_user_struct(target_umutex, target_addr, 1);
 
         DEBUG_UMTX("<WAIT UMUTEX> %s: _umtx_op(%p, %d, 0x%x, %d, %jx) "
@@ -1055,8 +1057,9 @@ abi_long freebsd_unlock_umutex(abi_ulong target_addr, uint32_t id)
     __put_user(flags, &target_umutex->m_owner);
     pthread_mutex_unlock(&umtx_wait_lck);
 
-    addr = g2h_untagged((uintptr_t)&target_umutex->m_owner);
+    addr = &target_umutex->m_owner;
 
+    /* addr is used only as a key, so we can unlock before we use it below */
     unlock_user_struct(target_umutex, target_addr, 1);
 
     /*
@@ -1502,6 +1505,7 @@ abi_long freebsd_rw_unlock(abi_ulong target_addr)
         }
     }
 
+    /* rw_state used below as key only */
     unlock_user_struct(target_urwlock, target_addr, 1);
     if (count != 0) {
         DEBUG_UMTX("<WAKE> %s: _umtx_op(%p, %d, 0x%x, NULL, NULL)\n",
