@@ -824,7 +824,10 @@ static inline abi_long do_freebsd_sigtimedwait(abi_ulong arg1, abi_ulong arg2,
     unlock_user(p, arg1, 0);
     if (arg3) {
         puts = &uts;
-        t2h_freebsd_timespec(puts, arg3);
+        ret = t2h_freebsd_timespec(puts, arg3);
+        if (ret != 0) {
+            return ret;
+        }
     } else {
         puts = NULL;
     }
