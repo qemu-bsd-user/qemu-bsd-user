@@ -696,7 +696,7 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1,
         if (target_eventlist == NULL) {
             return -TARGET_EFAULT;
         }
-        for (i = 0; i < arg5; i++) {
+        for (i = 0; i < ret; i++) {
             __put_user(eventlist[i].ident, &target_eventlist[i].ident);
             __put_user(eventlist[i].filter, &target_eventlist[i].filter);
             __put_user(eventlist[i].flags, &target_eventlist[i].flags);
@@ -713,7 +713,7 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1,
 #endif
         }
         unlock_user(target_eventlist, arg4,
-                    sizeof(*target_eventlist) * arg5);
+                    sizeof(*target_eventlist) * ret);
     }
     return ret;
 }
@@ -779,7 +779,7 @@ static inline abi_long do_freebsd_kevent(abi_long arg1, abi_ulong arg2,
         if (target_eventlist == NULL) {
             return -TARGET_EFAULT;
         }
-        for (i = 0; i < arg5; i++) {
+        for (i = 0; i < ret; i++) {
             __put_user(eventlist[i].ident, &target_eventlist[i].ident);
             __put_user(eventlist[i].filter, &target_eventlist[i].filter);
             __put_user(eventlist[i].flags, &target_eventlist[i].flags);
@@ -799,7 +799,7 @@ static inline abi_long do_freebsd_kevent(abi_long arg1, abi_ulong arg2,
             __put_user(eventlist[i].ext[3], &target_eventlist[i].ext[3]);
         }
         unlock_user(target_eventlist, arg4,
-                sizeof(struct target_freebsd_kevent) * arg5);
+                sizeof(struct target_freebsd_kevent) * ret);
     }
     return ret;
 }
