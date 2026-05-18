@@ -126,7 +126,7 @@ static inline abi_long do_freebsd_thr_set_name(long tid, abi_ulong target_name)
     if (p == NULL) {
         return -TARGET_EFAULT;
     }
-    ret = thr_set_name(tid, p);
+    ret = get_errno(thr_set_name(tid, p));
     unlock_user(p, target_name, 0);
 
     return ret;
