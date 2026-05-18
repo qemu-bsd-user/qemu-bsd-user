@@ -203,7 +203,10 @@ static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
                 return -TARGET_EINVAL;
             }
             ip_mreq = (struct ip_mreqn *) alloca(optlen);
-            target_to_host_ip_mreq(ip_mreq, optval_addr, optlen);
+            ret = target_to_host_ip_mreq(ip_mreq, optval_addr, optlen);
+            if (is_error(ret)) {
+                return -TARGET_EFAULT;
+            }
             ret = get_errno(setsockopt(sockfd, level, optname, ip_mreq,
                         optlen));
             break;
