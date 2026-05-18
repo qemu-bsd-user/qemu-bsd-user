@@ -478,7 +478,7 @@ static inline abi_long do_freebsd_kenv(abi_long action, abi_ulong name,
             ret = -TARGET_EFAULT;
             break;
         }
-        ret = kenv(action, gname, gvalue, len);
+        ret = get_errno(kenv(action, gname, gvalue, len));
         if (ret > 0) {
             len = ret;
         } else {
@@ -496,7 +496,7 @@ static inline abi_long do_freebsd_kenv(abi_long action, abi_ulong name,
             ret = -TARGET_EFAULT;
             break;
         }
-        ret = kenv(action, gname, gvalue, len);
+        ret = get_errno(kenv(action, gname, gvalue, len));
         unlock_user(gvalue, value, 0);
         gvalue = NULL;
         break;
@@ -507,7 +507,7 @@ static inline abi_long do_freebsd_kenv(abi_long action, abi_ulong name,
             break;
         }
         /* value and name ignored, per kenv(2) */
-        ret = kenv(action, gname, NULL, 0);
+        ret = get_errno(kenv(action, gname, NULL, 0));
         break;
     /* All three treated the same */
     case KENV_DUMP:
@@ -522,7 +522,7 @@ static inline abi_long do_freebsd_kenv(abi_long action, abi_ulong name,
             }
         }
         /* name is ignored, per kenv(2) */
-        ret = kenv(action, NULL, gvalue, len);
+        ret = get_errno(kenv(action, NULL, gvalue, len));
         if (ret > 0) {
             len = ret;
         } else {
