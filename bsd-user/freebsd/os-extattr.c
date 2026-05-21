@@ -34,7 +34,7 @@ abi_long t2h_freebsd_acl(struct acl *host_acl, abi_ulong target_addr)
         return -TARGET_EINVAL;
     }
 
-    for (i = 0; i < host_acl->acl_maxcnt; i++) {
+    for (i = 0; i < host_acl->acl_cnt; i++) {
         __get_user(host_acl->acl_entry[i].ae_tag,
             &target_acl->acl_entry[i].ae_tag);
         __get_user(host_acl->acl_entry[i].ae_id,
@@ -67,7 +67,7 @@ abi_long h2t_freebsd_acl(abi_ulong target_addr, struct acl *host_acl)
     __put_user(host_acl->acl_maxcnt, &target_acl->acl_maxcnt);
     __put_user(host_acl->acl_cnt, &target_acl->acl_cnt);
 
-    for (i = 0; i < host_acl->acl_maxcnt; i++) {
+    for (i = 0; i < host_acl->acl_cnt; i++) {
         __put_user(host_acl->acl_entry[i].ae_tag,
             &target_acl->acl_entry[i].ae_tag);
         __put_user(host_acl->acl_entry[i].ae_id,
