@@ -720,7 +720,7 @@ static inline abi_long do_freebsd_connectat(int fd, int sockfd,
     if ((int)addrlen < 0) {
         return -TARGET_EINVAL;
     }
-    addr = alloca(addrlen);
+    addr = alloca(addrlen + 1);
 
     ret = target_to_host_sockaddr(addr, target_addr, addrlen);
 
