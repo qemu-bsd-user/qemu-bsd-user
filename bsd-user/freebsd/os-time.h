@@ -44,7 +44,9 @@ static inline abi_long do_freebsd_nanosleep(abi_long arg1, abi_long arg2)
     if (!is_error(ret)) {
         ret = get_errno(safe_nanosleep(&req, &rem));
         if (ret == -TARGET_EINTR && arg2) {
-            ret = h2t_freebsd_timespec(arg2, &rem);
+            if (h2t_freebsd_timespec(arg2, &rem) != 0) {
+                ret = -TARGET_EFAULT;
+            }
         }
     }
 
@@ -66,7 +68,9 @@ static inline abi_long do_freebsd_clock_nanosleep(abi_long arg1, abi_long arg2,
     if (!is_error(ret)) {
         ret = get_errno(safe_clock_nanosleep(clkid, flags, &req, &rem));
         if (ret == -TARGET_EINTR && arg4) {
-            h2t_freebsd_timespec(arg4, &rem);
+            if (h2t_freebsd_timespec(arg4, &rem) != 0) {
+                ret = -TARGET_EFAULT;
+            }
         }
     }
 
@@ -81,7 +85,7 @@ static inline abi_long do_freebsd_clock_gettime(abi_long arg1, abi_long arg2)
 
     ret = get_errno(clock_gettime(arg1, &ts));
     if (!is_error(ret)) {
-        if (h2t_freebsd_timespec(arg2, &ts)) {
+        if (h2t_freebsd_timespec(arg2, &ts) != 0) {
             return -TARGET_EFAULT;
         }
     }
@@ -109,7 +113,7 @@ static inline abi_long do_freebsd_clock_getres(abi_long arg1, abi_long arg2)
 
     ret = get_errno(clock_getres(arg1, &ts));
     if (!is_error(ret)) {
-        if (h2t_freebsd_timespec(arg2, &ts)) {
+        if (h2t_freebsd_timespec(arg2, &ts) != 0) {
             return -TARGET_EFAULT;
         }
     }
