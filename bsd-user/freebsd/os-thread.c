@@ -1670,7 +1670,7 @@ abi_long do_freebsd_thr_new(CPUArchState *env,
         object_unparent(OBJECT(new_cpu));
         object_unref(OBJECT(new_cpu));
         g_free(ts);
-        ret = -host_to_target_errno(errno);
+        ret = -host_to_target_errno(ret);
     }
 
     pthread_mutex_unlock(&info.mutex);
