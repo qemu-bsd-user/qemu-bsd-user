@@ -95,6 +95,7 @@ abi_long t2h_freebsd_umtx_time(abi_ulong target_ut_addr,
             return -TARGET_EFAULT;
         }
         if (t2h_freebsd_timespec(&ut->_timeout, h2g(&target_ut->_timeout))) {
+            unlock_user_struct(target_ut, target_ut_addr, 0);
             return -TARGET_EFAULT;
         }
         __get_user(ut->_flags, &target_ut->_flags);
