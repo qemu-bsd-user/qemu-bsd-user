@@ -259,7 +259,7 @@ static inline abi_long do_bsd_recvfrom(int fd, abi_ulong msg, size_t len,
                 goto fail;
             }
         }
-        unlock_user(host_msg, msg, len);
+        unlock_user(host_msg, msg, ret);
     } else {
 fail:
         unlock_user(host_msg, msg, 0);
