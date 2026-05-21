@@ -423,7 +423,7 @@ static inline abi_long do_freebsd_ktimer_gettime(abi_long arg1, abi_long arg2)
         struct itimerspec hspec;
         ret = get_errno(__sys_ktimer_gettime(htimer, &hspec));
 
-        if (host_to_target_itimerspec(arg2, &hspec)) {
+        if (ret == 0 && host_to_target_itimerspec(arg2, &hspec)) {
             ret = -TARGET_EFAULT;
         }
     }
