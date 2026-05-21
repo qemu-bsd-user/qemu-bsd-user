@@ -426,9 +426,8 @@ static inline abi_long do_freebsd_ktimer_gettime(abi_long arg1, abi_long arg2)
         int htimer = g_posix_timers[timerid];
         struct itimerspec hspec;
         ret = get_errno(__sys_ktimer_gettime(htimer, &hspec));
-
-        if (ret == 0 && host_to_target_itimerspec(arg2, &hspec)) {
-            ret = -TARGET_EFAULT;
+        if (!is_error(ret)) {
+            ret = host_to_target_itimerspec(arg2, &hspec);
         }
     }
     return ret;
