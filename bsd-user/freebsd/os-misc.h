@@ -92,11 +92,11 @@ static inline abi_long do_freebsd_cpuset(abi_ulong target_cpuid)
     return put_user_s32(setid, target_cpuid);
 }
 
-#define target_to_host_cpuset_which(hp, t) { \
+#define target_to_host_cpuset_which(hp, t) do { \
     (*hp) = t;                               \
 } while (0)
 
-#define target_to_host_cpuset_level(hp, t) { \
+#define target_to_host_cpuset_level(hp, t) do { \
     (*hp) = t;                               \
 } while (0)
 
