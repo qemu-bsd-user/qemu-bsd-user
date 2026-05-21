@@ -675,7 +675,7 @@ static inline abi_long do_freebsd_freebsd11_kevent(abi_long arg1,
             tswap64s((uint64_t *)&changelist[i].udata);
 #endif
         }
-        unlock_user(target_changelist, arg2, sizeof(*target_changelist) * arg3);
+        unlock_user(target_changelist, arg2, 0);
     }
 
     if (arg5 != 0) {
