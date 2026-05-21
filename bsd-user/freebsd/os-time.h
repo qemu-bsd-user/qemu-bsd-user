@@ -347,6 +347,7 @@ static inline abi_long do_freebsd_ktimer_create(abi_long arg1, abi_long arg2,
             phost_sevp = &host_sevp;
             ret = target_to_host_sigevent(phost_sevp, arg2);
             if (ret != 0) {
+                g_posix_timers[timer_index] = 0;
                 return -TARGET_EFAULT;
             }
         }
@@ -356,6 +357,8 @@ static inline abi_long do_freebsd_ktimer_create(abi_long arg1, abi_long arg2,
             phtimer = NULL;
         } else {
             if (put_user(TIMER_MAGIC | timer_index, arg3, int)) {
+                __sys_ktimer_delete(g_posix_timers[timer_index]);
+                g_posix_timers[timer_index] = 0;
                 ret = -TARGET_EFAULT;
             }
         }
