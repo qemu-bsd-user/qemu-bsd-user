@@ -526,7 +526,7 @@ int_case:
                 return -TARGET_EFAULT;
             }
             ret = get_errno(getsockopt(sockfd, level, optname, p, &lv));
-            unlock_user(p, optval_addr, len);
+            unlock_user(p, optval_addr, ret < 0 ? 0 : lv);
             if (put_user_u32(lv, optlen)) {
                 return -TARGET_EFAULT;
             }
