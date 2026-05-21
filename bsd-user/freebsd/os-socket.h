@@ -485,7 +485,7 @@ int_case:
             if (len < 0) {
                 return -TARGET_EINVAL;
             }
-            lv = sizeof(lv);
+            lv = sizeof(val);
             ret = get_errno(getsockopt(sockfd, level, optname, &val, &lv));
             if (ret < 0) {
                 return ret;
@@ -554,7 +554,7 @@ int_case:
             if (len < 0) {
                 return -TARGET_EINVAL;
             }
-            lv = sizeof(lv);
+            lv = sizeof(val);
             ret = get_errno(getsockopt(sockfd, level, optname,
                 &val, &lv));
             if (ret < 0) {
@@ -627,7 +627,7 @@ int_case:
             if (len < 0) {
                 return -TARGET_EINVAL;
             }
-            lv = sizeof(lv);
+            lv = sizeof(val);
             ret = get_errno(getsockopt(sockfd, level, optname,
                 &val, &lv));
             if (ret < 0) {
