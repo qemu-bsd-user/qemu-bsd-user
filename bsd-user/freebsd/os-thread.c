@@ -404,9 +404,9 @@ abi_long freebsd_umtx_nwake_private(abi_ulong target_array_addr, uint32_t num)
          * This one should not be passed as compat32 at this point; we've
          * converted them all to host pointers.
          */
-        error = safe__umtx_op(uaddrs, UMTX_OP_NWAKE_PRIVATE,
-            MIN(BATCH_SIZE, count), NULL, NULL);
-        if (error != 0) {
+        error = get_errno(safe__umtx_op(uaddrs, UMTX_OP_NWAKE_PRIVATE,
+            MIN(BATCH_SIZE, count), NULL, NULL));
+        if (is_error(error)) {
             return error;
         }
     }
