@@ -65,7 +65,7 @@ static inline abi_long do_freebsd_sched_getscheduler(pid_t pid)
     return get_errno(sched_getscheduler(pid));
 }
 
-/* sched_sched_rr_get_interval(2) */
+/* sched_rr_get_interval(2) */
 static inline abi_long do_freebsd_sched_rr_get_interval(pid_t pid,
         abi_ulong target_ts_addr)
 {

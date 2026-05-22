@@ -212,7 +212,7 @@ static inline abi_long do_freebsd_extattr_get_link(abi_long arg1,
                                                    abi_long arg5)
 {
     abi_long ret;
-    void  *p, *a, *d;
+    void *p, *a, *d;
 
     p = lock_user_string(arg1);
     if (p == NULL) {
@@ -249,7 +249,7 @@ static inline abi_long do_freebsd_extattr_set_link(abi_long arg1,
                                                    abi_long arg5)
 {
     abi_long ret;
-    void  *p, *a, *d;
+    void *p, *a, *d;
 
     p = lock_user_string(arg1);
     if (p == NULL) {
