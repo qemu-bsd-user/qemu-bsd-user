@@ -29,7 +29,8 @@ abi_long t2h_freebsd_acl(struct acl *host_acl, abi_ulong target_addr)
     __get_user(host_acl->acl_maxcnt, &target_acl->acl_maxcnt);
     __get_user(host_acl->acl_cnt, &target_acl->acl_cnt);
 
-    if (host_acl->acl_maxcnt > ACL_MAX_ENTRIES) {
+    if (host_acl->acl_maxcnt > ACL_MAX_ENTRIES ||
+        host_acl->acl_cnt > ACL_MAX_ENTRIES) {
         unlock_user_struct(target_acl, target_addr, 0);
         return -TARGET_EINVAL;
     }
@@ -56,7 +57,8 @@ abi_long h2t_freebsd_acl(abi_ulong target_addr, struct acl *host_acl)
     uint32_t i;
     struct target_freebsd_acl *target_acl;
 
-    if (host_acl->acl_maxcnt > ACL_MAX_ENTRIES) {
+    if (host_acl->acl_maxcnt > ACL_MAX_ENTRIES ||
+        host_acl->acl_cnt > ACL_MAX_ENTRIES) {
         return -TARGET_EINVAL;
     }
 
