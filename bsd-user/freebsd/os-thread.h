@@ -581,7 +581,7 @@ static inline abi_long do_freebsd__umtx_op(abi_ulong obj, int op, abi_ulong val,
         /* Don't need to do access_ok(). */
         ret = freebsd_umtx_sem_wake(obj);
         break;
-    case UMTX_OP_SHM:
+    case TARGET_UMTX_OP_SHM:
         ret = freebsd_umtx_shm(uaddr, val);
         break;
     case TARGET_UMTX_OP_ROBUST_LISTS:
