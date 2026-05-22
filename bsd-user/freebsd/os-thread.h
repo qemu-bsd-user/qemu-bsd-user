@@ -216,7 +216,7 @@ static inline abi_long do_freebsd_swapcontext(CPUArchState *env, abi_ulong arg1,
         unlock_user(ucp, arg1, sizeof(target_ucontext_t));
     }
     if (is_error(ret)) {
-            return ret;
+        return ret;
     }
 
     /* Restore the context in arg2 to the current context. */
