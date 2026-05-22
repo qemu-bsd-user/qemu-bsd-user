@@ -152,8 +152,8 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
     return put_user_s32(setid, target_setid);
 }
 
-static abi_ulong copy_from_user_cpuset_mask(cpuset_t *mask,
-                                            abi_ulong target_mask_addr)
+static abi_long copy_from_user_cpuset_mask(cpuset_t *mask,
+                                           abi_ulong target_mask_addr)
 {
     int i, j, k;
     abi_ulong b, *target_mask;
@@ -179,7 +179,7 @@ static abi_ulong copy_from_user_cpuset_mask(cpuset_t *mask,
     return 0;
 }
 
-static abi_ulong copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
+static abi_long copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
         cpuset_t *mask)
 {
     int i, j, k;
