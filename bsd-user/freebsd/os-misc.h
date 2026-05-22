@@ -65,7 +65,7 @@ static inline abi_long do_freebsd_sched_getscheduler(pid_t pid)
     return get_errno(sched_getscheduler(pid));
 }
 
-/* sched_getscheduler(2) */
+/* sched_sched_rr_get_interval(2) */
 static inline abi_long do_freebsd_sched_rr_get_interval(pid_t pid,
         abi_ulong target_ts_addr)
 {
@@ -136,8 +136,7 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
     cpulevel_t level;
     abi_ulong target_setid;
 
-    target_to_host_cpuset_which(&which, arg1)
-        ;
+    target_to_host_cpuset_which(&which, arg1);
     target_to_host_cpuset_level(&level, arg2);
 #if TARGET_ABI_BITS == 32
     id = target_arg64(arg3, arg4);
@@ -154,55 +153,55 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
 }
 
 static abi_ulong copy_from_user_cpuset_mask(cpuset_t *mask,
-        abi_ulong target_mask_addr)
+                                            abi_ulong target_mask_addr)
 {
-        int i, j, k;
-        abi_ulong b, *target_mask;
+    int i, j, k;
+    abi_ulong b, *target_mask;
 
-        target_mask = lock_user(VERIFY_READ, target_mask_addr,
-                                CPU_SETSIZE / 8, 1);
-        if (target_mask == NULL) {
-                return -TARGET_EFAULT;
+    target_mask = lock_user(VERIFY_READ, target_mask_addr,
+                            CPU_SETSIZE / 8, 1);
+    if (target_mask == NULL) {
+        return -TARGET_EFAULT;
+    }
+    CPU_ZERO(mask);
+    k = 0;
+    for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
+        __get_user(b, &target_mask[i]);
+        for (j = 0; j < TARGET_ABI_BITS; j++) {
+            if ((b >> j) & 1) {
+                CPU_SET(k, mask);
+            }
+            k++;
         }
-        CPU_ZERO(mask);
-        k = 0;
-        for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
-                __get_user(b, &target_mask[i]);
-                for (j = 0; j < TARGET_ABI_BITS; j++) {
-                        if ((b >> j) & 1) {
-                                CPU_SET(k, mask);
-                        }
-                        k++;
-                }
-        }
-        unlock_user(target_mask, target_mask_addr, 0);
+    }
+    unlock_user(target_mask, target_mask_addr, 0);
 
-        return 0;
+    return 0;
 }
 
 static abi_ulong copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
         cpuset_t *mask)
 {
-        int i, j, k;
-        abi_ulong b, *target_mask;
+    int i, j, k;
+    abi_ulong b, *target_mask;
 
-        target_mask = lock_user(VERIFY_WRITE, target_mask_addr,
-                                CPU_SETSIZE / 8, 0);
-        if (target_mask == NULL) {
-                return -TARGET_EFAULT;
+    target_mask = lock_user(VERIFY_WRITE, target_mask_addr,
+                            CPU_SETSIZE / 8, 0);
+    if (target_mask == NULL) {
+        return -TARGET_EFAULT;
+    }
+    k = 0;
+    for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
+        b = 0;
+        for (j = 0; j < TARGET_ABI_BITS; j++) {
+            b |= ((CPU_ISSET(k, mask) != 0) << j);
+            k++;
         }
-        k = 0;
-        for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
-                b = 0;
-                for (j = 0; j < TARGET_ABI_BITS; j++) {
-                        b |= ((CPU_ISSET(k, mask) != 0) << j);
-                        k++;
-                }
-                __put_user(b, &target_mask[i]);
-        }
-        unlock_user(target_mask, target_mask_addr, (CPU_SETSIZE / 8));
+        __put_user(b, &target_mask[i]);
+    }
+    unlock_user(target_mask, target_mask_addr, (CPU_SETSIZE / 8));
 
-        return 0;
+    return 0;
 }
 
 /* cpuset_getaffinity(2) */
@@ -211,8 +210,8 @@ static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
         cpuwhich_t which, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
         abi_ulong arg6)
 {
-        cpuset_t mask;
-        abi_long ret;
+    cpuset_t mask;
+    abi_long ret;
     id_t id;    /* 64-bit */
     abi_ulong setsize, target_mask;
 
@@ -226,10 +225,10 @@ static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
     target_mask = arg5;
 #endif
 
-        ret = get_errno(cpuset_getaffinity(level, which, id, setsize, &mask));
-        if (ret == 0) {
-                ret = copy_to_user_cpuset_mask(target_mask, &mask);
-        }
+    ret = get_errno(cpuset_getaffinity(level, which, id, setsize, &mask));
+    if (ret == 0) {
+        ret = copy_to_user_cpuset_mask(target_mask, &mask);
+    }
 
     return ret;
 }
@@ -240,8 +239,8 @@ static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
         cpuwhich_t which, abi_ulong arg3, abi_ulong arg4, abi_ulong arg5,
         abi_ulong arg6)
 {
-        cpuset_t mask;
-        abi_long ret;
+    cpuset_t mask;
+    abi_long ret;
     id_t id; /* 64-bit */
     abi_ulong setsize, target_mask;
 
@@ -255,13 +254,13 @@ static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
     target_mask = arg5;
 #endif
 
-        ret = copy_from_user_cpuset_mask(&mask, target_mask);
-        if (ret == 0) {
-                ret = get_errno(cpuset_setaffinity(level, which, id, setsize,
-                                                   &mask));
-        }
+    ret = copy_from_user_cpuset_mask(&mask, target_mask);
+    if (ret == 0) {
+        ret = get_errno(cpuset_setaffinity(level, which, id, setsize,
+                                           &mask));
+    }
 
-        return ret;
+    return ret;
 }
 
 /*
