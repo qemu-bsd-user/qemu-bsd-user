@@ -1551,7 +1551,7 @@ freebsd_umtx_robust_list(abi_ulong target_addr, size_t rbsize)
 
     error = optimized_umtx_op(0, UMTX_OP_ROBUST_LISTS, sizeof(hparams),
         &hparams, NULL);
-        unlock_user_struct(tparams, target_addr, 0);
+    unlock_user_struct(tparams, target_addr, 0);
     return error;
 #else
     gemu_log("safe__umtx_op(..., UMTX_OP_ROBUST_LISTS. ...)  not supported\n");
