@@ -1406,7 +1406,7 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         ret = do_freebsd__acl_get_link(arg1, arg2, arg3);
         break;
 
-    case TARGET_FREEBSD_NR___acl_set_fd: /* __acl_get_fd() */
+    case TARGET_FREEBSD_NR___acl_set_fd: /* __acl_set_fd() */
         ret = do_freebsd__acl_set_fd(arg1, arg2, arg3);
         break;
 
