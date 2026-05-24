@@ -42,6 +42,7 @@ extern char **environ;
 #include "target.h"
 #include "exec/gdbstub.h"
 #include "exec/page-protection.h"
+#include "exec/tb-flush.h"
 #include "accel/tcg/vcpu-state.h"
 
 #include "qemu-os.h"
@@ -584,5 +585,21 @@ target_arg64(uint64_t word0, uint64_t word1)
 
 /* Clone cpu state */
 CPUArchState *cpu_copy(CPUArchState *env);
+
+/* In user-internal.h in linux-user XXX consider similar cleanup */
+
+/**
+ * begin_parallel_context
+ * @cs: the CPU context
+ *
+ * Called when starting the second vcpu, or joining shared memory.
+ */
+static inline void begin_parallel_context(CPUState *cs)
+{
+    if (!tcg_cflags_has(cs, CF_PARALLEL)) {
+        tb_flush__exclusive_or_serial();
+        tcg_cflags_set(cs, CF_PARALLEL);
+    }
+}
 
 #endif /* QEMU_H */
