@@ -27,7 +27,7 @@
 #include <sys/sysctl.h>
 #include <poll.h>
 
-#include "include/gdbstub/syscalls.h"
+#include "gdbstub/user.h"
 
 #include "qemu.h"
 #include "signal-common.h"
@@ -1661,8 +1661,13 @@ abi_long do_freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         record_syscall(ts, num, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
     }
 
+    gdb_syscall_entry(cpu, num);
+
     ret = freebsd_syscall(env, num, arg1, arg2, arg3, arg4, arg5, arg6,
                           arg7, arg8);
+
+    gdb_syscall_return(cpu, num);
+
     if (do_strace) {
         record_syscall_ret(ts, num, ret, get_second_rval(env));
     }
