@@ -203,3 +203,207 @@ the container to stick around.
 Testing with a container
 -------------
  % sudo podman run -it --rm --arch=arm64 -v /usr/local/bin/qemu-aarch64-static:/usr/local/bin/qemu-aarch64-static ghcr.io/freebsd/freebsd-runtime:15.1.beta2 uname -a`
+
+Unimplemented Syscalls
+======================
+
+The following FreeBSD syscalls (from ``/usr/include/sys/syscall.h``) do not have
+a corresponding ``case TARGET_FREEBSD_NR_xxxx:`` in the main switch statement in
+``bsd-user/freebsd/os-syscall.c``. Some of these are kernel-only, obsolete, or
+not meaningful in a user-mode emulation context.
+
+Compatibility/versioned syscalls
+--------------------------------
+
+- ``SYS_freebsd14_getgroups`` (79)
+- ``SYS_freebsd14_setgroups`` (80)
+- ``SYS_freebsd7___semctl`` (220)
+- ``SYS_freebsd7_msgctl`` (224)
+- ``SYS_freebsd7_shmctl`` (229)
+- ``SYS_freebsd10__umtx_lock`` (434)
+- ``SYS_freebsd10__umtx_unlock`` (435)
+
+AIO (asynchronous I/O)
+-----------------------
+
+- ``SYS_aio_read`` (255)
+- ``SYS_aio_write`` (256)
+- ``SYS_lio_listio`` (257)
+- ``SYS_aio_return`` (314)
+- ``SYS_aio_suspend`` (315)
+- ``SYS_aio_cancel`` (316)
+- ``SYS_aio_error`` (317)
+- ``SYS_aio_waitcomplete`` (359)
+- ``SYS_aio_fsync`` (465)
+- ``SYS_aio_mlock`` (543)
+- ``SYS_aio_writev`` (578)
+- ``SYS_aio_readv`` (579)
+
+Audit
+-----
+
+- ``SYS_audit`` (445)
+- ``SYS_auditon`` (446)
+- ``SYS_getauid`` (447)
+- ``SYS_setauid`` (448)
+- ``SYS_getaudit`` (449)
+- ``SYS_setaudit`` (450)
+- ``SYS_getaudit_addr`` (451)
+- ``SYS_setaudit_addr`` (452)
+- ``SYS_auditctl`` (453)
+
+MAC (Mandatory Access Control)
+------------------------------
+
+- ``SYS___mac_get_proc`` (384)
+- ``SYS___mac_set_proc`` (385)
+- ``SYS___mac_get_fd`` (386)
+- ``SYS___mac_get_file`` (387)
+- ``SYS___mac_set_fd`` (388)
+- ``SYS___mac_set_file`` (389)
+- ``SYS_mac_syscall`` (394)
+- ``SYS___mac_get_pid`` (409)
+- ``SYS___mac_get_link`` (410)
+- ``SYS___mac_set_link`` (411)
+- ``SYS___mac_execve`` (415)
+
+Jail
+----
+
+- ``SYS_jail`` (338)
+- ``SYS_jail_attach`` (436)
+- ``SYS_jail_get`` (506)
+- ``SYS_jail_set`` (507)
+- ``SYS_jail_remove`` (508)
+- ``SYS_jail_attach_jd`` (597)
+- ``SYS_jail_remove_jd`` (598)
+
+POSIX kernel semaphores (ksem)
+------------------------------
+
+- ``SYS_ksem_close`` (400)
+- ``SYS_ksem_post`` (401)
+- ``SYS_ksem_wait`` (402)
+- ``SYS_ksem_trywait`` (403)
+- ``SYS_ksem_init`` (404)
+- ``SYS_ksem_open`` (405)
+- ``SYS_ksem_unlink`` (406)
+- ``SYS_ksem_getvalue`` (407)
+- ``SYS_ksem_destroy`` (408)
+- ``SYS_ksem_timedwait`` (441)
+
+POSIX message queues (kmq)
+--------------------------
+
+- ``SYS_kmq_open`` (457)
+- ``SYS_kmq_setattr`` (458)
+- ``SYS_kmq_timedreceive`` (459)
+- ``SYS_kmq_timedsend`` (460)
+- ``SYS_kmq_notify`` (461)
+- ``SYS_kmq_unlink`` (462)
+
+SCTP
+----
+
+- ``SYS_sctp_peeloff`` (471)
+- ``SYS_sctp_generic_sendmsg`` (472)
+- ``SYS_sctp_generic_sendmsg_iov`` (473)
+- ``SYS_sctp_generic_recvmsg`` (474)
+
+Capsicum (read-only queries)
+----------------------------
+
+Note: The write-side Capsicum syscalls (``cap_enter``, ``cap_rights_limit``,
+``cap_ioctls_limit``, ``cap_fcntls_limit``) are handled (returning ``-ENOSYS``).
+These read-only query counterparts are completely missing.
+
+- ``SYS___cap_rights_get`` (515)
+- ``SYS_cap_getmode`` (517)
+- ``SYS_cap_ioctls_get`` (535)
+- ``SYS_cap_fcntls_get`` (537)
+
+RCTL (resource control)
+-----------------------
+
+- ``SYS_rctl_get_racct`` (525)
+- ``SYS_rctl_get_rules`` (526)
+- ``SYS_rctl_get_limits`` (527)
+- ``SYS_rctl_add_rule`` (528)
+- ``SYS_rctl_remove_rule`` (529)
+
+Clock/timer
+-----------
+
+- ``SYS_ffclock_getcounter`` (241)
+- ``SYS_ffclock_setestimate`` (242)
+- ``SYS_ffclock_getestimate`` (243)
+- ``SYS_ktimer_getoverrun`` (239)
+- ``SYS_timerfd_create`` (585)
+- ``SYS_timerfd_gettime`` (586)
+- ``SYS_timerfd_settime`` (587)
+
+NFS/RPC kernel
+--------------
+
+- ``SYS_nlm_syscall`` (154)
+- ``SYS_nfssvc`` (155)
+- ``SYS_rpctls_syscall`` (576)
+
+Network filesystem
+------------------
+
+- ``SYS_nnpfs_syscall`` (339)
+- ``SYS_afs3_syscall`` (377)
+
+File handle
+-----------
+
+- ``SYS_getfhat`` (564)
+- ``SYS_fhlink`` (565)
+- ``SYS_fhlinkat`` (566)
+- ``SYS_fhreadlink`` (567)
+
+File/VFS
+--------
+
+- ``SYS_sendfile`` (393)
+- ``SYS_fspacectl`` (580)
+- ``SYS_funlinkat`` (568)
+- ``SYS_posix_fadvise`` (531)
+
+Process/thread
+--------------
+
+- ``SYS_thr_create`` (430)
+- ``SYS_yield`` (321)
+- ``SYS_rtprio`` (166)
+- ``SYS_abort2`` (463)
+- ``SYS_pdrfork`` (600)
+- ``SYS_pdwait`` (601)
+
+Module
+------
+
+- ``SYS_modnext`` (300)
+- ``SYS_modstat`` (301)
+
+Miscellaneous
+-------------
+
+- ``SYS_semsys`` (169)
+- ``SYS_msgsys`` (170)
+- ``SYS_shmsys`` (171)
+- ``SYS_cpuset_getdomain`` (561)
+- ``SYS_cpuset_setdomain`` (562)
+- ``SYS_sched_getcpu`` (581)
+- ``SYS_kqueuex`` (583)
+- ``SYS_membarrier`` (584)
+- ``SYS_kcmp`` (588)
+- ``SYS_getrlimitusage`` (589)
+- ``SYS_fchroot`` (590)
+- ``SYS_setcred`` (591)
+- ``SYS_exterrctl`` (592)
+- ``SYS_inotify_add_watch_at`` (593)
+- ``SYS_inotify_rm_watch`` (594)
+- ``SYS_kexec_load`` (599)
+- ``SYS_renameat2`` (602)
