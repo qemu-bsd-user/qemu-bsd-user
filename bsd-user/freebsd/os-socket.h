@@ -14,6 +14,7 @@
 #include <netinet/in.h>
 
 #include "qemu-os.h"
+#include "os-sockopt.h"
 
 ssize_t safe_recvmsg(int s, struct msghdr *msg, int flags);
 ssize_t safe_sendmsg(int s, const struct msghdr *msg, int flags);
@@ -138,264 +139,89 @@ static abi_long do_sendrecvmsg(int fd, abi_ulong target_msg,
     return ret;
 }
 
+static inline struct sockopt_entry *get_sockopt_entry(int level)
+{
+    for (int i = 0; i < ARRAY_SIZE(so_cache); i++) {
+        if (so_cache[i].level == level) {
+            return so_cache[i].entry;
+        }
+    }
+    return NULL;
+}
+
 /* setsockopt(2) */
 static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
         abi_ulong optval_addr, socklen_t optlen)
 {
     abi_long ret;
     int val;
-    struct ip_mreqn *ip_mreq;
+    u_char ch;
+    uint64_t val64;
+    struct sockopt_entry *e = get_sockopt_entry(level);
     void *p;
 
-    switch (level) {
-    case IPPROTO_TCP:
-        /* TCP options all take an 'int' value. */
-        if (optlen < sizeof(uint32_t)) {
-            return -TARGET_EINVAL;
-        }
-        if (get_user_u32(val, optval_addr)) {
-            return -TARGET_EFAULT;
-        }
-        ret = get_errno(setsockopt(sockfd, level, optname, &val, sizeof(val)));
-        break;
-
-    case IPPROTO_IP:
-        switch (optname) {
-        case IP_OPTIONS:
-            p = lock_user(VERIFY_READ, optval_addr, optlen, 1);
-            if (p == NULL) {
-                return -TARGET_EFAULT;
-            }
-            ret = get_errno(setsockopt(sockfd, level, optname, p, optlen));
-            unlock_user(p, optval_addr, 0);
-            break;
-        case IP_HDRINCL:/* int; header is included with data */
-        case IP_TOS:    /* int; IP type of service and preced. */
-        case IP_TTL:    /* int; IP time to live */
-        case IP_RECVOPTS: /* bool; receive all IP opts w/dgram */
-        case IP_RECVRETOPTS: /* bool; receive IP opts for response */
-        case IP_RECVDSTADDR: /* bool; receive IP dst addr w/dgram */
-        case IP_MULTICAST_IF:/* u_char; set/get IP multicast i/f  */
-        case IP_MULTICAST_TTL:/* u_char; set/get IP multicast ttl */
-        case IP_MULTICAST_LOOP:/*u_char;set/get IP multicast loopback */
-        case IP_PORTRANGE: /* int; range to choose for unspec port */
-        case IP_RECVIF: /* bool; receive reception if w/dgram */
-        case IP_IPSEC_POLICY:   /* int; set/get security policy */
-        case IP_RECVTTL: /* bool; receive reception TTL w/dgram */
-            val = 0;
-            if (optlen >= sizeof(uint32_t)) {
-                if (get_user_u32(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            } else if (optlen >= 1) {
-                if (get_user_u8(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            }
-            ret = get_errno(setsockopt(sockfd, level, optname, &val,
-                        sizeof(val)));
-            break;
-
-        case IP_ADD_MEMBERSHIP: /*ip_mreq; add an IP group membership */
-        case IP_DROP_MEMBERSHIP:/*ip_mreq; drop an IP group membership*/
-            if (optlen < sizeof(struct target_ip_mreq) ||
-                    optlen > sizeof(struct target_ip_mreqn)) {
-                return -TARGET_EINVAL;
-            }
-            ip_mreq = (struct ip_mreqn *) alloca(optlen);
-            ret = target_to_host_ip_mreq(ip_mreq, optval_addr, optlen);
-            if (is_error(ret)) {
-                return -TARGET_EFAULT;
-            }
-            ret = get_errno(setsockopt(sockfd, level, optname, ip_mreq,
-                        optlen));
-            break;
-
-        default:
-            goto unimplemented;
-        }
-        break;
-
-    case IPPROTO_IPV6:
-        switch (optname) {
-        case IPV6_UNICAST_HOPS:     /* int; IP6 hops */
-        case IPV6_MULTICAST_IF:     /* u_int; set/get IP6 multicast i/f  */
-        case IPV6_MULTICAST_HOPS:   /* int; set/get IP6 multicast hops */
-        case IPV6_MULTICAST_LOOP:   /* u_int; set/get IP6 multicast loopback */
-        case IPV6_PORTRANGE:        /* int; range to choose for unspec port */
-        case IPV6_CHECKSUM:         /* int; checksum offset for raw socket */
-        case IPV6_V6ONLY:           /* bool; make AF_INET6 sockets v6 only */
-        case IPV6_RECVPKTINFO:      /* bool; recv if, dst addr */
-        case IPV6_RECVHOPLIMIT:     /* bool; recv hop limit */
-        case IPV6_RECVRTHDR:        /* bool; recv routing header */
-        case IPV6_RECVHOPOPTS:      /* bool; recv hop-by-hop option */
-        case IPV6_RECVDSTOPTS:      /* bool; recv dst option after rthdr */
-        case IPV6_USE_MIN_MTU:      /* bool; send packets at the minimum MTU */
-        case IPV6_RECVPATHMTU:      /* bool; notify an according MTU */
-        case IPV6_HOPLIMIT:         /* int; send hop limit */
-        case IPV6_RECVTCLASS:       /* bool; recv traffic class values */
-        case IPV6_AUTOFLOWLABEL:    /* bool; attach flowlabel automagically */
-        case IPV6_TCLASS:           /* int; send traffic class value */
-        case IPV6_DONTFRAG:         /* bool; disable IPv6 fragmentation */
-        case IPV6_PREFER_TEMPADDR:  /* int; prefer temporary addresses */
-        case IPV6_BINDANY:          /* bool: allow bind to any address */
-#ifdef IPV6_BINDMULTI
-        case IPV6_BINDMULTI:        /* bool; allow multibind to same addr/port*/
-#endif /* IPV6_BINDMULTI */
-#ifdef IPV6_RSS_LISTEN_BUCKET
-        case IPV6_RSS_LISTEN_BUCKET: /* int; set RSS listen bucket */
-#endif /* IPV6_RSS_LISTEN_BUCKET */
-#ifdef IPV6_FLOWID
-        case IPV6_FLOWID:           /* int; flowid of given socket */
-#endif /* IPV6_FLOWID */
-#ifdef IPV6_FLOWTYPE
-        case IPV6_FLOWTYPE:         /* int; flowtype of given socket */
-#endif /* IPV6_FLOWTYPE */
-#ifdef IPV6_RSSBUCKETID
-        case IPV6_RSSBUCKETID:      /* int; RSS bucket ID of given socket */
-#endif /* IPV6_RSSBUCKETID */
-            val = 0;
-            if (optlen >= sizeof(uint32_t)) {
-                if (get_user_u32(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            } else if (optlen >= 1) {
-                if (get_user_u8(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            }
-            ret = get_errno(setsockopt(sockfd, level, optname, &val,
-                        sizeof(val)));
-            break;
-
-        case IPV6_JOIN_GROUP:   /* ipv6_mreq; join a group membership */
-        case IPV6_LEAVE_GROUP:  /* ipv6_mreq; leave a group membership */
-        case ICMP6_FILTER:      /* icmp6_filter; icmp6 filter */
-        case IPV6_IPSEC_POLICY: /* struct; get/set security policy */
-        case IPV6_FW_ADD:       /* add a firewall rule to chain */
-        case IPV6_FW_DEL:       /* delete a firewall rule from chain */
-        case IPV6_FW_FLUSH:     /* flush firewall rule chain */
-        case IPV6_FW_ZERO:      /* clear single/all firewall counter(s) */
-        case IPV6_FW_GET:       /* get entire firewall rule chain */
-        case IPV6_RTHDRDSTOPTS: /* ip6_dest; send dst option before rthdr */
-        case IPV6_PATHMTU:      /* mtuinfo; get the current path MTU */
-        case IPV6_PKTINFO:      /* in6_pktinfo; send if, src addr */
-        case IPV6_NEXTHOP:      /* sockaddr; next hop addr */
-        case IPV6_HOPOPTS:      /* ip6_hbh; send hop-by-hop option */
-        case IPV6_DSTOPTS:      /* ip6_dest; send dst option befor rthdr */
-        case IPV6_RTHDR:        /* ip6_rthdr; send routing header */
-        case IPV6_MSFILTER:     /* struct __msfilterreq; */
-        default:
-            goto unimplemented;
-        }
-        break;
-
-    case TARGET_SOL_SOCKET:
-        switch (optname) {
-        /* Options with 'int' argument.  */
-        case TARGET_SO_DEBUG:
-            optname = SO_DEBUG;
-            break;
-
-        case TARGET_SO_REUSEADDR:
-            optname = SO_REUSEADDR;
-            break;
-
-        case TARGET_SO_REUSEPORT:
-            optname = SO_REUSEPORT;
-            break;
-
-        case TARGET_SO_KEEPALIVE:
-            optname = SO_KEEPALIVE;
-            break;
-
-        case TARGET_SO_DONTROUTE:
-            optname = SO_DONTROUTE;
-            break;
-
-        case TARGET_SO_LINGER:
-            optname = SO_LINGER;
-            break;
-
-        case TARGET_SO_BROADCAST:
-            optname = SO_BROADCAST;
-            break;
-
-        case TARGET_SO_OOBINLINE:
-            optname = SO_OOBINLINE;
-            break;
-
-        case TARGET_SO_SNDBUF:
-            optname = SO_SNDBUF;
-            break;
-
-        case TARGET_SO_RCVBUF:
-            optname = SO_RCVBUF;
-            break;
-
-        case TARGET_SO_SNDLOWAT:
-            optname = SO_SNDLOWAT;
-            break;
-
-        case TARGET_SO_RCVLOWAT:
-            optname = SO_RCVLOWAT;
-            break;
-
-        case TARGET_SO_SNDTIMEO:
-            optname = SO_SNDTIMEO;
-            break;
-
-        case TARGET_SO_RCVTIMEO:
-            optname = SO_RCVTIMEO;
-            break;
-
-        case TARGET_SO_ACCEPTFILTER:
-            goto unimplemented;
-
-        case TARGET_SO_NOSIGPIPE:
-            optname = SO_NOSIGPIPE;
-            break;
-
-        case TARGET_SO_TIMESTAMP:
-            optname = SO_TIMESTAMP;
-            break;
-
-        case TARGET_SO_BINTIME:
-            optname = SO_BINTIME;
-            break;
-
-        case TARGET_SO_ERROR:
-            optname = SO_ERROR;
-            break;
-
-        case TARGET_SO_SETFIB:
-            optname = SO_SETFIB;
-            break;
-
-#ifdef SO_USER_COOKIE
-        case TARGET_SO_USER_COOKIE:
-            optname = SO_USER_COOKIE;
-            break;
-#endif
-        default:
-            goto unimplemented;
-        }
-        if (optlen < sizeof(uint32_t)) {
-            return -TARGET_EINVAL;
-        }
-        if (get_user_u32(val, optval_addr)) {
-            return -TARGET_EFAULT;
-        }
-        ret = get_errno(setsockopt(sockfd, SOL_SOCKET, optname, &val,
-                    sizeof(val)));
-        break;
-    default:
-unimplemented:
-    gemu_log("Unsupported setsockopt level=%d optname=%d\n",
-        level, optname);
-    ret = -TARGET_ENOPROTOOPT;
+    
+    if (e == NULL) {
+        gemu_log("Unsupported setsockopt level=%d optname=%d\n",
+                 level, optname);
+        return -TARGET_ENOPROTOOPT;
     }
 
+    while (e->level != SOCK_LEVEL_NONE && e->optname != optname) {
+        e++;
+    }
+
+    if (e->level == SOCK_LEVEL_NONE) {
+        gemu_log("Unsupported setsockopt level=%d optname=%d\n",
+                 level, optname);
+        return -TARGET_ENOPROTOOPT;
+    }
+
+    for (int i = 0; i < ARRAY_SIZE(e->type) && e->type[i] != 0; i++) {
+        switch (e->type[i]) {
+        case SOCKOPT_TYPE_BOOL:
+        case SOCKOPT_TYPE_INT:
+        case SOCKOPT_TYPE_U_INT:
+        case SOCKOPT_TYPE_UINT32_T:
+            if (optlen != sizeof(int)) {
+                continue;
+            }
+            if (get_user_u32(val, optval_addr)) {
+                return -TARGET_EFAULT;
+            }
+            return get_errno(setsockopt(sockfd, level, optname, &val, sizeof(val)));
+        case SOCKOPT_TYPE_U_CHAR:
+            if (optlen != sizeof(u_char)) {
+                continue;
+            }
+            if (get_user_u8(ch, optval_addr)) {
+                return -TARGET_EFAULT;
+            }
+            return get_errno(setsockopt(sockfd, level, optname, &ch, sizeof(ch)));
+        case SOCKOPT_TYPE_UINT64_T:
+            if (optlen != sizeof(uint64_t)) {
+                continue;
+            }
+            if (get_user_u64(val64, optval_addr)) {
+                return -TARGET_EFAULT;
+            }
+            return get_errno(setsockopt(sockfd, level, optname, &val64, sizeof(val64)));
+        default:
+#if HOST_LONG_BITS != TARGET_ABI_BITS || HOST_BIG_ENDIAN != TARGET_BIG_ENDIAN
+            gemu_log("Unsupported setsockopt level=%d optname=%d since host and target differ\n",
+                     level, optname);
+            return -TARGET_ENOPROTOOPT;
+#endif
+            break;
+        }
+    }
+
+    /*
+     * When bit size and endian are the same, the structures are the same (we hope).
+     */
+    p = lock_user(VERIFY_READ, optval_addr, optlen, 1);
+    ret = get_errno(setsockopt(sockfd, level, optname, p, optlen));
+    unlock_user(p, optval_addr, 0);
     return ret;
 }
 
@@ -404,281 +230,105 @@ static inline abi_long do_bsd_getsockopt(int sockfd, int level, int optname,
         abi_ulong optval_addr, abi_ulong optlen)
 {
     abi_long ret;
-    int len, val;
-    socklen_t lv;
+    int val;
+    u_char ch;
+    socklen_t len;
+    uint64_t val64;
+    struct sockopt_entry *e = get_sockopt_entry(level);
     void *p;
 
-    switch (level) {
-    case TARGET_SOL_SOCKET:
-        level = SOL_SOCKET;
-        switch (optname) {
+    
+    if (e == NULL) {
+        gemu_log("Unsupported setsockopt level=%d optname=%d\n",
+                 level, optname);
+        return -TARGET_ENOPROTOOPT;
+    }
 
-        /* These don't just return a single integer */
-        case TARGET_SO_LINGER:
-        case TARGET_SO_RCVTIMEO:
-        case TARGET_SO_SNDTIMEO:
-        case TARGET_SO_ACCEPTFILTER:
-            goto unimplemented;
+    while (e->level != SOCK_LEVEL_NONE && e->optname != optname) {
+        e++;
+    }
 
-        /* Options with 'int' argument.  */
-        case TARGET_SO_DEBUG:
-            optname = SO_DEBUG;
-            goto int_case;
+    if (e->level == SOCK_LEVEL_NONE) {
+        gemu_log("Unsupported getsockopt level=%d optname=%d\n",
+                 level, optname);
+        return -TARGET_ENOPROTOOPT;
+    }
 
-        case TARGET_SO_REUSEADDR:
-            optname = SO_REUSEADDR;
-            goto int_case;
+    if (get_user_u32(len, optlen)) {
+        return -TARGET_EFAULT;
+    }
 
-        case TARGET_SO_REUSEPORT:
-            optname = SO_REUSEPORT;
-            goto int_case;
-
-        case TARGET_SO_TYPE:
-            optname = SO_TYPE;
-            goto int_case;
-
-        case TARGET_SO_ERROR:
-            optname = SO_ERROR;
-            goto int_case;
-
-        case TARGET_SO_DONTROUTE:
-            optname = SO_DONTROUTE;
-            goto int_case;
-
-        case TARGET_SO_BROADCAST:
-            optname = SO_BROADCAST;
-            goto int_case;
-
-        case TARGET_SO_SNDBUF:
-            optname = SO_SNDBUF;
-            goto int_case;
-
-        case TARGET_SO_RCVBUF:
-            optname = SO_RCVBUF;
-            goto int_case;
-
-        case TARGET_SO_KEEPALIVE:
-            optname = SO_KEEPALIVE;
-            goto int_case;
-
-        case TARGET_SO_OOBINLINE:
-            optname = SO_OOBINLINE;
-            goto int_case;
-
-        case TARGET_SO_TIMESTAMP:
-            optname = SO_TIMESTAMP;
-            goto int_case;
-
-        case TARGET_SO_RCVLOWAT:
-            optname = SO_RCVLOWAT;
-            goto int_case;
-
-        case TARGET_SO_LISTENINCQLEN:
-            optname = SO_LISTENINCQLEN;
-            goto int_case;
-
-        default:
-int_case:
-            if (get_user_u32(len, optlen)) {
-                return -TARGET_EFAULT;
+    for (int i = 0; i < ARRAY_SIZE(e->type) && e->type[i] != 0; i++) {
+        switch (e->type[i]) {
+        case SOCKOPT_TYPE_BOOL:
+        case SOCKOPT_TYPE_INT:
+        case SOCKOPT_TYPE_U_INT:
+        case SOCKOPT_TYPE_UINT32_T:
+            if (len != sizeof(int)) {
+                continue;
             }
-            if (len < 0) {
-                return -TARGET_EINVAL;
-            }
-            lv = sizeof(val);
-            ret = get_errno(getsockopt(sockfd, level, optname, &val, &lv));
+            ret = get_errno(getsockopt(sockfd, level, optname, &val, &len));
             if (ret < 0) {
                 return ret;
             }
-            if (len > lv) {
-                len = lv;
-            }
-            if (len == 4) {
+            if (len == sizeof(int)) {
                 if (put_user_u32(val, optval_addr)) {
                     return -TARGET_EFAULT;
                 }
-            } else {
-                if (put_user_u8(val, optval_addr)) {
+                goto done;
+            }
+            continue;
+        case SOCKOPT_TYPE_U_CHAR:
+            if (len != sizeof(u_char)) {
+                continue;
+            }
+            ret = get_errno(getsockopt(sockfd, level, optname, &ch, &len));
+            if (ret < 0) {
+                return ret;
+            }
+            if (len == sizeof(u_char)) {
+                if (put_user_u8(ch, optval_addr)) {
                     return -TARGET_EFAULT;
                 }
+                goto done;
             }
-            if (put_user_u32(len, optlen)) {
-                return -TARGET_EFAULT;
+            continue;
+        case SOCKOPT_TYPE_UINT64_T:
+            if (len != sizeof(uint64_t)) {
+                continue;
             }
-            break;
-
-        }
-        break;
-
-    case IPPROTO_TCP:
-        /* TCP options all take an 'int' value. */
-        goto int_case;
-
-    case IPPROTO_IP:
-        switch (optname) {
-        case IP_OPTIONS:
-            if (get_user_u32(len, optlen)) {
-                return -TARGET_EFAULT;
+            ret = get_errno(getsockopt(sockfd, level, optname, &val64, &len));
+            if (ret < 0) {
+                return ret;
             }
-            lv = (socklen_t)len;
-            p = lock_user(VERIFY_WRITE, optval_addr, len, 0);
-            if (p == NULL) {
-                return -TARGET_EFAULT;
+            if (len == sizeof(uint64_t)) {
+                if (put_user_u64(val64, optval_addr)) {
+                    return -TARGET_EFAULT;
+                }
+                goto done;
             }
-            ret = get_errno(getsockopt(sockfd, level, optname, p, &lv));
-            unlock_user(p, optval_addr, ret < 0 ? 0 : lv);
-            if (put_user_u32(lv, optlen)) {
-                return -TARGET_EFAULT;
-            }
-            break;
-        case IP_HDRINCL:
-        case IP_TOS:
-        case IP_TTL:
-        case IP_RECVOPTS:
-        case IP_RECVRETOPTS:
-        case IP_RECVDSTADDR:
-
-        case IP_RETOPTS:
-#if defined(IP_RECVTOS)
-        case IP_RECVTOS:
+            continue;
+        default:
+#if HOST_LONG_BITS != TARGET_ABI_BITS || HOST_BIG_ENDIAN != TARGET_BIG_ENDIAN
+            gemu_log("Unsupported getsockopt level=%d optname=%d since host and target differ\n",
+                     level, optname);
+            return -TARGET_ENOPROTOOPT;
 #endif
-        case IP_MULTICAST_TTL:
-        case IP_MULTICAST_LOOP:
-        case IP_PORTRANGE:
-        case IP_IPSEC_POLICY:
-        case IP_ONESBCAST:
-        case IP_BINDANY:
-            if (get_user_u32(len, optlen)) {
-                return -TARGET_EFAULT;
-            }
-            if (len < 0) {
-                return -TARGET_EINVAL;
-            }
-            lv = sizeof(val);
-            ret = get_errno(getsockopt(sockfd, level, optname,
-                &val, &lv));
-            if (ret < 0) {
-                return ret;
-            }
-            if (len < sizeof(int) && len > 0 && val >= 0 &&
-                val < 255) {
-                len = 1;
-                if (put_user_u32(len, optlen) ||
-                        put_user_u8(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            } else {
-                if (len > sizeof(int)) {
-                    len = sizeof(int);
-                }
-                if (put_user_u32(len, optlen) ||
-                        put_user_u32(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            }
             break;
-
-        default:
-            goto unimplemented;
         }
-        break;
+    }
 
-    case IPPROTO_IPV6:
-        switch (optname) {
-        case IPV6_UNICAST_HOPS:     /* int; IP6 hops */
-        case IPV6_MULTICAST_IF:     /* u_int; set/get IP6 multicast i/f  */
-        case IPV6_MULTICAST_HOPS:   /* int; set/get IP6 multicast hops */
-        case IPV6_MULTICAST_LOOP:   /* u_int; set/get IP6 multicast loopback */
-        case IPV6_PORTRANGE:        /* int; range to choose for unspec port */
-        case IPV6_CHECKSUM:         /* int; checksum offset for raw socket */
-        case IPV6_V6ONLY:           /* bool; make AF_INET6 sockets v6 only */
-        case IPV6_RECVPKTINFO:      /* bool; recv if, dst addr */
-        case IPV6_RECVHOPLIMIT:     /* bool; recv hop limit */
-        case IPV6_RECVRTHDR:        /* bool; recv routing header */
-        case IPV6_RECVHOPOPTS:      /* bool; recv hop-by-hop option */
-        case IPV6_RECVDSTOPTS:      /* bool; recv dst option after rthdr */
-        case IPV6_USE_MIN_MTU:      /* bool; send packets at the minimum MTU */
-        case IPV6_RECVPATHMTU:      /* bool; notify an according MTU */
-        case IPV6_HOPLIMIT:         /* int; send hop limit */
-        case IPV6_RECVTCLASS:       /* bool; recv traffic class values */
-        case IPV6_AUTOFLOWLABEL:    /* bool; attach flowlabel automagically */
-        case IPV6_TCLASS:           /* int; send traffic class value */
-        case IPV6_DONTFRAG:         /* bool; disable IPv6 fragmentation */
-        case IPV6_PREFER_TEMPADDR:  /* int; prefer temporary addresses */
-        case IPV6_BINDANY:          /* bool: allow bind to any address */
-#ifdef IPV6_BINDMULTI
-        case IPV6_BINDMULTI:        /* bool; allow multibind to same addr/port*/
-#endif /* IPV6_BINDMULTI */
-#ifdef IPV6_RSS_LISTEN_BUCKET
-        case IPV6_RSS_LISTEN_BUCKET: /* int; set RSS listen bucket */
-#endif /* IPV6_RSS_LISTEN_BUCKET */
-#ifdef IPV6_FLOWID
-        case IPV6_FLOWID:           /* int; flowid of given socket */
-#endif /* IPV6_FLOWID */
-#ifdef IPV6_FLOWTYPE
-        case IPV6_FLOWTYPE:         /* int; flowtype of given socket */
-#endif /* IPV6_FLOWTYPE */
-#ifdef IPV6_RSSBUCKETID
-        case IPV6_RSSBUCKETID:      /* int; RSS bucket ID of given socket */
-#endif /* IPV6_RSSBUCKETID */
-            if (get_user_u32(len, optlen)) {
-                return -TARGET_EFAULT;
-            }
-            if (len < 0) {
-                return -TARGET_EINVAL;
-            }
-            lv = sizeof(val);
-            ret = get_errno(getsockopt(sockfd, level, optname,
-                &val, &lv));
-            if (ret < 0) {
-                return ret;
-            }
-            if (len < sizeof(int) && len > 0 && val >= 0 &&
-                val < 255) {
-                len = 1;
-                if (put_user_u32(len, optlen) ||
-                        put_user_u8(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            } else {
-                if (len > sizeof(int)) {
-                    len = sizeof(int);
-                }
-                if (put_user_u32(len, optlen) ||
-                        put_user_u32(val, optval_addr)) {
-                    return -TARGET_EFAULT;
-                }
-            }
-            break;
+    /*
+     * When bit size and endian are the same, the structures are the same, and
+     * if not that is handled above.
+     */
+    p = lock_user(VERIFY_WRITE, optval_addr, optlen, 0);
+    ret = get_errno(getsockopt(sockfd, level, optname, p, &len));
+    unlock_user(p, optval_addr, 0);
 
-        case IPV6_JOIN_GROUP:   /* ipv6_mreq; join a group membership */
-        case IPV6_LEAVE_GROUP:  /* ipv6_mreq; leave a group membership */
-        case ICMP6_FILTER:      /* icmp6_filter; icmp6 filter */
-        case IPV6_IPSEC_POLICY: /* struct; get/set security policy */
-        case IPV6_FW_ADD:       /* add a firewall rule to chain */
-        case IPV6_FW_DEL:       /* delete a firewall rule from chain */
-        case IPV6_FW_FLUSH:     /* flush firewall rule chain */
-        case IPV6_FW_ZERO:      /* clear single/all firewall counter(s) */
-        case IPV6_FW_GET:       /* get entire firewall rule chain */
-        case IPV6_RTHDRDSTOPTS: /* ip6_dest; send dst option before rthdr */
-        case IPV6_PATHMTU:      /* mtuinfo; get the current path MTU */
-        case IPV6_PKTINFO:      /* in6_pktinfo; send if, src addr */
-        case IPV6_NEXTHOP:      /* sockaddr; next hop addr */
-        case IPV6_HOPOPTS:      /* ip6_hbh; send hop-by-hop option */
-        case IPV6_DSTOPTS:      /* ip6_dest; send dst option befor rthdr */
-        case IPV6_RTHDR:        /* ip6_rthdr; send routing header */
-        case IPV6_MSFILTER:     /* struct __msfilterreq; */
-        default:
-            goto unimplemented;
-        }
-        break;
-
-    default:
-unimplemented:
-        gemu_log("getsockopt level=%d optname=%d not yet supported\n",
-            level, optname);
-        ret = -TARGET_EOPNOTSUPP;
-        break;
+done:
+    if (put_user_u32(len, optlen)) {
+        return -TARGET_EFAULT;
     }
     return ret;
 }
