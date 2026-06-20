@@ -271,8 +271,8 @@ ERST
         .name       = "screendump",
         .args_type  = "filename:F,format:-fs,device:s?,head:i?",
         .params     = "filename [-f format] [device [head]]",
-        .help       = "save screen from head 'head' of display device 'device'"
-                      "in specified format 'format' as image 'filename'."
+        .help       = "save screen from head 'head' of display device 'device' "
+                      "in specified format 'format' as image 'filename'. "
                       "Currently only 'png' and 'ppm' formats are supported.",
          .cmd        = hmp_screendump,
         .coroutine  = true,
@@ -752,13 +752,13 @@ ERST
         .name       = "mouse_button",
         .args_type  = "button_state:i",
         .params     = "state",
-        .help       = "change mouse button state (1=L, 2=M, 4=R)",
+        .help       = "change mouse button state (1=L, 2=R, 4=M)",
         .cmd        = hmp_mouse_button,
     },
 
 SRST
 ``mouse_button`` *val*
-  Change the active mouse button state *val* (1=L, 2=M, 4=R).
+  Change the active mouse button state *val* (1=L, 2=R, 4=M).
 ERST
 
     {

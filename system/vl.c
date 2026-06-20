@@ -28,6 +28,7 @@
 #include "qemu/units.h"
 #include "qemu/module.h"
 #include "qemu/target-info.h"
+#include "qemu/target-info-qom.h"
 #include "exec/cpu-common.h"
 #include "exec/page-vary.h"
 #include "hw/core/qdev-properties.h"
@@ -142,6 +143,7 @@
 #include "system/iothread.h"
 #include "qemu/guest-random.h"
 #include "qemu/keyval.h"
+#include "memory-internal.h"
 
 #define MAX_VIRTIO_CONSOLES 1
 
@@ -1633,6 +1635,8 @@ static void qemu_unlink_pidfile(Notifier *n, void *data)
 
     upn = DO_UPCAST(struct UnlinkPidfileNotifier, notifier, n);
     unlink(upn->pid_file_realpath);
+    g_free(upn->pid_file_realpath);
+    upn->pid_file_realpath = NULL;
 }
 
 static const QEMUOption *lookup_opt(int argc, char **argv,
@@ -2009,7 +2013,8 @@ static bool object_create_early(const char *type)
 
 static void qemu_apply_machine_options(QDict *qdict)
 {
-    object_set_properties_from_keyval(OBJECT(current_machine), qdict, false, &error_fatal);
+    object_set_props_from_keyval(OBJECT(current_machine), qdict,
+                                 false, &error_fatal);
 
     if (semihosting_enabled(false) && !semihosting_get_argc()) {
         /* fall back to the -kernel/-append */
@@ -2213,7 +2218,7 @@ static void qemu_create_machine(QDict *qdict)
         }
     }
 
-    cpu_exec_init_all();
+    machine_memory_init();
 
     /*
      * Get the default machine options from the machine if it is not already
@@ -2224,8 +2229,8 @@ static void qemu_create_machine(QDict *qdict)
             keyval_parse(machine_class->default_machine_opts, NULL, NULL,
                          &error_abort);
         qemu_apply_legacy_machine_options(default_opts);
-        object_set_properties_from_keyval(OBJECT(current_machine), default_opts,
-                                          false, &error_abort);
+        object_set_props_from_keyval(OBJECT(current_machine), default_opts,
+                                     false, &error_abort);
         qobject_unref(default_opts);
     }
 }
@@ -2670,6 +2675,7 @@ static void qemu_maybe_daemonize(const char *pid_file)
                 warn_report("not removing PID file on exit: cannot resolve PID "
                             "file path: %s: %s", pid_file, strerror(errno));
             }
+            g_free(pid_file_realpath);
             return;
         }
 
@@ -2888,6 +2894,9 @@ void qemu_init(int argc, char **argv)
     qemu_init_exec_dir(argv[0]);
 
     os_setup_limits();
+
+    module_call_init(MODULE_INIT_TARGET_INFO);
+    target_info_qom_set_target();
 
     module_init_info(qemu_modinfo);
     module_allow_arch(target_name());

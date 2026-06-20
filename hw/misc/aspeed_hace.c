@@ -624,9 +624,9 @@ static const MemoryRegionOps aspeed_hace_ops = {
     },
 };
 
-static void aspeed_hace_reset(DeviceState *dev)
+static void aspeed_hace_reset_hold(Object *obj, ResetType type)
 {
-    struct AspeedHACEState *s = ASPEED_HACE(dev);
+    AspeedHACEState *s = ASPEED_HACE(obj);
     AspeedHACEClass *ahc = ASPEED_HACE_GET_CLASS(s);
 
     if (s->hash_ctx != NULL) {
@@ -687,21 +687,14 @@ static void aspeed_hace_unrealize(DeviceState *dev)
 static void aspeed_hace_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
 
     dc->realize = aspeed_hace_realize;
     dc->unrealize = aspeed_hace_unrealize;
-    device_class_set_legacy_reset(dc, aspeed_hace_reset);
+    rc->phases.hold = aspeed_hace_reset_hold;
     device_class_set_props(dc, aspeed_hace_properties);
     dc->vmsd = &vmstate_aspeed_hace;
 }
-
-static const TypeInfo aspeed_hace_info = {
-    .name = TYPE_ASPEED_HACE,
-    .parent = TYPE_SYS_BUS_DEVICE,
-    .instance_size = sizeof(AspeedHACEState),
-    .class_init = aspeed_hace_class_init,
-    .class_size = sizeof(AspeedHACEClass)
-};
 
 static void aspeed_ast2400_hace_class_init(ObjectClass *klass, const void *data)
 {
@@ -717,12 +710,6 @@ static void aspeed_ast2400_hace_class_init(ObjectClass *klass, const void *data)
     ahc->hash_mask = 0x000003ff; /* No SG or SHA512 modes */
 }
 
-static const TypeInfo aspeed_ast2400_hace_info = {
-    .name = TYPE_ASPEED_AST2400_HACE,
-    .parent = TYPE_ASPEED_HACE,
-    .class_init = aspeed_ast2400_hace_class_init,
-};
-
 static void aspeed_ast2500_hace_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -736,12 +723,6 @@ static void aspeed_ast2500_hace_class_init(ObjectClass *klass, const void *data)
     ahc->key_mask = 0x3FFFFFC0;
     ahc->hash_mask = 0x000003ff; /* No SG or SHA512 modes */
 }
-
-static const TypeInfo aspeed_ast2500_hace_info = {
-    .name = TYPE_ASPEED_AST2500_HACE,
-    .parent = TYPE_ASPEED_HACE,
-    .class_init = aspeed_ast2500_hace_class_init,
-};
 
 static void aspeed_ast2600_hace_class_init(ObjectClass *klass, const void *data)
 {
@@ -757,12 +738,6 @@ static void aspeed_ast2600_hace_class_init(ObjectClass *klass, const void *data)
     ahc->hash_mask = 0x00147FFF;
 }
 
-static const TypeInfo aspeed_ast2600_hace_info = {
-    .name = TYPE_ASPEED_AST2600_HACE,
-    .parent = TYPE_ASPEED_HACE,
-    .class_init = aspeed_ast2600_hace_class_init,
-};
-
 static void aspeed_ast1030_hace_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -776,12 +751,6 @@ static void aspeed_ast1030_hace_class_init(ObjectClass *klass, const void *data)
     ahc->key_mask = 0x7FFFFFF8;
     ahc->hash_mask = 0x00147FFF;
 }
-
-static const TypeInfo aspeed_ast1030_hace_info = {
-    .name = TYPE_ASPEED_AST1030_HACE,
-    .parent = TYPE_ASPEED_HACE,
-    .class_init = aspeed_ast1030_hace_class_init,
-};
 
 static void aspeed_ast2700_hace_class_init(ObjectClass *klass, const void *data)
 {
@@ -822,20 +791,39 @@ static void aspeed_ast2700_hace_class_init(ObjectClass *klass, const void *data)
     ahc->has_dma64 = true;
 }
 
-static const TypeInfo aspeed_ast2700_hace_info = {
-    .name = TYPE_ASPEED_AST2700_HACE,
-    .parent = TYPE_ASPEED_HACE,
-    .class_init = aspeed_ast2700_hace_class_init,
+static const TypeInfo aspeed_hace_types[] = {
+    {
+        .name = TYPE_ASPEED_HACE,
+        .parent = TYPE_SYS_BUS_DEVICE,
+        .instance_size = sizeof(AspeedHACEState),
+        .class_init = aspeed_hace_class_init,
+        .class_size = sizeof(AspeedHACEClass),
+    },
+    {
+        .name = TYPE_ASPEED_AST1030_HACE,
+        .parent = TYPE_ASPEED_HACE,
+        .class_init = aspeed_ast1030_hace_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_AST2400_HACE,
+        .parent = TYPE_ASPEED_HACE,
+        .class_init = aspeed_ast2400_hace_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_AST2500_HACE,
+        .parent = TYPE_ASPEED_HACE,
+        .class_init = aspeed_ast2500_hace_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_AST2600_HACE,
+        .parent = TYPE_ASPEED_HACE,
+        .class_init = aspeed_ast2600_hace_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_AST2700_HACE,
+        .parent = TYPE_ASPEED_HACE,
+        .class_init = aspeed_ast2700_hace_class_init,
+    }
 };
 
-static void aspeed_hace_register_types(void)
-{
-    type_register_static(&aspeed_ast2400_hace_info);
-    type_register_static(&aspeed_ast2500_hace_info);
-    type_register_static(&aspeed_ast2600_hace_info);
-    type_register_static(&aspeed_ast1030_hace_info);
-    type_register_static(&aspeed_ast2700_hace_info);
-    type_register_static(&aspeed_hace_info);
-}
-
-type_init(aspeed_hace_register_types);
+DEFINE_TYPES(aspeed_hace_types)

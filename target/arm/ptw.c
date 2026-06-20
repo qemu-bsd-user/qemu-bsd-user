@@ -13,11 +13,13 @@
 #include "exec/page-protection.h"
 #include "exec/target_page.h"
 #include "exec/tlb-flags.h"
+#ifdef CONFIG_TCG
 #include "accel/tcg/probe.h"
+#include "target/arm/tcg/idau.h"
+#endif
 #include "cpu.h"
 #include "internals.h"
 #include "cpu-features.h"
-#include "idau.h"
 
 typedef struct S1Translate {
     /*
@@ -667,7 +669,7 @@ static bool S1_ptw_translate(CPUARMState *env, S1Translate *ptw,
         };
         GetPhysAddrResult s2 = { };
 
-        if (get_phys_addr_gpc(env, &s2ptw, addr, MMU_DATA_LOAD, 0, &s2, fi)) {
+        if (!get_phys_addr_gpc(env, &s2ptw, addr, MMU_DATA_LOAD, 0, &s2, fi)) {
             goto fail;
         }
 
@@ -1169,11 +1171,11 @@ static bool get_phys_addr_v5(CPUARMState *env, S1Translate *ptw,
         goto do_fault;
     }
     result->f.phys_addr = phys_addr;
-    return false;
+    return true;
 do_fault:
     fi->domain = domain;
     fi->level = level;
-    return true;
+    return false;
 }
 
 static bool get_phys_addr_v6(CPUARMState *env, S1Translate *ptw,
@@ -1326,11 +1328,11 @@ static bool get_phys_addr_v6(CPUARMState *env, S1Translate *ptw,
     result->f.attrs.space = out_space;
     result->f.attrs.secure = arm_space_is_secure(out_space);
     result->f.phys_addr = phys_addr;
-    return false;
+    return true;
 do_fault:
     fi->domain = domain;
     fi->level = level;
-    return true;
+    return false;
 }
 
 /*
@@ -1842,7 +1844,7 @@ static bool lpae_block_desc_valid(ARMCPU *cpu, bool ds,
 /**
  * get_phys_addr_lpae: perform one stage of page table walk, LPAE format
  *
- * Returns false if the translation was successful. Otherwise, phys_ptr,
+ * Returns true if the translation was successful. Otherwise, phys_ptr,
  * attrs, prot and page_size may not be filled in, and the populated fsr
  * value provides information on why the translation aborted, in the format
  * of a long-format DFSR/IFSR fault register, with the following caveat:
@@ -1951,9 +1953,18 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
      * validation to do here.
      */
     if (inputsize < addrsize) {
-        uint64_t top_bits = sextract64(address, inputsize,
-                                           addrsize - inputsize);
-        if (-top_bits != param.select) {
+        /*
+         * If MTX is enabled, bits 56-59 aren't checked for canonicity
+         * during translation, since they will later be checked during
+         * the tag check step.
+         */
+
+        uint64_t cmp_mask = MAKE_64BIT_MASK(inputsize, addrsize - inputsize);
+
+        if (param.mtx) {
+            cmp_mask &= ~MAKE_64BIT_MASK(56, 4);
+        }
+        if ((address ^ -param.select) & cmp_mask) {
             /* The gap between the two regions is a Translation fault */
             goto do_translation_fault;
         }
@@ -2432,7 +2443,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
 
     result->f.phys_addr = descaddr;
     result->f.lg_page_size = ctz64(page_size);
-    return false;
+    return true;
 
  do_translation_fault:
     fi->type = ARMFault_Translation;
@@ -2445,7 +2456,7 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
         fi->stage2 = regime_is_stage2(mmu_idx);
     }
     fi->s1ns = fault_s1ns(ptw->cur_space, mmu_idx);
-    return true;
+    return false;
 }
 
 static bool get_phys_addr_pmsav5(CPUARMState *env,
@@ -2465,7 +2476,7 @@ static bool get_phys_addr_pmsav5(CPUARMState *env,
         /* MPU disabled.  */
         result->f.phys_addr = address;
         result->f.prot = PAGE_READ | PAGE_WRITE | PAGE_EXEC;
-        return false;
+        return true;
     }
 
     result->f.phys_addr = address;
@@ -2484,7 +2495,7 @@ static bool get_phys_addr_pmsav5(CPUARMState *env,
     }
     if (n < 0) {
         fi->type = ARMFault_Background;
-        return true;
+        return false;
     }
 
     if (access_type == MMU_INST_FETCH) {
@@ -2497,12 +2508,12 @@ static bool get_phys_addr_pmsav5(CPUARMState *env,
     case 0:
         fi->type = ARMFault_Permission;
         fi->level = 1;
-        return true;
+        return false;
     case 1:
         if (is_user) {
             fi->type = ARMFault_Permission;
             fi->level = 1;
-            return true;
+            return false;
         }
         result->f.prot = PAGE_READ | PAGE_WRITE;
         break;
@@ -2519,7 +2530,7 @@ static bool get_phys_addr_pmsav5(CPUARMState *env,
         if (is_user) {
             fi->type = ARMFault_Permission;
             fi->level = 1;
-            return true;
+            return false;
         }
         result->f.prot = PAGE_READ;
         break;
@@ -2530,10 +2541,10 @@ static bool get_phys_addr_pmsav5(CPUARMState *env,
         /* Bad permission.  */
         fi->type = ARMFault_Permission;
         fi->level = 1;
-        return true;
+        return false;
     }
     result->f.prot |= PAGE_EXEC;
-    return false;
+    return true;
 }
 
 static void get_phys_addr_pmsav7_default(CPUARMState *env, ARMMMUIdx mmu_idx,
@@ -2732,7 +2743,7 @@ static bool get_phys_addr_pmsav7(CPUARMState *env,
             if (!pmsav7_use_background_region(cpu, mmu_idx, secure, is_user)) {
                 /* background fault */
                 fi->type = ARMFault_Background;
-                return true;
+                return false;
             }
             get_phys_addr_pmsav7_default(env, mmu_idx, address,
                                          &result->f.prot);
@@ -2806,8 +2817,10 @@ static bool get_phys_addr_pmsav7(CPUARMState *env,
 
     fi->type = ARMFault_Permission;
     fi->level = 1;
-    return (ptw->in_prot_check & ~result->f.prot) != 0;
+    return (ptw->in_prot_check & ~result->f.prot) == 0;
 }
+
+#ifdef CONFIG_TCG
 
 static uint32_t *regime_rbar(CPUARMState *env, ARMMMUIdx mmu_idx,
                              uint32_t secure)
@@ -2844,6 +2857,7 @@ bool pmsav8_mpu_lookup(CPUARMState *env, uint32_t address,
      * If the region hit doesn't cover the entire TARGET_PAGE the address
      * is within, then we set the result page_size to 1 to force the
      * memory system to use a subpage.
+     * Return true on success, false on fault.
      */
     ARMCPU *cpu = env_archcpu(env);
     bool is_user = regime_is_user(mmu_idx);
@@ -2944,7 +2958,7 @@ bool pmsav8_mpu_lookup(CPUARMState *env, uint32_t address,
                 if (arm_feature(env, ARM_FEATURE_M)) {
                     fi->level = 1;
                 }
-                return true;
+                return false;
             }
 
             matchregion = n;
@@ -2958,7 +2972,7 @@ bool pmsav8_mpu_lookup(CPUARMState *env, uint32_t address,
         } else {
             fi->type = ARMFault_Permission;
         }
-        return true;
+        return false;
     }
 
     if (matchregion == -1) {
@@ -3020,7 +3034,7 @@ bool pmsav8_mpu_lookup(CPUARMState *env, uint32_t address,
     if (arm_feature(env, ARM_FEATURE_M)) {
         fi->level = 1;
     }
-    return (prot_check & ~result->f.prot) != 0;
+    return (prot_check & ~result->f.prot) == 0;
 }
 
 static bool v8m_is_sau_exempt(CPUARMState *env,
@@ -3191,7 +3205,7 @@ static bool get_phys_addr_pmsav8(CPUARMState *env,
                 result->f.lg_page_size = sattrs.subpage ? 0 : TARGET_PAGE_BITS;
                 result->f.phys_addr = address;
                 result->f.prot = 0;
-                return true;
+                return false;
             }
         } else {
             /*
@@ -3217,7 +3231,7 @@ static bool get_phys_addr_pmsav8(CPUARMState *env,
                 result->f.lg_page_size = sattrs.subpage ? 0 : TARGET_PAGE_BITS;
                 result->f.phys_addr = address;
                 result->f.prot = 0;
-                return true;
+                return false;
             }
         }
     }
@@ -3236,6 +3250,20 @@ static bool get_phys_addr_pmsav8(CPUARMState *env,
     }
     return ret;
 }
+
+#else /* !CONFIG_TCG */
+
+static bool get_phys_addr_pmsav8(CPUARMState *env,
+                                 S1Translate *ptw,
+                                 uint32_t address,
+                                 MMUAccessType access_type,
+                                 GetPhysAddrResult *result,
+                                 ARMMMUFaultInfo *fi)
+{
+    g_assert_not_reached();
+}
+
+#endif /* !CONFIG_TCG */
 
 /*
  * Translate from the 4-bit stage 2 representation of
@@ -3414,7 +3442,7 @@ static ARMCacheAttrs combine_cacheattrs(uint64_t hcr,
                                         ARMCacheAttrs s1, ARMCacheAttrs s2)
 {
     ARMCacheAttrs ret;
-    bool tagged = false;
+    bool tagged = false, notagaccess = false;
 
     assert(!s1.is_s2_format);
     ret.is_s2_format = false;
@@ -3422,6 +3450,18 @@ static ARMCacheAttrs combine_cacheattrs(uint64_t hcr,
     if (s1.attrs == 0xf0) {
         tagged = true;
         s1.attrs = 0xff;
+    }
+
+    if (hcr & HCR_FWB) {
+        if (s2.attrs >= 0xe) {
+            notagaccess = true;
+            s2.attrs = 0x7;
+        }
+    } else {
+        if (s2.attrs == 0x4) {
+            notagaccess = true;
+            s2.attrs = 0xf;
+        }
     }
 
     /* Combine shareability attributes (table D4-43) */
@@ -3455,9 +3495,16 @@ static ARMCacheAttrs combine_cacheattrs(uint64_t hcr,
         ret.shareability = 2;
     }
 
-    /* TODO: CombineS1S2Desc does not consider transient, only WB, RWA. */
+    /*
+     * The attr encoding 0xe0 corresponds to Tagged NoTagAccess and is only
+     * valid with FEAT_MTE_PERM (otherwise RESERVED, constrained
+     * unpredictable)). The presence of this feature is checked in
+     * allocation_tag_mem_probe, where Tagged NoTagAccess has its effect. See
+     * J1.3.5.2 EncodePARAttrs.
+     * TODO: CombineS1S2Desc does not consider transient, only WB, RWA.
+     */
     if (tagged && ret.attrs == 0xff) {
-        ret.attrs = 0xf0;
+        ret.attrs = notagaccess ? 0xe0 : 0xf0;
     }
 
     return ret;
@@ -3494,19 +3541,35 @@ static bool get_phys_addr_disabled(CPUARMState *env,
             int pamax = arm_pamax(env_archcpu(env));
             uint64_t tcr = env->cp15.tcr_el[r_el];
             int addrtop, tbi;
+            bool bit55;
 
             tbi = aa64_va_parameter_tbi(tcr, mmu_idx);
             if (access_type == MMU_INST_FETCH) {
                 tbi &= ~aa64_va_parameter_tbid(tcr, mmu_idx);
             }
-            tbi = (tbi >> extract64(address, 55, 1)) & 1;
+            bit55 = extract64(address, 55, 1);
+            tbi = (tbi >> bit55) & 1;
             addrtop = (tbi ? 55 : 63);
 
-            if (extract64(address, pamax, addrtop - pamax + 1) != 0) {
+            /*
+             * With MTX enabled, bits 56-59 are not checked according to
+             * AArch64.S1DisabledOutput.
+             */
+            uint64_t cmp_mask = MAKE_64BIT_MASK(pamax, addrtop - pamax + 1);
+
+            if (access_type != MMU_INST_FETCH &&
+                cpu_isar_feature(aa64_mte_mtx, env_archcpu(env))) {
+                int mtx = aa64_va_parameter_mtx(tcr, mmu_idx);
+                if (mtx & (1 << bit55)) {
+                    cmp_mask &= ~MAKE_64BIT_MASK(56, 4);
+                }
+            }
+
+            if (address & cmp_mask) {
                 fi->type = ARMFault_AddressSize;
                 fi->level = 0;
                 fi->stage2 = false;
-                return 1;
+                return false;
             }
 
             /*
@@ -3548,7 +3611,7 @@ static bool get_phys_addr_disabled(CPUARMState *env,
     result->f.lg_page_size = TARGET_PAGE_BITS;
     result->cacheattrs.shareability = shareability;
     result->cacheattrs.attrs = memattr;
-    return false;
+    return true;
 }
 
 static bool get_phys_addr_twostage(CPUARMState *env, S1Translate *ptw,
@@ -3569,7 +3632,7 @@ static bool get_phys_addr_twostage(CPUARMState *env, S1Translate *ptw,
                               memop, result, fi);
 
     /* If S1 fails, return early.  */
-    if (ret) {
+    if (!ret) {
         return ret;
     }
 
@@ -3600,7 +3663,7 @@ static bool get_phys_addr_twostage(CPUARMState *env, S1Translate *ptw,
     result->f.prot = s1_prot & result->s2prot;
 
     /* If S2 fails, return early.  */
-    if (ret) {
+    if (!ret) {
         return ret;
     }
 
@@ -3655,7 +3718,7 @@ static bool get_phys_addr_twostage(CPUARMState *env, S1Translate *ptw,
         result->f.attrs.space = arm_secure_to_space(result->f.attrs.secure);
     }
 
-    return false;
+    return true;
 }
 
 static bool get_phys_addr_nogpc(CPUARMState *env, S1Translate *ptw,
@@ -3771,7 +3834,7 @@ static bool get_phys_addr_nogpc(CPUARMState *env, S1Translate *ptw,
                       access_type == MMU_DATA_LOAD ? "reading" :
                       (access_type == MMU_DATA_STORE ? "writing" : "execute"),
                       (uint32_t)address, mmu_idx,
-                      ret ? "Miss" : "Hit",
+                      ret ? "Hit" : "Miss",
                       result->f.prot & PAGE_READ ? 'r' : '-',
                       result->f.prot & PAGE_WRITE ? 'w' : '-',
                       result->f.prot & PAGE_EXEC ? 'x' : '-');
@@ -3803,9 +3866,9 @@ static bool get_phys_addr_gpc(CPUARMState *env, S1Translate *ptw,
                               GetPhysAddrResult *result,
                               ARMMMUFaultInfo *fi)
 {
-    if (get_phys_addr_nogpc(env, ptw, address, access_type,
+    if (!get_phys_addr_nogpc(env, ptw, address, access_type,
                             memop, result, fi)) {
-        return true;
+        return false;
     }
 
     if (FIELD_EX64(env->cp15.gpccr_el3, GPCCR, GPC)) {
@@ -3825,11 +3888,11 @@ static bool get_phys_addr_gpc(CPUARMState *env, S1Translate *ptw,
                                           result->f.attrs.space, ptw->in_space,
                                           fi)) {
             fi->type = ARMFault_GPCFOnOutput;
-            return true;
+            return false;
         }
     }
 
-    return false;
+    return true;
 }
 
 bool get_phys_addr_for_at(CPUARMState *env, vaddr address,
@@ -3955,15 +4018,16 @@ static bool arm_cpu_get_phys_addr(CPUARMState *env, vaddr addr,
     };
     GetPhysAddrResult res = {};
     ARMMMUFaultInfo fi = {};
-    bool fault = get_phys_addr_gpc(env, &ptw, addr, MMU_DATA_LOAD, 0, &res, &fi);
+    bool ok = get_phys_addr_gpc(env, &ptw, addr, MMU_DATA_LOAD, 0, &res, &fi);
 
-    if (!fault) {
+    if (ok) {
         /* translation succeeded */
         result->physaddr = res.f.phys_addr;
         result->attrs = res.f.attrs;
+        result->attrs.debug = 1;
         result->lg_page_size = res.f.lg_page_size;
     }
-    return fault;
+    return ok;
 }
 
 bool arm_cpu_translate_for_debug(CPUState *cs, vaddr addr,
@@ -3973,12 +4037,7 @@ bool arm_cpu_translate_for_debug(CPUState *cs, vaddr addr,
     CPUARMState *env = &cpu->env;
     ARMMMUIdx mmu_idx = arm_mmu_idx(env);
 
-    /*
-     * Note that this function returns true on translation success,
-     * but arm_cpu_get_phys_addr() and all the other get_phys_addr
-     * style functions in this file return true on failure.
-     */
-    if (!arm_cpu_get_phys_addr(env, addr, result, mmu_idx)) {
+    if (arm_cpu_get_phys_addr(env, addr, result, mmu_idx)) {
         return true;
     }
 
@@ -3990,10 +4049,10 @@ bool arm_cpu_translate_for_debug(CPUState *cs, vaddr addr,
     switch (mmu_idx) {
     case ARMMMUIdx_E10_1:
     case ARMMMUIdx_E10_1_PAN:
-        return !arm_cpu_get_phys_addr(env, addr, result, ARMMMUIdx_E10_0);
+        return arm_cpu_get_phys_addr(env, addr, result, ARMMMUIdx_E10_0);
     case ARMMMUIdx_E20_2:
     case ARMMMUIdx_E20_2_PAN:
-        return !arm_cpu_get_phys_addr(env, addr, result, ARMMMUIdx_E20_0);
+        return arm_cpu_get_phys_addr(env, addr, result, ARMMMUIdx_E20_0);
     default:
         /* translation failed */
         return false;

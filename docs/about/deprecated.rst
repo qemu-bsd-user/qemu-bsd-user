@@ -177,14 +177,6 @@ The ``info capture`` command is deprecated and will be removed in a future relea
 Host Architectures
 ------------------
 
-MIPS (since 10.2)
-'''''''''''''''''
-
-MIPS is not supported by Debian 13 ("Trixie") and newer, making it hard to
-maintain our cross-compilation CI tests of the architecture. As we no longer
-have CI coverage support may bitrot away before the deprecation process
-completes.
-
 TCG Plugin support not enabled by default with TCI (since 9.2)
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
@@ -250,23 +242,12 @@ deprecated; use the new name ``dtb-randomness`` instead. The new name
 better reflects the way this property affects all random data within
 the device tree blob, not just the ``kaslr-seed`` node.
 
+RISC-V Shakti machine (since 11.1)
+''''''''''''''''''''''''''''''''''
 
-RISC-V default machine option (since 10.0)
-''''''''''''''''''''''''''''''''''''''''''
-
-RISC-V defines ``spike`` as the default machine if no machine option is
-given in the command line.  This happens because ``spike`` is the first
-RISC-V machine implemented in QEMU and setting it as default was
-convenient at that time.  Now we have 7 riscv64 and 6 riscv32 machines
-and having ``spike`` as a default is no longer justified.  This default
-will also promote situations where users think they're running ``virt``
-(the most used RISC-V machine type in 10.0) when in fact they're
-running ``spike``.
-
-Removing the default machine option forces users to always set the machine
-they want to use and avoids confusion.  Existing users of the ``spike``
-machine must ensure that they're setting the ``spike`` machine in the
-command line (``-M spike``).
+The RISC-V ``shakti_c`` machine hasn't had meaningful contributions since 2021
+and is currently unmaintained. The machine is scheduled to be removed as it
+appears to have no users.
 
 
 Backend options
@@ -381,14 +362,6 @@ Specifying the iSCSI password in plain text on the command line using the
 ``password`` option is insecure. The ``password-secret`` option should be
 used instead, to refer to a ``--object secret...`` instance that provides
 a password via a file, or encrypted.
-
-``gluster`` backend (since 9.2)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-According to https://marc.info/?l=fedora-devel-list&m=171934833215726
-the GlusterFS development effectively ended. Unless the development
-gains momentum again, the QEMU project will remove the gluster backend
-in a future release.
 
 
 Character device options

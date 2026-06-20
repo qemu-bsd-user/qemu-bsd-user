@@ -289,6 +289,7 @@ config ZYNQ
     select XILINX_AXI
     select XILINX_SPI
     select XILINX_SPIPS
+    select XLNX_ZYNQ_DDRC
     select ZYNQ_DEVCFG
 
 config ARM_V7M
@@ -642,6 +643,10 @@ config FSL_IMX8MM_EVK
     depends on TCG
     select FSL_IMX8MM
 
+config TEGRA241_CMDQV
+    bool
+    depends on ARM_SMMUV3_ACCEL
+
 config ARM_SMMUV3_ACCEL
     bool
     depends on ARM_SMMUV3
@@ -649,6 +654,7 @@ config ARM_SMMUV3_ACCEL
 config ARM_SMMUV3
     bool
     select ARM_SMMUV3_ACCEL if IOMMUFD
+    imply TEGRA241_CMDQV
 
 config FSL_IMX6UL
     bool

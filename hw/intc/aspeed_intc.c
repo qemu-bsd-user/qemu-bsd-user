@@ -692,9 +692,9 @@ static void aspeed_intc_instance_init(Object *obj)
     }
 }
 
-static void aspeed_intc_reset(DeviceState *dev)
+static void aspeed_intc_reset_hold(Object *obj, ResetType type)
 {
-    AspeedINTCState *s = ASPEED_INTC(dev);
+    AspeedINTCState *s = ASPEED_INTC(obj);
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
 
     memset(s->regs, 0, aic->nr_regs << 2);
@@ -746,26 +746,17 @@ static void aspeed_intc_unrealize(DeviceState *dev)
 static void aspeed_intc_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     AspeedINTCClass *aic = ASPEED_INTC_CLASS(klass);
 
     dc->desc = "ASPEED INTC Controller";
     dc->realize = aspeed_intc_realize;
     dc->unrealize = aspeed_intc_unrealize;
-    device_class_set_legacy_reset(dc, aspeed_intc_reset);
+    rc->phases.hold = aspeed_intc_reset_hold;
     dc->vmsd = NULL;
 
     aic->reg_ops = &aspeed_intc_ops;
 }
-
-static const TypeInfo aspeed_intc_info = {
-    .name = TYPE_ASPEED_INTC,
-    .parent = TYPE_SYS_BUS_DEVICE,
-    .instance_init = aspeed_intc_instance_init,
-    .instance_size = sizeof(AspeedINTCState),
-    .class_init = aspeed_intc_class_init,
-    .class_size = sizeof(AspeedINTCClass),
-    .abstract = true,
-};
 
 static AspeedINTCIRQ aspeed_2700_intc_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 10, R_GICINT192_201_EN, R_GICINT192_201_STATUS},
@@ -786,12 +777,6 @@ static void aspeed_2700_intc_class_init(ObjectClass *klass, const void *data)
     aic->irq_table = aspeed_2700_intc_irqs;
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intc_irqs);
 }
-
-static const TypeInfo aspeed_2700_intc_info = {
-    .name = TYPE_ASPEED_2700_INTC,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700_intc_class_init,
-};
 
 static AspeedINTCIRQ aspeed_2700_intcioexp2_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 8, 1, R_GICINT192_EN, R_GICINT192_STATUS},
@@ -816,12 +801,6 @@ static void aspeed_2700_intcioexp2_class_init(ObjectClass *klass,
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intcioexp2_irqs);
 }
 
-static const TypeInfo aspeed_2700_intcioexp2_info = {
-    .name = TYPE_ASPEED_2700_INTCIOEXP2,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700_intcioexp2_class_init,
-};
-
 static AspeedINTCIRQ aspeed_2700_intcioexp1_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 6, 1, R_GICINT192_EN, R_GICINT192_STATUS},
     {1, 7, 1, R_GICINT193_EN, R_GICINT193_STATUS},
@@ -844,12 +823,6 @@ static void aspeed_2700_intcioexp1_class_init(ObjectClass *klass,
     aic->irq_table = aspeed_2700_intcioexp1_irqs;
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intcioexp1_irqs);
 }
-
-static const TypeInfo aspeed_2700_intcioexp1_info = {
-    .name = TYPE_ASPEED_2700_INTCIOEXP1,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700_intcioexp1_class_init,
-};
 
 static AspeedINTCIRQ aspeed_2700_intcio_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 1, R_GICINT192_EN, R_GICINT192_STATUS},
@@ -877,12 +850,6 @@ static void aspeed_2700_intcio_class_init(ObjectClass *klass, const void *data)
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intcio_irqs);
 }
 
-static const TypeInfo aspeed_2700_intcio_info = {
-    .name = TYPE_ASPEED_2700_INTCIO,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700_intcio_class_init,
-};
-
 static AspeedINTCIRQ aspeed_2700ssp_intc_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 10, R_SSPINT160_169_EN, R_SSPINT160_169_STATUS},
 };
@@ -903,12 +870,6 @@ static void aspeed_2700ssp_intc_class_init(ObjectClass *klass, const void *data)
     aic->irq_table = aspeed_2700ssp_intc_irqs;
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700ssp_intc_irqs);
 }
-
-static const TypeInfo aspeed_2700ssp_intc_info = {
-    .name = TYPE_ASPEED_2700SSP_INTC,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700ssp_intc_class_init,
-};
 
 static AspeedINTCIRQ aspeed_2700ssp_intcio_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 1, R_SSPINT160_EN, R_SSPINT160_STATUS},
@@ -937,12 +898,6 @@ static void aspeed_2700ssp_intcio_class_init(ObjectClass *klass,
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700ssp_intcio_irqs);
 }
 
-static const TypeInfo aspeed_2700ssp_intcio_info = {
-    .name = TYPE_ASPEED_2700SSP_INTCIO,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700ssp_intcio_class_init,
-};
-
 static AspeedINTCIRQ aspeed_2700tsp_intc_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 10, R_TSPINT160_169_EN, R_TSPINT160_169_STATUS},
 };
@@ -963,12 +918,6 @@ static void aspeed_2700tsp_intc_class_init(ObjectClass *klass, const void *data)
     aic->irq_table = aspeed_2700tsp_intc_irqs;
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700tsp_intc_irqs);
 }
-
-static const TypeInfo aspeed_2700tsp_intc_info = {
-    .name = TYPE_ASPEED_2700TSP_INTC,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700tsp_intc_class_init,
-};
 
 static AspeedINTCIRQ aspeed_2700tsp_intcio_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 1, R_TSPINT160_EN, R_TSPINT160_STATUS},
@@ -997,23 +946,56 @@ static void aspeed_2700tsp_intcio_class_init(ObjectClass *klass,
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700tsp_intcio_irqs);
 }
 
-static const TypeInfo aspeed_2700tsp_intcio_info = {
-    .name = TYPE_ASPEED_2700TSP_INTCIO,
-    .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700tsp_intcio_class_init,
+static const TypeInfo aspeed_intc_types[] = {
+    {
+        .name = TYPE_ASPEED_INTC,
+        .parent = TYPE_SYS_BUS_DEVICE,
+        .instance_init = aspeed_intc_instance_init,
+        .instance_size = sizeof(AspeedINTCState),
+        .class_init = aspeed_intc_class_init,
+        .class_size = sizeof(AspeedINTCClass),
+        .abstract = true,
+    },
+    {
+        .name = TYPE_ASPEED_2700_INTC,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700_intc_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700_INTCIO,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700_intcio_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700SSP_INTC,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700ssp_intc_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700SSP_INTCIO,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700ssp_intcio_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700TSP_INTC,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700tsp_intc_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700TSP_INTCIO,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700tsp_intcio_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700_INTCIOEXP1,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700_intcioexp1_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700_INTCIOEXP2,
+        .parent = TYPE_ASPEED_INTC,
+        .class_init = aspeed_2700_intcioexp2_class_init,
+    }
 };
 
-static void aspeed_intc_register_types(void)
-{
-    type_register_static(&aspeed_intc_info);
-    type_register_static(&aspeed_2700_intc_info);
-    type_register_static(&aspeed_2700_intcio_info);
-    type_register_static(&aspeed_2700_intcioexp1_info);
-    type_register_static(&aspeed_2700_intcioexp2_info);
-    type_register_static(&aspeed_2700ssp_intc_info);
-    type_register_static(&aspeed_2700ssp_intcio_info);
-    type_register_static(&aspeed_2700tsp_intc_info);
-    type_register_static(&aspeed_2700tsp_intcio_info);
-}
-
-type_init(aspeed_intc_register_types);
+DEFINE_TYPES(aspeed_intc_types)

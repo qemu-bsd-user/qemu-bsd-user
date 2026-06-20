@@ -128,8 +128,8 @@
 #define AST2600_HW_STRAP2         TO_REG(0x510)
 #define AST2600_HW_STRAP2_CLR     TO_REG(0x514)
 #define AST2600_HW_STRAP2_PROT    TO_REG(0x518)
-#define AST2600_RNG_CTRL          TO_REG(0x524)
-#define AST2600_RNG_DATA          TO_REG(0x540)
+#define AST2600_RNG_CTRL          TO_REG(0x520)
+#define AST2600_RNG_DATA          TO_REG(0x524)
 #define AST2600_CHIP_ID0          TO_REG(0x5B0)
 #define AST2600_CHIP_ID1          TO_REG(0x5B4)
 
@@ -542,10 +542,10 @@ static uint32_t aspeed_2600_scu_calc_hpll(AspeedSCUState *s, uint32_t hpll_reg)
     return clkin * multiplier;
 }
 
-static void aspeed_scu_reset(DeviceState *dev)
+static void aspeed_scu_reset_hold(Object *obj, ResetType type)
 {
-    AspeedSCUState *s = ASPEED_SCU(dev);
-    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(dev);
+    AspeedSCUState *s = ASPEED_SCU(obj);
+    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(obj);
 
     memcpy(s->regs, asc->resets, asc->nr_regs * 4);
     s->regs[SILICON_REV] = s->silicon_rev;
@@ -562,6 +562,7 @@ static uint32_t aspeed_silicon_revs[] = {
     AST1060_A2_SILICON_REV,
     AST2700_A1_SILICON_REV,
     AST2700_A2_SILICON_REV,
+    AST1040_A0_SILICON_REV,
 };
 
 bool is_supported_silicon_rev(uint32_t silicon_rev)
@@ -615,21 +616,13 @@ static const Property aspeed_scu_properties[] = {
 static void aspeed_scu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     dc->realize = aspeed_scu_realize;
-    device_class_set_legacy_reset(dc, aspeed_scu_reset);
+    rc->phases.hold = aspeed_scu_reset_hold;
     dc->desc = "ASPEED System Control Unit";
     dc->vmsd = &vmstate_aspeed_scu;
     device_class_set_props(dc, aspeed_scu_properties);
 }
-
-static const TypeInfo aspeed_scu_info = {
-    .name = TYPE_ASPEED_SCU,
-    .parent = TYPE_SYS_BUS_DEVICE,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_scu_class_init,
-    .class_size    = sizeof(AspeedSCUClass),
-    .abstract      = true,
-};
 
 static void aspeed_2400_scu_class_init(ObjectClass *klass, const void *data)
 {
@@ -646,13 +639,6 @@ static void aspeed_2400_scu_class_init(ObjectClass *klass, const void *data)
     asc->ops = &aspeed_ast2400_scu_ops;
 }
 
-static const TypeInfo aspeed_2400_scu_info = {
-    .name = TYPE_ASPEED_2400_SCU,
-    .parent = TYPE_ASPEED_SCU,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_2400_scu_class_init,
-};
-
 static void aspeed_2500_scu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -667,13 +653,6 @@ static void aspeed_2500_scu_class_init(ObjectClass *klass, const void *data)
     asc->clkin_25Mhz = false;
     asc->ops = &aspeed_ast2500_scu_ops;
 }
-
-static const TypeInfo aspeed_2500_scu_info = {
-    .name = TYPE_ASPEED_2500_SCU,
-    .parent = TYPE_ASPEED_SCU,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_2500_scu_class_init,
-};
 
 static uint64_t aspeed_ast2600_scu_read(void *opaque, hwaddr offset,
                                         unsigned size)
@@ -821,10 +800,10 @@ static const uint32_t ast2600_a3_resets[ASPEED_AST2600_SCU_NR_REGS] = {
     [AST2600_CHIP_ID1]          = 0x88884444,
 };
 
-static void aspeed_ast2600_scu_reset(DeviceState *dev)
+static void aspeed_ast2600_scu_reset_hold(Object *obj, ResetType type)
 {
-    AspeedSCUState *s = ASPEED_SCU(dev);
-    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(dev);
+    AspeedSCUState *s = ASPEED_SCU(obj);
+    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(obj);
 
     memcpy(s->regs, asc->resets, asc->nr_regs * 4);
 
@@ -843,10 +822,11 @@ static void aspeed_ast2600_scu_reset(DeviceState *dev)
 static void aspeed_2600_scu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     AspeedSCUClass *asc = ASPEED_SCU_CLASS(klass);
 
     dc->desc = "ASPEED 2600 System Control Unit";
-    device_class_set_legacy_reset(dc, aspeed_ast2600_scu_reset);
+    rc->phases.hold = aspeed_ast2600_scu_reset_hold;
     asc->resets = ast2600_a3_resets;
     asc->calc_hpll = aspeed_2600_scu_calc_hpll;
     asc->get_apb = aspeed_2600_scu_get_apb_freq;
@@ -855,13 +835,6 @@ static void aspeed_2600_scu_class_init(ObjectClass *klass, const void *data)
     asc->clkin_25Mhz = true;
     asc->ops = &aspeed_ast2600_scu_ops;
 }
-
-static const TypeInfo aspeed_2600_scu_info = {
-    .name = TYPE_ASPEED_2600_SCU,
-    .parent = TYPE_ASPEED_SCU,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_2600_scu_class_init,
-};
 
 static uint64_t aspeed_ast2700_scu_read(void *opaque, hwaddr offset,
                                         unsigned size)
@@ -949,10 +922,10 @@ static const uint32_t ast2700_a0_resets[ASPEED_AST2700_SCU_NR_REGS] = {
     [AST2700_SCU_VGA_SCRATCH_0]     = 0x00000040,
 };
 
-static void aspeed_ast2700_scu_reset(DeviceState *dev)
+static void aspeed_ast2700_scu_reset_hold(Object *obj, ResetType type)
 {
-    AspeedSCUState *s = ASPEED_SCU(dev);
-    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(dev);
+    AspeedSCUState *s = ASPEED_SCU(obj);
+    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(obj);
 
     memcpy(s->regs, asc->resets, asc->nr_regs * 4);
     s->regs[AST2700_SILICON_REV] = s->silicon_rev;
@@ -962,10 +935,11 @@ static void aspeed_ast2700_scu_reset(DeviceState *dev)
 static void aspeed_2700_scu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     AspeedSCUClass *asc = ASPEED_SCU_CLASS(klass);
 
     dc->desc = "ASPEED 2700 System Control Unit";
-    device_class_set_legacy_reset(dc, aspeed_ast2700_scu_reset);
+    rc->phases.hold = aspeed_ast2700_scu_reset_hold;
     asc->resets = ast2700_a0_resets;
     asc->calc_hpll = aspeed_2600_scu_calc_hpll;
     asc->get_apb = aspeed_2700_scu_get_apb_freq;
@@ -1081,10 +1055,11 @@ static const uint32_t ast2700_a0_resets_io[ASPEED_AST2700_SCU_NR_REGS] = {
 static void aspeed_2700_scuio_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     AspeedSCUClass *asc = ASPEED_SCU_CLASS(klass);
 
     dc->desc = "ASPEED 2700 System Control Unit I/O";
-    device_class_set_legacy_reset(dc, aspeed_ast2700_scu_reset);
+    rc->phases.hold = aspeed_ast2700_scu_reset_hold;
     asc->resets = ast2700_a0_resets_io;
     asc->calc_hpll = aspeed_2600_scu_calc_hpll;
     asc->get_apb = aspeed_2700_scuio_get_apb_freq;
@@ -1093,20 +1068,6 @@ static void aspeed_2700_scuio_class_init(ObjectClass *klass, const void *data)
     asc->clkin_25Mhz = true;
     asc->ops = &aspeed_ast2700_scuio_ops;
 }
-
-static const TypeInfo aspeed_2700_scu_info = {
-    .name = TYPE_ASPEED_2700_SCU,
-    .parent = TYPE_ASPEED_SCU,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_2700_scu_class_init,
-};
-
-static const TypeInfo aspeed_2700_scuio_info = {
-    .name = TYPE_ASPEED_2700_SCUIO,
-    .parent = TYPE_ASPEED_SCU,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_2700_scuio_class_init,
-};
 
 static const uint32_t ast1030_a1_resets[ASPEED_AST2600_SCU_NR_REGS] = {
     [AST2600_SYS_RST_CTRL]      = 0xFFC3FED8,
@@ -1122,10 +1083,10 @@ static const uint32_t ast1030_a1_resets[ASPEED_AST2600_SCU_NR_REGS] = {
     [AST2600_CHIP_ID1]          = 0x0BADCAFE,
 };
 
-static void aspeed_ast1030_scu_reset(DeviceState *dev)
+static void aspeed_ast1030_scu_reset_hold(Object *obj, ResetType type)
 {
-    AspeedSCUState *s = ASPEED_SCU(dev);
-    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(dev);
+    AspeedSCUState *s = ASPEED_SCU(obj);
+    AspeedSCUClass *asc = ASPEED_SCU_GET_CLASS(obj);
 
     memcpy(s->regs, asc->resets, asc->nr_regs * 4);
 
@@ -1139,10 +1100,11 @@ static void aspeed_ast1030_scu_reset(DeviceState *dev)
 static void aspeed_1030_scu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     AspeedSCUClass *asc = ASPEED_SCU_CLASS(klass);
 
     dc->desc = "ASPEED 1030 System Control Unit";
-    device_class_set_legacy_reset(dc, aspeed_ast1030_scu_reset);
+    rc->phases.hold = aspeed_ast1030_scu_reset_hold;
     asc->resets = ast1030_a1_resets;
     asc->calc_hpll = aspeed_2600_scu_calc_hpll;
     asc->get_apb = aspeed_1030_scu_get_apb_freq;
@@ -1152,22 +1114,51 @@ static void aspeed_1030_scu_class_init(ObjectClass *klass, const void *data)
     asc->ops = &aspeed_ast2600_scu_ops;
 }
 
-static const TypeInfo aspeed_1030_scu_info = {
-    .name = TYPE_ASPEED_1030_SCU,
-    .parent = TYPE_ASPEED_SCU,
-    .instance_size = sizeof(AspeedSCUState),
-    .class_init = aspeed_1030_scu_class_init,
+static const TypeInfo aspeed_scu_types[] = {
+    {
+        .name = TYPE_ASPEED_SCU,
+        .parent = TYPE_SYS_BUS_DEVICE,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_scu_class_init,
+        .class_size    = sizeof(AspeedSCUClass),
+        .abstract      = true,
+    },
+    {
+        .name = TYPE_ASPEED_1030_SCU,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_1030_scu_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2400_SCU,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2400_scu_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2500_SCU,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2500_scu_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2600_SCU,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2600_scu_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700_SCU,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2700_scu_class_init,
+    },
+    {
+        .name = TYPE_ASPEED_2700_SCUIO,
+        .parent = TYPE_ASPEED_SCU,
+        .instance_size = sizeof(AspeedSCUState),
+        .class_init = aspeed_2700_scuio_class_init,
+    }
 };
 
-static void aspeed_scu_register_types(void)
-{
-    type_register_static(&aspeed_scu_info);
-    type_register_static(&aspeed_2400_scu_info);
-    type_register_static(&aspeed_2500_scu_info);
-    type_register_static(&aspeed_2600_scu_info);
-    type_register_static(&aspeed_1030_scu_info);
-    type_register_static(&aspeed_2700_scu_info);
-    type_register_static(&aspeed_2700_scuio_info);
-}
-
-type_init(aspeed_scu_register_types);
+DEFINE_TYPES(aspeed_scu_types)

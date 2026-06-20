@@ -1,21 +1,20 @@
 keymaps = [
-  ['atset1', 'qcode'],
+  ['atset1', 'linux'],
   ['linux', 'qcode'],
-  ['qcode', 'atset1'],
-  ['qcode', 'atset2'],
-  ['qcode', 'atset3'],
+  ['linux', 'atset1'],
+  ['linux', 'atset2'],
+  ['linux', 'atset3'],
   ['qcode', 'linux'],
-  ['qcode', 'qnum'],
-  ['qcode', 'sun'],
-  ['qnum', 'qcode'],
-  ['usb', 'qcode'],
-  ['win32', 'qcode'],
-  ['x11', 'qcode'],
-  ['xorgevdev', 'qcode'],
-  ['xorgkbd', 'qcode'],
-  ['xorgxquartz', 'qcode'],
-  ['xorgxwin', 'qcode'],
-  ['osx', 'qcode'],
+  ['linux', 'qnum'],
+  ['linux', 'sun'],
+  ['qnum', 'linux'],
+  ['usb', 'linux'],
+  ['win32', 'linux'],
+  ['x11', 'linux'],
+  ['xorgkbd', 'linux'],
+  ['xorgxquartz', 'linux'],
+  ['xorgxwin', 'linux'],
+  ['osx', 'linux'],
 ]
 
 if have_system or xkbcommon.found()
@@ -54,7 +53,6 @@ libui = static_library('qemuui', libui_sources + genh,
 ui = declare_dependency(objects: libui.extract_all_objects(recursive: false), dependencies: [pixman])
 system_ss.add(png)
 system_ss.add(files(
-  'input-legacy.c',
   'input-barrier.c',
   'input.c',
   'ui-hmp-cmds.c',
