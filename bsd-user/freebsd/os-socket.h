@@ -220,6 +220,9 @@ static inline abi_long do_bsd_setsockopt(int sockfd, int level, int optname,
      * When bit size and endian are the same, the structures are the same (we hope).
      */
     p = lock_user(VERIFY_READ, optval_addr, optlen, 1);
+    if (p == NULL) {
+        return -TARGET_EFAULT;
+    }
     ret = get_errno(setsockopt(sockfd, level, optname, p, optlen));
     unlock_user(p, optval_addr, 0);
     return ret;
@@ -239,7 +242,7 @@ static inline abi_long do_bsd_getsockopt(int sockfd, int level, int optname,
 
     
     if (e == NULL) {
-        gemu_log("Unsupported setsockopt level=%d optname=%d\n",
+        gemu_log("Unsupported getsockopt level=%d optname=%d\n",
                  level, optname);
         return -TARGET_ENOPROTOOPT;
     }
@@ -322,10 +325,12 @@ static inline abi_long do_bsd_getsockopt(int sockfd, int level, int optname,
      * When bit size and endian are the same, the structures are the same, and
      * if not that is handled above.
      */
-    p = lock_user(VERIFY_WRITE, optval_addr, optlen, 0);
+    p = lock_user(VERIFY_WRITE, optval_addr, len, 0);
+    if (p == NULL) {
+        return -TARGET_EFAULT;
+    }
     ret = get_errno(getsockopt(sockfd, level, optname, p, &len));
-    unlock_user(p, optval_addr, 0);
-
+    unlock_user(p, optval_addr, ret < 0 ? 0 : len);
 done:
     if (put_user_u32(len, optlen)) {
         return -TARGET_EFAULT;
