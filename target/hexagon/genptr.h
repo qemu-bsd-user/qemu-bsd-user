@@ -36,6 +36,7 @@ void gen_store8i(TCGv_env cpu_env, TCGv vaddr, int64_t src, uint32_t slot);
 TCGv gen_read_reg(TCGv result, int num);
 TCGv gen_read_preg(TCGv pred, uint8_t num);
 TCGv get_result_gpr(DisasContext *ctx, int rnum);
+TCGv gen_unalias_gpr_src(TCGv src, TCGv dst);
 TCGv get_result_pred(DisasContext *ctx, int pnum);
 void gen_pred_write(DisasContext *ctx, int pnum, TCGv val);
 void gen_set_usr_field(DisasContext *ctx, int field, TCGv val);
@@ -58,6 +59,10 @@ TCGv gen_get_half(TCGv result, int N, TCGv src, bool sign);
 void gen_set_half(int N, TCGv result, TCGv src);
 void gen_set_half_i64(int N, TCGv_i64 result, TCGv src);
 void probe_noshuf_load(TCGv va, int s, int mi);
+void gen_gvec_sabsdiff(unsigned vece, uint32_t dofs, uint32_t aofs,
+                       uint32_t bofs, uint32_t oprsz, uint32_t maxsz);
+void gen_gvec_uabsdiff(unsigned vece, uint32_t dofs, uint32_t aofs,
+                       uint32_t bofs, uint32_t oprsz, uint32_t maxsz);
 
 extern const target_ulong reg_immut_masks[TOTAL_PER_THREAD_REGS];
 

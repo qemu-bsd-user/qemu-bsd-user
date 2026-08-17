@@ -23,6 +23,15 @@ import string
 import hex_common
 from textwrap import dedent
 
+def gen_disabled_ieee_insn(f, tag, regs):
+    f.write("    if (!ctx->ieee_fp_extension) {\n")
+    for regtype, regid in regs:
+        reg = hex_common.get_register(tag, regtype, regid)
+        if reg.is_hvx_reg() and reg.is_written():
+            reg.gen_zero(f)
+    f.write("        return;\n")
+    f.write("    }\n")
+
 ##
 ## Generate the TCG code to call the helper
 ##     For A2_add: Rd32=add(Rs32,Rt32), { RdV=RsV+RtV;}
@@ -74,7 +83,25 @@ def gen_tcg_func(f, tag, regs, imms):
         i = 1 if immlett.isupper() else 0
         f.write(f"    int {hex_common.imm_name(immlett)} = insn->immed[{i}];\n")
 
+    if "A_HVX_IEEE_FP" in hex_common.attribdict[tag]:
+        gen_disabled_ieee_insn(f, tag, regs)
+
     if hex_common.is_idef_parser_enabled(tag):
+        gpr_operands = [
+            hex_common.get_register(tag, regtype, regid)
+            for regtype, regid in regs
+            if hex_common.get_register(tag, regtype, regid).may_alias_gpr()
+        ]
+        dests = [reg for reg in gpr_operands if reg.is_written()]
+        for reg in gpr_operands:
+            if reg.is_written() or not reg.is_read():
+                continue
+            src = reg.reg_tcg()
+            for dest in dests:
+                f.write(hex_common.code_fmt(f"""\
+                    {src} = gen_unalias_gpr_src({src}, {dest.reg_tcg()});
+                """))
+
         declared = []
         ## Handle registers
         for regtype, regid in regs:

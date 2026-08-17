@@ -428,12 +428,21 @@ static void pc_i440fx_machine_options(MachineClass *m)
                      pc_piix_compat_defaults, pc_piix_compat_defaults_len);
 }
 
-static void pc_i440fx_machine_11_1_options(MachineClass *m)
+static void pc_i440fx_machine_11_2_options(MachineClass *m)
 {
     pc_i440fx_machine_options(m);
 }
 
-DEFINE_I440FX_MACHINE_AS_LATEST(11, 1);
+DEFINE_I440FX_MACHINE_AS_LATEST(11, 2);
+
+static void pc_i440fx_machine_11_1_options(MachineClass *m)
+{
+    pc_i440fx_machine_11_2_options(m);
+    compat_props_add(m->compat_props, hw_compat_11_1, hw_compat_11_1_len);
+    compat_props_add(m->compat_props, pc_compat_11_1, pc_compat_11_1_len);
+}
+
+DEFINE_I440FX_MACHINE(11, 1);
 
 static void pc_i440fx_machine_11_0_options(MachineClass *m)
 {
@@ -658,6 +667,7 @@ static void xenfv_machine_4_2_options(MachineClass *m)
 {
     pc_i440fx_machine_4_2_options(m);
     m->desc = "Xen Fully-virtualized PC";
+    m->alias = "xenfv";
     m->max_cpus = HVM_MAX_VCPUS;
     m->default_machine_opts = "accel=xen,suppress-vmdesc=on";
 }
