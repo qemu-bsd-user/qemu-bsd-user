@@ -664,7 +664,7 @@ int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste, SMMUEventInfo *event)
 {
     dma_addr_t addr, strtab_base;
     uint32_t log2size;
-    int strtab_size_shift;
+    int strtab_size;
     int ret;
 
     trace_smmuv3_find_ste(sid, s->features, s->sid_split);
@@ -685,9 +685,9 @@ int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste, SMMUEventInfo *event)
          * Align strtab base address to table size. For this purpose, assume it
          * is not bounded by SMMU_IDR1_SIDSIZE.
          */
-        strtab_size_shift = MAX(5, (int)log2size - s->sid_split - 1 + 3);
+        strtab_size = MAX(6, (int)log2size - s->sid_split + L1STD_SIZE);
         strtab_base = s->strtab_base & SMMU_BASE_ADDR_MASK &
-                      ~MAKE_64BIT_MASK(0, strtab_size_shift);
+                      ~MAKE_64BIT_MASK(0, strtab_size);
         l1_ste_offset = sid >> s->sid_split;
         l2_ste_offset = sid & ((1 << s->sid_split) - 1);
         l1ptr = (dma_addr_t)(strtab_base + l1_ste_offset * sizeof(l1std));
@@ -707,7 +707,7 @@ int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste, SMMUEventInfo *event)
 
         span = L1STD_SPAN(&l1std);
 
-        if (!span) {
+        if (!span || span > 11) {
             /* l2ptr is not valid */
             if (!event->inval_ste_allowed) {
                 qemu_log_mask(LOG_GUEST_ERROR,
@@ -716,8 +716,20 @@ int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste, SMMUEventInfo *event)
             event->type = SMMU_EVT_C_BAD_STREAMID;
             return -EINVAL;
         }
+
+        if (span > s->sid_split + 1) {
+            if (!event->inval_ste_allowed) {
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "invalid span (0x%x)\n", span);
+            }
+            event->type = SMMU_EVT_C_BAD_STREAMID;
+            return -EINVAL;
+        }
+
         max_l2_ste = (1 << span) - 1;
         l2ptr = l1std_l2ptr(&l1std);
+
+        l2ptr &= ~MAKE_64BIT_MASK(0, 6 + (span - 1));
         trace_smmuv3_find_ste_2lvl(s->strtab_base, l1ptr, l1_ste_offset,
                                    l2ptr, l2_ste_offset, max_l2_ste);
         if (l2_ste_offset > max_l2_ste) {
@@ -729,9 +741,10 @@ int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste, SMMUEventInfo *event)
         }
         addr = l2ptr + l2_ste_offset * sizeof(*ste);
     } else {
-        strtab_size_shift = log2size + 5;
+        strtab_size = log2size + STE_SIZE;
+        strtab_size = MIN(64, strtab_size);
         strtab_base = s->strtab_base & SMMU_BASE_ADDR_MASK &
-                      ~MAKE_64BIT_MASK(0, strtab_size_shift);
+                      ~MAKE_64BIT_MASK(0, strtab_size);
         addr = strtab_base + sid * sizeof(*ste);
     }
 
@@ -1688,6 +1701,13 @@ static MemTxResult smmu_writel(SMMUv3State *s, hwaddr offset,
         s->strtab_base_cfg = data;
         if (FIELD_EX32(data, STRTAB_BASE_CFG, FMT) == 1) {
             s->sid_split = FIELD_EX32(data, STRTAB_BASE_CFG, SPLIT);
+            if (s->sid_split != 6 && s->sid_split != 8 && s->sid_split != 10) {
+                /* Other values are reserved, behave as 6 */
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "Invalid STRTAB_BASE_CFG.SPLIT=%u, use 6 instead\n",
+                              s->sid_split);
+                s->sid_split = 6;
+            }
             s->features |= SMMU_FEATURE_2LVL_STE;
         }
         break;

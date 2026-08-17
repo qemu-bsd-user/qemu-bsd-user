@@ -44,10 +44,12 @@ GlobalProperty hw_compat_11_0[] = {
     { "chardev-vc", "encoding", "cp437" },
     { "tpm-crb", "cap-chunk", "off" },
     { "tpm-crb", "x-allow-chunk-migration", "off" },
+    { "tpm-tis-device", "ppi", "off" },
     { TYPE_ARM_SMMUV3, "ats", "off" },
     { TYPE_ARM_SMMUV3, "ril", "on" },
     { TYPE_ARM_SMMUV3, "ssidsize", "0" },
     { TYPE_ARM_SMMUV3, "oas", "44" },
+    { "migration", "switchover-ack-legacy", "on" },
 };
 const size_t hw_compat_11_0_len = G_N_ELEMENTS(hw_compat_11_0);
 
@@ -496,6 +498,8 @@ static void machine_set_memory_encryption(Object *obj, const char *value,
 {
     Object *cgs =
         object_resolve_path_component(object_get_objects_root(), value);
+
+    warn_report("memory-encryption is deprecated, use confidential-guest-support instead");
 
     if (!cgs) {
         error_setg(errp, "No such memory encryption object '%s'", value);

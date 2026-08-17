@@ -256,8 +256,12 @@ F: linux-user/hexagon/
 F: tests/tcg/hexagon/
 F: disas/hexagon.c
 F: configs/targets/hexagon-linux-user.mak
+F: configs/targets/hexagon-softmmu.mak
 F: tests/docker/dockerfiles/debian-hexagon-cross.docker
 F: gdbstub/gdb-xml/hexagon*.xml
+F: docs/system/target-hexagon.rst
+F: docs/system/hexagon/
+F: docs/devel/hexagon-sys.rst
 T: git https://github.com/qualcomm/qemu.git hex-next
 
 Hexagon idef-parser
@@ -276,7 +280,9 @@ F: disas/hppa.c
 F: tests/tcg/hppa/
 
 LoongArch TCG CPUs
-M: Song Gao <gaosong@loongson.cn>
+M: Song Gao <17746591750@163.com>
+M: Bibo Mao <maobibo@loongson.cn>
+R: Xianglai Li <lixianglai@loongson.cn>
 S: Maintained
 F: target/loongarch/
 F: tests/docker/dockerfiles/debian-loongarch-cross.docker
@@ -349,7 +355,7 @@ M: Alistair Francis <alistair.francis@wdc.com>
 R: Weiwei Li <liwei1518@gmail.com>
 R: Daniel Henrique Barboza <daniel.barboza@oss.qualcomm.com>
 R: Liu Zhiwei <zhiwei_liu@linux.alibaba.com>
-R: Chao Liu <chao.liu.zevorn@gmail.com>
+R: Chao Liu <chao.liu@processmission.com>
 L: qemu-riscv@nongnu.org
 S: Supported
 F: configs/targets/riscv*
@@ -1341,11 +1347,24 @@ F: pc-bios/hppa-firmware.img
 F: roms/seabios-hppa/
 F: tests/functional/hppa/
 
+Hexagon Machines
+----------------
+V66G_1024, V68N_1024, sa8775-cdsp0
+M: Brian Cain <brian.cain@oss.qualcomm.com>
+R: Pierrick Bouvier <pierrick.bouvier@oss.qualcomm.com>
+S: Supported
+F: hw/hexagon/
+F: include/hw/hexagon/
+F: configs/devices/hexagon-softmmu/default.mak
+F: docs/system/hexagon/
+F: docs/devel/hexagon-sys.rst
+
 LoongArch Machines
 ------------------
 Virt
-M: Song Gao <gaosong@loongson.cn>
+M: Song Gao <17746591750@163.com>
 M: Bibo Mao <maobibo@loongson.cn>
+R: Xianglai Li <lixianglai@loongson.cn>
 R: Jiaxun Yang <jiaxun.yang@flygoat.com>
 S: Maintained
 F: docs/system/loongarch/virt.rst
@@ -1359,6 +1378,7 @@ F: hw/intc/loongarch_*.c
 F: hw/intc/loongson_ipi_common.c
 F: hw/rtc/ls7a_rtc.c
 F: gdbstub/gdb-xml/loongarch*.xml
+F: tests/qtest/migration/loongarch64/
 
 M68K Machines
 -------------
@@ -1646,7 +1666,7 @@ F: tests/functional/ppc64/test_tuxrun.py
 
 PowerNV (Non-Virtualized)
 M: Nicholas Piggin <npiggin@gmail.com>
-R: Aditya Gupta <adityag@linux.ibm.com>
+M: Aditya Gupta <adityag@linux.ibm.com>
 R: Glenn Miles <milesg@linux.ibm.com>
 R: Harsh Prateek Bora <harshpb@linux.ibm.com>
 L: qemu-ppc@nongnu.org
@@ -1740,8 +1760,10 @@ F: target/riscv/xlrbr.decode
 F: tests/tcg/riscv64/test-crc32.S
 
 Microchip PolarFire SoC Icicle Kit
+M: Conor Dooley <conor@kernel.org>
+M: Sebastian Huber <sebastian.huber@embedded-brains.de>
 L: qemu-riscv@nongnu.org
-S: Supported
+S: Odd Fixes
 F: docs/system/riscv/microchip-icicle-kit.rst
 F: hw/riscv/microchip_pfsoc.c
 F: hw/char/mchp_pfsoc_mmuart.c
@@ -1773,6 +1795,19 @@ F: hw/*/*sifive*.c
 F: include/hw/*/*sifive*.h
 F: tests/functional/riscv64/test_sifive_u.py
 
+Tenstorrent Machines
+M: Joel Stanley <joel@jms.id.au>
+M: Nicholas Piggin <npiggin@gmail.com>
+R: Anirudh Srinivasan <asrinivasan@oss.tenstorrent.com>
+R: Michael Ellerman <mpe@kernel.org>
+R: Portia Stephens <portias@oss.tenstorrent.com>
+L: qemu-riscv@nongnu.org
+S: Supported
+F: docs/system/riscv/tt_*.rst
+F: hw/riscv/tt_*.c
+F: include/hw/riscv/tt_*.h
+F: tests/functional/riscv64/test_tt_*.py
+
 AMD Microblaze-V Generic Board
 M: Sai Pavan Boddu <sai.pavan.boddu@amd.com>
 S: Maintained
@@ -1787,7 +1822,7 @@ F: hw/riscv/xiangshan_kmh.c
 F: include/hw/riscv/xiangshan_kmh.h
 
 K230 Machines
-M: Chao Liu <chao.liu.zevorn@gmail.com>
+M: Chao Liu <chao.liu@processmission.com>
 L: qemu-riscv@nongnu.org
 S: Maintained
 F: docs/system/riscv/k230.rst
@@ -1795,6 +1830,7 @@ F: hw/riscv/k230.c
 F: hw/watchdog/k230_wdt.c
 F: include/hw/riscv/k230.h
 F: include/hw/watchdog/k230_wdt.h
+F: tests/functional/riscv64/test_k230.py
 F: tests/qtest/k230-wdt-test.c
 
 RX Machines
@@ -2106,6 +2142,15 @@ F: hw/net/can/xlnx-*
 F: include/hw/net/xlnx-*
 F: tests/qtest/xlnx-can*-test*
 
+FlexCAN
+M: Matyas Bobek <matyas.bobek@gmail.com>
+M: Pavel Pisa <pisa@cmp.felk.cvut.cz>
+S: Maintained
+F: hw/net/can/flexcan.c
+F: hw/net/can/flexcan_regs.h
+F: include/hw/net/flexcan.h
+F: tests/qtest/flexcan-test.c
+
 EDU
 M: Jiri Slaby <jslaby@suse.cz>
 S: Maintained
@@ -2274,7 +2319,7 @@ F: hw/char/
 F: include/hw/char/
 
 Network devices
-M: Jason Wang <jasowang@redhat.com>
+M: Jason Wang <jasowangio@gmail.com>
 S: Odd Fixes
 F: hw/net/
 F: include/hw/net/
@@ -2299,6 +2344,7 @@ F: tests/qtest/virtio-scsi-test.c
 F: tests/qtest/fuzz-virtio-scsi-test.c
 F: tests/qtest/am53c974-test.c
 F: tests/qtest/fuzz-lsi53c895a-test.c
+F: tests/functional/x86_64/test_hotplug_scsi.py
 T: git https://github.com/bonzini/qemu.git scsi-next
 
 SSI
@@ -2347,6 +2393,7 @@ S: Supported
 F: hw/vfio/*
 F: util/vfio-helpers.c
 F: include/hw/vfio/
+F: docs/devel/vfio-mdpy.rst
 F: docs/devel/migration/vfio.rst
 F: qapi/vfio.json
 F: migration/vfio-stub.c
@@ -2640,6 +2687,7 @@ S: Supported
 F: hw/nvme/*
 F: include/block/nvme.h
 F: tests/qtest/nvme-test.c
+F: tests/functional/x86_64/test_nvme_migration.py
 F: docs/system/devices/nvme.rst
 T: git git://git.infradead.org/qemu-nvme.git nvme-next
 
@@ -2734,6 +2782,14 @@ pcf8574
 S: Orphan
 F: hw/gpio/pcf8574.c
 F: include/hw/gpio/pcf8574.h
+
+DesignWare I2C
+M: Chris Rauer <crauer@google.com>
+R: Alano Song <alanosong@163.com>
+R: Joel Stanley <joel@jms.id.au>
+S: Maintained
+F: hw/i2c/designware_i2c.c
+F: include/hw/i2c/designware_i2c.h
 
 Generic Loader
 M: Alistair Francis <alistair@alistair23.me>
@@ -3291,6 +3347,7 @@ F: scripts/dump-guest-memory.py
 F: stubs/dump.c
 F: docs/specs/vmcoreinfo.rst
 F: tests/qtest/vmcoreinfo-test.c
+F: tests/qtest/dump-test.c
 
 Error reporting
 M: Markus Armbruster <armbru@redhat.com>
@@ -3349,6 +3406,7 @@ F: include/system/memory.h
 F: include/system/memory_cached.h
 F: include/system/memory_ldst*
 F: include/system/physmem.h
+F: include/system/ram-discard-manager.h
 F: include/system/ramblock.h
 F: include/system/memory_mapping.h
 F: system/dma-helpers.c
@@ -3359,18 +3417,24 @@ F: system/physmem.c
 F: system/memory_ldst*
 F: system/memory-internal.h
 F: system/ram-block-attributes.c
+F: system/ram-discard-manager.c
 F: scripts/coccinelle/memory-region-housekeeping.cocci
+F: tests/unit/test-ram-discard-manager.c
+F: tests/unit/test-ram-discard-manager-stubs.c
 
 Memory devices
 M: David Hildenbrand <david@kernel.org>
 M: Igor Mammedov <imammedo@redhat.com>
+R: FangSheng Huang <FangSheng.Huang@amd.com>
 S: Supported
 F: hw/mem/memory-device*.c
 F: hw/mem/nvdimm.c
 F: hw/mem/pc-dimm.c
+F: hw/mem/sp-mem.c
 F: include/hw/mem/memory-device.h
 F: include/hw/mem/nvdimm.h
 F: include/hw/mem/pc-dimm.h
+F: include/hw/mem/sp-mem.h
 F: docs/nvdimm.txt
 
 SPICE
@@ -3442,7 +3506,7 @@ F: include/qemu/qemu-print.h
 F: util/qemu-print.c
 
 Network device backends
-M: Jason Wang <jasowang@redhat.com>
+M: Jason Wang <jasowangio@gmail.com>
 S: Maintained
 F: net/
 F: include/net/
@@ -3616,6 +3680,7 @@ F: docs/interop/*qmp-*
 F: scripts/qmp/
 F: tests/qtest/qmp-test.c
 F: tests/qtest/qmp-cmd-test.c
+F: tests/functional/generic/test_monitor_hotplug.py
 T: git https://repo.or.cz/qemu/armbru.git qapi-next
 
 qtest
@@ -3750,7 +3815,7 @@ F: hw/pci/pcie_doe.c
 F: docs/specs/spdm.rst
 
 Checkpatch
-R: Chao Liu <chao.liu.zevorn@gmail.com>
+R: Chao Liu <chao.liu@processmission.com>
 S: Odd Fixes
 F: scripts/checkpatch.pl
 
@@ -4039,7 +4104,7 @@ F: target/i386/igvm.c
 
 VT-d Emulation
 M: Michael S. Tsirkin <mst@redhat.com>
-R: Jason Wang <jasowang@redhat.com>
+R: Jason Wang <jasowangio@gmail.com>
 R: Yi Liu <yi.l.liu@intel.com>
 R: Clément Mathieu--Drif <clement.mathieu--drif@bull.com>
 S: Supported
@@ -4050,6 +4115,7 @@ F: include/hw/i386/intel_iommu.h
 F: tests/functional/x86_64/test_intel_iommu.py
 F: tests/qtest/intel-iommu-test.c
 F: tests/qtest/iommu-intel-test.c
+F: tests/qtest/iommu-intel-inv-test.c
 
 AMD-Vi Emulation
 M: Alejandro Jimenez <alejandro.j.jimenez@oracle.com>
@@ -4064,8 +4130,6 @@ R: Daniel Henrique Barboza <daniel.barboza@oss.qualcomm.com>
 L: qemu-riscv@nongnu.org
 S: Supported
 F: pc-bios/opensbi-*
-F: .gitlab-ci.d/opensbi.yml
-F: .gitlab-ci.d/opensbi/
 
 Clock framework
 M: Luc Michel <luc@lmichel.fr>
@@ -4474,7 +4538,7 @@ F: subprojects/libvfio-user.wrap
 F: tests/functional/x86_64/test_vfio_user_client.py
 
 EBPF
-M: Jason Wang <jasowang@redhat.com>
+M: Jason Wang <jasowangio@gmail.com>
 R: Yuri Benditovich <ybendito@redhat.com>
 S: Maintained
 F: docs/devel/ebpf_rss.rst
@@ -4550,7 +4614,7 @@ GIT Data Mining Config
 M: Alex Bennée <alex.bennee@linaro.org>
 S: Odd Fixes
 F: gitdm.config
-F: contrib/gitdm/*
+F: scripts/gitdm/*
 
 Incompatible changes
 L: devel@lists.libvirt.org

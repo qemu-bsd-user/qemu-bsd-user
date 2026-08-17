@@ -31,7 +31,6 @@
 #include "system/kvm.h"
 #include "system/kvm_int.h"
 #include "cpu.h"
-#include "target/riscv/csr.h"
 #include "trace.h"
 #include "accel/accel-cpu-target.h"
 #include "hw/pci/pci.h"
@@ -304,10 +303,13 @@ static KVMCPUConfig kvm_multi_ext_cfgs[] = {
     KVM_EXT_CFG("zihintntl", ext_zihintntl, KVM_RISCV_ISA_EXT_ZIHINTNTL),
     KVM_EXT_CFG("zihintpause", ext_zihintpause, KVM_RISCV_ISA_EXT_ZIHINTPAUSE),
     KVM_EXT_CFG("zihpm", ext_zihpm, KVM_RISCV_ISA_EXT_ZIHPM),
+    KVM_EXT_CFG("zilsd", ext_zilsd, KVM_RISCV_ISA_EXT_ZILSD),
     KVM_EXT_CFG("zimop", ext_zimop, KVM_RISCV_ISA_EXT_ZIMOP),
     KVM_EXT_CFG("zcmop", ext_zcmop, KVM_RISCV_ISA_EXT_ZCMOP),
+    KVM_EXT_CFG("zclsd", ext_zclsd, KVM_RISCV_ISA_EXT_ZCLSD),
     KVM_EXT_CFG("zabha", ext_zabha, KVM_RISCV_ISA_EXT_ZABHA),
     KVM_EXT_CFG("zacas", ext_zacas, KVM_RISCV_ISA_EXT_ZACAS),
+    KVM_EXT_CFG("zalasr", ext_zalasr, KVM_RISCV_ISA_EXT_ZALASR),
     KVM_EXT_CFG("zawrs", ext_zawrs, KVM_RISCV_ISA_EXT_ZAWRS),
     KVM_EXT_CFG("zfa", ext_zfa, KVM_RISCV_ISA_EXT_ZFA),
     KVM_EXT_CFG("zfbfmin", ext_zfbfmin, KVM_RISCV_ISA_EXT_ZFBFMIN),
@@ -1395,6 +1397,17 @@ int kvm_arch_put_registers(CPUState *cs, KvmPutState level, Error **errp)
         return ret;
     }
 
+    /*
+     * For RUNTIME_STATE, KVM already has the correct FP and Vector state
+     * from the preceding KVM_RUN exit. QEMU never modifies these registers
+     * during exit handling, so re-syncing is unnecessary.  This saves ~68
+     * KVM_SET_ONE_REG ioctls per vCPU exit.  See also s390x which uses
+     * the same pattern.
+     */
+    if (KVM_PUT_RUNTIME_STATE == level) {
+        return ret;
+    }
+
     ret = kvm_riscv_put_regs_fp(cs);
     if (ret) {
         return ret;
@@ -1407,11 +1420,9 @@ int kvm_arch_put_registers(CPUState *cs, KvmPutState level, Error **errp)
 
     if (KVM_PUT_RESET_STATE == level) {
         RISCVCPU *cpu = RISCV_CPU(cs);
-        if (cs->cpu_index == 0) {
-            ret = kvm_riscv_sync_mpstate_to_kvm(cpu, KVM_MP_STATE_RUNNABLE);
-        } else {
-            ret = kvm_riscv_sync_mpstate_to_kvm(cpu, KVM_MP_STATE_STOPPED);
-        }
+        int state = cs->cpu_index == 0 ? KVM_MP_STATE_RUNNABLE
+                                       : KVM_MP_STATE_STOPPED;
+        ret = kvm_riscv_sync_mpstate_to_kvm(cpu, state);
         if (ret) {
             return ret;
         }
@@ -2206,19 +2217,21 @@ int kvm_arch_remove_sw_breakpoint(CPUState *cs, struct kvm_sw_breakpoint *bp)
     return 0;
 }
 
-int kvm_arch_insert_hw_breakpoint(vaddr addr, vaddr len, int type)
+int kvm_arch_insert_gdbstub_hw_breakpoint(vaddr addr, vaddr len,
+                                          GdbBreakpointType type)
 {
     /* TODO; To be implemented later. */
     return -EINVAL;
 }
 
-int kvm_arch_remove_hw_breakpoint(vaddr addr, vaddr len, int type)
+int kvm_arch_remove_gdbstub_hw_breakpoint(vaddr addr, vaddr len,
+                                          GdbBreakpointType type)
 {
     /* TODO; To be implemented later. */
     return -EINVAL;
 }
 
-void kvm_arch_remove_all_hw_breakpoints(void)
+void kvm_arch_remove_all_gdbstub_hw_breakpoints(void)
 {
     /* TODO; To be implemented later. */
 }

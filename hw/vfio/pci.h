@@ -188,6 +188,7 @@ struct VFIOPCIDevice {
     bool clear_parent_atomics_on_exit;
     bool skip_vsc_check;
     uint16_t vpasid_cap_offset;
+    OnOffAuto ats;
     VFIODisplay *dpy;
     Notifier irqchip_change_notifier;
     VFIOPCICPR cpr;
@@ -270,6 +271,7 @@ bool vfio_populate_vga(VFIOPCIDevice *vdev, Error **errp);
 
 void vfio_display_reset(VFIOPCIDevice *vdev);
 bool vfio_display_probe(VFIOPCIDevice *vdev, Error **errp);
+void vfio_display_exit(VFIOPCIDevice *vdev);
 void vfio_display_finalize(VFIOPCIDevice *vdev);
 
 extern const VMStateDescription vfio_display_vmstate;

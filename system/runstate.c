@@ -706,7 +706,7 @@ void qemu_system_guest_panicked(GuestPanicInformation *info)
                           " error code: 0x%" PRIx32 " error message:\"%s\"\n",
                           info->u.tdx.error_code, message);
             g_free(message);
-            if (info->u.tdx.gpa != -1ull) {
+            if (info->u.tdx.has_gpa) {
                 qemu_log_mask(LOG_GUEST_ERROR, "Additional error information "
                               "can be found at gpa page: 0x%" PRIx64 "\n",
                               info->u.tdx.gpa);
@@ -1045,9 +1045,7 @@ void qemu_cleanup(int status)
     audio_cleanup();
     monitor_cleanup();
     qemu_chr_cleanup();
+    qemu_display_cleanup();
     user_creatable_cleanup();
-#ifdef CONFIG_VNC
-    vnc_cleanup();
-#endif
     /* TODO: unref root container, check all devices are ok */
 }

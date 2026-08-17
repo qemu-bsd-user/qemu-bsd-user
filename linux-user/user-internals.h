@@ -22,6 +22,7 @@
 #include "qemu/log.h"
 #include "exec/tb-flush.h"
 #include "exec/translation-block.h"
+#include "user/probe-guest-base.h"
 
 extern char *exec_path;
 extern char real_exec_path[PATH_MAX];
@@ -29,7 +30,6 @@ void init_task_state(TaskState *ts);
 void task_settid(TaskState *);
 void stop_all_tasks(void);
 extern const char *qemu_uname_release;
-extern unsigned long mmap_min_addr;
 
 typedef struct IOCTLEntry IOCTLEntry;
 
@@ -76,26 +76,23 @@ void fork_start(void);
 void fork_end(pid_t pid);
 
 /**
- * probe_guest_base:
+ * linux_probe_guest_base:
  * @image_name: the executable being loaded
- * @loaddr: the lowest fixed address within the executable
- * @hiaddr: the highest fixed address within the executable
+ * @image_range: the fixed addresses within the executable
  *
  * Creates the initial guest address space in the host memory space.
  *
- * If @loaddr == 0, then no address in the executable is fixed, i.e.
- * it is fully relocatable.  In that case @hiaddr is the size of the
- * executable minus one.
+ * If @image_range is NULL, then no address in the executable is fixed,
+ * i.e. it is fully relocatable.
  *
  * This function will not return if a valid value for guest_base
  * cannot be chosen.  On return, the executable loader can expect
  *
- *    target_mmap(loaddr, hiaddr - loaddr + 1, ...)
+ *    target_mmap(i->lo, i->hi - i->lo + 1, ...)
  *
  * to succeed.
  */
-void probe_guest_base(const char *image_name,
-                      abi_ulong loaddr, abi_ulong hiaddr);
+void linux_probe_guest_base(const char *image_name, const PGBRange *image_range);
 
 /* syscall.c */
 int host_to_target_waitstatus(int status);
