@@ -938,6 +938,9 @@ static void ivshmem_exit(PCIDevice *dev)
     IVShmemState *s = IVSHMEM_COMMON(dev);
     int i;
 
+    qemu_chr_fe_set_handlers(&s->server_chr,
+                             NULL, NULL, NULL, NULL, NULL, NULL, true);
+
     migrate_del_blocker(&s->migration_blocker);
 
     if (memory_region_is_mapped(s->ivshmem_bar2)) {
@@ -966,6 +969,8 @@ static void ivshmem_exit(PCIDevice *dev)
             close_peer_eventfds(s, i);
         }
         g_free(s->peers);
+        s->peers = NULL;
+        s->nb_peers = 0;
     }
 
     if (ivshmem_has_feature(s, IVSHMEM_MSI)) {
@@ -973,6 +978,7 @@ static void ivshmem_exit(PCIDevice *dev)
     }
 
     g_free(s->msi_vectors);
+    s->msi_vectors = NULL;
 }
 
 static int ivshmem_pre_load(void *opaque)

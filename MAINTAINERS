@@ -1357,6 +1357,7 @@ F: hw/hexagon/
 F: include/hw/hexagon/
 F: configs/devices/hexagon-softmmu/default.mak
 F: docs/system/hexagon/
+F: tests/functional/hexagon/
 F: docs/devel/hexagon-sys.rst
 
 LoongArch Machines
@@ -2204,7 +2205,9 @@ M: Peter Maydell <peter.maydell@linaro.org>
 L: qemu-arm@nongnu.org
 S: Odd Fixes
 F: hw/*/omap*
+F: hw/dma/soc_dma.c
 F: include/hw/arm/omap.h
+F: include/hw/dma/soc_dma.h
 F: docs/system/arm/sx1.rst
 F: tests/functional/arm/test_sx1.py
 
@@ -2350,6 +2353,7 @@ T: git https://github.com/bonzini/qemu.git scsi-next
 SSI
 M: Alistair Francis <alistair@alistair23.me>
 S: Maintained
+F: docs/devel/ssi.rst
 F: hw/ssi/*
 F: hw/block/m25p80*
 F: include/hw/ssi/ssi.h
@@ -2940,7 +2944,7 @@ F: include/hw/isa/vt82c686.h
 
 Firmware configuration (fw_cfg)
 R: Gerd Hoffmann <kraxel@redhat.com>
-S: Orphaned
+S: Orphan
 F: docs/specs/fw_cfg.rst
 F: hw/nvram/fw_cfg*.c
 F: stubs/fw_cfg.c
