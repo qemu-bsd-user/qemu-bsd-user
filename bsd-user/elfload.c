@@ -325,8 +325,12 @@ static void pgb_dynamic(const char *image_name, uintptr_t guest_loaddr,
     uintptr_t brk, ret;
     PGBAddrs ga;
 
-    /* Try the identity map first. */
-    if (pgb_addr_set(&ga, guest_loaddr, guest_hiaddr, true)) {
+    /*
+     * The identity map makes every guest address a host address, so it
+     * is only safe while qemu sits outside the guest address space.
+     */
+    if ((uintptr_t)&pgb_dynamic > guest_addr_max &&
+        pgb_addr_set(&ga, guest_loaddr, guest_hiaddr, true)) {
         brk = (uintptr_t)sbrk(0);
         if (pgb_try_mmap_set(&ga, 0, brk)) {
             guest_base = 0;
