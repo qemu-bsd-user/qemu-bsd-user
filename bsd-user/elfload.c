@@ -1165,7 +1165,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
         if (elf_ex.e_type == ET_EXEC) {
             probe_guest_base(bprm->fullpath, loaddr, hiaddr);
         } else {
-            probe_guest_base(bprm->fullpath, 0, hiaddr - loaddr);
+            probe_guest_base(bprm->fullpath, et_dyn_addr,
+                             et_dyn_addr + hiaddr - loaddr);
         }
     }
 
