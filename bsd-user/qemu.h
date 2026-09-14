@@ -273,6 +273,8 @@ extern unsigned long target_maxdsiz;
 extern unsigned long target_dflssiz;
 extern unsigned long target_maxssiz;
 extern unsigned long target_sgrowsiz;
+extern abi_ulong target_stkbas;
+extern abi_ulong target_stksiz;
 
 /* os-syscall.c */
 abi_long get_errno(abi_long ret);

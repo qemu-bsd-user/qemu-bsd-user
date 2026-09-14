@@ -1211,7 +1211,9 @@ static abi_long do_freebsd_sysctl_oid(CPUArchState *env, int32_t *snamep,
         switch (snamep[1]) {
         case KERN_USRSTACK:
             if (oldlen) {
-                (*(abi_ulong *)holdp) = tswapal(TARGET_USRSTACK);
+                /* The stack is placed by mmap(), not at TARGET_USRSTACK. */
+                (*(abi_ulong *)holdp) =
+                    tswapal(target_stkbas + target_stksiz);
             }
             holdlen = sizeof(abi_ulong);
             ret = 0;
