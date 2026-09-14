@@ -149,7 +149,7 @@ static void print_syscall_ret(TaskState *ts, abi_ulong ret, abi_ulong ret2, int 
 #if TARGET_ABI_BITS == 32
     else if (ts->cs.sc->ret_type == 2) {
         off_t off;
-#ifdef TARGET_BIG_ENDIAN
+#if TARGET_BIG_ENDIAN
         off = (off_t)ret << 32 | ret2;
 #else
         off = (off_t)ret2 << 32 | ret;

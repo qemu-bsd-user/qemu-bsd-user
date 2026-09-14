@@ -336,7 +336,7 @@ static inline abi_long do_freebsd_kldsym(abi_long fileid, abi_long cmd,
 #if TARGET_ABI_BITS == 32
 static inline uint64_t target_offset64(uint32_t word0, uint32_t word1)
 {
-#ifdef TARGET_BIG_ENDIAN
+#if TARGET_BIG_ENDIAN
     return ((uint64_t)word0 << 32) | word1;
 #else
     return ((uint64_t)word1 << 32) | word0;
