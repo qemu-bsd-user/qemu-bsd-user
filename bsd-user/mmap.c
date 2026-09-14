@@ -700,6 +700,12 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
             errno = EINVAL;
             goto fail;
         }
+        /*
+         * Enforced above against the guest address space. The host must not
+         * see it: under reserved_va qemu has already mapped this range, so
+         * host MAP_FIXED|MAP_EXCL can only fail.
+         */
+        flags &= ~MAP_EXCL;
 #endif
 
         /* handle the start of the mapping */
