@@ -1603,18 +1603,14 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         ret = do_freebsd_kenv(arg1, arg2, arg3, arg4);
         break;
 
-        /*
-         * Capsicum
-         */
     case TARGET_FREEBSD_NR_cap_rights_limit: /* cap_rights_limit(2) */
     case TARGET_FREEBSD_NR_cap_ioctls_limit: /* cap_ioctls_limit(2) */
     case TARGET_FREEBSD_NR_cap_fcntls_limit: /* cap_fcntls_limit(2) */
     case TARGET_FREEBSD_NR_cap_enter:        /* cap_enter(2) */
         /*
-         * Accepted without effect: the rights would apply to qemu's own
-         * descriptors, and capability mode would stop qemu opening the
-         * guest's libraries. ENOSYS is not an option, as the cpu loop
-         * turns it into SIGSYS.
+         * The rights would apply to qemu's own descriptors, and capability
+         * mode would stop qemu opening the guest's libraries. ENOSYS is not
+         * an option: the cpu loop turns it into SIGSYS.
          */
         ret = 0;
         break;
