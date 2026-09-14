@@ -1562,6 +1562,11 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         ret = do_freebsd_posix_fallocate(arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
+    case TARGET_FREEBSD_NR_posix_fadvise: /* posix_fadvise(2) */
+        ret = do_freebsd_posix_fadvise(arg1, arg2, arg3, arg4, arg5,
+            arg6, arg7);
+        break;
+
     case TARGET_FREEBSD_NR_posix_openpt: /* posix_openpt(2) */
         ret = do_freebsd_posix_openpt(arg1);
         break;

@@ -362,6 +362,20 @@ static inline abi_long do_freebsd_posix_fallocate(abi_long arg1, abi_long arg2,
 #endif
 }
 
+/* posix_fadvise(2) */
+static inline abi_long do_freebsd_posix_fadvise(abi_long arg1,
+    abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5,
+    abi_long arg6, abi_long arg7)
+{
+
+#if TARGET_ABI_BITS == 32
+    return get_errno(posix_fadvise(arg1, target_offset64(arg3, arg4),
+        target_offset64(arg5, arg6), arg7));
+#else
+    return get_errno(posix_fadvise(arg1, arg2, arg3, arg4));
+#endif
+}
+
 /* posix_openpt(2) */
 static inline abi_long do_freebsd_posix_openpt(abi_long flags)
 {
