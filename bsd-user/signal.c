@@ -517,7 +517,27 @@ void force_sig_fault(int sig, int code, abi_ulong addr)
 static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 {
     CPUState *cpu = thread_cpu;
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts;
+
+    if (cpu == NULL) {
+        /*
+         * Helper threads run no guest code but keep SIGSEGV, SIGFPE and
+         * SIGILL unblocked, so a signal can land here with no thread_cpu.
+         * si_code > 0 means the kernel raised it, making it a fault in qemu
+         * itself; anything else came from kill(2) and is the guest's.
+         */
+        if (info->si_code > 0) {
+            struct sigaction sa;
+
+            memset(&sa, 0, sizeof(sa));
+            sa.sa_handler = SIG_DFL;
+            sigaction(host_sig, &sa, NULL);
+        } else if (first_cpu != NULL) {
+            pthread_kill(first_cpu->thread->thread, host_sig);
+        }
+        return;
+    }
+    ts = get_task_state(cpu);
     target_siginfo_t tinfo;
     ucontext_t *uc = puc;
     struct emulated_sigtable *k;
