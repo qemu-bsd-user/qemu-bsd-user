@@ -996,6 +996,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
     int error, retval;
     char *elf_interpreter;
     abi_ulong baddr, elf_entry, et_dyn_addr, interp_load_addr = 0;
+    abi_ulong loaddr, hiaddr, align;
     abi_ulong reloc_func_desc = 0;
 
     load_addr = 0;
@@ -1135,38 +1136,56 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
         break;
     }
 
-    et_dyn_addr = 0;
-    if (elf_ex.e_type == ET_DYN && baddr == 0) {
-        et_dyn_addr = ELF_ET_DYN_LOAD_ADDR;
+    loaddr = -1;
+    hiaddr = 0;
+    align = 0;
+    for (i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
+        if (elf_ppnt->p_type != PT_LOAD) {
+            continue;
+        }
+        abi_ulong a = elf_ppnt->p_vaddr & TARGET_PAGE_MASK;
+        if (a < loaddr) {
+            loaddr = a;
+        }
+        a = elf_ppnt->p_vaddr + elf_ppnt->p_memsz - 1;
+        if (a > hiaddr) {
+            hiaddr = a;
+        }
+        if (elf_ppnt->p_align > align) {
+            align = elf_ppnt->p_align;
+        }
     }
 
+    et_dyn_addr = 0;
+
     /*
-     * Find the address range of PT_LOAD segments and select a safe
-     * guest_base so that the guest does not overlap the host.
+     * Select a guest_base so that the guest does not overlap the host.
+     * et_dyn_addr is still 0 for a PIE; its address is chosen below.
      */
     if (!have_guest_base && !reserved_va) {
-        abi_ulong loaddr = -1, hiaddr = 0;
-
-        for (i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum;
-             i++, elf_ppnt++) {
-            if (elf_ppnt->p_type != PT_LOAD) {
-                continue;
-            }
-            abi_ulong a = elf_ppnt->p_vaddr & TARGET_PAGE_MASK;
-            if (a < loaddr) {
-                loaddr = a;
-            }
-            a = elf_ppnt->p_vaddr + elf_ppnt->p_memsz - 1;
-            if (a > hiaddr) {
-                hiaddr = a;
-            }
-        }
-
         if (elf_ex.e_type == ET_EXEC) {
             probe_guest_base(bprm->fullpath, loaddr, hiaddr);
         } else {
             probe_guest_base(bprm->fullpath, et_dyn_addr,
                              et_dyn_addr + hiaddr - loaddr);
+        }
+    }
+
+    /*
+     * Let the allocator place the image.  A fixed address collides with
+     * non-PIE objects, which must have the one they were linked for.
+     */
+    if (elf_ex.e_type == ET_DYN && baddr == 0) {
+        int rflags = MAP_ANON | MAP_PRIVATE;
+
+        if (align > TARGET_PAGE_SIZE) {
+            rflags |= MAP_ALIGNED(ctz64(align));
+        }
+        et_dyn_addr = target_mmap(0, hiaddr - loaddr + 1, PROT_NONE,
+                                  rflags, -1, 0);
+        if (et_dyn_addr == (abi_ulong)-1) {
+            perror("mmap reserve");
+            exit(-1);
         }
     }
 
