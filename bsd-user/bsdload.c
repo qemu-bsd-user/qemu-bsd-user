@@ -154,16 +154,17 @@ int loader_exec(const char *filename, char **argv, char **envp,
     bprm->page = g_malloc0(MAX_ARG_PAGES * sizeof(void *));
 
     if (strchr(filename, '/') != NULL) {
-        path = realpath(filename, fullpath);
-        if (path == NULL) {
+        if (realpath(filename, fullpath) == NULL) {
             /* Failed to resolve. */
             retval = -1;
             goto errout;
         }
-        if (!is_there(path)) {
+        if (!is_there(fullpath)) {
             retval = -1;
             goto errout;
         }
+        /* bprm->fullpath outlives us; fullpath is on the stack. */
+        path = g_strdup(fullpath);
     } else {
         path = g_find_program_in_path(filename);
         if (path == NULL) {
