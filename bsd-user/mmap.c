@@ -400,7 +400,8 @@ abi_ulong mmap_find_vma(abi_ulong start, abi_ulong size, abi_ulong alignment)
          */
         repeat = (ptr == prev ? repeat + 1 : 0);
 
-        if (h2g_valid(ptr + size - 1)) {
+        /* Below guest_base h2g() wraps, and h2g_valid() cannot catch it. */
+        if ((uintptr_t)ptr >= guest_base && h2g_valid(ptr + size - 1)) {
             addr = h2g(ptr);
 
             if ((addr & ~TARGET_PAGE_MASK) == 0) {
