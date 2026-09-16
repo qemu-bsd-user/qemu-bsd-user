@@ -24,7 +24,7 @@
 #endif
 
 #define elf_check_arch(x) ( (x) == ELF_ARCH )
-#ifdef TARGET_BIG_ENDIAN
+#if TARGET_BIG_ENDIAN
 #define ELF_DATA        ELFDATA2MSB
 #else
 #define ELF_DATA        ELFDATA2LSB
