@@ -986,7 +986,7 @@ static abi_long do_bsd_lseek(CPUArchState *env, abi_long arg1, abi_long arg2,
         ret = get_errno(res);
         set_second_rval(env, 0xFFFFFFFF);
     } else {
-#ifdef TARGET_BIG_ENDIAN
+#if TARGET_BIG_ENDIAN
         ret = ((res >> 32) & 0xFFFFFFFF);
         set_second_rval(env, res & 0xFFFFFFFF);
 #else
