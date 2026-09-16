@@ -695,10 +695,21 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
         }
 
 #ifdef MAP_EXCL
-        /* Reject the mapping if any page within the range is mapped */
-        if ((flags & MAP_EXCL) && !page_check_range_empty(start, end - 1)) {
-            errno = EINVAL;
-            goto fail;
+        /*
+         * For reserved_va, we are in full control of the allocation.
+         * Otherwise, we allow MAP_EXCL to propagate to the host mmap.
+         */
+        if (reserved_va) {
+            /* Reject the mapping if any page within the range is mapped */
+            if ((flags & MAP_EXCL) && !page_check_range_empty(start, end - 1)) {
+                errno = EINVAL;
+                goto fail;
+            }
+            /*
+             * MAP_EXCL has been validated in the guest address space,
+             * we must clear it now or else the host mmap will fail
+             */
+            flags &= ~MAP_EXCL;
         }
 #endif
 
