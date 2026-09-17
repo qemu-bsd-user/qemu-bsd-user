@@ -1621,7 +1621,7 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
     {
         const char *name;
 
-        name = decoded_syscalls[num].name;
+        name = freebsd_syscall_name(num);
         if (name == NULL) {
             /* _mask(LOG_UNIMP, maybe? */
             qemu_log("Unsupported syscall #%d\n", num);
