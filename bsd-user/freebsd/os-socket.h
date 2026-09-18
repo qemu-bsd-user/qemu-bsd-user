@@ -395,7 +395,7 @@ static inline abi_long do_freebsd_accept4(int fd, abi_ulong target_addr,
     abi_long ret;
 
     if (target_addr == 0) {
-        return get_errno(accept(fd, NULL, NULL));
+        return get_errno(accept4(fd, NULL, NULL, flags));
     }
     /* return EINVAL if addrlen pointer is invalid */
     if (get_user_u32(addrlen, target_addrlen_addr)) {
