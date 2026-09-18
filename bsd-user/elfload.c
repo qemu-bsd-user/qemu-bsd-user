@@ -517,21 +517,16 @@ load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr, int fd,
         if (error == -1) {
             perror("mmap");
             exit(-1);
-#if 0
-        /* Not sure what to do about the following: */
         } else if (elf_ppnt->p_memsz != elf_ppnt->p_filesz) {
             abi_ulong start_bss, end_bss;
 
             start_bss = rbase + elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
             end_bss = rbase + elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
 
-            /*
-             * Calling set_brk effectively mmaps the pages that we need for the
-             * bss and break sections.
-             */
-            set_brk(start_bss, end_bss);
-            padzero(start_bss, end_bss);
-#endif
+            if (start_bss < end_bss &&
+                !zero_bss(start_bss, end_bss, elf_prot, &err)) {
+                goto exit_errmsg;
+            }
         }
 
         if (first) {
