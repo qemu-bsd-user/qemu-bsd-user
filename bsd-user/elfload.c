@@ -38,8 +38,9 @@ abi_ulong target_stksiz;
 abi_ulong target_stkbas;
 
 static int elf_core_dump(int signr, CPUArchState *env);
-static int load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr,
-                             int fd, abi_ulong rbase, abi_ulong *baddrp);
+static int load_elf_sections(const char *image_name, const struct elfhdr *hdr,
+                             struct elf_phdr *phdr, int fd, abi_ulong rbase,
+                             abi_ulong *baddrp);
 
 static inline void memcpy_fromfs(void *to, const void *from, unsigned long n)
 {
@@ -281,8 +282,8 @@ static abi_ulong load_elf_interp(const char *elf_interpreter,
         }
     }
 
-    error = load_elf_sections(interp_elf_ex, elf_phdata, interpreter_fd, rbase,
-        &baddr);
+    error = load_elf_sections(elf_interpreter, interp_elf_ex, elf_phdata,
+                              interpreter_fd, rbase, &baddr);
     if (error != 0) {
         perror("load_elf_sections");
         exit(-1);
@@ -471,14 +472,75 @@ int is_target_elf_binary(int fd)
     }
 }
 
+/**
+ * zero_bss:
+ *
+ * Map and zero the bss.  We need to explicitly zero any fractional pages
+ * after the data section (i.e. bss).  Return false on mapping failure.
+ */
+static bool zero_bss(abi_ulong start_bss, abi_ulong end_bss,
+                     int prot, Error **errp)
+{
+    abi_ulong align_bss;
+
+    /* We only expect writable bss; the code segment shouldn't need this. */
+    if (!(prot & PROT_WRITE)) {
+        error_setg(errp, "PT_LOAD with non-writable bss");
+        return false;
+    }
+
+    align_bss = TARGET_PAGE_ALIGN(start_bss);
+    end_bss = TARGET_PAGE_ALIGN(end_bss);
+
+    if (start_bss < align_bss) {
+        int flags = page_get_flags(start_bss);
+
+        if (!(flags & PAGE_RWX)) {
+            /*
+             * The whole address space of the executable was reserved
+             * at the start, therefore all pages will be VALID.
+             * But assuming there are no PROT_NONE PT_LOAD segments,
+             * a PROT_NONE page means no data all bss, and we can
+             * simply extend the new anon mapping back to the start
+             * of the page of bss.
+             */
+            align_bss -= TARGET_PAGE_SIZE;
+        } else {
+            /*
+             * The start of the bss shares a page with something.
+             * The only thing that we expect is the data section,
+             * which would already be marked writable.
+             * Overlapping the RX code segment seems malformed.
+             */
+            if (!(flags & PAGE_WRITE)) {
+                error_setg(errp, "PT_LOAD with bss overlapping "
+                           "non-writable page");
+                return false;
+            }
+
+            /* The page is already mapped and writable. */
+            memset(g2h_untagged(start_bss), 0, align_bss - start_bss);
+        }
+    }
+    if (align_bss < end_bss &&
+        target_mmap(align_bss, end_bss - align_bss, prot,
+                    MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0) == -1) {
+        error_setg_errno(errp, errno, "Error mapping bss");
+        return false;
+    }
+    return true;
+}
+
 static int
-load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr, int fd,
-    abi_ulong rbase, abi_ulong *baddrp)
+load_elf_sections(const char *image_name, const struct elfhdr *hdr,
+                  struct elf_phdr *phdr, int fd, abi_ulong rbase,
+                  abi_ulong *baddrp)
 {
     struct elf_phdr *elf_ppnt;
     abi_ulong baddr;
     int i;
     bool first;
+    Error *err = NULL;
 
     /*
      * Now we do a little grungy work by mmaping the ELF image into
@@ -539,6 +601,9 @@ load_elf_sections(const struct elfhdr *hdr, struct elf_phdr *phdr, int fd,
         *baddrp = baddr;
     }
     return 0;
+exit_errmsg:
+    error_reportf_err(err, "%s: ", image_name);
+    exit(-1);
 }
 
 int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
@@ -708,8 +773,8 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
 
     info->elf_flags = elf_ex.e_flags;
 
-    error = load_elf_sections(&elf_ex, elf_phdata, bprm->fd, et_dyn_addr,
-                              &load_addr);
+    error = load_elf_sections(bprm->filename, &elf_ex, elf_phdata, bprm->fd,
+                              et_dyn_addr, &load_addr);
     for (i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
         if (elf_ppnt->p_type != PT_LOAD) {
             continue;
