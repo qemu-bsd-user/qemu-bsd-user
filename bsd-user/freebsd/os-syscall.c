@@ -491,6 +491,11 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
         ret = do_bsd_pread(env, arg1, arg2, arg3, arg4, arg5, arg6);
         break;
 
+    case TARGET_FREEBSD_NR_posix_fadvise: /* posix_fadvise(2) */
+        ret = do_bsd_posix_fadvise(env, arg1, arg2, arg3, arg4, arg5, arg6,
+            arg7);
+        break;
+
     case TARGET_FREEBSD_NR_readv: /* readv(2) */
         ret = do_bsd_readv(arg1, arg2, arg3);
         break;
@@ -1621,7 +1626,7 @@ static abi_long freebsd_syscall(CPUArchState *env, int num, abi_long arg1,
     {
         const char *name;
 
-        name = decoded_syscalls[num].name;
+        name = freebsd_syscall_name(num);
         if (name == NULL) {
             /* _mask(LOG_UNIMP, maybe? */
             qemu_log("Unsupported syscall #%d\n", num);

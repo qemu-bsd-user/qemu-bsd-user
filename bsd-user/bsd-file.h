@@ -75,6 +75,38 @@ static abi_long do_bsd_read(abi_long arg1, abi_long arg2, abi_long arg3)
     return ret;
 }
 
+/* posix_fadvise(2) */
+static abi_long do_bsd_posix_fadvise(CPUArchState *env, abi_long arg1,
+    abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6,
+    abi_long arg7)
+{
+    off_t offset, len;
+    int advice, rv;
+
+#if TARGET_ABI_BITS == 32
+    if (regpairs_aligned(env) != 0) {
+        offset = target_arg64(arg3, arg4);
+        len = target_arg64(arg5, arg6);
+        advice = (int)arg7;
+    } else {
+        offset = target_arg64(arg2, arg3);
+        len = target_arg64(arg4, arg5);
+        advice = (int)arg6;
+    }
+#else
+    offset = arg2;
+    len = arg3;
+    advice = (int)arg4;
+#endif
+
+    /*
+     * get_errno() would be wrong here, POSIX requires errno not be set and
+     * this syscall reports failure through return value, not the error flag.
+     */
+    rv = posix_fadvise(arg1, offset, len, advice);
+    return rv == 0 ? 0 : host_to_target_errno(rv);
+}
+
 /* pread(2) */
 static abi_long do_bsd_pread(CPUArchState *env, abi_long arg1,
     abi_long arg2, abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6)
