@@ -119,17 +119,8 @@ struct target_msgbuf {
 };
 
 /*
- * sched.h
- */
-struct target_sched_param {
-        int32_t sched_priority;
-};
-
-/*
  *  sys/mman.h
  */
-#define TARGET_MADV_DONTNEED            4       /* dont need these pages */
-
 /*
  * FreeBSD doesn't define this, but Linux does. In Linux, it's only MAP_PRIVATE
  * and MAP_SHARED and a few Linux-specific types (0xf). FreeBSD allows other
