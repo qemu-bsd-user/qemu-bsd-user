@@ -598,9 +598,10 @@ static inline abi_long do_freebsd_sigfastblock(abi_long cmd, abi_long ptr)
 {
     void *hostptr = g2h_untagged(ptr);
 
-    if (hostptr == NULL)
+    if (hostptr == NULL) {
         return -TARGET_EFAULT;
-    return (get_errno(safe_sigfastblock(cmd, hostptr)));
+    }
+    return get_errno(safe_sigfastblock(cmd, hostptr));
 }
 
 #endif /* FREEBSD_OS_THREAD_H */
