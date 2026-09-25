@@ -285,7 +285,7 @@ static int mmap_frag(abi_ulong real_start,
          */
         if (!(flags & MAP_ANON)
             && (flags & MAP_TYPE) == MAP_SHARED
-            && (prot1 & PROT_WRITE)) {
+            && (target_prot & PROT_WRITE)) {
             return -1;
         }
 

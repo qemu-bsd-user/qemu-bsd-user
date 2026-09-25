@@ -604,4 +604,5 @@ static inline void begin_parallel_context(CPUState *cs)
     }
 }
 
+
 #endif /* QEMU_H */
