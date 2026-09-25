@@ -10,6 +10,21 @@
 #include <sys/syscall.h>
 #include "systruss.h" /* Generated from sys/syscalls.h */
 
+static const struct syscall_decode *syscall_lookup(int num)
+{
+    static const struct syscall_decode unknown = { .ret_type = 1 };
+
+    if (num < 0 || num >= (int)ARRAY_SIZE(decoded_syscalls)) {
+        return &unknown;
+    }
+    return &decoded_syscalls[num];
+}
+
+const char *freebsd_syscall_name(int num)
+{
+    return syscall_lookup(num)->name;
+}
+
 static void alloc_syscall(TaskState *t, int num)
 {
     assert(t->in_syscall == 0);
@@ -21,7 +36,7 @@ static void alloc_syscall(TaskState *t, int num)
     }
     memset(t->cs.args, 0, sizeof(t->cs.args));
     t->cs.number = num;
-    t->cs.sc = &decoded_syscalls[num];
+    t->cs.sc = syscall_lookup(num);
     t->cs.nargs = t->cs.sc->nargs;
     t->outfile = fmemopen(t->trace_buf, sizeof(t->trace_buf), "w");
     t->in_syscall = 1;

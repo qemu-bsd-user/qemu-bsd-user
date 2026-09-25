@@ -9,6 +9,7 @@ void record_syscall(TaskState *ts, int num, abi_long arg1, abi_long arg2,
                     abi_long arg3, abi_long arg4, abi_long arg5, abi_long arg6,
                     abi_long arg7, abi_long arg8);
 void record_syscall_ret(TaskState *ts, int num, abi_ulong ret, abi_ulong ret2);
+const char *freebsd_syscall_name(int num);
 
 /*
  * System call arguments come in several flavors. These
@@ -73,7 +74,5 @@ struct syscall_decode {
 	u_int nargs;		     /* number of meaningful arguments */
 	struct syscall_arg args[10]; /* Hopefully no syscalls with > 10 args */
 };
-
-extern const struct syscall_decode decoded_syscalls[];
 
 #endif /* TRUSS_HDR_H */
