@@ -389,7 +389,7 @@ abi_long freebsd_umtx_nwake_private(abi_ulong target_array_addr, uint32_t num)
      * If we haven't relocated the guest, there's a 1:1 mapping so we can avoid
      * having to g2h_untagged() each address and just pass it through as-is.
      */
-    if (!have_guest_base && !reserved_va) {
+    if (guest_base == 0 && !reserved_va) {
         return optimized_umtx_op(target_array_addr, UMTX_OP_NWAKE_PRIVATE, num,
             NULL, NULL);
     }
