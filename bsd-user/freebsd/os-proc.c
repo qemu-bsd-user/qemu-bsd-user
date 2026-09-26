@@ -21,7 +21,7 @@ struct kinfo_proc;
 abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         abi_ulong guest_envp, int do_fexec)
 {
-    char **argp, **envp, **qarg0;
+    char **argp, **envp;
     int argc, envc;
     abi_ulong gp;
     abi_ulong addr;
@@ -51,10 +51,7 @@ abi_long freebsd_exec_common(abi_ulong path_or_fd, abi_ulong guest_argp,
         envc++;
     }
 
-    qarg0 = argp = g_new0(char *, argc + 9);
-    /* save the first argument for the emulator */
-    *argp++ = (char *)getprogname();
-    *argp++ = (char *)getprogname();
+    argp = g_new0(char *, argc + 1);
     envp = g_new0(char *, envc + 1);
     for (gp = guest_argp, q = argp; gp; gp += sizeof(abi_ulong), q++) {
         if (get_user_ual(addr, gp)) {
@@ -126,7 +123,7 @@ execve_end:
         unlock_user(*q, addr, 0);
     }
 
-    g_free(qarg0);
+    g_free(argp);
     g_free(envp);
 
     return ret;

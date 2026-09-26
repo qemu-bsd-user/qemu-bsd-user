@@ -266,7 +266,6 @@ int target_msync(abi_ulong start, abi_ulong len, int flags);
 void mmap_reserve(abi_ulong start, abi_ulong size);
 
 /* main.c */
-extern char qemu_proc_pathname[];
 extern unsigned long target_maxtsiz;
 extern unsigned long target_dfldsiz;
 extern unsigned long target_maxdsiz;
