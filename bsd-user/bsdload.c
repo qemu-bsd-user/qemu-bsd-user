@@ -147,8 +147,14 @@ int loader_exec(const char *filename, char **argv, char **envp,
                 struct target_pt_regs *regs, struct image_info *infop,
                 struct bsd_binprm *bprm)
 {
-    char *path = NULL, fullpath[PATH_MAX];
+    /*
+     * fullpath is referenced via bprm->fullpath for the lifetime of the
+     * process, so static storage is acceptable and convenient.
+     */
+    static char fullpath[PATH_MAX];
+    char *path = NULL;
     int retval, i;
+    size_t res;
 
     bprm->p = TARGET_PAGE_SIZE * MAX_ARG_PAGES;
     bprm->page = g_malloc0(MAX_ARG_PAGES * sizeof(void *));
@@ -170,6 +176,13 @@ int loader_exec(const char *filename, char **argv, char **envp,
             retval = -1;
             goto errout;
         }
+        res = g_strlcpy(fullpath, path, sizeof(fullpath));
+        g_free(path);
+        if (res >= sizeof(fullpath)) {
+            retval = -1;
+            goto errout;
+        }
+        path = fullpath;
     }
 
     retval = open(path, O_RDONLY);
@@ -206,7 +219,6 @@ int loader_exec(const char *filename, char **argv, char **envp,
         return retval;
     }
 errout:
-    g_free(path);
     /* Something went wrong, return the inode and free the argument pages*/
     for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
         g_free(bprm->page[i]);
