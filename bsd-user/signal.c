@@ -161,6 +161,12 @@ static bool has_trapno(int tsig)
         tsig == TARGET_SIGTRAP;
 }
 
+/* Distinguish kernel-raised trap from kill(2), sigqueue(2) etc. */
+static bool host_signal_is_fault(const siginfo_t *info)
+{
+    return info->si_code > 0 && info->si_code < SI_USER;
+}
+
 /* Siginfo conversion. */
 
 /*
@@ -535,7 +541,8 @@ static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
      * Non-spoofed SIGSEGV and SIGBUS are synchronous, and need special
      * handling wrt signal blocking and unwinding.
      */
-    if ((host_sig == SIGSEGV || host_sig == SIGBUS) && info->si_code > 0) {
+    if ((host_sig == SIGSEGV || host_sig == SIGBUS) &&
+        host_signal_is_fault(info)) {
         MMUAccessType access_type;
         uintptr_t host_addr;
         abi_ptr guest_addr;
