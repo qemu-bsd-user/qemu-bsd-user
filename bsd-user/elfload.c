@@ -621,6 +621,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
     abi_ulong elf_entry, et_dyn_addr, interp_load_addr = 0;
     abi_ulong reloc_func_desc = 0;
     PGBRange range = { -1, 0 };
+    abi_ulong align = 0;
 
     load_addr = 0;
     elf_ex = *((struct elfhdr *) bprm->buf);          /* exec-header */
@@ -724,6 +725,7 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
             range.lo = MIN(range.lo, elf_ppnt->p_vaddr);
             range.hi = MAX(range.hi,
                            elf_ppnt->p_vaddr + elf_ppnt->p_memsz - 1);
+            align = MAX(align, elf_ppnt->p_align);
             break;
         }
     }
@@ -757,8 +759,21 @@ int load_elf_binary(struct bsd_binprm *bprm, struct image_info *info)
 
     et_dyn_addr = 0;
     if (elf_ex.e_type == ET_DYN) {
+        abi_ulong rbase;
+        abi_ulong lo = TARGET_ELF_PAGESTART(range.lo);
+        int flags = MAP_PRIVATE | MAP_ANON;
+
         probe_guest_base(bprm->filename, NULL, NULL);
-        et_dyn_addr = ELF_ET_DYN_LOAD_ADDR - range.lo;
+        if (align > TARGET_PAGE_SIZE) {
+            flags |= MAP_ALIGNED(ctz64(align));
+        }
+        rbase = target_mmap(ELF_ET_DYN_LOAD_ADDR, range.hi - lo + 1,
+                            PROT_NONE, flags, -1, 0);
+        if (rbase == -1) {
+            perror("mmap");
+            exit(-1);
+        }
+        et_dyn_addr = rbase - lo;
     } else {
         probe_guest_base(bprm->filename, &range, NULL);
     }
