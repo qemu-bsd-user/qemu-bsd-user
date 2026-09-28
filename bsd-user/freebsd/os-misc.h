@@ -194,7 +194,7 @@ static abi_long copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
     for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
         b = 0;
         for (j = 0; j < TARGET_ABI_BITS; j++) {
-            b |= ((CPU_ISSET(k, mask) != 0) << j);
+            b |= ((abi_ulong)(CPU_ISSET(k, mask) != 0) << j);
             k++;
         }
         __put_user(b, &target_mask[i]);
