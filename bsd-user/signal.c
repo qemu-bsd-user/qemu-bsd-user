@@ -18,6 +18,7 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "qemu/osdep.h"
+#include <sys/thr.h>
 
 #include "qemu/log.h"
 #include "qemu.h"
@@ -40,6 +41,16 @@ static struct target_sigaction sigact_table[TARGET_NSIG];
 static void host_signal_handler(int host_sig, siginfo_t *info, void *puc);
 static void target_to_host_sigset_internal(sigset_t *d,
         const target_sigset_t *s);
+
+/*
+ * Saved siginfo for signals a non-vCPU thread passes on to a vCPU thread.
+ * Only SIGSEGV, SIGFPE and SIGILL can reach a non-vCPU thread and none of
+ * them queue, so a single entry per signal is sufficient.
+ */
+static struct {
+    siginfo_t info;
+    bool valid;
+} forwarded_signals[NSIG];
 
 static inline int on_sig_stack(TaskState *ts, unsigned long sp)
 {
@@ -523,13 +534,36 @@ void force_sig_fault(int sig, int code, abi_ulong addr)
 static void host_signal_handler(int host_sig, siginfo_t *info, void *puc)
 {
     CPUState *cpu = thread_cpu;
-    TaskState *ts = get_task_state(cpu);
+    TaskState *ts;
     target_siginfo_t tinfo;
     ucontext_t *uc = puc;
     struct emulated_sigtable *k;
     int guest_sig;
     uintptr_t pc = 0;
     bool sync_sig = false;
+
+    /*
+     * SIGSEGV, SIGFPE and SIGILL can reach a non-vCPU thread.
+     * A real fault here is a bug in qemu itself, so restore the default
+     * action and let it die.  Otherwise store the guest siginfo and
+     * forward it to the first vCPU.
+     */
+    if (cpu == NULL) {
+        if (host_signal_is_fault(info)) {
+            signal(host_sig, SIG_DFL);
+        } else if (first_cpu != NULL) {
+            forwarded_signals[host_sig].info = *info;
+            qatomic_store_release(&forwarded_signals[host_sig].valid, true);
+            thr_kill(get_task_state(first_cpu)->ts_tid, host_sig);
+        }
+        return;
+    }
+    /* Use siginfo saved by a non-vCPU thread, if valid. */
+    if (info->si_code == SI_LWP && info->si_pid == getpid() &&
+        qatomic_xchg(&forwarded_signals[host_sig].valid, false)) {
+        info = &forwarded_signals[host_sig].info;
+    }
+    ts = get_task_state(cpu);
 
     if (host_sig == host_interrupt_signal) {
         ts->signal_pending = 1;
