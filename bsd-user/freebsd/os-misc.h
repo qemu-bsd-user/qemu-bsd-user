@@ -153,19 +153,20 @@ static inline abi_long do_freebsd_cpuset_getid(abi_long arg1, abi_ulong arg2,
 }
 
 static abi_long copy_from_user_cpuset_mask(cpuset_t *mask,
-                                           abi_ulong target_mask_addr)
+                                           abi_ulong target_mask_addr,
+                                           abi_ulong setsize)
 {
     int i, j, k;
     abi_ulong b, *target_mask;
+    abi_long ret = 0;
 
-    target_mask = lock_user(VERIFY_READ, target_mask_addr,
-                            CPU_SETSIZE / 8, 1);
+    target_mask = lock_user(VERIFY_READ, target_mask_addr, setsize, 1);
     if (target_mask == NULL) {
         return -TARGET_EFAULT;
     }
     CPU_ZERO(mask);
     k = 0;
-    for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
+    for (i = 0; i < MIN(setsize, sizeof(cpuset_t)) / sizeof(abi_ulong); i++) {
         __get_user(b, &target_mask[i]);
         for (j = 0; j < TARGET_ABI_BITS; j++) {
             if ((b >> j) & 1) {
@@ -174,32 +175,39 @@ static abi_long copy_from_user_cpuset_mask(cpuset_t *mask,
             k++;
         }
     }
+    /* As the kernel does, reject data beyond what cpuset_t can hold. */
+    for (i = sizeof(cpuset_t); i < setsize; i++) {
+        if (((uint8_t *)target_mask)[i] != 0) {
+            ret = -TARGET_EINVAL;
+            break;
+        }
+    }
     unlock_user(target_mask, target_mask_addr, 0);
 
-    return 0;
+    return ret;
 }
 
 static abi_long copy_to_user_cpuset_mask(abi_ulong target_mask_addr,
-        cpuset_t *mask)
+        cpuset_t *mask, abi_ulong setsize)
 {
     int i, j, k;
     abi_ulong b, *target_mask;
 
-    target_mask = lock_user(VERIFY_WRITE, target_mask_addr,
-                            CPU_SETSIZE / 8, 0);
+    target_mask = lock_user(VERIFY_WRITE, target_mask_addr, setsize, 0);
     if (target_mask == NULL) {
         return -TARGET_EFAULT;
     }
+    memset(target_mask, 0, setsize);
     k = 0;
-    for (i = 0; i < ((CPU_SETSIZE / 8) / sizeof(abi_ulong)); i++) {
+    for (i = 0; i < MIN(setsize, sizeof(cpuset_t)) / sizeof(abi_ulong); i++) {
         b = 0;
         for (j = 0; j < TARGET_ABI_BITS; j++) {
-            b |= ((CPU_ISSET(k, mask) != 0) << j);
+            b |= ((abi_ulong)(CPU_ISSET(k, mask) != 0) << j);
             k++;
         }
         __put_user(b, &target_mask[i]);
     }
-    unlock_user(target_mask, target_mask_addr, (CPU_SETSIZE / 8));
+    unlock_user(target_mask, target_mask_addr, setsize);
 
     return 0;
 }
@@ -225,9 +233,10 @@ static inline abi_long do_freebsd_cpuset_getaffinity(cpulevel_t level,
         target_mask = arg5;
     }
 
-    ret = get_errno(cpuset_getaffinity(level, which, id, setsize, &mask));
+    ret = get_errno(cpuset_getaffinity(level, which, id,
+                                       MIN(setsize, sizeof(mask)), &mask));
     if (ret == 0) {
-        ret = copy_to_user_cpuset_mask(target_mask, &mask);
+        ret = copy_to_user_cpuset_mask(target_mask, &mask, setsize);
     }
 
     return ret;
@@ -254,9 +263,9 @@ static inline abi_long do_freebsd_cpuset_setaffinity(cpulevel_t level,
         target_mask = arg5;
     }
 
-    ret = copy_from_user_cpuset_mask(&mask, target_mask);
+    ret = copy_from_user_cpuset_mask(&mask, target_mask, setsize);
     if (ret == 0) {
-        ret = get_errno(cpuset_setaffinity(level, which, id, setsize,
+        ret = get_errno(cpuset_setaffinity(level, which, id, sizeof(mask),
                                            &mask));
     }
 
