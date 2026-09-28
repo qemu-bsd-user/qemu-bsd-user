@@ -20,7 +20,7 @@
 
 #define TARGET_RESERVED_VA 0xf7000000
 
-#define TARGET_USRSTACK (0xbfc00000)
+#define TARGET_USRSTACK (0xffc00000)
 
 static inline abi_ulong get_sp_from_cpustate(CPUX86State *state)
 {

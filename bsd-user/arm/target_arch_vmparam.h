@@ -20,8 +20,8 @@
 
 #define TARGET_RESERVED_VA  0xf7000000
 
-                /* KERNBASE - 512 MB */
-#define TARGET_VM_MAXUSER_ADDRESS   (0xc0000000 - (512 * MiB))
+                /* KERNBASE - 4 MB */
+#define TARGET_VM_MAXUSER_ADDRESS   (0xc0000000 - (4 * MiB))
 #define TARGET_USRSTACK             TARGET_VM_MAXUSER_ADDRESS
 
 static inline abi_ulong get_sp_from_cpustate(CPUARMState *state)
