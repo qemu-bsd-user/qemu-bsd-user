@@ -175,7 +175,13 @@ static inline abi_long do_bsd_madvise(abi_long arg1, abi_long arg2,
 static inline abi_long do_bsd_minherit(abi_long addr, abi_long len,
         abi_long inherit)
 {
-    return get_errno(minherit(g2h_untagged(addr), len, inherit));
+    abi_long ret = get_errno(minherit(g2h_untagged(addr), len, inherit));
+
+    /* INHERIT_SHARE memory is shared after fork and needs atomics. */
+    if (ret == 0 && inherit == INHERIT_SHARE) {
+        begin_parallel_context(thread_cpu);
+    }
+    return ret;
 }
 
 /* mincore(2) */
