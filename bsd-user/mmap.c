@@ -775,7 +775,7 @@ abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
      * supported by the host -- anything that requires EXCP_ATOMIC will not
      * be atomic with respect to an external process.
      */
-    if ((flags & MAP_TYPE) != MAP_PRIVATE) {
+    if ((flags & MAP_TYPE) == MAP_SHARED) {
         begin_parallel_context(thread_cpu);
     }
     return start;
