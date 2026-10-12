@@ -746,7 +746,10 @@ F: include/hw/*/allwinner*
 F: hw/arm/cubieboard.c
 F: docs/system/arm/cubieboard.rst
 F: hw/misc/axp2xx.c
+F: hw/gpio/allwinner-gpio.c
+F: include/hw/gpio/allwinner-gpio*
 F: tests/functional/arm/test_cubieboard.py
+F: tests/qtest/allwinner-gpio-test.c
 
 Allwinner-h3
 M: Niek Linnenbank <nieklinnenbank@gmail.com>
@@ -2146,6 +2149,7 @@ S: Supported
 F: include/qemu/target-info*.h
 F: target-info*.c
 F: configs/targets/*.c
+F: tests/unit/test-multi-targets.c
 
 Xtensa Machines
 ---------------
@@ -3338,6 +3342,7 @@ F: docs/devel/migration/CPR.rst
 Compute Express Link
 M: Jonathan Cameron <jic23@kernel.org>
 R: Junjie Cao <junjie.cao@intel.com>
+R: Anisa Su <anisa.su@samsung.com>
 L: linux-cxl@vger.kernel.org
 S: Supported
 F: hw/cxl/

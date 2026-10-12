@@ -84,6 +84,7 @@ tests += {
   'test_lsr.S': {'cflags': asmflags},
   'test_mpyi.S': {'cflags': asmflags},
   'test_packet.S': {'cflags': asmflags},
+  'test_pnew_jump_loads.c': {'cflags': cflags},
   'test_reorder.S': {'cflags': asmflags},
   'test_round.S': {'cflags': asmflags},
   'test_vavgw.S': {'cflags': asmflags},
@@ -115,7 +116,6 @@ if 'qemu-hexagon' in emulators
     'hexagon-linux-user': {
       'cc': 'hexagon-unknown-linux-musl-clang',
       'cc_dockerfile': 'debian-hexagon-cross',
-      'cc_docker_host_arch': ['x86_64'],
       'folder': 'hexagon',
       'gdb_arch': 'hexagon_is_not_supported_by_gdb',
       'qemu': emulators['qemu-hexagon'],

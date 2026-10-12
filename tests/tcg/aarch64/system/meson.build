@@ -72,6 +72,13 @@ tests += {
                   '-semihosting-config', 'enable=on,arg=2',
                   qemu_base_args]
   },
+  'wfxt.c': {
+    'cflags': cflags,
+    'qemu_args': ['-M', 'virt,virtualization=on,gic-version=2',
+                  '-cpu', 'max', '-smp', '1',
+                  '-semihosting-config', 'enable=on,arg=2',
+                  qemu_base_args]
+  },
 }
 
 tests += {
@@ -96,8 +103,8 @@ if 'qemu-system-aarch64' in emulators
   tcg_tests += {
     'aarch64-softmmu': {
       'cc': cc,
+      'cc_alt': cc_alt + ['aarch64-elf-gcc'],
       'cc_dockerfile': cc_dockerfile,
-      'cc_docker_host_arch': cc_docker_host_arch,
       'cc_feat_cflags': cc_feat_cflags,
       'folder': 'aarch64/system',
       'gdb_arch': 'aarch64',
